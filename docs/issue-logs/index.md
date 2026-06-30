@@ -20,3 +20,4 @@ title: 问题定位日志
 ## 日志列表
 
 - [RMSNorm SIMD 多 reduction 轴 codegen 精度问题定位](rms-norm-simd-multi-reduction-codegen.md)
+- [RMSNorm SIMD 多 reduction 轴 codegen 修改详解](rms-norm-simd-multi-reduction-codegen-change-detail.md)
