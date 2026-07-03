@@ -12,7 +12,7 @@ A2 这类环境无法依赖 SIMT fallback 绕过 SIMD kernel，因此错误 DSL 
 
 ## 复现方式
 
-复现脚本在仓库内：[rms_norm_simd_multi_reduction_repro.py](../../scripts/repro/rms_norm_simd_multi_reduction_repro.py)。
+复现脚本在仓库内：[rms_norm_simd_multi_reduction_repro.py](https://github.com/limbochao/torch-learn/blob/main/scripts/repro/rms_norm_simd_multi_reduction_repro.py)。
 
 核心 eager 表达式如下：
 

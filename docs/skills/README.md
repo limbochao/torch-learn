@@ -10,5 +10,6 @@
 
 ## 技能列表
 
-- [torch-codegen-debugging](../../skills/torch-codegen-debugging/SKILL.md): PyTorch/torch_npu/Inductor codegen 问题定位流程。
-- [debug-issue-archive](../../skills/debug-issue-archive/SKILL.md): debug 类问题归档和去敏写作流程。
+- [torch-codegen-debugging](https://github.com/limbochao/torch-learn/blob/main/skills/torch-codegen-debugging/SKILL.md): PyTorch/torch_npu/Inductor codegen 问题定位流程。
+- [debug-issue-archive](https://github.com/limbochao/torch-learn/blob/main/skills/debug-issue-archive/SKILL.md): debug 类问题归档和去敏写作流程。
+- [torch-learn-skill-sync](https://github.com/limbochao/torch-learn/blob/main/skills/torch-learn-skill-sync/SKILL.md): 编辑 `torch-learn/skills` 后同步本地安装目录的流程。

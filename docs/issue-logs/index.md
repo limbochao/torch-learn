@@ -4,19 +4,59 @@ title: 问题定位日志
 
 # 问题定位日志
 
-本目录记录 PyTorch 相关问题的定位过程，重点保留可复现信息和结论依据。
+<section class="tl-note-band" markdown="1">
+本分区记录 PyTorch、torch_npu 和 Inductor 相关问题的定位过程。重点不是只保存结论，而是保留复现方式、证据链、关键代码路径和验证结果。
+</section>
 
-## 建议记录内容
-
-- 问题背景和现象。
-- 复现方式和环境信息。
-- 关键日志、报错栈或中间产物。
-- 代码分析路径和证据。
-- 结论、修复方案、验证结果。
-- 后续风险或待确认问题。
-
-新增日志时可以参考 `templates/issue-log.md`。
-
+<div class="tl-section-heading" markdown="1">
 ## 日志列表
 
-- [RMSNorm SIMD 多 reduction 轴 codegen 精度问题定位](rms-norm-simd-multi-reduction-codegen.md)
+按问题域归档，优先展示能复用排查方法的记录。
+</div>
+
+<div class="tl-card-grid tl-card-grid-two" markdown="1">
+<article class="tl-feature tl-card-accent-rose" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">Codegen</span>
+  <span class="tl-badge">SIMD</span>
+  <span class="tl-badge">Accuracy</span>
+</div>
+
+### [RMSNorm SIMD 多 reduction 轴 codegen 问题复盘](rms-norm-simd-multi-reduction-codegen.html)
+
+记录 RMSNorm weight grad 在 `torch.compile` 后出现 NPU Inductor 精度错误的定位过程，包含错误 DSL、axis flatten、mask/value 坐标和 store 位置分析。
+</article>
+</div>
+
+<div class="tl-section-heading" markdown="1">
+## 记录结构
+
+新增日志建议尽量覆盖这些信息，便于后续复现、审阅和复用。
+</div>
+
+<ul class="tl-index-list">
+  <li>
+    <div><strong>问题背景</strong></div>
+    <div>
+      <p>说明触发场景、用户可见现象、影响范围，以及为什么需要定位。</p>
+    </div>
+  </li>
+  <li>
+    <div><strong>复现信息</strong></div>
+    <div>
+      <p>记录环境、输入规模、运行命令、最小复现脚本和必要的日志开关。</p>
+    </div>
+  </li>
+  <li>
+    <div><strong>证据链</strong></div>
+    <div>
+      <p>保留报错栈、中间产物、关键生成代码、源码分析路径和对照实验。</p>
+    </div>
+  </li>
+  <li>
+    <div><strong>结论验证</strong></div>
+    <div>
+      <p>说明根因、修复方向、验证命令、验证结果，以及仍需关注的风险。</p>
+    </div>
+  </li>
+</ul>
