@@ -59,11 +59,6 @@ title: 首页
 复现方式、关键日志、代码证据、根因结论和验证结果。重点保留以后能复用的 debug 路径。
 </article>
 
-<article class="tl-card" markdown="1">
-### [维护约定](#maintenance)
-
-新增文字内容优先归档到匹配分区，并保留问题、证据和验证结论。
-</article>
 </div>
 </section>
 
@@ -99,10 +94,4 @@ title: 首页
 整理阅读 generated DSL 时经常遇到的基础术语，为后续 codegen 问题复盘提供统一上下文。
 </article>
 </div>
-</section>
-
-<section id="maintenance" class="tl-note-band" markdown="1">
-## 内容维护方向
-
-新增文字内容优先写到对应分区的 `docs/` 页面。非文字类内容可以保留在仓库对应目录中，但不作为 Pages 主入口展示。每篇文档尽量回答三个问题：问题是什么，证据在哪里，结论如何验证。
 </section>
