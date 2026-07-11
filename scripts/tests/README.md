@@ -9,3 +9,8 @@
 - 性能或行为对比脚本。
 
 需要远程 NPU 环境验证的脚本，应在文档中标明运行前提和环境变量。
+
+## 当前脚本
+
+- `pointwise_op_cost_cases.py`: 分类验证 elementwise Aten 算子，并通过 NPU profiler 对比 generated pointwise
+  kernel 的执行时间。

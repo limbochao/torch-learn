@@ -24,6 +24,10 @@ title: 学习笔记
       <a href="compiler/inductor-codegen-terms.html">Inductor Codegen 术语说明</a>
       <p>解释 DSL、reduction lane、tile、stride、tiling 等阅读生成 kernel 时常见的术语。</p>
     </div>
+    <div>
+      <a href="compiler/inductor-pointwise-vs-elementwise.html">Inductor Pointwise 与 Elementwise 范围区别</a>
+      <p>说明 Triton pointwise 为什么大于狭义 elementwise，并列出 broadcast、view/reindex、mask、copy、fill 等子类。</p>
+    </div>
   </li>
 </ul>
 

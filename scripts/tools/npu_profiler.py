@@ -1,4 +1,4 @@
-"""Small helpers for collecting and summarizing torch_npu profiler results.
+"""Helpers for collecting and summarizing torch_npu profiler results.
 
 The collection helper follows the common torch_npu profiler pattern:
 

@@ -29,16 +29,16 @@ description: Use this skill whenever editing, creating, reviewing, or moving ski
 $CODEX_HOME/skills/<skill-name>
 ```
 
-如果 `CODEX_HOME` 未设置，按默认路径处理：
+如果 `CODEX_HOME` 未设置，按当前用户的默认路径处理：
 
 ```text
-/home/qc/.codex/skills/<skill-name>
+$HOME/.codex/skills/<skill-name>
 ```
 
 修改 source skill 后必须检查 installed skill 是否存在：
 
 ```bash
-test -d "${CODEX_HOME:-/home/qc/.codex}/skills/<skill-name>"
+test -d "${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>"
 ```
 
 如果 installed skill 存在，需要同步同一份修改；如果不存在，只在结果里说明该 skill 尚未安装。
@@ -96,8 +96,8 @@ rsync -a --delete <source-skill-dir>/ <installed-skill-dir>/
 ```bash
 find torch-learn/skills/<skill-name> -maxdepth 2 -type f -print | sort
 sed -n '1,40p' torch-learn/skills/<skill-name>/SKILL.md
-test -d "${CODEX_HOME:-/home/qc/.codex}/skills/<skill-name>" && \
-  diff -ru torch-learn/skills/<skill-name> "${CODEX_HOME:-/home/qc/.codex}/skills/<skill-name>"
+test -d "${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>" && \
+  diff -ru torch-learn/skills/<skill-name> "${CODEX_HOME:-$HOME/.codex}/skills/<skill-name>"
 ```
 
 最终回复保持简洁：

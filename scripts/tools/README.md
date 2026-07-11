@@ -1,6 +1,10 @@
-# NPU profiler 工具
+# tools
 
-`torch_learn.profiler` 提供两个公共工具：
+本目录存放可被测试、复现和分析脚本复用的辅助工具。
+
+## NPU profiler
+
+`npu_profiler.py` 提供两个公共工具：
 
 - `TorchNpuProfiler`: 封装 `torch_npu.profiler.profile`，默认 CPU + NPU activity，`profiler_level=1`。
 - `ProfileResultParser`: 解析 profiler 结果中的 `kernel_details.csv` 和 `step_trace_time.csv`。
@@ -12,7 +16,7 @@
 ```python
 import torch
 
-from torch_learn.profiler import TorchNpuProfiler
+from scripts.tools.npu_profiler import TorchNpuProfiler
 
 profiler = TorchNpuProfiler("./prof_log")
 
@@ -43,7 +47,7 @@ profiler.run_steps(lambda: compiled_fn(*args), steps=10)
 ## 解析结果
 
 ```python
-from torch_learn.profiler import ProfileResultParser
+from scripts.tools.npu_profiler import ProfileResultParser
 
 parser = ProfileResultParser("./prof_log")
 

@@ -26,6 +26,19 @@ title: 问题定位日志
 
 记录 RMSNorm weight grad 在 `torch.compile` 后出现 NPU Inductor 精度错误的定位过程，包含错误 DSL、axis flatten、mask/value 坐标和 store 位置分析。
 </article>
+
+<article class="tl-feature tl-card-accent-blue" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">Codegen</span>
+  <span class="tl-badge">Dynamic Shape</span>
+  <span class="tl-badge">DLRM</span>
+</div>
+
+### [DLRM dynamic 与 static codegen 对比分析](dlrm-dynamic-vs-static-codegen-analysis.html)
+
+对比 `dynamic=True` 与 `dynamic=False` 下的 FX graph 和 generated code，解释 dynamic shape、kernel type、
+SIMT 切分及后续 concat lowering 的差异。
+</article>
 </div>
 
 <div class="tl-section-heading" markdown="1">

@@ -9,4 +9,4 @@
 - `runtime/`: dispatcher、executor、device runtime 等运行时内容。
 - `ops/`: 算子语义、shape、dtype、layout 等专题记录。
 
-新增笔记时可以参考 `templates/note.md`。
+新增笔记时可以参考仓库中的 [学习笔记模板](../../templates/note.md)。

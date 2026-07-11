@@ -47,6 +47,17 @@ title: Torch skills
 
 用于编辑 `torch-learn/skills` 下的 skill 后，对照并同步本地 Codex 安装目录中的同名 skill。
 </article>
+
+<article class="tl-card tl-card-accent-blue" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">Image</span>
+  <span class="tl-badge">OpenAI</span>
+</div>
+
+### [openai-image-generation](https://github.com/limbochao/torch-learn/blob/main/skills/openai-image-generation/SKILL.md)
+
+用于复用 Codex 凭证或自定义 OpenAI-compatible 凭证，调用 Responses API 进行生图、修图、参考图改风格和局部重绘。
+</article>
 </div>
 
 <div class="tl-section-heading" markdown="1">

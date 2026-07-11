@@ -1,6 +1,6 @@
-"""Profiler helpers used by torch-learn scripts."""
+"""Reusable helpers for torch-learn scripts."""
 
-from .npu import (
+from .npu_profiler import (
     DurationSummary,
     NpuProfilerConfig,
     ProfileResultParser,
@@ -15,4 +15,3 @@ __all__ = [
     "StepDurationSummary",
     "TorchNpuProfiler",
 ]
-

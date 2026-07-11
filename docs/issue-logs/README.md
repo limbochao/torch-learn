@@ -11,4 +11,4 @@
 - 结论、修复方案、验证结果。
 - 后续风险或待确认问题。
 
-新增日志时可以参考 `templates/issue-log.md`。
+新增日志时可以参考仓库中的 [issue log 模板](../../templates/issue-log.md)。

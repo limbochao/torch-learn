@@ -29,6 +29,10 @@ title: 首页
     <a href="notes/compiler/inductor-codegen-terms.html">Inductor Codegen 术语说明</a>
     <span>整理 DSL、reduction lane、tile、stride、tiling 等常用概念。</span>
   </li>
+  <li>
+    <a href="issue-logs/dlrm-dynamic-vs-static-codegen-analysis.html">DLRM dynamic 与 static codegen 对比</a>
+    <span>从 FX graph、generated code 和 kernel type 解释 dynamic shape 带来的结构变化。</span>
+  </li>
 </ul>
 </aside>
 </section>
@@ -60,6 +64,17 @@ title: 首页
 </article>
 
 </div>
+</section>
+
+<section markdown="1">
+<div class="tl-section-heading" markdown="1">
+## 仓库资源
+
+脚本和 Skills 在仓库目录中集中维护，Pages 仅提供跳转入口。
+</div>
+
+- [脚本索引](scripts/)
+- [Torch Skills](skills/)
 </section>
 
 <section markdown="1">
