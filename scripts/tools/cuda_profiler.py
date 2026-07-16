@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -180,6 +181,29 @@ class CudaProfileParser:
         if isinstance(value, (list, tuple)):
             return json.dumps(value, separators=(",", ":"))
         return str(value)
+
+
+def cuda_kernel_label(kernel_name: str) -> str:
+    """Return a concise summary label while leaving profiler artifacts intact."""
+
+    if kernel_name.startswith("triton_"):
+        return kernel_name
+
+    patterns = (
+        (r"::([A-Za-z0-9_]+)_kernel_cuda(?:\(|<)", lambda match: match.group(1)),
+        (r"CUDAFunctorOnSelf_([A-Za-z0-9_]+)", lambda match: f"{match.group(1)}_self"),
+        (r"CUDAFunctor_([A-Za-z0-9_]+)", lambda match: match.group(1)),
+        (r"binary_internal::([A-Za-z0-9_]+)Functor", lambda match: match.group(1).lower()),
+    )
+    for pattern, formatter in patterns:
+        match = re.search(pattern, kernel_name)
+        if match:
+            return formatter(match)
+
+    concise_name = kernel_name.removeprefix("void ")
+    if len(concise_name) <= 96:
+        return concise_name
+    return f"{concise_name[:93]}..."
 
 
 def default_output_path(trace_path: Path) -> Path:

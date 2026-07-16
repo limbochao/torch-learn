@@ -34,6 +34,7 @@ parser.export_kernel_csv("cuda_kernels.csv")
 ```
 
 `cuda_runtime`、`ac2g`、CPU operator 等非 kernel 事件不会写入 CSV。`grid` 或 `block` 缺失时对应字段为空。
+`cuda_kernel_label` 可为汇总表生成短名称；它不修改 Chrome Trace 或 parser 导出的原始 kernel 名称。
 
 ## NPU profiler
 

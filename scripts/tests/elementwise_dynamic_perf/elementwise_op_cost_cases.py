@@ -1,25 +1,25 @@
-"""Compare static and dynamic pointwise kernel performance.
+"""Compare static and dynamic elementwise kernel performance.
 
 The cases are split into memory-bound and compute-bound workloads. P0 is the
 small first-pass suite; P1 adds scalar operation classes for follow-up analysis.
-Each run profiles eager and the selected compiled execution. Device-side kernel
-durations are parsed from profiler artifacts; correctness is not checked.
+Each run profiles only the selected execution. Device-side kernel durations are
+parsed from profiler artifacts; correctness is not checked.
 
 Run static kernels, compiling one specialized kernel for each runtime shape:
 
-    RUN_ID=baseline_001 DEVICE=npu MODE=static PRIORITY=P0 \
-        python scripts/tests/pointwise_op_cost_cases.py
+    RUN_ID=baseline_001 DEVICE=npu EXECUTION=static PRIORITY=P0 \
+        python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
 
 Run one dynamic kernel compiled/autotuned with COMPILE_SHAPE and reuse it for
 all SHAPES. SYMBOLIC_DIMS identifies which dimensions are allowed to change:
 
-    RUN_ID=baseline_001 DEVICE=npu MODE=dynamic SYMBOLIC_DIMS=0 COMPILE_SHAPE=8192 \
-        PRIORITY=P0 python scripts/tests/pointwise_op_cost_cases.py
+    RUN_ID=baseline_001 DEVICE=npu EXECUTION=dynamic SYMBOLIC_DIMS=0 COMPILE_SHAPE=8192 \
+        PRIORITY=P0 python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
 
 Useful environment variables:
 
     DEVICE=npu|cuda
-    MODE=static|dynamic
+    EXECUTION=eager|static|dynamic
     PRIORITY=P0 or PRIORITY=P0,P1
     CASES=memory_add,exp_log
     COMPILE_SHAPE=8192
@@ -27,8 +27,8 @@ Useful environment variables:
     SYMBOLIC_DIMS=0
     DTYPE=float32
     WARMUP=5 ACTIVE=20 REPEAT=1
-    RUN_ID=pointwise_baseline_001
-    PROFILE_ROOT=prof_log/pointwise_op_cost_cases
+    RUN_ID=elementwise_baseline_001
+    PROFILE_ROOT=prof_log/elementwise_dynamic_perf
 
 The default SHAPES bracket 128, 2048, 8192, and 2^20 boundaries. Use separate
 dynamic runs with COMPILE_SHAPE=128, 8192, and 1048576 to quantify how the
@@ -55,11 +55,11 @@ from pathlib import Path
 import torch
 
 
-SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_ROOT = Path(__file__).resolve().parents[2]
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from tools.cuda_profiler import CudaProfileParser, TorchCudaProfiler
+from tools.cuda_profiler import CudaProfileParser, TorchCudaProfiler, cuda_kernel_label
 from tools.npu_profiler import ProfileResultParser, TorchNpuProfiler
 
 
@@ -425,7 +425,7 @@ def profile_cuda_case(
         mean_us=sum(record.duration for record in records) / call_count,
         sample_count=call_count,
         kernel_count=len(records),
-        kernels=tuple(sorted({record.kernel_name for record in records})),
+        kernels=tuple(sorted({cuda_kernel_label(record.kernel_name) for record in records})),
     )
 
 
@@ -527,15 +527,15 @@ def initialize_device(device: str) -> None:
 
 def main() -> None:
     device = os.environ.get("DEVICE", "npu").strip().lower()
-    compiled_execution = os.environ.get("MODE", "static").strip().lower()
-    if compiled_execution not in ("static", "dynamic"):
-        raise ValueError("MODE must be 'static' or 'dynamic'")
+    selected_execution = os.environ.get("EXECUTION", "static").strip().lower()
+    if selected_execution not in ("eager", "static", "dynamic"):
+        raise ValueError("EXECUTION must be 'eager', 'static', or 'dynamic'")
 
     run_id = env_run_id()
     initialize_device(device)
     dtype = env_dtype("DTYPE", torch.float32)
     runtime_shapes = parse_shapes()
-    if compiled_execution == "dynamic":
+    if selected_execution == "dynamic":
         compile_shape = parse_shape(os.environ.get("COMPILE_SHAPE", "8192"))
         symbolic_dims = parse_symbolic_dims(len(compile_shape))
         validate_symbolic_shapes(compile_shape, runtime_shapes, symbolic_dims)
@@ -550,20 +550,22 @@ def main() -> None:
         raise ValueError("WARMUP must be non-negative; ACTIVE and REPEAT must be positive")
 
     profile_root = Path(
-        os.environ.get("PROFILE_ROOT", "prof_log/pointwise_op_cost_cases")
+        os.environ.get("PROFILE_ROOT", "prof_log/elementwise_dynamic_perf")
     )
     run_root = profile_root / run_id
     summary_path = run_root / "summary.csv"
     names = selected_case_names()
 
-    print("pointwise_op_cost_cases")
+    print("elementwise_op_cost_cases")
     print(
-        f"run_id={run_id} device={device} execution={compiled_execution} dtype={dtype}"
+        f"run_id={run_id} device={device} execution={selected_execution} dtype={dtype}"
     )
-    if compiled_execution == "dynamic":
+    if selected_execution == "dynamic":
         print(f"compile_shape={compile_shape} symbolic_dims={symbolic_dims}")
-    else:
+    elif selected_execution == "static":
         print("compile_shape=per-runtime-shape")
+    else:
+        print("compile_shape=not-applicable")
     print(f"runtime_shapes={runtime_shapes}")
     print(f"warmup={warmup} active={active} repeat={repeat}")
     print(f"profile_root={profile_root}")
@@ -577,7 +579,7 @@ def main() -> None:
     for name in names:
         case = CASES[name]
         dynamic_compiled = None
-        if compiled_execution == "dynamic":
+        if selected_execution == "dynamic":
             compile_args = make_inputs(
                 compile_shape, device, dtype, case.input_kind
             )
@@ -588,62 +590,64 @@ def main() -> None:
 
         for runtime_shape in runtime_shapes:
             args = make_inputs(runtime_shape, device, dtype, case.input_kind)
-            if compiled_execution == "static":
+            if selected_execution == "static":
                 compiled = compile_static(case, args)
                 row_compile_shape = runtime_shape
-            else:
+            elif selected_execution == "dynamic":
                 compiled = dynamic_compiled
                 row_compile_shape = compile_shape
-            if compiled is None:
+            else:
+                compiled = None
+                row_compile_shape = runtime_shape
+            if selected_execution != "eager" and compiled is None:
                 raise AssertionError("compiled function was not initialized")
             sync(device)
 
-            executions = (("eager", case.fn), (compiled_execution, compiled))
-            for execution, execution_fn in executions:
-                output_dir = result_dir(
-                    run_root,
-                    device,
-                    name,
-                    runtime_shape,
-                    row_compile_shape,
-                    symbolic_dims,
-                    execution,
-                )
-                timing = profile_case(
-                    execution_fn,
-                    args,
-                    device,
-                    output_dir,
-                    warmup,
-                    active,
-                    repeat,
-                )
-                result_row = {
-                    "run_id": run_id,
-                    "device": device,
-                    "execution": execution,
-                    "priority": case.priority,
-                    "bound": case.bound,
-                    "case": name,
-                    "group": case.group,
-                    "input_kind": case.input_kind,
-                    "dtype": str(dtype),
-                    "compile_shape": shape_label(row_compile_shape)
-                    if execution != "eager"
-                    else "",
-                    "runtime_shape": shape_label(runtime_shape),
-                    "symbolic_dims": "|".join(str(dim) for dim in symbolic_dims)
-                    if execution == "dynamic"
-                    else "",
-                    "scalar_ops": "|".join(case.scalar_ops),
-                    "samples": str(timing.sample_count),
-                    "device_kernel_count": str(timing.kernel_count),
-                    "device_call_mean_us": f"{timing.mean_us:.6f}",
-                    "kernels": "|".join(timing.kernels),
-                    "result_dir": str(output_dir),
-                }
-                writer.writerow(result_row)
-                merge_summary_rows(summary_path, [result_row])
+            execution_fn = case.fn if compiled is None else compiled
+            output_dir = result_dir(
+                run_root,
+                device,
+                name,
+                runtime_shape,
+                row_compile_shape,
+                symbolic_dims,
+                selected_execution,
+            )
+            timing = profile_case(
+                execution_fn,
+                args,
+                device,
+                output_dir,
+                warmup,
+                active,
+                repeat,
+            )
+            result_row = {
+                "run_id": run_id,
+                "device": device,
+                "execution": selected_execution,
+                "priority": case.priority,
+                "bound": case.bound,
+                "case": name,
+                "group": case.group,
+                "input_kind": case.input_kind,
+                "dtype": str(dtype),
+                "compile_shape": shape_label(row_compile_shape)
+                if selected_execution != "eager"
+                else "",
+                "runtime_shape": shape_label(runtime_shape),
+                "symbolic_dims": "|".join(str(dim) for dim in symbolic_dims)
+                if selected_execution == "dynamic"
+                else "",
+                "scalar_ops": "|".join(case.scalar_ops),
+                "samples": str(timing.sample_count),
+                "device_kernel_count": str(timing.kernel_count),
+                "device_call_mean_us": f"{timing.mean_us:.6f}",
+                "kernels": "|".join(timing.kernels),
+                "result_dir": str(output_dir),
+            }
+            writer.writerow(result_row)
+            merge_summary_rows(summary_path, [result_row])
 
 
 if __name__ == "__main__":

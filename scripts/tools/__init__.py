@@ -5,6 +5,7 @@ from .cuda_profiler import (
     CudaProfilerConfig,
     CudaProfileParser,
     TorchCudaProfiler,
+    cuda_kernel_label,
 )
 from .npu_profiler import (
     DurationSummary,
@@ -18,6 +19,7 @@ __all__ = [
     "CudaKernelRecord",
     "CudaProfilerConfig",
     "CudaProfileParser",
+    "cuda_kernel_label",
     "DurationSummary",
     "NpuProfilerConfig",
     "ProfileResultParser",
