@@ -2,6 +2,39 @@
 
 本目录存放可被测试、复现和分析脚本复用的辅助工具。
 
+## CUDA profiler
+
+`cuda_profiler.py` 提供 `TorchCudaProfiler` 采集 PyTorch CUDA profiler Chrome Trace，并通过
+`CudaProfileParser` 解析 JSON。parser 只提取 device 侧满足 `ph="X"` 且 `cat="kernel"` 的完整 kernel
+事件，并输出以下 CSV 字段：
+
+- `kernel_name`: kernel 完整名称。
+- `duration`: device kernel 执行时间，单位为微秒。
+- `grid`: launch grid，例如 `[1,1,1]`。
+- `block`: launch block，例如 `[128,1,1]`。
+
+直接通过命令行转换：
+
+```bash
+python scripts/tools/cuda_profiler.py trace.json -o cuda_kernels.csv
+```
+
+不指定 `-o` 时，默认输出到输入文件同目录下的 `<trace_name>_kernels.csv`。
+
+也可以在其它脚本中调用：
+
+```python
+from scripts.tools.cuda_profiler import CudaProfileParser
+
+parser = CudaProfileParser("trace.json")
+for record in parser.kernel_records():
+    print(record.kernel_name, record.duration, record.grid, record.block)
+
+parser.export_kernel_csv("cuda_kernels.csv")
+```
+
+`cuda_runtime`、`ac2g`、CPU operator 等非 kernel 事件不会写入 CSV。`grid` 或 `block` 缺失时对应字段为空。
+
 ## NPU profiler
 
 `npu_profiler.py` 提供两个公共工具：

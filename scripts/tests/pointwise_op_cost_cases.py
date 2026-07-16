@@ -1,29 +1,51 @@
-"""
-Microbench cases for elementwise aten op cost classes.
+"""Compare static and dynamic pointwise kernel performance.
 
-This script intentionally avoids broadcast/view/reindex cases. Each case focuses on
-one class of elementwise aten ops so the generated pointwise kernel can be compared
-by the scalar work inside each output element.
+The cases are split into memory-bound and compute-bound workloads. P0 is the
+small first-pass suite; P1 adds scalar operation classes for follow-up analysis.
+Each run profiles eager and the selected compiled execution. Device-side kernel
+durations are parsed from profiler artifacts; correctness is not checked.
 
-The timing result is parsed from torch_npu profiler `kernel_details.csv`, so the
-reported numbers are device-side Triton kernel duration in microseconds.
+Run static kernels, compiling one specialized kernel for each runtime shape:
 
-Run on NPU after sourcing the target environment:
+    RUN_ID=baseline_001 DEVICE=npu MODE=static PRIORITY=P0 \
+        python scripts/tests/pointwise_op_cost_cases.py
 
-    python scripts/tests/pointwise_op_cost_cases.py
+Run one dynamic kernel compiled/autotuned with COMPILE_SHAPE and reuse it for
+all SHAPES. SYMBOLIC_DIMS identifies which dimensions are allowed to change:
+
+    RUN_ID=baseline_001 DEVICE=npu MODE=dynamic SYMBOLIC_DIMS=0 COMPILE_SHAPE=8192 \
+        PRIORITY=P0 python scripts/tests/pointwise_op_cost_cases.py
 
 Useful environment variables:
 
-    DEVICE=npu DYNAMIC=0 CHECK=1 PROFILE_ROOT=prof_log/pointwise_op_cost_cases
-    PROF_WAIT=1 PROF_WARMUP=1 PROF_ACTIVE=5 PROF_REPEAT=1
-    SHAPE=1048576 DTYPE=float32 CASES=arithmetic_light,exp_log
-    TORCHINDUCTOR_CACHE_DIR=/path/to/inductor_cache
+    DEVICE=npu|cuda
+    MODE=static|dynamic
+    PRIORITY=P0 or PRIORITY=P0,P1
+    CASES=memory_add,exp_log
+    COMPILE_SHAPE=8192
+    SHAPES=127;128;129;2047;2048;2049;8191;8192;8193;1048575;1048576;1048577
+    SYMBOLIC_DIMS=0
+    DTYPE=float32
+    WARMUP=5 ACTIVE=20 REPEAT=1
+    RUN_ID=pointwise_baseline_001
+    PROFILE_ROOT=prof_log/pointwise_op_cost_cases
+
+The default SHAPES bracket 128, 2048, 8192, and 2^20 boundaries. Use separate
+dynamic runs with COMPILE_SHAPE=128, 8192, and 1048576 to quantify how the
+first shape affects reuse performance.
+
+Runs sharing RUN_ID are merged into <PROFILE_ROOT>/<RUN_ID>/summary.csv. Raw
+profiles are stored below <PROFILE_ROOT>/<RUN_ID>/profiles/. Cross-device
+automatic merging requires both processes to access the same PROFILE_ROOT;
+file locking and atomic replacement protect concurrent summary updates.
 """
 
 from __future__ import annotations
 
 import csv
+import fcntl
 import os
+import re
 import shutil
 import sys
 from collections.abc import Callable
@@ -37,28 +59,64 @@ SCRIPTS_ROOT = Path(__file__).resolve().parents[1]
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
+from tools.cuda_profiler import CudaProfileParser, TorchCudaProfiler
 from tools.npu_profiler import ProfileResultParser, TorchNpuProfiler
 
 
 TensorArgs = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 CaseFn = Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]
+DEFAULT_SHAPES = (
+    "127;128;129;2047;2048;2049;8191;8192;8193;"
+    "1048575;1048576;1048577"
+)
+RESULT_COLUMNS = (
+    "run_id",
+    "device",
+    "execution",
+    "priority",
+    "bound",
+    "case",
+    "group",
+    "input_kind",
+    "dtype",
+    "compile_shape",
+    "runtime_shape",
+    "symbolic_dims",
+    "scalar_ops",
+    "samples",
+    "device_kernel_count",
+    "device_call_mean_us",
+    "kernels",
+    "result_dir",
+)
+SUMMARY_KEY_COLUMNS = (
+    "device",
+    "execution",
+    "case",
+    "input_kind",
+    "dtype",
+    "compile_shape",
+    "runtime_shape",
+    "symbolic_dims",
+)
 
 
 @dataclass(frozen=True)
 class Case:
     fn: CaseFn
+    priority: str
+    bound: str
     group: str
-    aten_ops: tuple[str, ...]
-    input_desc: str
-    output_desc: str
+    scalar_ops: tuple[str, ...]
     input_kind: str = "float"
 
 
-def env_bool(name: str, default: bool) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in ("1", "true", "yes", "on")
+@dataclass(frozen=True)
+class TimingResult:
+    mean_us: float
+    sample_count: int
+    kernel_count: int
+    kernels: tuple[str, ...]
 
 
 def env_int(name: str, default: int) -> int:
@@ -66,6 +124,15 @@ def env_int(name: str, default: int) -> int:
     if value is None:
         return default
     return int(value)
+
+
+def env_run_id() -> str:
+    value = os.environ.get("RUN_ID", "").strip()
+    if not value:
+        raise ValueError("RUN_ID is required to isolate and aggregate experiment results")
+    if re.fullmatch(r"[A-Za-z0-9._-]+", value) is None:
+        raise ValueError("RUN_ID may only contain letters, digits, '.', '_', and '-'")
+    return value
 
 
 def env_dtype(name: str, default: torch.dtype) -> torch.dtype:
@@ -82,26 +149,82 @@ def env_dtype(name: str, default: torch.dtype) -> torch.dtype:
     }
     key = value.strip().lower()
     if key not in mapping:
-        expected = sorted(mapping)
-        raise ValueError(f"Unsupported DTYPE={value!r}, expected one of {expected}")
+        raise ValueError(
+            f"Unsupported DTYPE={value!r}, expected one of {sorted(mapping)}"
+        )
     return mapping[key]
 
 
-def parse_shape() -> tuple[int, ...]:
-    value = os.environ.get("SHAPE", "1048576")
-    return tuple(
-        int(x.strip()) for x in value.replace("x", ",").split(",") if x.strip()
+def parse_shape(value: str) -> tuple[int, ...]:
+    shape = tuple(
+        int(dim.strip())
+        for dim in value.replace("x", ",").split(",")
+        if dim.strip()
     )
+    if not shape or any(dim <= 0 for dim in shape):
+        raise ValueError(f"Invalid shape {value!r}; dimensions must be positive")
+    return shape
+
+
+def parse_shapes() -> list[tuple[int, ...]]:
+    value = os.environ.get("SHAPES")
+    if value is None:
+        legacy_shape = os.environ.get("SHAPE")
+        value = legacy_shape if legacy_shape is not None else DEFAULT_SHAPES
+    shapes = [parse_shape(item) for item in value.split(";") if item.strip()]
+    if not shapes:
+        raise ValueError("SHAPES must contain at least one shape")
+    return shapes
+
+
+def parse_symbolic_dims(rank: int) -> tuple[int, ...]:
+    value = os.environ.get("SYMBOLIC_DIMS", "0")
+    dims = []
+    for item in value.split(","):
+        if not item.strip():
+            continue
+        dim = int(item)
+        dim = dim + rank if dim < 0 else dim
+        if dim < 0 or dim >= rank:
+            raise ValueError(f"SYMBOLIC_DIMS contains {item!r}, but rank is {rank}")
+        dims.append(dim)
+    if not dims:
+        raise ValueError("SYMBOLIC_DIMS must contain at least one dimension")
+    return tuple(sorted(set(dims)))
+
+
+def validate_symbolic_shapes(
+    compile_shape: tuple[int, ...],
+    runtime_shapes: list[tuple[int, ...]],
+    symbolic_dims: tuple[int, ...],
+) -> None:
+    for runtime_shape in runtime_shapes:
+        if len(runtime_shape) != len(compile_shape):
+            raise ValueError(
+                f"Runtime shape {runtime_shape} and compile shape {compile_shape} "
+                "must have the same rank"
+            )
+        for dim, (compile_size, runtime_size) in enumerate(
+            zip(compile_shape, runtime_shape)
+        ):
+            if dim not in symbolic_dims and compile_size != runtime_size:
+                raise ValueError(
+                    f"Dimension {dim} is static but changes from {compile_size} "
+                    f"to {runtime_size}; add it to SYMBOLIC_DIMS"
+                )
+
+
+def shape_label(shape: tuple[int, ...]) -> str:
+    return "x".join(str(dim) for dim in shape)
 
 
 def sync(device: str) -> None:
-    if device == "cuda":
-        torch.cuda.synchronize()
-    elif device == "npu":
-        torch.npu.synchronize()
+    getattr(torch, device).synchronize()
 
 
-def make_float_inputs(shape: tuple[int, ...], device: str, dtype: torch.dtype) -> TensorArgs:
+def make_float_inputs(
+    shape: tuple[int, ...], device: str, dtype: torch.dtype
+) -> TensorArgs:
     torch.manual_seed(0)
     x = torch.rand(shape, device=device, dtype=dtype) + 0.5
     y = torch.rand(shape, device=device, dtype=dtype) + 1.0
@@ -117,14 +240,6 @@ def make_int_inputs(shape: tuple[int, ...], device: str) -> TensorArgs:
     return x, y, z
 
 
-def make_bool_inputs(shape: tuple[int, ...], device: str) -> TensorArgs:
-    torch.manual_seed(0)
-    x = torch.rand(shape, device=device) > 0.2
-    y = torch.rand(shape, device=device) > 0.4
-    z = torch.rand(shape, device=device) > 0.6
-    return x, y, z
-
-
 def make_inputs(
     shape: tuple[int, ...],
     device: str,
@@ -135,46 +250,11 @@ def make_inputs(
         return make_float_inputs(shape, device, dtype)
     if input_kind == "int":
         return make_int_inputs(shape, device)
-    if input_kind == "bool":
-        return make_bool_inputs(shape, device)
     raise ValueError(f"Unsupported input_kind={input_kind!r}")
 
 
-def arithmetic_light(x, y, z):
-    return ((x + y) * 1.125 - z * 0.25) + x * y
-
-
-def minmax_clamp(x, y, z):
-    return torch.clamp_max(torch.maximum(x, y), 2.0) + torch.clamp_min(
-        torch.minimum(y, z), 1.0
-    )
-
-
-def compare_ops(x, y, z):
-    return (x < y) | (y <= z) | (x != z)
-
-
-def logical_ops(x, y, z):
-    return torch.logical_xor(
-        torch.logical_and(x, y),
-        torch.logical_or(torch.logical_not(y), z),
-    )
-
-
-def bitwise_ops(x, y, z):
-    return ((x & y) ^ (z | 17)) + ((x << 1) & 255) - ((y >> 1) & 127)
-
-
-def division_ops(x, y, z):
-    return x / (y + 0.25) + torch.div(z, x + 0.5)
-
-
-def root_reciprocal_ops(x, y, z):
-    return torch.sqrt(x * y + 0.01) + torch.rsqrt(z + 1.0) + torch.reciprocal(y + 0.5)
-
-
-def pow_ops(x, y, z):
-    return torch.pow(x + 0.1, 2.0) + torch.pow(y + 0.1, z * 0.1)
+def memory_add(x, y, z):
+    return x + y
 
 
 def exp_log_ops(x, y, z):
@@ -186,258 +266,384 @@ def exp_log_ops(x, y, z):
     )
 
 
+def bitwise_ops(x, y, z):
+    return ((x & y) ^ (z | 17)) + ((x << 1) & 255) - ((y >> 1) & 127)
+
+
+def division_ops(x, y, z):
+    return x / (y + 0.25) + torch.div(z, x + 0.5)
+
+
+def pow_ops(x, y, z):
+    return torch.pow(x + 0.1, 2.0) + torch.pow(y + 0.1, z * 0.1)
+
+
 def trig_hyperbolic_ops(x, y, z):
     return torch.sin(x) * torch.cos(y) + torch.tanh(z) + torch.atan(x * 0.1)
 
 
-def special_math_ops(x, y, z):
-    positive = x * 0.1 + 1.0
-    return torch.erf(x * 0.1) + torch.erfc(y * 0.1) + torch.lgamma(positive) + z * 0.01
-
-
-def round_sign_ops(x, y, z):
-    return torch.ceil(x) + torch.sign(y - 1.5) + torch.signbit(z - 1.5).to(x.dtype)
-
-
 CASES: dict[str, Case] = {
-    "arithmetic_light": Case(
-        arithmetic_light,
-        "light arithmetic",
-        ("aten.add", "aten.sub", "aten.mul"),
-        input_desc="x,y,z: same-shape float tensors; x in [0.5,1.5), y in [1,2), z in [1.5,2.5)",
-        output_desc="out = ((x + y) * 1.125 - z * 0.25) + x * y",
+    "memory_add": Case(
+        memory_add,
+        priority="P0",
+        bound="memory_bound",
+        group="single float add",
+        scalar_ops=("add",),
     ),
-    "minmax_clamp": Case(
-        minmax_clamp,
-        "min/max clamp",
-        ("aten.maximum", "aten.minimum", "aten.clamp_max", "aten.clamp_min"),
-        input_desc="x,y,z: same-shape float tensors; positive values around [0.5,2.5)",
-        output_desc="out = clamp_max(maximum(x, y), 2.0) + clamp_min(minimum(y, z), 1.0)",
-    ),
-    "compare": Case(
-        compare_ops,
-        "comparison",
-        ("aten.lt", "aten.le", "aten.ne"),
-        input_desc="x,y,z: same-shape float tensors; positive values around [0.5,2.5)",
-        output_desc="out = (x < y) | (y <= z) | (x != z)",
-    ),
-    "logical": Case(
-        logical_ops,
-        "logical bool",
-        ("aten.logical_and", "aten.logical_or", "aten.logical_xor", "aten.logical_not"),
-        input_desc="x,y,z: same-shape bool tensors generated from random thresholds",
-        output_desc="out = logical_xor(logical_and(x, y), logical_or(logical_not(y), z))",
-        input_kind="bool",
+    "exp_log": Case(
+        exp_log_ops,
+        priority="P0",
+        bound="compute_bound",
+        group="exp and log",
+        scalar_ops=("exp", "expm1", "log1p", "log2"),
     ),
     "bitwise": Case(
         bitwise_ops,
-        "integer bitwise",
-        (
-            "aten.bitwise_and",
-            "aten.bitwise_or",
-            "aten.bitwise_xor",
-            "aten.bitwise_left_shift",
-            "aten.bitwise_right_shift",
-        ),
-        input_desc="x,y,z: same-shape int32 tensors with values in [1,1024)",
-        output_desc="out = ((x & y) ^ (z | 17)) + ((x << 1) & 255) - ((y >> 1) & 127)",
+        priority="P1",
+        bound="memory_bound",
+        group="integer bitwise",
+        scalar_ops=("and", "or", "xor", "left_shift", "right_shift"),
         input_kind="int",
     ),
     "division": Case(
         division_ops,
-        "division",
-        ("aten.div", "aten.div.Tensor"),
-        input_desc="x,y,z: same-shape float tensors with positive denominators",
-        output_desc="out = x / (y + 0.25) + div(z, x + 0.5)",
-    ),
-    "root_reciprocal": Case(
-        root_reciprocal_ops,
-        "sqrt rsqrt reciprocal",
-        ("aten.sqrt", "aten.rsqrt", "aten.reciprocal"),
-        input_desc="x,y,z: same-shape positive float tensors; expressions keep sqrt inputs positive",
-        output_desc="out = sqrt(x * y + 0.01) + rsqrt(z + 1.0) + reciprocal(y + 0.5)",
+        priority="P1",
+        bound="compute_bound",
+        group="division",
+        scalar_ops=("div",),
     ),
     "pow": Case(
         pow_ops,
-        "power",
-        ("aten.pow",),
-        input_desc="x,y,z: same-shape positive float tensors; one constant exponent and one tensor exponent",
-        output_desc="out = pow(x + 0.1, 2.0) + pow(y + 0.1, z * 0.1)",
-    ),
-    "exp_log": Case(
-        exp_log_ops,
-        "exp/log",
-        ("aten.exp", "aten.expm1", "aten.log1p", "aten.log2"),
-        input_desc="x,y,z: same-shape positive float tensors; log inputs stay positive",
-        output_desc="out = exp(x * 0.01) + expm1(y * 0.01) + log1p(z) + log2(y + 1.0)",
+        priority="P1",
+        bound="compute_bound",
+        group="constant and tensor power",
+        scalar_ops=("pow",),
     ),
     "trig_hyperbolic": Case(
         trig_hyperbolic_ops,
-        "trig/hyperbolic",
-        ("aten.sin", "aten.cos", "aten.tanh", "aten.atan"),
-        input_desc="x,y,z: same-shape float tensors; values around [0.5,2.5)",
-        output_desc="out = sin(x) * cos(y) + tanh(z) + atan(x * 0.1)",
-    ),
-    "special_math": Case(
-        special_math_ops,
-        "special math",
-        ("aten.erf", "aten.erfc", "aten.lgamma"),
-        input_desc="x,y,z: same-shape positive float tensors; lgamma input is x * 0.1 + 1.0",
-        output_desc="out = erf(x * 0.1) + erfc(y * 0.1) + lgamma(x * 0.1 + 1.0) + z * 0.01",
-    ),
-    "round_sign": Case(
-        round_sign_ops,
-        "round/sign",
-        ("aten.ceil", "aten.sign", "aten.signbit"),
-        input_desc="x,y,z: same-shape float tensors; sign/signbit use values shifted by 1.5",
-        output_desc="out = ceil(x) + sign(y - 1.5) + signbit(z - 1.5).to(x.dtype)",
+        priority="P1",
+        bound="compute_bound",
+        group="trig and hyperbolic",
+        scalar_ops=("sin", "cos", "tanh", "atan"),
     ),
 }
 
 
-def output_spec(tensor: torch.Tensor) -> str:
-    return f"shape={tuple(tensor.shape)} dtype={tensor.dtype}"
+def selected_case_names() -> list[str]:
+    selected = os.environ.get("CASES")
+    if selected:
+        names = [item.strip() for item in selected.split(",") if item.strip()]
+        unknown = sorted(set(names) - set(CASES))
+        if unknown:
+            raise ValueError(
+                f"Unknown CASES entries: {unknown}; valid cases: {sorted(CASES)}"
+            )
+        return names
+
+    priorities = {
+        item.strip().upper()
+        for item in os.environ.get("PRIORITY", "P0").split(",")
+        if item.strip()
+    }
+    unknown = sorted(priorities - {"P0", "P1"})
+    if unknown:
+        raise ValueError(f"Unknown PRIORITY entries: {unknown}; expected P0 or P1")
+    return [name for name, case in CASES.items() if case.priority in priorities]
 
 
-def assert_same_output(actual: torch.Tensor, expected: torch.Tensor) -> None:
-    if actual.dtype == torch.bool or not actual.dtype.is_floating_point:
-        if not torch.equal(actual, expected):
-            raise AssertionError("compiled output differs from eager output")
-        return
-    torch.testing.assert_close(actual, expected, rtol=1e-3, atol=1e-3)
+def mark_symbolic(args: TensorArgs, symbolic_dims: tuple[int, ...]) -> None:
+    for tensor in args:
+        for dim in symbolic_dims:
+            torch._dynamo.mark_dynamic(tensor, dim)
 
 
-def profile_compiled_case(
-    case_name: str,
-    compiled_fn: CaseFn,
+def prepare_profile_dir(profile_dir: Path) -> None:
+    if profile_dir.exists():
+        shutil.rmtree(profile_dir)
+    profile_dir.mkdir(parents=True)
+
+
+def profile_npu_case(
+    case_fn: CaseFn,
     args: TensorArgs,
-    profile_root: Path,
-    wait: int,
+    profile_dir: Path,
     warmup: int,
     active: int,
     repeat: int,
-) -> tuple[float, float, int, str]:
-    case_profile_dir = profile_root / case_name
-    if case_profile_dir.exists():
-        shutil.rmtree(case_profile_dir)
-
+) -> TimingResult:
+    prepare_profile_dir(profile_dir)
     profiler = TorchNpuProfiler(
-        case_profile_dir,
-        wait=wait,
+        profile_dir,
+        wait=0,
         warmup=warmup,
         active=active,
         repeat=repeat,
         with_stack=False,
     )
-    profiler.run_steps(lambda: compiled_fn(*args))
-
-    summaries = ProfileResultParser(case_profile_dir).kernel_time_by_name(
-        name_prefix="triton"
+    profiler.run_steps(lambda: case_fn(*args))
+    summaries = ProfileResultParser(profile_dir).kernel_time_by_name()
+    call_count = active * repeat
+    total_us = sum(summary.total_us for summary in summaries)
+    kernel_count = sum(summary.count for summary in summaries)
+    if kernel_count == 0:
+        raise RuntimeError(f"No NPU device kernels found in {profile_dir}")
+    return TimingResult(
+        mean_us=total_us / call_count,
+        sample_count=call_count,
+        kernel_count=kernel_count,
+        kernels=tuple(summary.key for summary in summaries),
     )
-    total_us = sum(item.total_us for item in summaries)
-    count = sum(item.count for item in summaries)
-    mean_us = total_us / count if count else 0.0
-    kernels = "|".join(item.key for item in summaries)
-    return mean_us, total_us, count, kernels
 
 
-def case_names() -> list[str]:
-    selected = os.environ.get("CASES")
-    if not selected:
-        return list(CASES)
-    names = [x.strip() for x in selected.split(",") if x.strip()]
-    unknown = sorted(set(names) - set(CASES))
-    if unknown:
-        raise ValueError(f"Unknown CASES entries: {unknown}; valid cases: {sorted(CASES)}")
-    return names
+def profile_cuda_case(
+    case_fn: CaseFn,
+    args: TensorArgs,
+    profile_dir: Path,
+    warmup: int,
+    active: int,
+    repeat: int,
+) -> TimingResult:
+    prepare_profile_dir(profile_dir)
+    profiler = TorchCudaProfiler(
+        profile_dir,
+        wait=0,
+        warmup=warmup,
+        active=active,
+        repeat=repeat,
+        with_stack=False,
+    )
+    profiler.run_steps(lambda: case_fn(*args))
+    records = [
+        record
+        for trace_path in profiler.trace_paths
+        for record in CudaProfileParser(trace_path).kernel_records()
+    ]
+    call_count = active * repeat
+    if not records:
+        raise RuntimeError(f"No CUDA device kernels found in {profile_dir}")
+    return TimingResult(
+        mean_us=sum(record.duration for record in records) / call_count,
+        sample_count=call_count,
+        kernel_count=len(records),
+        kernels=tuple(sorted({record.kernel_name for record in records})),
+    )
+
+
+def profile_case(
+    case_fn: CaseFn,
+    args: TensorArgs,
+    device: str,
+    profile_dir: Path,
+    warmup: int,
+    active: int,
+    repeat: int,
+) -> TimingResult:
+    if device == "npu":
+        return profile_npu_case(
+            case_fn, args, profile_dir, warmup, active, repeat
+        )
+    return profile_cuda_case(case_fn, args, profile_dir, warmup, active, repeat)
+
+
+def result_dir(
+    run_root: Path,
+    device: str,
+    case_name: str,
+    runtime_shape: tuple[int, ...],
+    compile_shape: tuple[int, ...],
+    symbolic_dims: tuple[int, ...],
+    execution: str,
+) -> Path:
+    root = run_root / "profiles" / device / execution
+    if execution == "dynamic":
+        dims_label = "-".join(str(dim) for dim in symbolic_dims)
+        root = root / f"compile_{shape_label(compile_shape)}" / f"dims_{dims_label}"
+    return root / case_name / f"runtime_{shape_label(runtime_shape)}"
+
+
+def summary_key(row: dict[str, str]) -> tuple[str, ...]:
+    return tuple(row[column] for column in SUMMARY_KEY_COLUMNS)
+
+
+def merge_summary_rows(summary_path: Path, new_rows: list[dict[str, str]]) -> None:
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = summary_path.with_suffix(f"{summary_path.suffix}.lock")
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        rows_by_key: dict[tuple[str, ...], dict[str, str]] = {}
+        if summary_path.exists():
+            with summary_path.open(newline="", encoding="utf-8") as summary_file:
+                reader = csv.DictReader(summary_file)
+                if tuple(reader.fieldnames or ()) != RESULT_COLUMNS:
+                    raise ValueError(
+                        f"Existing summary schema does not match current script: {summary_path}"
+                    )
+                for row in reader:
+                    rows_by_key[summary_key(row)] = row
+        for row in new_rows:
+            rows_by_key[summary_key(row)] = row
+
+        temporary_path = summary_path.with_name(
+            f".{summary_path.name}.tmp.{os.getpid()}"
+        )
+        try:
+            with temporary_path.open("w", newline="", encoding="utf-8") as summary_file:
+                writer = csv.DictWriter(summary_file, fieldnames=RESULT_COLUMNS)
+                writer.writeheader()
+                writer.writerows(rows_by_key.values())
+            os.replace(temporary_path, summary_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
+
+def compile_static(case: Case, args: TensorArgs) -> CaseFn:
+    torch._dynamo.reset()
+    compiled = torch.compile(case.fn, backend="inductor", dynamic=False)
+    compiled(*args)
+    return compiled
+
+
+def compile_dynamic(
+    case: Case,
+    args: TensorArgs,
+    symbolic_dims: tuple[int, ...],
+) -> CaseFn:
+    torch._dynamo.reset()
+    mark_symbolic(args, symbolic_dims)
+    compiled = torch.compile(case.fn, backend="inductor", dynamic=None)
+    compiled(*args)
+    return compiled
+
+
+def initialize_device(device: str) -> None:
+    if device == "npu":
+        import torch_npu  # noqa: F401
+    elif device == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("DEVICE=cuda requested, but CUDA is not available")
+    else:
+        raise ValueError("DEVICE must be 'npu' or 'cuda'")
 
 
 def main() -> None:
-    device = os.environ.get("DEVICE", "npu")
-    shape = parse_shape()
+    device = os.environ.get("DEVICE", "npu").strip().lower()
+    compiled_execution = os.environ.get("MODE", "static").strip().lower()
+    if compiled_execution not in ("static", "dynamic"):
+        raise ValueError("MODE must be 'static' or 'dynamic'")
+
+    run_id = env_run_id()
+    initialize_device(device)
     dtype = env_dtype("DTYPE", torch.float32)
-    dynamic = env_bool("DYNAMIC", False)
-    check = env_bool("CHECK", True)
-    profile_root = Path(os.environ.get("PROFILE_ROOT", "prof_log/pointwise_op_cost_cases"))
-    prof_wait = env_int("PROF_WAIT", 1)
-    prof_warmup = env_int("PROF_WARMUP", 1)
-    prof_active = env_int("PROF_ACTIVE", 5)
-    prof_repeat = env_int("PROF_REPEAT", 1)
-
-    if device == "npu":
-        import torch_npu  # noqa: F401
+    runtime_shapes = parse_shapes()
+    if compiled_execution == "dynamic":
+        compile_shape = parse_shape(os.environ.get("COMPILE_SHAPE", "8192"))
+        symbolic_dims = parse_symbolic_dims(len(compile_shape))
+        validate_symbolic_shapes(compile_shape, runtime_shapes, symbolic_dims)
     else:
-        raise RuntimeError("This script uses torch_npu profiler and expects DEVICE=npu.")
+        compile_shape = runtime_shapes[0]
+        symbolic_dims = ()
 
-    names = case_names()
+    warmup = env_int("WARMUP", 5)
+    active = env_int("ACTIVE", 20)
+    repeat = env_int("REPEAT", 1)
+    if warmup < 0 or active <= 0 or repeat <= 0:
+        raise ValueError("WARMUP must be non-negative; ACTIVE and REPEAT must be positive")
+
+    profile_root = Path(
+        os.environ.get("PROFILE_ROOT", "prof_log/pointwise_op_cost_cases")
+    )
+    run_root = profile_root / run_id
+    summary_path = run_root / "summary.csv"
+    names = selected_case_names()
 
     print("pointwise_op_cost_cases")
-    print(f"device={device} dtype={dtype} shape={shape} dynamic={int(dynamic)}")
     print(
-        f"prof_wait={prof_wait} prof_warmup={prof_warmup} "
-        f"prof_active={prof_active} prof_repeat={prof_repeat}"
+        f"run_id={run_id} device={device} execution={compiled_execution} dtype={dtype}"
     )
+    if compiled_execution == "dynamic":
+        print(f"compile_shape={compile_shape} symbolic_dims={symbolic_dims}")
+    else:
+        print("compile_shape=per-runtime-shape")
+    print(f"runtime_shapes={runtime_shapes}")
+    print(f"warmup={warmup} active={active} repeat={repeat}")
     print(f"profile_root={profile_root}")
-    print(f"check={int(check)}")
+    print(f"summary_csv={summary_path}")
     print(f"cases={','.join(names)}")
     print()
-    writer = csv.writer(sys.stdout)
-    writer.writerow(
-        [
-            "case",
-            "group",
-            "input_kind",
-            "input_desc",
-            "output_desc",
-            "actual_output",
-            "aten_ops",
-            "triton_kernel_mean_us",
-            "triton_kernel_total_us",
-            "triton_kernel_count",
-            "kernels",
-        ]
-    )
+
+    writer = csv.DictWriter(sys.stdout, fieldnames=RESULT_COLUMNS)
+    writer.writeheader()
 
     for name in names:
         case = CASES[name]
-        args = make_inputs(shape, device, dtype, case.input_kind)
-        compiled = torch.compile(case.fn, backend="inductor", dynamic=dynamic)
-
-        # Compile before profiling so profiler records steady-state kernel launches.
-        compiled_out = compiled(*args)
-        sync(device)
-
-        if check:
-            eager_out = case.fn(*args)
+        dynamic_compiled = None
+        if compiled_execution == "dynamic":
+            compile_args = make_inputs(
+                compile_shape, device, dtype, case.input_kind
+            )
+            dynamic_compiled = compile_dynamic(
+                case, compile_args, symbolic_dims
+            )
             sync(device)
-            assert_same_output(compiled_out, eager_out)
 
-        mean_us, total_us, count, kernels = profile_compiled_case(
-            name,
-            compiled,
-            args,
-            profile_root,
-            prof_wait,
-            prof_warmup,
-            prof_active,
-            prof_repeat,
-        )
-        aten_ops = "|".join(case.aten_ops)
-        writer.writerow(
-            [
-                name,
-                case.group,
-                case.input_kind,
-                case.input_desc,
-                case.output_desc,
-                output_spec(compiled_out),
-                aten_ops,
-                f"{mean_us:.6f}",
-                f"{total_us:.6f}",
-                count,
-                kernels,
-            ]
-        )
+        for runtime_shape in runtime_shapes:
+            args = make_inputs(runtime_shape, device, dtype, case.input_kind)
+            if compiled_execution == "static":
+                compiled = compile_static(case, args)
+                row_compile_shape = runtime_shape
+            else:
+                compiled = dynamic_compiled
+                row_compile_shape = compile_shape
+            if compiled is None:
+                raise AssertionError("compiled function was not initialized")
+            sync(device)
+
+            executions = (("eager", case.fn), (compiled_execution, compiled))
+            for execution, execution_fn in executions:
+                output_dir = result_dir(
+                    run_root,
+                    device,
+                    name,
+                    runtime_shape,
+                    row_compile_shape,
+                    symbolic_dims,
+                    execution,
+                )
+                timing = profile_case(
+                    execution_fn,
+                    args,
+                    device,
+                    output_dir,
+                    warmup,
+                    active,
+                    repeat,
+                )
+                result_row = {
+                    "run_id": run_id,
+                    "device": device,
+                    "execution": execution,
+                    "priority": case.priority,
+                    "bound": case.bound,
+                    "case": name,
+                    "group": case.group,
+                    "input_kind": case.input_kind,
+                    "dtype": str(dtype),
+                    "compile_shape": shape_label(row_compile_shape)
+                    if execution != "eager"
+                    else "",
+                    "runtime_shape": shape_label(runtime_shape),
+                    "symbolic_dims": "|".join(str(dim) for dim in symbolic_dims)
+                    if execution == "dynamic"
+                    else "",
+                    "scalar_ops": "|".join(case.scalar_ops),
+                    "samples": str(timing.sample_count),
+                    "device_kernel_count": str(timing.kernel_count),
+                    "device_call_mean_us": f"{timing.mean_us:.6f}",
+                    "kernels": "|".join(timing.kernels),
+                    "result_dir": str(output_dir),
+                }
+                writer.writerow(result_row)
+                merge_summary_rows(summary_path, [result_row])
 
 
 if __name__ == "__main__":
