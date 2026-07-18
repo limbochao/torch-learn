@@ -14,3 +14,5 @@
 
 - `elementwise_dynamic_perf/`: 配套提供 elementwise 性能采集和宽表 CSV 对比脚本；支持 CUDA/NPU，按
   `EXECUTION=eager|static|dynamic` 分进程采集，再将相同场景的 execution 和设备结果横向合并。
+- `run_model_profile_rounds.sh`: 重复执行完整模型测试命令，从命令和日志定位 compile、profile 目录，
+  汇总 kernel 耗时并保存每轮产物。测试命令在脚本内配置，用法：`bash run_model_profile_rounds.sh [rounds]`。
