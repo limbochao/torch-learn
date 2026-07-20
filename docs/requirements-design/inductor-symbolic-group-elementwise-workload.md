@@ -109,29 +109,37 @@ grouped meta。该约束应继续保留。
 
 ```mermaid
 flowchart TD
-    A["TritonKernel 已创建"] --> B["SplitTiling 选择 split/tiling axis"]
-    B --> C{"group autotune 开启?"}
-    C -- 否 --> Z["不创建 GroupedKernelMeta"]
-    C -- 是 --> D{"template 在 allowlist?"}
-    D -- 否 --> Z
-    D -- 是 --> E{"存在 dynamic split axis?"}
-    E -- 否 --> Z
-    E -- 是 --> F{"template == pointwise?"}
-    F -- 否 --> G["沿用 reduction feature"]
-    F -- 是 --> H["调用 workload 分类接口"]
-    H --> I{"识别为 elementwise?"}
-    I -- 是 --> J["group_workload = elementwise"]
-    I -- 否或未知 --> K["group_workload = None"]
-    J --> L["按 template + workload 生成 group features"]
-    K --> L
-    G --> M["构造 GroupedKernelMeta"]
-    L --> M
-    M --> N["写入 inductor_meta"]
-    N --> O["runtime 根据 group features dispatch"]
+    A["FX Graph"] --> B["decomposition + lowering"]
+    B --> C["Scheduler 调度与融合"]
+    C --> D["创建 TritonKernel"]
+
+    subgraph ST["SplitTiling 阶段"]
+        E["选择 split/tiling axis"] --> F{"group autotune 开启?"}
+        F -- 否 --> Z["不创建 GroupedKernelMeta"]
+        F -- 是 --> G{"template 在 allowlist?"}
+        G -- 否 --> Z
+        G -- 是 --> H{"存在 dynamic split axis?"}
+        H -- 否 --> Z
+        H -- 是 --> I{"template == pointwise?"}
+        I -- 否 --> J["沿用 reduction feature"]
+        I -- 是 --> K["调用 _classify_group_workload<br/>在这里识别 elementwise"]
+        K --> L{"识别结果"}
+        L -- elementwise --> M["group_workload = elementwise"]
+        L -- 否或未知 --> N["group_workload = None"]
+        M --> O["按 template + workload 生成 group features"]
+        N --> O
+        J --> P["构造 GroupedKernelMeta"]
+        O --> P
+    end
+
+    D --> E
+    P --> Q["写入 inductor_meta"]
+    Q --> R["runtime 根据 group features dispatch"]
 ```
 
-关键点是：workload 分类发生在 `SplitTiling` 的 grouped 分支内部，而不是 lowering 或
-普通 Triton codegen 的通用路径。
+关键点是：elementwise 识别明确发生在 `SplitTiling` 的 grouped 分支内部，位置在确认
+存在 dynamic split axis 之后、生成 group features 之前，而不是 lowering 或普通 Triton
+codegen 的通用路径。
 
 ## 7. 接口设计
 
@@ -358,4 +366,3 @@ dynamic ordinary pointwise + old pointwise buckets
 3. elementwise 默认 bucket 是否需要独立于 pointwise；
 4. `group_workload` 是否需要加入现有 autotune cache key；
 5. 是否需要增加独立环境变量控制 elementwise workload 灰度发布。
-
