@@ -11,8 +11,12 @@ title: 需求设计
 <div class="tl-section-heading" markdown="1">
 ## 内容状态
 
-当前还没有正式归档的需求设计文档。后续新增时，建议按下面的生命周期组织。
+当前已归档 1 篇需求设计文档，后续新增时继续按下面的生命周期组织。
 </div>
+
+## 已归档设计
+
+- [Symbolic Grouped Autotune 增加 Elementwise Workload 设计](inductor-symbolic-group-elementwise-workload.md)
 
 <div class="tl-card-grid" markdown="1">
 <article class="tl-card tl-card-accent-blue" markdown="1">
