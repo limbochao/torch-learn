@@ -25,6 +25,7 @@ for ((i = 1; i <= rounds; i++)); do
         echo "Failed to find profile or compile path: ${run_dir}/run.log" >&2; exit 1;
     }
     total="$(awk -F, 'NR>1 {sum+=$11} END {print sum}' "${profile_path}/ASCEND_PROFILER_OUTPUT/kernel_details.csv")"
-    cp -r "${profile_path}" "${run_dir}/profile"; cp -r "${compile_path}" "${run_dir}/compile"
-    echo "${PTA},${TA},${CANN},${i},${time},${total},${profile_path},${compile_path}" >> "${results_csv}"
+    profile_copy_path="${run_dir}/profile"; compile_copy_path="${run_dir}/compile"
+    cp -r "${profile_path}" "${profile_copy_path}"; cp -r "${compile_path}" "${compile_copy_path}"
+    echo "${PTA},${TA},${CANN},${i},${time},${total},${profile_copy_path},${compile_copy_path}" >> "${results_csv}"
 done
