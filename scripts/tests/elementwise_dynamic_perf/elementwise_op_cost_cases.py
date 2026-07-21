@@ -16,10 +16,13 @@ all SHAPES. SYMBOLIC_DIMS identifies which dimensions are allowed to change:
     RUN_ID=baseline_001 DEVICE=npu EXECUTION=dynamic SYMBOLIC_DIMS=0 COMPILE_SHAPE=8192 \
         PRIORITY=P0 python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
 
+Use EXECUTION=group on NPU to enable symbolic group autotune while keeping the
+same dynamic compilation path.
+
 Useful environment variables:
 
     DEVICE=npu|cuda
-    EXECUTION=eager|static|dynamic
+    EXECUTION=eager|static|dynamic|group
     PRIORITY=P0 or PRIORITY=P0,P1
     CASES=memory_add,exp_log
     COMPILE_SHAPE=8192
@@ -69,6 +72,8 @@ DEFAULT_SHAPES = (
     "127;128;129;2047;2048;2049;8191;8192;8193;"
     "1048575;1048576;1048577"
 )
+GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
+DYNAMIC_EXECUTIONS = ("dynamic", "group")
 RESULT_COLUMNS = (
     "run_id",
     "device",
@@ -455,7 +460,7 @@ def result_dir(
     execution: str,
 ) -> Path:
     root = run_root / "profiles" / device / execution
-    if execution == "dynamic":
+    if execution in DYNAMIC_EXECUTIONS:
         dims_label = "-".join(str(dim) for dim in symbolic_dims)
         root = root / f"compile_{shape_label(compile_shape)}" / f"dims_{dims_label}"
     return root / case_name / f"runtime_{shape_label(runtime_shape)}"
@@ -528,14 +533,17 @@ def initialize_device(device: str) -> None:
 def main() -> None:
     device = os.environ.get("DEVICE", "npu").strip().lower()
     selected_execution = os.environ.get("EXECUTION", "static").strip().lower()
-    if selected_execution not in ("eager", "static", "dynamic"):
-        raise ValueError("EXECUTION must be 'eager', 'static', or 'dynamic'")
+    if selected_execution not in ("eager", "static", "dynamic", "group"):
+        raise ValueError("EXECUTION must be 'eager', 'static', 'dynamic', or 'group'")
+    if selected_execution == "group" and device != "npu":
+        raise ValueError("EXECUTION=group is only supported with DEVICE=npu")
+    os.environ[GROUP_AUTOTUNE_ENV] = "1" if selected_execution == "group" else "0"
 
     run_id = env_run_id()
     initialize_device(device)
     dtype = env_dtype("DTYPE", torch.float32)
     runtime_shapes = parse_shapes()
-    if selected_execution == "dynamic":
+    if selected_execution in DYNAMIC_EXECUTIONS:
         compile_shape = parse_shape(os.environ.get("COMPILE_SHAPE", "8192"))
         symbolic_dims = parse_symbolic_dims(len(compile_shape))
         validate_symbolic_shapes(compile_shape, runtime_shapes, symbolic_dims)
@@ -560,8 +568,9 @@ def main() -> None:
     print(
         f"run_id={run_id} device={device} execution={selected_execution} dtype={dtype}"
     )
-    if selected_execution == "dynamic":
+    if selected_execution in DYNAMIC_EXECUTIONS:
         print(f"compile_shape={compile_shape} symbolic_dims={symbolic_dims}")
+        print(f"{GROUP_AUTOTUNE_ENV}={os.environ[GROUP_AUTOTUNE_ENV]}")
     elif selected_execution == "static":
         print("compile_shape=per-runtime-shape")
     else:
@@ -579,7 +588,7 @@ def main() -> None:
     for name in names:
         case = CASES[name]
         dynamic_compiled = None
-        if selected_execution == "dynamic":
+        if selected_execution in DYNAMIC_EXECUTIONS:
             compile_args = make_inputs(
                 compile_shape, device, dtype, case.input_kind
             )
@@ -593,7 +602,7 @@ def main() -> None:
             if selected_execution == "static":
                 compiled = compile_static(case, args)
                 row_compile_shape = runtime_shape
-            elif selected_execution == "dynamic":
+            elif selected_execution in DYNAMIC_EXECUTIONS:
                 compiled = dynamic_compiled
                 row_compile_shape = compile_shape
             else:
@@ -637,7 +646,7 @@ def main() -> None:
                 else "",
                 "runtime_shape": shape_label(runtime_shape),
                 "symbolic_dims": "|".join(str(dim) for dim in symbolic_dims)
-                if selected_execution == "dynamic"
+                if selected_execution in DYNAMIC_EXECUTIONS
                 else "",
                 "scalar_ops": "|".join(case.scalar_ops),
                 "samples": str(timing.sample_count),

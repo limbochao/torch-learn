@@ -23,9 +23,14 @@ OUTPUT_COLUMNS = (
     "npu_static_us",
     "npu_dynamic_us",
     "npu_dynamic_static_ratio",
+    "npu_group_us",
+    "npu_group_eager_ratio",
+    "npu_group_static_ratio",
     "npu_cuda_ratio_of_lift",
+    "npu_group_cuda_ratio_of_lift",
 )
 EXECUTIONS = ("eager", "static", "dynamic")
+SHAPE_DEPENDENT_EXECUTIONS = ("dynamic", "group")
 DEVICES = ("cuda", "npu")
 OUTPUT_NAME = "elementwise_op_cost_comparison.csv"
 LOGGER = logging.getLogger(__name__)
@@ -66,7 +71,7 @@ def first_shapes(rows: list[dict[str, str]]) -> list[str]:
     shapes = {
         row_value(row, "compile_shape")
         for row in rows
-        if row_value(row, "execution") == "dynamic"
+        if row_value(row, "execution") in SHAPE_DEPENDENT_EXECUTIONS
     }
     return sorted(shapes, key=shape_key) if shapes else [""]
 
@@ -81,7 +86,10 @@ def select_execution_row(
     for row in rows:
         if row_value(row, "device") != device or row_value(row, "execution") != execution:
             continue
-        if execution == "dynamic" and row_value(row, "compile_shape") != first_shape:
+        if (
+            execution in SHAPE_DEPENDENT_EXECUTIONS
+            and row_value(row, "compile_shape") != first_shape
+        ):
             continue
         matches.append(row)
     return matches[-1] if matches else None
@@ -101,10 +109,10 @@ def timing_us(row: dict[str, str] | None) -> float | None:
         return None
 
 
-def cost_ratio(dynamic_us: float | None, static_us: float | None) -> float | None:
-    if dynamic_us is None or static_us in (None, 0.0):
+def cost_ratio(numerator_us: float | None, denominator_us: float | None) -> float | None:
+    if numerator_us is None or denominator_us in (None, 0.0):
         return None
-    return dynamic_us / static_us
+    return numerator_us / denominator_us
 
 
 def comparison_row(
@@ -139,10 +147,22 @@ def comparison_row(
 
     cuda_ratio = ratios["cuda"]
     npu_ratio = ratios["npu"]
+    npu_group_us = timing_us(select_execution_row(rows, "npu", "group", first_shape))
+    result["npu_group_us"] = format_number(npu_group_us)
+    npu_eager_us = timing_us(select_execution_row(rows, "npu", "eager", first_shape))
+    npu_static_us = timing_us(select_execution_row(rows, "npu", "static", first_shape))
+    npu_group_eager_ratio = cost_ratio(npu_group_us, npu_eager_us)
+    npu_group_static_ratio = cost_ratio(npu_group_us, npu_static_us)
+    result["npu_group_eager_ratio"] = format_number(npu_group_eager_ratio)
+    result["npu_group_static_ratio"] = format_number(npu_group_static_ratio)
     ratio_of_lift = None
     if npu_ratio is not None and cuda_ratio not in (None, 0.0):
         ratio_of_lift = npu_ratio / cuda_ratio
     result["npu_cuda_ratio_of_lift"] = format_number(ratio_of_lift)
+    group_ratio_of_lift = None
+    if npu_group_static_ratio is not None and cuda_ratio not in (None, 0.0):
+        group_ratio_of_lift = npu_group_static_ratio / cuda_ratio
+    result["npu_group_cuda_ratio_of_lift"] = format_number(group_ratio_of_lift)
     return result
 
 
