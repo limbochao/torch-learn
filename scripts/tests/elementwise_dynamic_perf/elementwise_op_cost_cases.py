@@ -16,13 +16,13 @@ all SHAPES. SYMBOLIC_DIMS identifies which dimensions are allowed to change:
     RUN_ID=baseline_001 DEVICE=npu EXECUTION=dynamic SYMBOLIC_DIMS=0 COMPILE_SHAPE=8192 \
         PRIORITY=P0 python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
 
-Use EXECUTION=group on NPU to enable symbolic group autotune while keeping the
-same dynamic compilation path.
+Use EXECUTION=custom on NPU to benchmark a locally modified torch_npu dynamic
+path. Use EXECUTION=group to enable symbolic group autotune.
 
 Useful environment variables:
 
     DEVICE=npu|cuda
-    EXECUTION=eager|static|dynamic|group
+    EXECUTION=eager|static|dynamic|custom|group
     PRIORITY=P0 or PRIORITY=P0,P1
     CASES=memory_add,exp_log
     COMPILE_SHAPE=8192
@@ -31,6 +31,7 @@ Useful environment variables:
     DTYPE=float32
     WARMUP=5 ACTIVE=20 REPEAT=1
     RUN_ID=elementwise_baseline_001
+    RECORD_RESULTS=0|1
     PROFILE_ROOT=prof_log/elementwise_dynamic_perf
 
 The default SHAPES bracket 128, 2048, 8192, and 2^20 boundaries. Use separate
@@ -47,10 +48,12 @@ from __future__ import annotations
 
 import csv
 import fcntl
+import json
 import os
 import re
 import shutil
 import sys
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +65,7 @@ SCRIPTS_ROOT = Path(__file__).resolve().parents[2]
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
+from tools.autotune_tiling import BestTilingRecorder
 from tools.cuda_profiler import CudaProfileParser, TorchCudaProfiler, cuda_kernel_label
 from tools.npu_profiler import ProfileResultParser, TorchNpuProfiler
 
@@ -73,7 +77,7 @@ DEFAULT_SHAPES = (
     "1048575;1048576;1048577"
 )
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
-DYNAMIC_EXECUTIONS = ("dynamic", "group")
+DYNAMIC_EXECUTIONS = ("dynamic", "custom", "group")
 RESULT_COLUMNS = (
     "run_id",
     "device",
@@ -92,6 +96,7 @@ RESULT_COLUMNS = (
     "device_kernel_count",
     "device_call_mean_us",
     "kernels",
+    "autotune_tiling_configs",
     "result_dir",
 )
 SUMMARY_KEY_COLUMNS = (
@@ -129,6 +134,18 @@ def env_int(name: str, default: int) -> int:
     if value is None:
         return default
     return int(value)
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in ("1", "true", "yes", "on"):
+        return True
+    if normalized in ("0", "false", "no", "off"):
+        return False
+    raise ValueError(f"{name} must be one of 0, 1, false, true, no, yes, off, or on")
 
 
 def env_run_id() -> str:
@@ -368,6 +385,12 @@ def prepare_profile_dir(profile_dir: Path) -> None:
     profile_dir.mkdir(parents=True)
 
 
+def serialize_best_tiling_configs(records: list[dict[str, object]]) -> str:
+    if not records:
+        return ""
+    return json.dumps(records, sort_keys=True, separators=(",", ":"))
+
+
 def profile_npu_case(
     case_fn: CaseFn,
     args: TensorArgs,
@@ -533,14 +556,24 @@ def initialize_device(device: str) -> None:
 def main() -> None:
     device = os.environ.get("DEVICE", "npu").strip().lower()
     selected_execution = os.environ.get("EXECUTION", "static").strip().lower()
-    if selected_execution not in ("eager", "static", "dynamic", "group"):
-        raise ValueError("EXECUTION must be 'eager', 'static', 'dynamic', or 'group'")
-    if selected_execution == "group" and device != "npu":
-        raise ValueError("EXECUTION=group is only supported with DEVICE=npu")
+    if selected_execution not in ("eager", "static", "dynamic", "custom", "group"):
+        raise ValueError(
+            "EXECUTION must be 'eager', 'static', 'dynamic', 'custom', or 'group'"
+        )
+    if selected_execution in ("custom", "group") and device != "npu":
+        raise ValueError(f"EXECUTION={selected_execution} is only supported with DEVICE=npu")
     os.environ[GROUP_AUTOTUNE_ENV] = "1" if selected_execution == "group" else "0"
 
-    run_id = env_run_id()
+    record_results = env_bool("RECORD_RESULTS", True)
+    run_id = (
+        env_run_id()
+        if record_results
+        else os.environ.get("RUN_ID", "temporary").strip() or "temporary"
+    )
     initialize_device(device)
+    tiling_recorder = BestTilingRecorder(device)
+    if selected_execution != "eager":
+        tiling_recorder.install()
     dtype = env_dtype("DTYPE", torch.float32)
     runtime_shapes = parse_shapes()
     if selected_execution in DYNAMIC_EXECUTIONS:
@@ -562,6 +595,14 @@ def main() -> None:
     )
     run_root = profile_root / run_id
     summary_path = run_root / "summary.csv"
+    temporary_profile_root = None
+    if record_results:
+        result_root = run_root
+    else:
+        temporary_profile_root = tempfile.TemporaryDirectory(
+            prefix="elementwise_dynamic_perf_"
+        )
+        result_root = Path(temporary_profile_root.name)
     names = selected_case_names()
 
     print("elementwise_op_cost_cases")
@@ -577,8 +618,9 @@ def main() -> None:
         print("compile_shape=not-applicable")
     print(f"runtime_shapes={runtime_shapes}")
     print(f"warmup={warmup} active={active} repeat={repeat}")
+    print(f"record_results={record_results}")
     print(f"profile_root={profile_root}")
-    print(f"summary_csv={summary_path}")
+    print(f"summary_csv={summary_path if record_results else 'disabled'}")
     print(f"cases={','.join(names)}")
     print()
 
@@ -588,25 +630,36 @@ def main() -> None:
     for name in names:
         case = CASES[name]
         dynamic_compiled = None
+        dynamic_tiling_records: list[dict[str, object]] = []
         if selected_execution in DYNAMIC_EXECUTIONS:
             compile_args = make_inputs(
                 compile_shape, device, dtype, case.input_kind
             )
-            dynamic_compiled = compile_dynamic(
-                case, compile_args, symbolic_dims
-            )
+            tiling_recorder.start_capture()
+            try:
+                dynamic_compiled = compile_dynamic(
+                    case, compile_args, symbolic_dims
+                )
+            finally:
+                dynamic_tiling_records = tiling_recorder.stop_capture()
             sync(device)
 
-        for runtime_shape in runtime_shapes:
+        for runtime_index, runtime_shape in enumerate(runtime_shapes):
             args = make_inputs(runtime_shape, device, dtype, case.input_kind)
             if selected_execution == "static":
-                compiled = compile_static(case, args)
+                tiling_recorder.start_capture()
+                try:
+                    compiled = compile_static(case, args)
+                finally:
+                    tiling_records = tiling_recorder.stop_capture()
                 row_compile_shape = runtime_shape
             elif selected_execution in DYNAMIC_EXECUTIONS:
                 compiled = dynamic_compiled
+                tiling_records = dynamic_tiling_records if runtime_index == 0 else []
                 row_compile_shape = compile_shape
             else:
                 compiled = None
+                tiling_records = []
                 row_compile_shape = runtime_shape
             if selected_execution != "eager" and compiled is None:
                 raise AssertionError("compiled function was not initialized")
@@ -614,7 +667,7 @@ def main() -> None:
 
             execution_fn = case.fn if compiled is None else compiled
             output_dir = result_dir(
-                run_root,
+                result_root,
                 device,
                 name,
                 runtime_shape,
@@ -631,6 +684,7 @@ def main() -> None:
                 active,
                 repeat,
             )
+            tiling_configs = serialize_best_tiling_configs(tiling_records)
             result_row = {
                 "run_id": run_id,
                 "device": device,
@@ -653,10 +707,15 @@ def main() -> None:
                 "device_kernel_count": str(timing.kernel_count),
                 "device_call_mean_us": f"{timing.mean_us:.6f}",
                 "kernels": "|".join(timing.kernels),
-                "result_dir": str(output_dir),
+                "autotune_tiling_configs": tiling_configs,
+                "result_dir": str(output_dir) if record_results else "",
             }
             writer.writerow(result_row)
-            merge_summary_rows(summary_path, [result_row])
+            if record_results:
+                merge_summary_rows(summary_path, [result_row])
+
+    if temporary_profile_root is not None:
+        temporary_profile_root.cleanup()
 
 
 if __name__ == "__main__":

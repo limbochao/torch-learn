@@ -9,28 +9,15 @@ from collections import defaultdict
 from pathlib import Path
 
 
-OUTPUT_COLUMNS = (
+BASE_OUTPUT_COLUMNS = (
     "bound",
     "scalar_ops",
     "dtype",
     "first_shape",
     "runtime_shape",
-    "cuda_eager_us",
-    "cuda_static_us",
-    "cuda_dynamic_us",
-    "cuda_dynamic_static_ratio",
-    "npu_eager_us",
-    "npu_static_us",
-    "npu_dynamic_us",
-    "npu_dynamic_static_ratio",
-    "npu_group_us",
-    "npu_group_eager_ratio",
-    "npu_group_static_ratio",
-    "npu_cuda_ratio_of_lift",
-    "npu_group_cuda_ratio_of_lift",
 )
 EXECUTIONS = ("eager", "static", "dynamic")
-SHAPE_DEPENDENT_EXECUTIONS = ("dynamic", "group")
+SHAPE_DEPENDENT_EXECUTIONS = ("dynamic", "custom", "group")
 DEVICES = ("cuda", "npu")
 OUTPUT_NAME = "elementwise_op_cost_comparison.csv"
 LOGGER = logging.getLogger(__name__)
@@ -74,6 +61,56 @@ def first_shapes(rows: list[dict[str, str]]) -> list[str]:
         if row_value(row, "execution") in SHAPE_DEPENDENT_EXECUTIONS
     }
     return sorted(shapes, key=shape_key) if shapes else [""]
+
+
+def has_execution(
+    present: set[tuple[str, str]],
+    device: str,
+    execution: str,
+) -> bool:
+    return (device, execution) in present
+
+
+def output_columns(rows: list[dict[str, str]]) -> tuple[str, ...]:
+    present = {
+        (row_value(row, "device"), row_value(row, "execution")) for row in rows
+    }
+    columns = list(BASE_OUTPUT_COLUMNS)
+    for device in DEVICES:
+        for execution in EXECUTIONS:
+            if has_execution(present, device, execution):
+                columns.append(f"{device}_{execution}_us")
+        if (
+            has_execution(present, device, "dynamic")
+            and has_execution(present, device, "static")
+        ):
+            columns.append(f"{device}_dynamic_static_ratio")
+
+    for execution in ("custom", "group"):
+        if has_execution(present, "npu", execution):
+            columns.append(f"npu_{execution}_us")
+        for baseline in ("eager", "static"):
+            if (
+                has_execution(present, "npu", execution)
+                and has_execution(present, "npu", baseline)
+            ):
+                columns.append(f"npu_{execution}_{baseline}_ratio")
+        if (
+            has_execution(present, "npu", execution)
+            and has_execution(present, "npu", "static")
+            and has_execution(present, "cuda", "dynamic")
+            and has_execution(present, "cuda", "static")
+        ):
+            columns.append(f"npu_{execution}_cuda_ratio_of_lift")
+
+    if (
+        has_execution(present, "npu", "dynamic")
+        and has_execution(present, "npu", "static")
+        and has_execution(present, "cuda", "dynamic")
+        and has_execution(present, "cuda", "static")
+    ):
+        columns.append("npu_cuda_ratio_of_lift")
+    return tuple(columns)
 
 
 def select_execution_row(
@@ -121,8 +158,9 @@ def comparison_row(
     dtype: str,
     runtime_shape: str,
     first_shape: str,
+    columns: tuple[str, ...],
 ) -> dict[str, str]:
-    result = {column: "" for column in OUTPUT_COLUMNS}
+    result = {column: "" for column in columns}
     result.update(
         {
             "bound": row_value(rows[-1], "bound") if rows else "",
@@ -140,29 +178,45 @@ def comparison_row(
             for execution in EXECUTIONS
         }
         for execution, timing in timings.items():
-            result[f"{device}_{execution}_us"] = format_number(timing)
+            column = f"{device}_{execution}_us"
+            if column in result:
+                result[column] = format_number(timing)
         ratio = cost_ratio(timings["dynamic"], timings["static"])
         ratios[device] = ratio
-        result[f"{device}_dynamic_static_ratio"] = format_number(ratio)
+        column = f"{device}_dynamic_static_ratio"
+        if column in result:
+            result[column] = format_number(ratio)
 
     cuda_ratio = ratios["cuda"]
     npu_ratio = ratios["npu"]
-    npu_group_us = timing_us(select_execution_row(rows, "npu", "group", first_shape))
-    result["npu_group_us"] = format_number(npu_group_us)
     npu_eager_us = timing_us(select_execution_row(rows, "npu", "eager", first_shape))
     npu_static_us = timing_us(select_execution_row(rows, "npu", "static", first_shape))
-    npu_group_eager_ratio = cost_ratio(npu_group_us, npu_eager_us)
-    npu_group_static_ratio = cost_ratio(npu_group_us, npu_static_us)
-    result["npu_group_eager_ratio"] = format_number(npu_group_eager_ratio)
-    result["npu_group_static_ratio"] = format_number(npu_group_static_ratio)
+    for execution in ("custom", "group"):
+        execution_us = timing_us(
+            select_execution_row(rows, "npu", execution, first_shape)
+        )
+        column = f"npu_{execution}_us"
+        if column in result:
+            result[column] = format_number(execution_us)
+        for baseline, baseline_us in (
+            ("eager", npu_eager_us),
+            ("static", npu_static_us),
+        ):
+            column = f"npu_{execution}_{baseline}_ratio"
+            if column in result:
+                result[column] = format_number(cost_ratio(execution_us, baseline_us))
+        column = f"npu_{execution}_cuda_ratio_of_lift"
+        if column in result:
+            execution_static_ratio = cost_ratio(execution_us, npu_static_us)
+            lift = None
+            if execution_static_ratio is not None and cuda_ratio not in (None, 0.0):
+                lift = execution_static_ratio / cuda_ratio
+            result[column] = format_number(lift)
     ratio_of_lift = None
     if npu_ratio is not None and cuda_ratio not in (None, 0.0):
         ratio_of_lift = npu_ratio / cuda_ratio
-    result["npu_cuda_ratio_of_lift"] = format_number(ratio_of_lift)
-    group_ratio_of_lift = None
-    if npu_group_static_ratio is not None and cuda_ratio not in (None, 0.0):
-        group_ratio_of_lift = npu_group_static_ratio / cuda_ratio
-    result["npu_group_cuda_ratio_of_lift"] = format_number(group_ratio_of_lift)
+    if "npu_cuda_ratio_of_lift" in result:
+        result["npu_cuda_ratio_of_lift"] = format_number(ratio_of_lift)
     return result
 
 
@@ -176,6 +230,7 @@ def condensed_key(row: dict[str, str]) -> tuple[str, ...]:
 
 
 def build_comparison_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    columns = output_columns(rows)
     grouped: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
     for row in rows:
         grouped[group_key(row)].append(row)
@@ -189,6 +244,7 @@ def build_comparison_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
                 dtype,
                 runtime_shape,
                 first_shape,
+                columns,
             )
             key = condensed_key(comparison)
             if key in comparison_by_key:
@@ -215,10 +271,14 @@ def build_comparison_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     )
 
 
-def write_comparison(rows: list[dict[str, str]], output_path: Path) -> None:
+def write_comparison(
+    rows: list[dict[str, str]],
+    output_path: Path,
+    columns: tuple[str, ...],
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as output:
-        writer = csv.DictWriter(output, fieldnames=OUTPUT_COLUMNS)
+        writer = csv.DictWriter(output, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -233,8 +293,9 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
     args = parse_args()
     output_path = args.summary.parent / OUTPUT_NAME
-    rows = build_comparison_rows(read_rows(args.summary))
-    write_comparison(rows, output_path)
+    summary_rows = read_rows(args.summary)
+    rows = build_comparison_rows(summary_rows)
+    write_comparison(rows, output_path, output_columns(summary_rows))
     print(f"wrote {len(rows)} comparison rows to {output_path}")
 
 

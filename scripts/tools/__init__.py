@@ -1,5 +1,6 @@
 """Reusable helpers for torch-learn scripts."""
 
+from .autotune_tiling import BestTilingRecorder
 from .cuda_profiler import (
     CudaKernelRecord,
     CudaProfilerConfig,
@@ -16,6 +17,7 @@ from .npu_profiler import (
 )
 
 __all__ = [
+    "BestTilingRecorder",
     "CudaKernelRecord",
     "CudaProfilerConfig",
     "CudaProfileParser",

@@ -18,13 +18,30 @@ RUN_ID=baseline_001 DEVICE=cuda EXECUTION=dynamic COMPILE_SHAPE=8192 SYMBOLIC_DI
     python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
 RUN_ID=baseline_001 DEVICE=npu EXECUTION=dynamic COMPILE_SHAPE=8192 SYMBOLIC_DIMS=0 \
     python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
+RUN_ID=baseline_001 DEVICE=npu EXECUTION=custom COMPILE_SHAPE=8192 SYMBOLIC_DIMS=0 \
+    python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
 RUN_ID=baseline_001 DEVICE=npu EXECUTION=group COMPILE_SHAPE=8192 SYMBOLIC_DIMS=0 \
     python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
 ```
 
-`EXECUTION=group` 仅支持 NPU。它会在导入 `torch_npu` 前设置
+`EXECUTION=custom` 和 `EXECUTION=group` 仅支持 NPU。`custom` 与 `dynamic` 使用完全相同的
+符号化和 `torch.compile(dynamic=None)` 路径，用于比较人为修改后的 torch_npu 行为。`group` 会在导入
+`torch_npu` 前设置
 `INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE=1`，并使用与 `dynamic` 相同的符号化和
 `torch.compile(dynamic=None)` 路径；普通 `dynamic` 会将该开关设置为 `0`。
+
+`RECORD_RESULTS=0` 可用于临时试验：不要求设置 `RUN_ID`，只将结果打印到 stdout，不写 `summary.csv`，
+临时 profiler 产物会在进程退出前删除。默认值为 `1`，保持现有结果记录行为。
+
+每条 `summary.csv` 结果还包含一个 autotune tiling 字段：
+
+- `autotune_tiling_configs`：紧凑 JSON 数组，保存每个 kernel 最终选中的 best config；每项包含 kernel、selected
+  config、runtime blocks，NPU group 还包含
+  `group_id` 和 `feature_inputs`。
+
+static 的每个 runtime shape 都独立编译，因此各行记录各自编译时的 tiling。dynamic/custom/group 只在使用
+`COMPILE_SHAPE` 首次编译时 autotune，因此记录写入该 case 的第一条 runtime shape 行，后续复用 kernel 的行为空。
+eager 或编译时未触发 Inductor autotune 时，该字段为空。
 
 生成浓缩 CSV：
 
@@ -34,15 +51,16 @@ python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_compare.py \
 ```
 
 产物固定写入 summary 同级目录的 `elementwise_op_cost_comparison.csv`。所有数值保留三位小数；原始 summary
-不存在的 execution 或设备数据保持为空。输出唯一键为
+未运行的 device/execution 不生成对应列；已生成列中不存在的组合保持为空。输出唯一键为
 `scalar_ops + dtype + first_shape + runtime_shape`；若不同 case 产生相同键，脚本会打印冲突 warning。
 
-输出字段：
+下列为所有可能字段，实际输出会根据 summary 中已有的 device/execution 选择其子集：
 
 ```text
 bound,scalar_ops,dtype,first_shape,runtime_shape,
 cuda_eager_us,cuda_static_us,cuda_dynamic_us,cuda_dynamic_static_ratio,
 npu_eager_us,npu_static_us,npu_dynamic_us,npu_dynamic_static_ratio,
+npu_custom_us,npu_custom_eager_ratio,npu_custom_static_ratio,npu_custom_cuda_ratio_of_lift,
 npu_group_us,npu_group_eager_ratio,npu_group_static_ratio,
 npu_cuda_ratio_of_lift,npu_group_cuda_ratio_of_lift
 ```
@@ -52,4 +70,5 @@ npu_cuda_ratio_of_lift,npu_group_cuda_ratio_of_lift
 - `npu_group_eager_ratio = npu_group_us / npu_eager_us`。
 - `npu_group_static_ratio = npu_group_us / npu_static_us`。
 - `npu_cuda_ratio_of_lift = npu_dynamic_static_ratio / cuda_dynamic_static_ratio`。
+- `npu_custom_cuda_ratio_of_lift = npu_custom_static_ratio / cuda_dynamic_static_ratio`。
 - `npu_group_cuda_ratio_of_lift = npu_group_static_ratio / cuda_dynamic_static_ratio`。

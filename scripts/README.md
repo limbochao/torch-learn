@@ -18,6 +18,7 @@ Skill 内部需要随安装包分发的 bundled scripts 保留在对应 `skills/
 - `repro/rms_norm_simd_multi_reduction_manual_tiling.py`: 使用手工 tiling 验证问题。
 - `tests/elementwise_dynamic_perf/`: 采集并浓缩 CUDA/NPU eager、static 与 dynamic elementwise kernel 的
   device-side 开销。
+- `tools/autotune_tiling.py`: 提供脚本调用的接口，获取 CUDA/NPU Inductor autotune 最终选中的 tiling config。
 - `tools/cuda_profiler.py`: 将 PyTorch CUDA profiler Chrome Trace JSON 中的 device kernel 记录转换为 CSV。
 - `tools/npu_profiler.py`: 采集并解析 torch_npu profiler 结果，详细用法见 `tools/README.md`。
 

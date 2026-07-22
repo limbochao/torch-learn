@@ -36,6 +36,30 @@ parser.export_kernel_csv("cuda_kernels.csv")
 `cuda_runtime`、`ac2g`、CPU operator 等非 kernel 事件不会写入 CSV。`grid` 或 `block` 缺失时对应字段为空。
 `cuda_kernel_label` 可为汇总表生成短名称；它不修改 Chrome Trace 或 parser 导出的原始 kernel 名称。
 
+## Autotune best tiling
+
+`autotune_tiling.py` 提供 `BestTilingRecorder`，通过运行时 hook 记录 CUDA、NPU 普通 autotune 和 NPU
+symbolic group autotune 最终选中的 tiling。工具只返回结构化记录，不落盘、不汇总、不定义业务字段：
+
+```python
+from scripts.tools.autotune_tiling import BestTilingRecorder
+
+recorder = BestTilingRecorder("npu")
+recorder.install()
+try:
+    recorder.start_capture()
+    try:
+        compiled_fn(*args)
+    finally:
+        tiling_records = recorder.stop_capture()
+finally:
+    recorder.uninstall()
+```
+
+每条记录包含 `device`、`kernel_name`、`selected_config` 和 `runtime_blocks`。NPU group 记录还包含
+`group_id` 和 `feature_inputs`。调用方自行决定如何补充场景元数据和保存结果。recorder 使用 Inductor autotuner
+的内部接口，升级 PyTorch 或 torch_npu 后需要通过目标设备测试确认 hook 仍然有效。
+
 ## NPU profiler
 
 `npu_profiler.py` 提供两个公共工具：
