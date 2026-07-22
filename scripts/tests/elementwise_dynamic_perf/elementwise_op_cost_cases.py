@@ -26,7 +26,8 @@ Useful environment variables:
     PRIORITY=P0 or PRIORITY=P0,P1
     CASES=memory_add,exp_log
     COMPILE_SHAPE=8192
-    SHAPES=127;128;129;2047;2048;2049;8191;8192;8193;1048575;1048576;1048577
+    SHAPES=127;128;129;2047;2048;2049;8191;8192;8193;16383;16384;16385;
+        131071;131072;131073;1048575;1048576;1048577
     SYMBOLIC_DIMS=0
     DTYPE=float32
     WARMUP=5 ACTIVE=20 REPEAT=1
@@ -34,9 +35,9 @@ Useful environment variables:
     RECORD_RESULTS=0|1
     PROFILE_ROOT=prof_log/elementwise_dynamic_perf
 
-The default SHAPES bracket 128, 2048, 8192, and 2^20 boundaries. Use separate
-dynamic runs with COMPILE_SHAPE=128, 8192, and 1048576 to quantify how the
-first shape affects reuse performance.
+The default SHAPES bracket 128, 2048, 8192, 16K, 128K, and 2^20 boundaries.
+Use separate dynamic runs with COMPILE_SHAPE=128, 8192, and 1048576 to quantify
+how the first shape affects reuse performance.
 
 Runs sharing RUN_ID are merged into <PROFILE_ROOT>/<RUN_ID>/summary.csv. Raw
 profiles are stored below <PROFILE_ROOT>/<RUN_ID>/profiles/. Cross-device
@@ -74,6 +75,7 @@ TensorArgs = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 CaseFn = Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]
 DEFAULT_SHAPES = (
     "127;128;129;2047;2048;2049;8191;8192;8193;"
+    "16383;16384;16385;131071;131072;131073;"
     "1048575;1048576;1048577"
 )
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
