@@ -1,4 +1,4 @@
-"""Condense elementwise performance summary rows into a cross-device CSV."""
+"""Condense elementwise performance summary rows into CSV and XLSX reports."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import csv
 import logging
 from collections import defaultdict
 from pathlib import Path
+
+from elementwise_op_cost_xlsx import write_xlsx_report
 
 
 BASE_OUTPUT_COLUMNS = (
@@ -20,6 +22,7 @@ EXECUTIONS = ("eager", "static", "dynamic")
 SHAPE_DEPENDENT_EXECUTIONS = ("dynamic", "custom", "group")
 DEVICES = ("cuda", "npu")
 OUTPUT_NAME = "elementwise_op_cost_comparison.csv"
+XLSX_OUTPUT_NAME = "elementwise_op_cost_comparison.xlsx"
 LOGGER = logging.getLogger(__name__)
 
 
@@ -293,10 +296,14 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
     args = parse_args()
     output_path = args.summary.parent / OUTPUT_NAME
+    xlsx_output_path = args.summary.parent / XLSX_OUTPUT_NAME
     summary_rows = read_rows(args.summary)
     rows = build_comparison_rows(summary_rows)
-    write_comparison(rows, output_path, output_columns(summary_rows))
+    columns = output_columns(summary_rows)
+    write_comparison(rows, output_path, columns)
+    write_xlsx_report(rows, xlsx_output_path, columns)
     print(f"wrote {len(rows)} comparison rows to {output_path}")
+    print(f"wrote {len(rows)} comparison rows to {xlsx_output_path}")
 
 
 if __name__ == "__main__":

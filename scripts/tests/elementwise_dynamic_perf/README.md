@@ -4,7 +4,7 @@
 
 - `elementwise_op_cost_cases.py`：通过现有 CUDA/NPU profiler 工具采集单次 elementwise case 调用的
   device-side 平均耗时，并按 `RUN_ID` 合并到原始 `summary.csv`。
-- `elementwise_op_cost_compare.py`：将原始 summary 浓缩为同场景、跨 execution、跨设备的宽表 CSV。
+- `elementwise_op_cost_compare.py`：将原始 summary 浓缩为同场景、跨 execution、跨设备的宽表 CSV 和 XLSX。
 
 每次采集只运行 `EXECUTION` 指定的路径。不同 execution 和设备使用相同 `RUN_ID`，并共享
 `PROFILE_ROOT`：
@@ -50,8 +50,10 @@ python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_compare.py \
     prof_log/elementwise_dynamic_perf/baseline_001/summary.csv
 ```
 
-产物固定写入 summary 同级目录的 `elementwise_op_cost_comparison.csv`。所有数值保留三位小数；原始 summary
-未运行的 device/execution 不生成对应列；已生成列中不存在的组合保持为空。输出唯一键为
+产物固定写入 summary 同级目录的 `elementwise_op_cost_comparison.csv` 和
+`elementwise_op_cost_comparison.xlsx`。CSV 保持机器可读的完整重复值；XLSX 合并相邻的场景维度单元格，并增加
+冻结表头、筛选、列宽、分组底色和 ratio 异常值标红。两种产物的数值和动态列完全一致，所有数值保留三位小数；
+原始 summary 未运行的 device/execution 不生成对应列；已生成列中不存在的组合保持为空。输出唯一键为
 `scalar_ops + dtype + first_shape + runtime_shape`；若不同 case 产生相同键，脚本会打印冲突 warning。
 
 下列为所有可能字段，实际输出会根据 summary 中已有的 device/execution 选择其子集：
