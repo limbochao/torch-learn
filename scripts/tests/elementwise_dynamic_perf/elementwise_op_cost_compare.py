@@ -88,16 +88,20 @@ def output_columns(rows: list[dict[str, str]]) -> tuple[str, ...]:
             and has_execution(present, device, "static")
         ):
             columns.append(f"{device}_dynamic_static_ratio")
+            if device == "npu" and (
+                has_execution(present, "cuda", "dynamic")
+                and has_execution(present, "cuda", "static")
+            ):
+                columns.append("npu_cuda_ratio_of_lift")
 
     for execution in ("custom", "group"):
         if has_execution(present, "npu", execution):
             columns.append(f"npu_{execution}_us")
-        for baseline in ("eager", "static"):
-            if (
-                has_execution(present, "npu", execution)
-                and has_execution(present, "npu", baseline)
-            ):
-                columns.append(f"npu_{execution}_{baseline}_ratio")
+        if (
+            has_execution(present, "npu", execution)
+            and has_execution(present, "npu", "static")
+        ):
+            columns.append(f"npu_{execution}_static_ratio")
         if (
             has_execution(present, "npu", execution)
             and has_execution(present, "npu", "static")
@@ -105,14 +109,6 @@ def output_columns(rows: list[dict[str, str]]) -> tuple[str, ...]:
             and has_execution(present, "cuda", "static")
         ):
             columns.append(f"npu_{execution}_cuda_ratio_of_lift")
-
-    if (
-        has_execution(present, "npu", "dynamic")
-        and has_execution(present, "npu", "static")
-        and has_execution(present, "cuda", "dynamic")
-        and has_execution(present, "cuda", "static")
-    ):
-        columns.append("npu_cuda_ratio_of_lift")
     return tuple(columns)
 
 
@@ -192,7 +188,6 @@ def comparison_row(
 
     cuda_ratio = ratios["cuda"]
     npu_ratio = ratios["npu"]
-    npu_eager_us = timing_us(select_execution_row(rows, "npu", "eager", first_shape))
     npu_static_us = timing_us(select_execution_row(rows, "npu", "static", first_shape))
     for execution in ("custom", "group"):
         execution_us = timing_us(
@@ -201,13 +196,9 @@ def comparison_row(
         column = f"npu_{execution}_us"
         if column in result:
             result[column] = format_number(execution_us)
-        for baseline, baseline_us in (
-            ("eager", npu_eager_us),
-            ("static", npu_static_us),
-        ):
-            column = f"npu_{execution}_{baseline}_ratio"
-            if column in result:
-                result[column] = format_number(cost_ratio(execution_us, baseline_us))
+        column = f"npu_{execution}_static_ratio"
+        if column in result:
+            result[column] = format_number(cost_ratio(execution_us, npu_static_us))
         column = f"npu_{execution}_cuda_ratio_of_lift"
         if column in result:
             execution_static_ratio = cost_ratio(execution_us, npu_static_us)

@@ -59,6 +59,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+
+GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
+SELECTED_EXECUTION = os.environ.get("EXECUTION", "static").strip().lower()
+os.environ[GROUP_AUTOTUNE_ENV] = "1" if SELECTED_EXECUTION == "group" else "0"
+
 import torch
 
 
@@ -78,7 +83,6 @@ DEFAULT_SHAPES = (
     "16383;16384;16385;131071;131072;131073;"
     "1048575;1048576;1048577"
 )
-GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
 DYNAMIC_EXECUTIONS = ("dynamic", "custom", "group")
 RESULT_COLUMNS = (
     "run_id",
@@ -557,15 +561,13 @@ def initialize_device(device: str) -> None:
 
 def main() -> None:
     device = os.environ.get("DEVICE", "npu").strip().lower()
-    selected_execution = os.environ.get("EXECUTION", "static").strip().lower()
+    selected_execution = SELECTED_EXECUTION
     if selected_execution not in ("eager", "static", "dynamic", "custom", "group"):
         raise ValueError(
             "EXECUTION must be 'eager', 'static', 'dynamic', 'custom', or 'group'"
         )
     if selected_execution in ("custom", "group") and device != "npu":
         raise ValueError(f"EXECUTION={selected_execution} is only supported with DEVICE=npu")
-    os.environ[GROUP_AUTOTUNE_ENV] = "1" if selected_execution == "group" else "0"
-
     record_results = env_bool("RECORD_RESULTS", True)
     run_id = (
         env_run_id()

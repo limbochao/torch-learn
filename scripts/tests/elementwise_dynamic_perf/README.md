@@ -26,7 +26,7 @@ RUN_ID=baseline_001 DEVICE=npu EXECUTION=group COMPILE_SHAPE=8192 SYMBOLIC_DIMS=
 
 `EXECUTION=custom` 和 `EXECUTION=group` 仅支持 NPU。`custom` 与 `dynamic` 使用完全相同的
 符号化和 `torch.compile(dynamic=None)` 路径，用于比较人为修改后的 torch_npu 行为。`group` 会在导入
-`torch_npu` 前设置
+`torch` 和 `torch_npu` 前设置
 `INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE=1`，并使用与 `dynamic` 相同的符号化和
 `torch.compile(dynamic=None)` 路径；普通 `dynamic` 会将该开关设置为 `0`。
 
@@ -61,15 +61,14 @@ python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_compare.py \
 ```text
 bound,scalar_ops,dtype,first_shape,runtime_shape,
 cuda_eager_us,cuda_static_us,cuda_dynamic_us,cuda_dynamic_static_ratio,
-npu_eager_us,npu_static_us,npu_dynamic_us,npu_dynamic_static_ratio,
-npu_custom_us,npu_custom_eager_ratio,npu_custom_static_ratio,npu_custom_cuda_ratio_of_lift,
-npu_group_us,npu_group_eager_ratio,npu_group_static_ratio,
-npu_cuda_ratio_of_lift,npu_group_cuda_ratio_of_lift
+npu_eager_us,npu_static_us,npu_dynamic_us,npu_dynamic_static_ratio,npu_cuda_ratio_of_lift,
+npu_custom_us,npu_custom_static_ratio,npu_custom_cuda_ratio_of_lift,
+npu_group_us,npu_group_static_ratio,npu_group_cuda_ratio_of_lift
 ```
 
 其中：
 
-- `npu_group_eager_ratio = npu_group_us / npu_eager_us`。
+- `npu_custom_static_ratio = npu_custom_us / npu_static_us`。
 - `npu_group_static_ratio = npu_group_us / npu_static_us`。
 - `npu_cuda_ratio_of_lift = npu_dynamic_static_ratio / cuda_dynamic_static_ratio`。
 - `npu_custom_cuda_ratio_of_lift = npu_custom_static_ratio / cuda_dynamic_static_ratio`。
