@@ -33,6 +33,11 @@ RUN_ID=baseline_001 DEVICE=npu EXECUTION=group COMPILE_SHAPE=8192 SYMBOLIC_DIMS=
 `RECORD_RESULTS=0` 可用于临时试验：不要求设置 `RUN_ID`，只将结果打印到 stdout，不写 `summary.csv`，
 临时 profiler 产物会在进程退出前删除。默认值为 `1`，保持现有结果记录行为。
 
+记录结果时，脚本会在导入 `torch` 前启用 `TORCH_COMPILE_DEBUG=1`。每次编译后从实际 compile debug 根目录
+选择包含最新 `output_code.py` 的完整 trace 目录，并复制到与 `profiles/` 镜像并列的
+`<PROFILE_ROOT>/<RUN_ID>/torch_compile_debug/`。static 保存每个 runtime shape 各自的编译产物；
+dynamic/custom/group 将首次编译的同一份产物复制到所有 runtime shape 场景。eager 不生成 compile debug 产物。
+
 每条 `summary.csv` 结果还包含一个 autotune tiling 字段：
 
 - `autotune_tiling_configs`：紧凑 JSON 数组，保存每个 kernel 最终选中的 best config；每项包含 kernel、selected

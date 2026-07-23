@@ -60,9 +60,25 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in ("1", "true", "yes", "on"):
+        return True
+    if normalized in ("0", "false", "no", "off"):
+        return False
+    raise ValueError(f"{name} must be one of 0, 1, false, true, no, yes, off, or on")
+
+
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
 SELECTED_EXECUTION = os.environ.get("EXECUTION", "static").strip().lower()
+RECORD_RESULTS = env_bool("RECORD_RESULTS", True)
 os.environ[GROUP_AUTOTUNE_ENV] = "1" if SELECTED_EXECUTION == "group" else "0"
+os.environ["TORCH_COMPILE_DEBUG"] = (
+    "1" if RECORD_RESULTS and SELECTED_EXECUTION != "eager" else "0"
+)
 
 import torch
 
@@ -140,18 +156,6 @@ def env_int(name: str, default: int) -> int:
     if value is None:
         return default
     return int(value)
-
-
-def env_bool(name: str, default: bool) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    normalized = value.strip().lower()
-    if normalized in ("1", "true", "yes", "on"):
-        return True
-    if normalized in ("0", "false", "no", "off"):
-        return False
-    raise ValueError(f"{name} must be one of 0, 1, false, true, no, yes, off, or on")
 
 
 def env_run_id() -> str:
@@ -391,6 +395,24 @@ def prepare_profile_dir(profile_dir: Path) -> None:
     profile_dir.mkdir(parents=True)
 
 
+def latest_compile_debug_dir() -> Path:
+    debug_root = Path(torch._dynamo.config.debug_dir_root)
+    output_codes = [path for path in debug_root.rglob("output_code.py") if path.is_file()]
+    if not output_codes:
+        raise RuntimeError(f"No output_code.py found below compile debug root {debug_root}")
+    latest_output_code = max(
+        output_codes,
+        key=lambda path: (path.stat().st_mtime_ns, path.stat().st_ctime_ns, str(path)),
+    )
+    return latest_output_code.parent
+
+
+def save_compile_debug_dir(source_dir: Path, destination_dir: Path) -> None:
+    if destination_dir.exists():
+        shutil.rmtree(destination_dir)
+    shutil.copytree(source_dir, destination_dir)
+
+
 def serialize_best_tiling_configs(records: list[dict[str, object]]) -> str:
     if not records:
         return ""
@@ -487,8 +509,9 @@ def result_dir(
     compile_shape: tuple[int, ...],
     symbolic_dims: tuple[int, ...],
     execution: str,
+    artifact: str = "profiles",
 ) -> Path:
-    root = run_root / "profiles" / device / execution
+    root = run_root / artifact / device / execution
     if execution in DYNAMIC_EXECUTIONS:
         dims_label = "-".join(str(dim) for dim in symbolic_dims)
         root = root / f"compile_{shape_label(compile_shape)}" / f"dims_{dims_label}"
@@ -568,7 +591,7 @@ def main() -> None:
         )
     if selected_execution in ("custom", "group") and device != "npu":
         raise ValueError(f"EXECUTION={selected_execution} is only supported with DEVICE=npu")
-    record_results = env_bool("RECORD_RESULTS", True)
+    record_results = RECORD_RESULTS
     run_id = (
         env_run_id()
         if record_results
@@ -634,6 +657,7 @@ def main() -> None:
     for name in names:
         case = CASES[name]
         dynamic_compiled = None
+        dynamic_compile_debug_dir = None
         dynamic_tiling_records: list[dict[str, object]] = []
         if selected_execution in DYNAMIC_EXECUTIONS:
             compile_args = make_inputs(
@@ -647,9 +671,12 @@ def main() -> None:
             finally:
                 dynamic_tiling_records = tiling_recorder.stop_capture()
             sync(device)
+            if record_results:
+                dynamic_compile_debug_dir = latest_compile_debug_dir()
 
         for runtime_index, runtime_shape in enumerate(runtime_shapes):
             args = make_inputs(runtime_shape, device, dtype, case.input_kind)
+            compile_debug_dir = None
             if selected_execution == "static":
                 tiling_recorder.start_capture()
                 try:
@@ -659,6 +686,7 @@ def main() -> None:
                 row_compile_shape = runtime_shape
             elif selected_execution in DYNAMIC_EXECUTIONS:
                 compiled = dynamic_compiled
+                compile_debug_dir = dynamic_compile_debug_dir
                 tiling_records = dynamic_tiling_records if runtime_index == 0 else []
                 row_compile_shape = compile_shape
             else:
@@ -668,6 +696,8 @@ def main() -> None:
             if selected_execution != "eager" and compiled is None:
                 raise AssertionError("compiled function was not initialized")
             sync(device)
+            if selected_execution == "static" and record_results:
+                compile_debug_dir = latest_compile_debug_dir()
 
             execution_fn = case.fn if compiled is None else compiled
             output_dir = result_dir(
@@ -679,6 +709,18 @@ def main() -> None:
                 symbolic_dims,
                 selected_execution,
             )
+            if compile_debug_dir is not None:
+                compile_debug_output_dir = result_dir(
+                    result_root,
+                    device,
+                    name,
+                    runtime_shape,
+                    row_compile_shape,
+                    symbolic_dims,
+                    selected_execution,
+                    artifact="torch_compile_debug",
+                )
+                save_compile_debug_dir(compile_debug_dir, compile_debug_output_dir)
             timing = profile_case(
                 execution_fn,
                 args,
