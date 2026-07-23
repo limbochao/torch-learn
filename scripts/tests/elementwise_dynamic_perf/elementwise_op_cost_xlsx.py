@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -11,6 +12,7 @@ SHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 LABEL_COLUMNS = ("bound", "scalar_ops", "dtype", "first_shape")
 BASE_COLUMNS = (*LABEL_COLUMNS, "runtime_shape")
+ROUND_TILING_SUFFIXES = ("_dynamic_tiling", "_custom_tiling")
 
 ET.register_namespace("", SHEET_NS)
 ET.register_namespace("r", REL_NS)
@@ -49,6 +51,62 @@ def _merge_ranges(
             if end - start > 1:
                 ranges.append((start + 2, end + 1, column_index))
             start = end
+    for column_index, column in enumerate(columns, start=1):
+        if column.endswith(ROUND_TILING_SUFFIXES):
+            ranges.extend(
+                _value_merge_ranges(rows, column, column_index, group_aware=False)
+            )
+        elif column.endswith("_group_tiling"):
+            ranges.extend(
+                _value_merge_ranges(rows, column, column_index, group_aware=True)
+            )
+    return ranges
+
+
+def _group_ids(value: str) -> tuple[str, ...]:
+    records = json.loads(value)
+    return tuple(
+        str(record["group_id"])
+        for record in records
+        if record.get("group_id") is not None
+    )
+
+
+def _value_merge_ranges(
+    rows: list[dict[str, str]],
+    column: str,
+    column_index: int,
+    group_aware: bool,
+) -> list[tuple[int, int, int]]:
+    ranges = []
+    start = 0
+    while start < len(rows):
+        value = rows[start].get(column, "")
+        if not value:
+            start += 1
+            continue
+        scene = tuple(rows[start].get(name, "") for name in LABEL_COLUMNS)
+        group_ids = _group_ids(value) if group_aware else ()
+        if group_aware and not group_ids:
+            start += 1
+            continue
+        key = (scene, group_ids, value) if group_aware else (scene, value)
+        end = start + 1
+        while end < len(rows):
+            next_value = rows[end].get(column, "")
+            next_scene = tuple(rows[end].get(name, "") for name in LABEL_COLUMNS)
+            next_group_ids = _group_ids(next_value) if group_aware and next_value else ()
+            next_key = (
+                (next_scene, next_group_ids, next_value)
+                if group_aware
+                else (next_scene, next_value)
+            )
+            if next_key != key:
+                break
+            end += 1
+        if end - start > 1:
+            ranges.append((start + 2, end + 1, column_index))
+        start = end
     return ranges
 
 
@@ -57,6 +115,8 @@ def _cell_style(column: str, bound: str) -> int:
         return 3 if bound == "memory_bound" else 2
     if column == "runtime_shape":
         return 4
+    if column.endswith("_tiling"):
+        return 9
     if "ratio_of_lift" in column:
         return 8
     if "ratio" in column:
@@ -114,7 +174,8 @@ def _worksheet_xml(
     widths = ET.SubElement(worksheet, _tag("cols"))
     for index, column in enumerate(columns, start=1):
         value_width = max((len(row.get(column, "")) for row in rows), default=0)
-        width = min(max(len(column) + 2, value_width + 2, 12), 28)
+        max_width = 48 if column.endswith("_tiling") else 28
+        width = min(max(len(column) + 2, value_width + 2, 12), max_width)
         ET.SubElement(
             widths,
             _tag("col"),
@@ -247,7 +308,7 @@ STYLES_XML = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     </border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="9">
+  <cellXfs count="10">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1">
       <alignment horizontal="center" vertical="center" wrapText="1"/>
@@ -269,6 +330,9 @@ STYLES_XML = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center"/></xf>
     <xf numFmtId="164" fontId="0" fillId="8" borderId="1" xfId="0"
       applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1">
+      <alignment horizontal="left" vertical="center" wrapText="1"/>
+    </xf>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
   <dxfs count="1"><dxf><font><color rgb="FFE53935"/></font></dxf></dxfs>

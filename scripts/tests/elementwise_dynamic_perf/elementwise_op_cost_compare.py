@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import logging
 from collections import defaultdict
 from pathlib import Path
@@ -20,6 +21,7 @@ BASE_OUTPUT_COLUMNS = (
 )
 EXECUTIONS = ("eager", "static", "dynamic")
 SHAPE_DEPENDENT_EXECUTIONS = ("dynamic", "custom", "group")
+SHARED_TILING_EXECUTIONS = ("dynamic", "custom")
 DEVICES = ("cuda", "npu")
 OUTPUT_NAME = "elementwise_op_cost_comparison.csv"
 XLSX_OUTPUT_NAME = "elementwise_op_cost_comparison.xlsx"
@@ -83,6 +85,8 @@ def output_columns(rows: list[dict[str, str]]) -> tuple[str, ...]:
         for execution in EXECUTIONS:
             if has_execution(present, device, execution):
                 columns.append(f"{device}_{execution}_us")
+                if execution != "eager":
+                    columns.append(f"{device}_{execution}_tiling")
         if (
             has_execution(present, device, "dynamic")
             and has_execution(present, device, "static")
@@ -97,6 +101,7 @@ def output_columns(rows: list[dict[str, str]]) -> tuple[str, ...]:
     for execution in ("custom", "group"):
         if has_execution(present, "npu", execution):
             columns.append(f"npu_{execution}_us")
+            columns.append(f"npu_{execution}_tiling")
         if (
             has_execution(present, "npu", execution)
             and has_execution(present, "npu", "static")
@@ -151,13 +156,52 @@ def cost_ratio(numerator_us: float | None, denominator_us: float | None) -> floa
     return numerator_us / denominator_us
 
 
+def shared_tiling_key(row: dict[str, str]) -> tuple[str, ...]:
+    return (
+        row_value(row, "case"),
+        row_value(row, "scalar_ops"),
+        row_value(row, "dtype").removeprefix("torch."),
+        row_value(row, "device"),
+        row_value(row, "execution"),
+        row_value(row, "compile_shape"),
+    )
+
+
+def shared_tilings(rows: list[dict[str, str]]) -> dict[tuple[str, ...], str]:
+    result = {}
+    for row in rows:
+        if row_value(row, "execution") not in SHARED_TILING_EXECUTIONS:
+            continue
+        tiling = row_value(row, "autotune_tiling_configs")
+        if tiling:
+            result[shared_tiling_key(row)] = format_tiling(tiling)
+    return result
+
+
+def format_tiling(value: str) -> str:
+    records = json.loads(value)
+    result = []
+    for record in records:
+        item = {
+            "kernel_name": record.get("kernel_name", ""),
+            "selected_config": record.get("selected_config", {}),
+            "runtime_blocks": record.get("runtime_blocks", {}),
+        }
+        if record.get("group_id") is not None:
+            item["group_id"] = record["group_id"]
+        result.append(item)
+    return json.dumps(result, sort_keys=True, separators=(",", ":"))
+
+
 def comparison_row(
     rows: list[dict[str, str]],
+    case: str,
     scalar_ops: str,
     dtype: str,
     runtime_shape: str,
     first_shape: str,
     columns: tuple[str, ...],
+    tilings: dict[tuple[str, ...], str],
 ) -> dict[str, str]:
     result = {column: "" for column in columns}
     result.update(
@@ -180,6 +224,17 @@ def comparison_row(
             column = f"{device}_{execution}_us"
             if column in result:
                 result[column] = format_number(timing)
+            tiling_column = f"{device}_{execution}_tiling"
+            if tiling_column in result:
+                execution_row = select_execution_row(
+                    rows, device, execution, first_shape
+                )
+                if execution in SHARED_TILING_EXECUTIONS:
+                    key = (case, scalar_ops, dtype, device, execution, first_shape)
+                    result[tiling_column] = tilings.get(key, "")
+                elif execution_row is not None:
+                    value = row_value(execution_row, "autotune_tiling_configs")
+                    result[tiling_column] = format_tiling(value) if value else ""
         ratio = cost_ratio(timings["dynamic"], timings["static"])
         ratios[device] = ratio
         column = f"{device}_dynamic_static_ratio"
@@ -196,6 +251,17 @@ def comparison_row(
         column = f"npu_{execution}_us"
         if column in result:
             result[column] = format_number(execution_us)
+        tiling_column = f"npu_{execution}_tiling"
+        if tiling_column in result:
+            execution_row = select_execution_row(
+                rows, "npu", execution, first_shape
+            )
+            if execution in SHARED_TILING_EXECUTIONS:
+                key = (case, scalar_ops, dtype, "npu", execution, first_shape)
+                result[tiling_column] = tilings.get(key, "")
+            elif execution_row is not None:
+                value = row_value(execution_row, "autotune_tiling_configs")
+                result[tiling_column] = format_tiling(value) if value else ""
         column = f"npu_{execution}_static_ratio"
         if column in result:
             result[column] = format_number(cost_ratio(execution_us, npu_static_us))
@@ -225,6 +291,7 @@ def condensed_key(row: dict[str, str]) -> tuple[str, ...]:
 
 def build_comparison_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     columns = output_columns(rows)
+    tilings = shared_tilings(rows)
     grouped: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
     for row in rows:
         grouped[group_key(row)].append(row)
@@ -234,11 +301,13 @@ def build_comparison_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
         for first_shape in first_shapes(case_rows):
             comparison = comparison_row(
                 case_rows,
+                case,
                 scalar_ops,
                 dtype,
                 runtime_shape,
                 first_shape,
                 columns,
+                tilings,
             )
             key = condensed_key(comparison)
             if key in comparison_by_key:

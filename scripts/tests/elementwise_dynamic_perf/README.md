@@ -44,9 +44,10 @@ dynamic/custom/group 将首次编译的同一份产物复制到所有 runtime sh
   config、runtime blocks，NPU group 还包含
   `group_id` 和 `feature_inputs`。
 
-static 的每个 runtime shape 都独立编译，因此各行记录各自编译时的 tiling。dynamic/custom/group 只在使用
+static 的每个 runtime shape 都独立编译，因此各行记录各自编译时的 tiling。dynamic/custom 只在使用
 `COMPILE_SHAPE` 首次编译时 autotune，因此记录写入该 case 的第一条 runtime shape 行，后续复用 kernel 的行为空。
-eager 或编译时未触发 Inductor autotune 时，该字段为空。
+group 会在每个 runtime shape 的调用窗口捕获该 shape 实际使用的 `group_id` 和 best config。eager 或编译、调用时
+未触发 Inductor autotuner 时，该字段为空。
 
 生成浓缩 CSV：
 
@@ -61,14 +62,21 @@ python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_compare.py \
 原始 summary 未运行的 device/execution 不生成对应列；已生成列中不存在的组合保持为空。输出唯一键为
 `scalar_ops + dtype + first_shape + runtime_shape`；若不同 case 产生相同键，脚本会打印冲突 warning。
 
+compare 会为已运行的 static/dynamic/custom/group 增加紧跟耗时列的 `*_tiling` 列。CSV 中 dynamic/custom 将同一
+`first_shape` 轮次的首次编译 tiling 复制到该轮所有 runtime shape 行；group 保留各 runtime shape 对应
+`group_id` 的 tiling。XLSX 中 dynamic/custom 的 tiling 按整个 `first_shape` 轮次合并单元格，group 则按相同
+`group_id` 合并连续单元格；static 仍逐 runtime shape 展示。
+
 下列为所有可能字段，实际输出会根据 summary 中已有的 device/execution 选择其子集：
 
 ```text
 bound,scalar_ops,dtype,first_shape,runtime_shape,
-cuda_eager_us,cuda_static_us,cuda_dynamic_us,cuda_dynamic_static_ratio,
-npu_eager_us,npu_static_us,npu_dynamic_us,npu_dynamic_static_ratio,npu_cuda_ratio_of_lift,
-npu_custom_us,npu_custom_static_ratio,npu_custom_cuda_ratio_of_lift,
-npu_group_us,npu_group_static_ratio,npu_group_cuda_ratio_of_lift
+cuda_eager_us,cuda_static_us,cuda_static_tiling,cuda_dynamic_us,cuda_dynamic_tiling,
+cuda_dynamic_static_ratio,
+npu_eager_us,npu_static_us,npu_static_tiling,npu_dynamic_us,npu_dynamic_tiling,
+npu_dynamic_static_ratio,npu_cuda_ratio_of_lift,
+npu_custom_us,npu_custom_tiling,npu_custom_static_ratio,npu_custom_cuda_ratio_of_lift,
+npu_group_us,npu_group_tiling,npu_group_static_ratio,npu_group_cuda_ratio_of_lift
 ```
 
 其中：

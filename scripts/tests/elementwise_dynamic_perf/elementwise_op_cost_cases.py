@@ -721,15 +721,30 @@ def main() -> None:
                     artifact="torch_compile_debug",
                 )
                 save_compile_debug_dir(compile_debug_dir, compile_debug_output_dir)
-            timing = profile_case(
-                execution_fn,
-                args,
-                device,
-                output_dir,
-                warmup,
-                active,
-                repeat,
-            )
+            if selected_execution == "group":
+                tiling_recorder.start_capture()
+                try:
+                    timing = profile_case(
+                        execution_fn,
+                        args,
+                        device,
+                        output_dir,
+                        warmup,
+                        active,
+                        repeat,
+                    )
+                finally:
+                    tiling_records = tiling_recorder.stop_capture()
+            else:
+                timing = profile_case(
+                    execution_fn,
+                    args,
+                    device,
+                    output_dir,
+                    warmup,
+                    active,
+                    repeat,
+                )
             tiling_configs = serialize_best_tiling_configs(tiling_records)
             result_row = {
                 "run_id": run_id,
