@@ -40,9 +40,10 @@ Use separate dynamic runs with COMPILE_SHAPE=128, 8192, and 1048576 to quantify
 how the first shape affects reuse performance.
 
 Runs sharing RUN_ID are merged into <PROFILE_ROOT>/<RUN_ID>/summary.csv. Raw
-profiles are stored below <PROFILE_ROOT>/<RUN_ID>/profiles/. Cross-device
-automatic merging requires both processes to access the same PROFILE_ROOT;
-file locking and atomic replacement protect concurrent summary updates.
+profiles and compile debug artifacts are grouped below each device, execution,
+compile shape, symbolic dimensions, and case. Cross-device automatic merging
+requires both processes to access the same PROFILE_ROOT; file locking and atomic
+replacement protect concurrent summary updates.
 """
 
 from __future__ import annotations
@@ -511,11 +512,11 @@ def result_dir(
     execution: str,
     artifact: str = "profiles",
 ) -> Path:
-    root = run_root / artifact / device / execution
+    root = run_root / device / execution
     if execution in DYNAMIC_EXECUTIONS:
         dims_label = "-".join(str(dim) for dim in symbolic_dims)
         root = root / f"compile_{shape_label(compile_shape)}" / f"dims_{dims_label}"
-    return root / case_name / f"runtime_{shape_label(runtime_shape)}"
+    return root / case_name / f"runtime_{shape_label(runtime_shape)}" / artifact
 
 
 def summary_key(row: dict[str, str]) -> tuple[str, ...]:

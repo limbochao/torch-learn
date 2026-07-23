@@ -128,6 +128,18 @@ def _cell_style(column: str, bound: str) -> int:
     return 4
 
 
+def _column_width(
+    rows: list[dict[str, str]],
+    column: str,
+) -> int:
+    value_width = max((len(row.get(column, "")) for row in rows), default=0)
+    if column.endswith("_tiling"):
+        return min(max(value_width + 2, 18), 48)
+    if column not in BASE_COLUMNS:
+        return max(value_width + 2, 10)
+    return min(max(len(column) + 2, value_width + 2, 12), 28)
+
+
 def _append_cell(
     row_element: ET.Element,
     row_number: int,
@@ -169,17 +181,19 @@ def _worksheet_xml(
         {"ySplit": "1", "topLeftCell": "A2", "activePane": "bottomLeft", "state": "frozen"},
     )
     ET.SubElement(view, _tag("selection"), {"pane": "bottomLeft", "activeCell": "A2", "sqref": "A2"})
-    ET.SubElement(worksheet, _tag("sheetFormatPr"), {"defaultRowHeight": "15"})
+    ET.SubElement(worksheet, _tag("sheetFormatPr"), {"defaultRowHeight": "20"})
 
     widths = ET.SubElement(worksheet, _tag("cols"))
     for index, column in enumerate(columns, start=1):
-        value_width = max((len(row.get(column, "")) for row in rows), default=0)
-        max_width = 48 if column.endswith("_tiling") else 28
-        width = min(max(len(column) + 2, value_width + 2, 12), max_width)
         ET.SubElement(
             widths,
             _tag("col"),
-            {"min": str(index), "max": str(index), "width": str(width), "customWidth": "1"},
+            {
+                "min": str(index),
+                "max": str(index),
+                "width": str(_column_width(rows, column)),
+                "customWidth": "1",
+            },
         )
 
     merge_ranges = _merge_ranges(rows, columns)
@@ -189,12 +203,16 @@ def _worksheet_xml(
         for row_number in range(start + 1, end + 1)
     }
     sheet_data = ET.SubElement(worksheet, _tag("sheetData"))
-    header = ET.SubElement(sheet_data, _tag("row"), {"r": "1", "ht": "28", "customHeight": "1"})
+    header = ET.SubElement(sheet_data, _tag("row"), {"r": "1", "ht": "60", "customHeight": "1"})
     for column_index, column in enumerate(columns, start=1):
         _append_cell(header, 1, column_index, column, 1, numeric=False)
 
     for row_number, row in enumerate(rows, start=2):
-        row_element = ET.SubElement(sheet_data, _tag("row"), {"r": str(row_number)})
+        row_element = ET.SubElement(
+            sheet_data,
+            _tag("row"),
+            {"r": str(row_number), "ht": "20", "customHeight": "1"},
+        )
         for column_index, column in enumerate(columns, start=1):
             if (row_number, column_index) in merged_children:
                 continue
