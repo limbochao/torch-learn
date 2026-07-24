@@ -21,11 +21,15 @@ grouped symbolic autotune 已开启
 
 本设计中的 elementwise 不是“算子名称属于数学逐元素集合”，而是更贴近 device 执行特征的
 “直接一一映射 pointwise”：每个输出 lane 独立计算，并且每个张量读、写都使用相同的直接
-迭代映射。broadcast、reindex、间接索引、语义 mask、scatter/atomic store 和纯数据生成不准入。
+迭代映射。broadcast、导致映射变化的 reindex、间接索引、语义 mask、scatter/atomic store
+不准入。独立的纯数据生成 kernel 不准入，但融合链中的 `full` 等常量临时节点可以作为
+neutral constant node 放行。
 
 识别不使用算子 allowlist 或 blacklist。它直接复用 Scheduler 已经从 `LoopBody` 提取出的
 `SchedulerNode.read_writes`，对融合 kernel 中的每个 SchedulerNode 分别比较 `MemoryDep` 的
-规范化访问签名。无法证明是 elementwise 时返回 `None`，继续使用原 pointwise group 策略。
+规范化访问签名。节点分为有 tensor 读写的 direct node 和只产生融合常量临时值的 neutral
+constant node；整个 kernel 仍必须至少有一个直接的外部 tensor read。无法证明是 elementwise
+时返回 `None`，继续使用原 pointwise group 策略。
 
 这样做有三个直接结果：
 
@@ -112,14 +116,15 @@ broadcast、reindex、generation 等其他 workload。
 目标是把 device 上表现相近、可以共用同一份 group 策略的 kernel 放在一起。因此分类应关注
 迭代 lane 与访存地址的关系，而不是 API 的数学类别。
 
-本设计定义：一个 pointwise 融合 kernel 是 elementwise，当且仅当它的每个 SchedulerNode
-都满足以下条件：
+本设计定义：一个 pointwise 融合 kernel 是 elementwise，当且仅当满足以下条件：
 
 1. 每个输出 lane 独立，不包含 reduction 或跨 lane 数据依赖；
-2. 至少有一个普通张量 read 和一个普通 tensor write；
-3. 所有 tensor write 使用同一个直接迭代映射；
-4. 所有 tensor read 与该 write 使用相同的直接迭代映射；
-5. 不存在跨 lane primitive、间接索引、语义 masked 子块、特殊 store mode、alias/mutation
+2. 每个 SchedulerNode 都能被证明为 direct node 或 neutral constant node；
+3. 所有 node 的 tensor write 使用同一个直接迭代映射；
+4. direct node 的所有 tensor read 与该 write 使用相同的直接迭代映射；
+5. neutral constant node 没有 read 和 index expression，只生成直接映射的常量临时值；
+6. 整个 kernel 至少有一个来自 kernel 外部的直接 tensor read；
+7. 不存在跨 lane primitive、间接索引、语义 masked 子块、特殊 store mode、alias/mutation
    或未知依赖类型。
 
 逻辑形式为：
@@ -147,7 +152,10 @@ out[address(i)] = f(in0[address(i)], in1[address(i)], ..., scalar_constants)
 | gather/index_select | 普通 pointwise | read index 包含 indirect/tmp symbol |
 | repeat/pad/cat | 普通 pointwise | reindex 或语义 mask 导致结构不一致 |
 | scatter/atomic | 普通 pointwise | 写映射或 store mode 不满足普通写入 |
-| full/iota/random | 普通 pointwise | 没有与 write 对齐的普通张量 read |
+| standalone full/iota/random | 普通 pointwise | 整个 kernel 没有外部 direct tensor read |
+| `x + full_like(x, 1)` | elementwise | full 是 neutral constant node，`x` 是外部 direct read |
+| `x + arange(N)` | 普通 pointwise | 包含 `IndexExprDep`，第一版保守回退 |
+| `x + random(...)` | 普通 pointwise | 包含 RNG 语义，第一版保守回退 |
 
 ### 4.3 为什么 broadcast 不属于本分类
 
@@ -275,16 +283,28 @@ flowchart TD
 
 ## 7. SplitTiling 能拿到什么数据
 
-### 7.1 `SIMDKernelFeatures.scheduler_nodes()`
+### 7.1 SchedulerNode 与 kernel 的关系
 
-`SIMDKernelFeatures` 表示将生成单个 kernel 的有序 schedule，并提供：
+一个 `SchedulerNode` 通常封装一个 `ComputedBuffer` 或 `TemplateBuffer`，表示一个可被 Scheduler
+调度的逻辑计算节点。它不等于一个 kernel：没有 fusion 时一个 node 可能生成一个 kernel；发生
+fusion 后，多个 node 会按顺序进入同一个 `node_schedule`，最终生成一个 kernel。
+
+```text
+SchedulerNode A ─┐
+SchedulerNode B ─┼─> node_schedule -> SIMDKernelFeatures -> 一个 Triton kernel
+SchedulerNode C ─┘
+```
+
+`SIMDKernelFeatures` 的职责就是保存“将生成同一个 kernel 的有序 schedule”。其
+`scheduler_nodes()` 会过滤 `EnableReduction`、`DisableReduction` 这类 schedule marker，只
+返回实际计算节点：
+
 
 ```python
 def scheduler_nodes(self) -> Iterable[SchedulerNode]:
     return tuple(NodeScheduleMarker.only_nodes(self.node_schedule))
 ```
 
-它会过滤 `EnableReduction`、`DisableReduction` 这类 schedule marker，只返回实际计算节点。
 代码位于 `pytorch/torch/_inductor/codegen/simd_kernel_features.py:75`。
 
 在 SplitTiling 中可直接取得：
@@ -293,7 +313,26 @@ def scheduler_nodes(self) -> Iterable[SchedulerNode]:
 nodes = tuple(self.kernel.features.scheduler_nodes())
 ```
 
-### 7.2 `SchedulerNode.read_writes`
+### 7.2 `scheduler_nodes()` 已在 NPUIndex 路径使用
+
+group 特性只在 `NPUIndexTritonKernel` 的 SplitTiling 路径生效，但 `scheduler_nodes()` 并不是
+其他 kernel 专属接口。当前 NPUIndex 路径在创建 kernel 前已经通过以下调用链使用它：
+
+```text
+NPUTritonScheduling.codegen_node_schedule(kernel_features)
+    -> create_kernel_choices(kernel_features, ...)
+    -> kernel_features.contains_op("scan")
+    -> SIMDKernelFeatures.op_counts()
+    -> SIMDKernelFeatures.scheduler_nodes()
+    -> NPUIndexTritonKernel(..., features=kernel_features)
+```
+
+`NPUTritonScheduling.kernel_type = NPUIndexTritonKernel` 位于
+`pytorch_new/torch_npu/_inductor/codegen/scheduling.py:64`，`contains_op("scan")` 位于同文件
+`create_kernel_choices()`。`scheduler_nodes()` 和 `op_counts()` 都使用 `@cache_on_self`，因此
+SplitTiling 中再次调用会复用缓存 tuple，不会重新提取依赖。
+
+### 7.3 `SchedulerNode.read_writes`
 
 `SchedulerNode._compute_attrs()` 在构建调度节点时调用：
 
@@ -316,7 +355,40 @@ node._body               # LoopBody，可查询 op/内存语义
 代码证据位于 `pytorch/torch/_inductor/scheduler.py:1446`。依赖是从已经 lowering 的
 `LoopBody` 中提取，不要求重新 trace FX graph。
 
-### 7.3 `MemoryDep` 字段
+`read_writes` 描述逻辑 buffer 依赖，不等价于最终 DSL 中实际存在的 load/store 数量：
+
+- 外部普通 `MemoryDep` read/write 通常生成 `tl.load/tl.store`；
+- 融合内部 buffer 的 write 会先写入 `self.cse.store_cache`；
+- consumer 读取同名内部 buffer 时直接取得缓存值，不生成 `tl.load`；
+- 名称在 `V.graph.removed_buffers` 中的内部 buffer 不生成 `tl.store`；
+- CSE 还可能把多个相同的逻辑 read 合并为一个实际 load。
+
+例如：
+
+```text
+node0: tmp = relu(x)
+node1: out = tmp + 1
+```
+
+逻辑依赖是：
+
+```text
+node0 reads={x},   writes={tmp}
+node1 reads={tmp}, writes={out}
+```
+
+融合 DSL 通常只有：
+
+```python
+x_value = tl.load(x_ptr + offset, mask=mask)
+tmp_value = tl.maximum(x_value, 0.0)
+tl.store(out_ptr + offset, tmp_value + 1, mask=mask)
+```
+
+没有 `tmp` 的实际 `tl.store/tl.load`。elementwise 分类使用逻辑依赖的目的不是统计 DSL 指令，
+而是确认 producer 到 consumer 的迭代坐标是否保持一致。
+
+### 7.4 `MemoryDep` 与其他依赖类型
 
 普通内存访问使用 `MemoryDep` 表示：
 
@@ -350,7 +422,39 @@ class MemoryDep(Dep):
 `read_dep.index == write_dep.index and read_dep.size == write_dep.size` 证明访问一一对应，见
 `pytorch/torch/_inductor/scheduler.py:1740`，说明使用 MemoryDep 比较访问映射符合现有模型。
 
-### 7.4 为什么不收集“外部 reads 和最终 writes”
+但 `ReadWrites` 的字段类型是：
+
+```python
+reads: OrderedSet[Dep]
+writes: OrderedSet[Dep]
+index_exprs: OrderedSet[IndexExprDep]
+```
+
+所以“所有 read/write 是 MemoryDep”表示每个依赖都有明确的 buffer、index 和迭代范围，可以
+参与地址映射比较；它不是说所有 Scheduler 依赖天然都是 MemoryDep。
+
+| 类型 | 表示内容 | 是否能比较直接映射 |
+| --- | --- | --- |
+| `MemoryDep` | 一个具有明确 index 的普通 load/store | 可以，但仍需检查 indirect/mode/signature |
+| `StarDep` | 依赖整个 buffer，无法给出单一 index | 不可以，第一版回退 |
+| `WeakDep` | mutation 或全局排序依赖，通常不对应真实 load | 不可以，第一版回退 |
+| `IndexExprDep` | 用迭代坐标生成数据，不访问 buffer | 单独检查，第一版不作为 direct node |
+
+`StarDep.index` 和 `WeakDep.index` 都会抛出 `NotImplementedError`。例如 bucketize 对 boundaries
+buffer 使用 `StarDep`，因为搜索访问无法表示成一个直接 lane index；`WeakDep` 则常由 Scheduler
+为 mutation 顺序人工加入。`IndexExprDep` 不在 reads/writes 中，`arange/iota` 等坐标生成会记录
+到 `read_writes.index_exprs`。
+
+因此 MemoryDep 是“地址可分析”的必要条件，不是 elementwise 的充分条件。以下都是
+MemoryDep，但仍必须拒绝：
+
+```text
+broadcast: MemoryDep("y", d1, ...)
+gather:    MemoryDep("x", tmp0, ...)
+atomic:    MemoryDep("out", d0, ..., mode="atomic_add")
+```
+
+### 7.5 只收集必要的外部 read，不重建全部 kernel 边界
 
 融合 kernel 可能有内部临时 buffer：
 
@@ -359,16 +463,34 @@ node0: tmp = relu(x)
 node1: out = tmp * y
 ```
 
-如果先把整个 kernel 的 ReadWrites 合并，再试图区分外部输入和最终输出，需要额外处理：
+如果先把整个 kernel 的 ReadWrites 合并，再完整重建外部输入和最终输出，需要额外处理：
 
 - 被融合消除的内部 buffer；
 - mutation rename、alias 和 inplace；
 - 多输出和中间结果仍被外部使用；
 - `ReadWrites.merge_list()` 会从 reads 中移除同时被 writes 覆盖的名字，但保留所有 writes。
 
-这会把 elementwise 分类变成一次新的 kernel 边界分析。实际上没有必要：逐 SchedulerNode
-检查即可。如果 node0 的 `x read -> tmp write` 和 node1 的 `tmp/y read -> out write` 都是一一
-映射，整个融合 kernel 就满足要求；任一节点包含 broadcast/reindex，整个 kernel 回退。
+本设计不重建最终 writes；逐 SchedulerNode 检查即可验证映射。但是为了区分 standalone full
+和融合链中的 full 临时节点，需要确认 kernel 至少有一个外部 tensor read。在已经拒绝
+mutation/alias 后，可按 buffer 名称进行轻量判断：
+
+```python
+produced_names = {
+    dep.name
+    for node in nodes
+    for dep in node.read_writes.writes
+    if isinstance(dep, MemoryDep)
+}
+external_reads = {
+    dep
+    for node in nodes
+    for dep in node.read_writes.reads
+    if isinstance(dep, MemoryDep) and dep.name not in produced_names
+}
+```
+
+这里只回答“是否存在 kernel 外部的直接 tensor read”，不判断哪些 write 是最终输出。若
+`external_reads` 为空，即使存在 `full -> relu` 多节点融合，仍按纯生成 kernel 回退。
 
 ```mermaid
 flowchart LR
@@ -382,14 +504,15 @@ flowchart LR
     C --> N1
 ```
 
-内部 buffer 在 producer 中作为 write、在 consumer 中作为 read，映射会在两个节点各自得到
-验证，不需要显式判断它是否为 external/final。
+内部 buffer 在 producer 中作为 write、在 consumer 中作为 read。分类同时验证每个 node 的
+映射、所有 node 的统一 reference signature，以及是否存在 external read；不需要重建最终
+write 集合。
 
 ## 8. 详细识别算法
 
 ### 8.1 三层门禁
 
-识别分为 kernel 前置门禁、逐节点结构门禁和访问签名门禁。
+识别分为 kernel 前置门禁、逐节点类型判定和 kernel 汇总门禁。
 
 ```mermaid
 flowchart TD
@@ -401,22 +524,23 @@ flowchart TD
     D --> E{"节点列表非空?"}
     E -- 否 --> RP["普通 pointwise<br/>workload=None"]
     E -- 是 --> F["依次检查 SchedulerNode"]
-    F --> G{"无 side effect、alias/mutation、<br/>masked/scan/sort primitive?"}
+    F --> G{"无 side effect、alias/mutation、<br/>masked/scan/sort/RNG?"}
     G -- 否 --> RP
-    G -- 是 --> H{"reads/writes 均为支持的 MemoryDep?"}
+    G -- 是 --> H{"writes 非空且均为 MemoryDep?<br/>index_exprs 为空?"}
     H -- 否 --> RP
-    H -- 是 --> I{"至少一个 read 和一个 write?"}
-    I -- 否 --> RP
-    I -- 是 --> J{"无 indirect read/write<br/>且所有 mode=None?"}
+    H -- 是 --> I{"reads 是否为空?"}
+    I -- 否 --> D0["按 direct node 检查"]
+    I -- 是 --> N0["按 neutral constant node 检查"]
+    D0 --> J{"read/write 均为直接 MemoryDep<br/>且签名一致?"}
+    N0 --> JN{"仅常量数据流、普通直接 write<br/>且输出被其他 node 消费?"}
     J -- 否 --> RP
-    J -- 是 --> K["生成每个访问的规范化签名"]
-    K --> L{"所有 write 签名相同?"}
-    L -- 否 --> RP
-    L -- 是 --> M{"所有 read 签名<br/>等于 write 签名?"}
-    M -- 否 --> RP
-    M -- 是 --> N{"还有未检查节点?"}
+    JN -- 否 --> RP
+    J -- 是 --> N{"还有未检查节点?"}
+    JN -- 是 --> N
     N -- 是 --> F
-    N -- 否 --> RE["workload=elementwise"]
+    N -- 否 --> K{"所有 reference signature 一致<br/>且存在 external direct read?"}
+    K -- 否 --> RP
+    K -- 是 --> RE["workload=elementwise"]
 ```
 
 ### 8.2 Kernel 前置门禁
@@ -445,39 +569,90 @@ def _classify_group_workload(self, template: str) -> str | None:
     if not nodes:
         return None
 
-    if all(self._is_direct_elementwise_node(node) for node in nodes):
-        return "elementwise"
-    return None
+    return "elementwise" if self._is_direct_elementwise_kernel(nodes) else None
 ```
 
 不要在 group 开关关闭、template 不在 allowlist 或没有动态 split axis 时执行扫描，避免给现有
 codegen 增加无效开销。
 
-### 8.3 逐节点结构门禁
+### 8.3 所有 node 共用的结构门禁
 
 每个 SchedulerNode 先执行以下检查：
 
 1. `node.has_side_effects()` 必须为 false；
 2. `node.has_aliasing_or_mutation()` 必须为 false；
-3. `node._body` 不能包含 `masked`、`scan` 或 `sort`；
-4. reads 和 writes 中的依赖必须全部是可比较的 `MemoryDep`；
-5. 至少有一个 read 和一个 write；
-6. 每个 read/write 都必须满足 `is_indirect() == false`；
-7. 每个 write 的 `mode` 必须为 `None`。
+3. `node._body` 不能包含 `masked`、`scan`、`sort` 或 RNG primitive；
+4. writes 必须非空且全部是 `MemoryDep`；
+5. `read_writes.index_exprs` 必须为空；
+6. 每个 write 必须满足 `is_indirect() == false`；
+7. 每个 write 的 `mode` 必须为 `None`；
+8. 所有 write 的访问签名必须相同。
 
 这些条件是 IR 结构条件，不是 ATen/Python 算子 blacklist：
 
 - `masked` 指 `ops.masked()` 产生的语义子块，例如 pad/cat 可能产生的条件内存访问；
 - `scan`、`sort` 即使 read/write index 相同，也存在 MemoryDep 无法表示的跨 lane 依赖；
+- RNG 即使没有普通 tensor 输入，也具有与常量生成不同的计算和状态语义；
 - 正常 Triton tile 越界 mask 是后续 codegen 自动生成的，不存在于 LoopBody 的语义 op 中；
 - `torch.where` lowering 为逐元素值选择，不等于 `ops.masked()`，不会因此被排除；
 - `StarDep` 表示依赖整个 buffer，`WeakDep` 表示排序/变异依赖，它们都没有可比较的 index；
+- `IndexExprDep` 表示把 lane 坐标作为计算数据，例如 iota；普通 load/store 地址不会因此产生
+  `IndexExprDep`；
 - 遇到未知 Dep 类型直接回退，避免把无法证明的访问当作一一映射。
 
 第一版保守排除 alias/mutation。它们未必全部具有不同 device 行为，但依赖命名和写入语义更
 复杂；后续只有在性能数据证明有价值，并能建立独立结构证明时才放宽。
 
-### 8.4 访问签名
+### 8.4 Direct node 条件
+
+Direct node 表示至少读取一个 tensor，并按同一迭代映射写出结果。除共用门禁外必须满足：
+
+1. reads 非空；
+2. 所有 reads 都是 `MemoryDep`，不能出现 `StarDep`、`WeakDep` 或未知 Dep；
+3. 每个 read 都满足 `is_indirect() == false`；
+4. 每个 read 和 write 的规范化访问签名相同。
+
+```text
+Direct node =
+    至少一个可比较的 tensor read
+    + 至少一个普通 tensor write
+    + 所有 read/write 迭代映射一致
+    + 无 index_expr/indirect/special store/特殊语义
+```
+
+“所有 read/write 是 MemoryDep”只说明每个依赖都有明确地址，可以参与比较；它不代表映射已经
+一致。broadcast、gather 和 atomic 仍可能使用 MemoryDep，必须继续检查 signature、indirect
+和 mode。
+
+### 8.5 Neutral constant node 条件
+
+Neutral constant node 用于覆盖融合链中的 `full/zeros/ones` 等常量临时值。除共用门禁外必须
+满足：
+
+1. `read_writes.reads` 完全为空，而不只是没有 MemoryDep read；
+2. `read_writes.index_exprs` 为空，排除 iota/arange；
+3. LoopBody 数据流只依赖常量，不包含 RNG 或其他隐式数据源；
+4. 所有 write 都是普通、非 indirect、同一直接映射的 MemoryDep；
+5. neutral node 的所有 write buffer 都被同一 kernel 的其他 node 读取，证明它是融合临时值；
+6. 它的 reference signature 与 kernel 中 direct node 的 reference signature 相同。
+
+例如融合 `x + full_like(x, 1)` 时，full node 是 neutral，add node 是 direct；standalone full
+只有 neutral node，没有 external direct read，因此整个 kernel 不准入。`full -> relu(full)`
+即使形成多个 node，同样没有外部 tensor read，也不准入。
+
+`_is_constant_only_body()` 不按 `full/zeros/ones` API 名称枚举，而是从每个 store value 在
+LoopBody FX graph 中反向检查数据来源：
+
+```text
+store value
+    -> 允许普通 lane-local 中间运算和 dtype cast
+    -> 所有数据叶子必须是 literal constant
+```
+
+遇到 load、load_seed、index expression、RNG、masked subblock 或未知的无输入数据源即返回
+false。这样既能覆盖由常量组合产生的 neutral node，又不会把 iota/random 当成常量。
+
+### 8.6 访问签名
 
 不能直接比较原始 `MemoryDep.index`，因为等价访问可能存在：
 
@@ -537,40 +712,70 @@ def _make_access_signature(dep: MemoryDep) -> _AccessSignature | None:
 签名相等应优先使用结构相等；若表达式结构不同，再使用现有 sizevars 的静态相等能力验证。
 只有能证明相等时返回 true，化简异常或无法证明均返回 false。
 
-### 8.5 节点判定
+### 8.7 节点与 kernel 判定
 
 概念实现：
 
 ```python
-def _is_direct_elementwise_node(self, node: SchedulerNode) -> bool:
+def _classify_elementwise_node(self, node: SchedulerNode):
     if node.has_side_effects() or node.has_aliasing_or_mutation():
-        return False
-    if any(node._body.has_op(op) for op in ("masked", "scan", "sort")):
-        return False
+        return None
+    if self._has_unsupported_elementwise_semantics(node):
+        return None
 
     reads = tuple(node.read_writes.reads)
     writes = tuple(node.read_writes.writes)
-    if not reads or not writes:
-        return False
-    if not all(isinstance(dep, MemoryDep) for dep in (*reads, *writes)):
-        return False
+    if not writes or node.read_writes.index_exprs:
+        return None
+    if not all(isinstance(dep, MemoryDep) for dep in writes):
+        return None
 
-    read_signatures = tuple(self._make_access_signature(dep) for dep in reads)
     write_signatures = tuple(self._make_access_signature(dep) for dep in writes)
-    if any(signature is None for signature in (*read_signatures, *write_signatures)):
-        return False
+    if any(signature is None for signature in write_signatures):
+        return None
 
     reference = write_signatures[0]
     if not all(self._same_access_signature(reference, sig) for sig in write_signatures):
-        return False
-    return all(self._same_access_signature(reference, sig) for sig in read_signatures)
+        return None
+
+    if not reads:
+        if self._is_constant_only_body(node):
+            return "neutral_constant", reference
+        return None
+
+    if not all(isinstance(dep, MemoryDep) for dep in reads):
+        return None
+    read_signatures = tuple(self._make_access_signature(dep) for dep in reads)
+    if any(signature is None for signature in read_signatures):
+        return None
+    if not all(self._same_access_signature(reference, sig) for sig in read_signatures):
+        return None
+    return "direct", reference
 ```
 
-这里“至少一个 read”用于把 full/iota/random 等生成类 kernel 保留在普通 pointwise。标量常量
-不会形成 MemoryDep，可以参与 `f(...)`；0 维 tensor load 会形成固定地址 read，其签名不会与
-逐元素 write 相等，因此按 broadcast 处理。
+Kernel 级汇总：
 
-### 8.6 异常与保守回退
+```python
+def _is_direct_elementwise_kernel(self, nodes) -> bool:
+    classifications = []
+    for node in nodes:
+        result = self._classify_elementwise_node(node)
+        if result is None:
+            return False
+        classifications.append(result)
+
+    references = tuple(reference for _, reference in classifications)
+    if not self._all_signatures_equal(references):
+        return False
+    if not self._neutral_outputs_are_consumed(nodes, classifications):
+        return False
+    return self._has_external_direct_read(nodes, classifications)
+```
+
+标量常量不会形成 MemoryDep，可以直接参与 direct node 的 `f(...)`；0 维 tensor load 会形成
+固定地址 MemoryDep，其签名不会与逐元素 write 相等，因此按 broadcast 处理。
+
+### 8.8 异常与保守回退
 
 分类函数不应吞掉任意 `Exception`。实现时只捕获规范化过程中已知的符号分析异常，并返回
 `None`/false；编程错误仍应在测试阶段暴露。准则如下：
@@ -603,7 +808,38 @@ node1 writes: out index=d0*N+d1, size=(M,N)
 
 两个节点分别通过，kernel 为 elementwise。
 
-### 9.2 融合链中包含 broadcast
+### 9.2 融合链中的 full 临时节点
+
+```python
+tmp0 = torch.full_like(x, 1.0)
+tmp1 = relu(x)
+out = tmp1 + tmp0
+```
+
+Scheduler 逻辑依赖可能是：
+
+```text
+node0 full: reads={},         writes={tmp0}
+node1 relu: reads={x},        writes={tmp1}
+node2 add:  reads={tmp0,tmp1},writes={out}
+```
+
+node0 没有 read/index_expr，产生同映射常量临时值，分类为 neutral；node1、node2 分类为 direct；
+`x` 是不在 `produced_names` 中的 external direct read，因此 kernel 可以准入。
+
+融合后 `tmp0/tmp1` 通常通过 `store_cache` 传递，不生成实际内部 load/store：
+
+```python
+x_value = tl.load(x_ptr + offset, mask=mask)
+tmp0_value = tl.full((BLOCK,), 1.0, tl.float32)
+tmp1_value = tl.maximum(x_value, 0.0)
+tl.store(out_ptr + offset, tmp1_value + tmp0_value, mask=mask)
+```
+
+如果 kernel 只有 standalone full，或者只有 `full -> relu(full)`，则没有 external direct read，
+回退普通 pointwise。若 neutral write 没有被其他 node 消费，也不能作为“融合临时节点”放行。
+
+### 9.3 融合链中包含 broadcast
 
 ```python
 tmp = relu(x)       # x: [M, N]
@@ -613,7 +849,7 @@ out = tmp + y       # y: [N]
 node0 通过；node1 的 `y read` 只依赖 `d1`，与 output write 签名不同。只要一个节点失败，整个
 融合 kernel 回退普通 pointwise。
 
-### 9.3 固定 offset 与步长 slice
+### 9.4 固定 offset 与步长 slice
 
 ```text
 x[4:]  read index = d0 + 4
@@ -629,7 +865,7 @@ out    write index = d0
 
 去除 offset 后仍不同，不准入。
 
-### 9.4 多输入、多输出
+### 9.5 多输入、多输出
 
 - 多输入：每个 read 都必须与统一 write 签名相同；任一 broadcast/reindex input 即失败。
 - 多输出：所有 write 必须具有同一签名；不同 layout 或不同迭代域即失败。
@@ -637,12 +873,12 @@ out    write index = d0
 
 这保证同一 kernel 只使用一种可解释的直接映射。
 
-### 9.5 间接索引
+### 9.6 间接索引
 
 gather/index_select 的 load index 会包含由其他 load 计算出的 `indirect`/`tmp` symbol。
 `MemoryDep.is_indirect()` 已按这些符号检测，直接回退，不需要列举 gather API。
 
-### 9.6 `where` 与语义 mask
+### 9.7 `where` 与语义 mask
 
 ```python
 out = torch.where(mask, x, y)
@@ -850,7 +1086,9 @@ enable_symbolic_shape_group_autotune == true
     AND 当前 template 在 symbolic_group_allow_templates 中
     AND 当前 kernel 存在 dynamic split axis
     AND template == pointwise
-    AND 所有 SchedulerNode 通过直接映射检查
+    AND 所有 SchedulerNode 都是 direct 或 neutral constant node
+    AND 所有 node 使用统一的直接映射
+    AND 至少存在一个 external direct tensor read
 ```
 
 | 场景 | 预期行为 |
@@ -902,7 +1140,9 @@ INDUCTOR_ASCEND_SYMBOLIC_GROUP_TEMPLATES=pointwise,reduction,persistent_reductio
 - 单 read/多 write 且 write 映射一致；
 - 任一 read broadcast；
 - 任一 write 映射不同；
-- 没有 read 的 full/iota 类；
+- 无 read、无 index_expr 的 full neutral node；
+- 无 read、存在 `IndexExprDep` 的 iota node；
+- 无 read、包含 RNG 语义的 random node；
 - 没有 write 或空依赖；
 - `StarDep`、`WeakDep`、未知 Dep；
 - `ops.masked()`；
@@ -917,13 +1157,20 @@ INDUCTOR_ASCEND_SYMBOLIC_GROUP_TEMPLATES=pointwise,reduction,persistent_reductio
 | 融合结构 | 预期 workload |
 | --- | --- |
 | relu -> same-shape add -> cast | `elementwise` |
+| full neutral -> same-shape add(x) | `elementwise` |
+| standalone full | `None` |
+| full -> relu(full)，无外部 read | `None` |
+| full 与 direct node 水平融合但 full 输出未被消费 | `None` |
+| arange/index_expr -> same-shape add(x) | `None` |
+| random -> same-shape add(x) | `None` |
 | relu -> broadcast add | `None` |
 | direct node -> gather node | `None` |
 | direct node -> semantic masked node | `None` |
 | 多输出且同映射 | `elementwise` |
 | 多输出且不同 layout | `None` |
 
-测试必须证明分类遍历全部 SchedulerNode，不能只检查第一个/最后一个节点。
+测试必须证明分类遍历全部 SchedulerNode，不能只检查第一个/最后一个节点；还要检查 neutral
+输出消费关系、external read 识别以及跨 node reference signature 一致性。
 
 ### 15.4 Grouped metadata 测试
 
@@ -976,7 +1223,9 @@ shape 应覆盖小、中、大 numel，以及单轴/多轴动态 shape。关注�
 | normalize 后错误忽略 layout 差异 | 不重排 loop，只合并维度；保留 stride/index 关系 |
 | 固定 offset 处理过宽 | 只移除不依赖迭代变量的常量 base offset |
 | 语义 mask 与 tail mask 混淆 | 只检查 LoopBody `ops.masked()`，不检查 codegen tail mask |
-| 融合内部 buffer 边界复杂 | 逐 SchedulerNode 判定，不重建 kernel 边界 |
+| full 临时节点造成 false negative | 区分 direct/neutral，并要求 neutral 输出在 kernel 内被消费 |
+| 纯生成融合链误判 elementwise | 要求至少一个不由本 kernel 产生的 external direct read |
+| 融合内部 buffer 边界复杂 | 逐 node 判定，只按名称收集必要 external read，不重建最终 writes |
 | payload/cache 不兼容 | workload 可选，缺失读取为 `None` |
 | fallback 后 metadata 残留 | disable 路径同步清理 `group_workload` |
 | 分类增加编译耗时 | 仅 grouped dynamic pointwise 执行，复用已提取依赖 |
@@ -985,14 +1234,15 @@ shape 应覆盖小、中、大 numel，以及单轴/多轴动态 shape。关注�
 ## 17. 实施顺序
 
 1. 在 `GroupedKernelMeta` 增加可选 workload，并完成 payload 兼容测试；
-2. 在 SplitTiling 实现访问签名 helper 和逐节点分类测试；
-3. 在 `_build_grouped_meta()` 接入分类结果；
-4. 按 template + workload 分发 group feature；
-5. 在 Triton metadata 正常和 disable 路径同步写入/清理 workload；
-6. 增加动态 elementwise、broadcast、融合链集成测试；
-7. 先复用现有 threshold 验证 metadata/runtime 全链路；
-8. 在 NPU 上 profiling 后确定 elementwise buckets；
-9. 回归 group off、静态 shape、reduction 和普通 pointwise。
+2. 在 SplitTiling 实现访问签名、direct/neutral node 判定和逐节点测试；
+3. 实现 neutral 输出消费、跨 node 统一签名和 external direct read 汇总；
+4. 在 `_build_grouped_meta()` 接入分类结果；
+5. 按 template + workload 分发 group feature；
+6. 在 Triton metadata 正常和 disable 路径同步写入/清理 workload；
+7. 增加动态 elementwise、broadcast、full neutral 和纯生成融合链集成测试；
+8. 先复用现有 threshold 验证 metadata/runtime 全链路；
+9. 在 NPU 上 profiling 后确定 elementwise buckets；
+10. 回归 group off、静态 shape、reduction 和普通 pointwise。
 
 ## 18. 验收标准
 
@@ -1003,10 +1253,13 @@ shape 应覆盖小、中、大 numel，以及单轴/多轴动态 shape。关注�
 3. 分类数据完全来自 SchedulerNode/LoopBody 已有结构；
 4. 同 shape direct 计算可识别，broadcast/reindex/indirect/masked/special store 可排除；
 5. 融合 kernel 的每个 SchedulerNode 都参与判定；
-6. 未知结构可靠回退普通 pointwise，codegen 不因“不确定”失败；
-7. old payload、group off、静态 shape 和 reduction 回归通过；
-8. elementwise feature 能完整进入 group id、candidate 和 launch policy 链路；
-9. 最终独立 bucket 有 NPU profiling 数据支撑。
+6. full 常量临时节点可作为 neutral 放行，standalone full 和纯生成融合链仍回退；
+7. `StarDep/WeakDep/IndexExprDep` 等不可比较或非访存依赖有明确处理；
+8. 逻辑内部 read/write 被 DSL 消除时不影响分类；
+9. 未知结构可靠回退普通 pointwise，codegen 不因“不确定”失败；
+10. old payload、group off、静态 shape 和 reduction 回归通过；
+11. elementwise feature 能完整进入 group id、candidate 和 launch policy 链路；
+12. 最终独立 bucket 有 NPU profiling 数据支撑。
 
 ## 19. 代码证据汇总
 
@@ -1014,12 +1267,17 @@ shape 应覆盖小、中、大 numel，以及单轴/多轴动态 shape。关注�
 | --- | --- |
 | kernel features 保存融合后的有序 schedule | `pytorch/torch/_inductor/codegen/simd_kernel_features.py:55` |
 | 可过滤 marker 取得实际 SchedulerNode | `pytorch/torch/_inductor/codegen/simd_kernel_features.py:75` |
+| NPUIndex 创建 kernel 前已通过 op_counts 使用 scheduler_nodes | `pytorch_new/torch_npu/_inductor/codegen/scheduling.py:110` |
 | SchedulerNode 从 LoopBody 提取 ReadWrites | `pytorch/torch/_inductor/scheduler.py:1446` |
 | MemoryDep 保存 index/vars/size/mode | `pytorch/torch/_inductor/dependencies.py:76` |
+| StarDep/WeakDep 没有可比较的 index | `pytorch/torch/_inductor/dependencies.py:320` |
+| IndexExprDep 独立记录 lane 坐标数据 | `pytorch/torch/_inductor/dependencies.py:425` |
 | broadcast 会产生额外零 stride/缺失变量 | `pytorch/torch/_inductor/dependencies.py:104` |
 | MemoryDep 提供 offset、normalize、indirect 判断 | `pytorch/torch/_inductor/dependencies.py:161` |
 | inplace 已使用 index/size 相等证明映射一致 | `pytorch/torch/_inductor/scheduler.py:1740` |
 | kernel 初始化保存 node_schedule | `pytorch_new/torch_npu/_inductor/codegen/triton.py:1412` |
+| 内部 buffer load 可直接命中 store_cache | `pytorch_new/torch_npu/_inductor/codegen/triton.py:4051` |
+| removed internal buffer 不生成实际 store | `pytorch_new/torch_npu/_inductor/codegen/triton.py:4833` |
 | SplitTiling 在最终维度决策中创建 | `pytorch_new/torch_npu/_inductor/codegen/triton.py:1607` |
 | grouped rewrite 位于 split/tiling 选择之后 | `pytorch_new/torch_npu/_inductor/codegen/split_tiling.py:234` |
 | 当前动态 split axis 后构造 group features/meta | `pytorch_new/torch_npu/_inductor/codegen/split_tiling.py:311` |
