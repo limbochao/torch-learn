@@ -10,9 +10,12 @@ title: CUDA 社区 v2.10.0 用例的 NPU 动态 Shape 看护优先级分析
 
 “重要”表示该用例覆盖 NPU `torch.compile` 动态 shape 的核心正确性、符号传播、数据依赖 shape、
 前反向、常见模型算子或编译复用链路。它不表示社区原用例可以不经适配直接在 NPU 上运行。
+用例属于算子、扩展或 codegen 专项，不作为降低重要性的理由；只要目标能力适用于 NPU 且覆盖上述核心风险，
+就应进入核心看护集。
 
-“不重要”仅表示不建议进入 NPU 动态 shape **核心**看护集，不代表用例本身没有价值。CUDA/Triton 专属、
-CPU/meta 专属、静态 shape、纯性能、纯未特化浮点参数和过窄的内部回归用例，应由对应专项测试看护。
+“不重要”仅表示不建议进入 NPU 动态 shape **核心**看护集，不代表用例本身没有价值。NPU 明确关闭的能力、
+目标算子仅走 NPU fallback 且未额外覆盖核心符号传播、CUDA 专属、CPU/meta 专属、静态 shape、纯性能、
+纯未特化浮点参数和过窄的内部回归用例，不进入核心看护集。
 
 ## 判定依据
 
@@ -26,8 +29,12 @@ CPU/meta 专属、静态 shape、纯性能、纯未特化浮点参数和过窄�
    `pytorch_new/torch_npu/_inductor/dvm/mlir_fusion.py:455` 显式关闭 `comprehensive_padding`。
    因此 `test_padding.py` 中即使名称带 dynamic，其目标仍是 CUDA/Triton padding layout 策略，
    不作为当前 NPU 动态 shape 核心用例。
-4. 直接调用社区 Triton kernel、检查 Triton 源码字符串、依赖 CUDA SM80/FlashAttention、仅在 CPU/meta
-   运行的用例，不具备 NPU 核心看护价值；其中可迁移的算子语义应改写为 NPU 后端断言后再进入专项集。
+4. NPU 后端使用 `triton-ascend`。用户 Triton kernel、dynamic reduction 和 persistent reduction 等适用于
+   NPU 的 codegen 核心能力，应适配 CUDA 专属断言后进入核心看护集；CUDA FlashAttention 和仅在 CPU/meta
+   运行的路径仍不适用。
+5. `pytorch_new/torch_npu/_inductor/lowering_fallback_list.py` 中的算子不会进入 NPU Inductor lowering 和融合。
+   当用例主要验证此类算子本身时，不作为 NPU codegen 核心用例；`nonzero` 等用于产生数据依赖 shape、并继续
+   验证 unbacked SymInt 传播的场景除外，因为该传播链路本身是 NPU 动态 shape 的核心能力。
 
 ## 逐项分析
 
