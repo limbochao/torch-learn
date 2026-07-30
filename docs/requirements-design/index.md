@@ -11,12 +11,13 @@ title: 需求设计
 <div class="tl-section-heading" markdown="1">
 ## 内容状态
 
-当前已归档 1 篇需求设计文档，后续新增时继续按下面的生命周期组织。
+当前已归档 2 篇需求设计文档，后续新增时继续按下面的生命周期组织。
 </div>
 
 ## 已归档设计
 
 - [Symbolic Grouped Autotune 增加 Elementwise Workload 设计](inductor-symbolic-group-elementwise-workload.md)
+- [CUDA 社区 v2.10.0 用例的 NPU 动态 Shape 看护优先级分析](npu-dynamic-shape-v2.10-test-priority-analysis.md)
 
 <div class="tl-card-grid" markdown="1">
 <article class="tl-card tl-card-accent-blue" markdown="1">
