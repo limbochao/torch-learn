@@ -32,7 +32,8 @@ CPU/meta 专属、静态 shape、纯性能、纯未特化浮点参数和过窄�
 ## 逐项分析
 
 完整表格单独存放在
-[npu-dynamic-shape-v2.10-test-priority-analysis.csv](npu-dynamic-shape-v2.10-test-priority-analysis.csv)，包含“文件名、用例、用例功能、是否为重要用例”四列。
+[npu-dynamic-shape-v2.10-test-priority-analysis.csv](npu-dynamic-shape-v2.10-test-priority-analysis.csv)，
+包含“文件名、用例、用例分类（NPU 视角）、用例功能、是否为重要用例”五列。
 
 ## 使用建议
 
