@@ -6,7 +6,7 @@ title: CUDA 社区 v2.10.0 用例的 NPU 动态 Shape 看护优先级分析
 
 ## 结论
 
-本次共分析 105 个用例，其中 56 个建议作为 NPU 动态 shape 重要用例看护，49 个不建议进入核心看护集。
+本次共分析 105 个用例，其中 57 个建议作为 NPU 动态 shape 重要用例看护，48 个不建议进入核心看护集。
 
 “重要”表示该用例覆盖 NPU `torch.compile` 动态 shape 的核心正确性、符号传播、数据依赖 shape、
 前反向、常见模型算子或编译复用链路。它不表示社区原用例可以不经适配直接在 NPU 上运行。
@@ -37,7 +37,7 @@ CPU/meta 专属、静态 shape、纯性能、纯未特化浮点参数和过窄�
 
 ## 使用建议
 
-建议先把 56 个“是”用例按以下顺序迁移或对齐到 NPU：
+建议先把 57 个“是”用例按以下顺序迁移或对齐到 NPU：
 
 1. `nonzero`/`item`/`tolist` 产生的 unbacked SymInt 与 tensor factory、view、split、cat 的组合。
 2. 动态 shape 的 MM/BMM/Linear/LayerNorm/reduction/einsum/softmax 等常见模型算子。
