@@ -85,6 +85,24 @@ python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_compare.py \
 纯 NPU 结果只生成已有 execution 对应的 `npu_*` 列，以及它们相对 NPU static 的 ratio；不会生成 `cuda_*`、
 `npu_cuda_ratio_of_lift` 或 `npu_<execution>_cuda_ratio_of_lift` 列。
 
+也可以使用配套示例脚本依次运行一轮 eager、一轮 static，以及使用不同首 shape 的多轮 dynamic，最后自动执行
+compare。脚本会在 static 和每轮 dynamic 前执行 `rm -rf /tmp/torchinductor_root/*`，避免复用上一轮的
+Inductor 缓存：
+
+```bash
+RUN_ID=npu_only_001 \
+    scripts/tests/elementwise_dynamic_perf/run_npu_compare.sh
+```
+
+dynamic 默认依次使用 `128 8192 1048576` 作为首 shape。可通过空格分隔的 `COMPILE_SHAPES` 覆盖，并可通过
+环境变量设置 `PROFILE_ROOT`、`SYMBOLIC_DIMS`、`CASES` 和 `PYTHON_BIN`。默认运行
+`CASES=memory_add,exp_log`，例如：
+
+```bash
+RUN_ID=npu_only_001 CASES=memory_add,exp_log COMPILE_SHAPES="128 8192 1048576" \
+    scripts/tests/elementwise_dynamic_perf/run_npu_compare.sh
+```
+
 产物固定写入 summary 同级目录的 `elementwise_op_cost_comparison.csv` 和
 `elementwise_op_cost_comparison.xlsx`。CSV 保持机器可读的完整重复值；XLSX 合并相邻的场景维度单元格，并增加
 冻结表头、筛选、列宽和分组底色，tiling 使用 pretty JSON 展示；ratio 大于 `1.15` 或小于 `0.85` 时标红。
