@@ -140,6 +140,15 @@ def _column_width(
     return min(max(len(column) + 2, value_width + 2, 12), 28)
 
 
+def _display_value(column: str, value: str) -> str:
+    if not value or not column.endswith("_tiling"):
+        return value
+    try:
+        return json.dumps(json.loads(value), indent=2, sort_keys=True)
+    except json.JSONDecodeError:
+        return value
+
+
 def _append_cell(
     row_element: ET.Element,
     row_number: int,
@@ -165,7 +174,8 @@ def _append_cell(
     attributes["t"] = "inlineStr"
     cell = ET.SubElement(row_element, _tag("c"), attributes)
     inline_string = ET.SubElement(cell, _tag("is"))
-    ET.SubElement(inline_string, _tag("t")).text = value
+    text_attributes = {"{http://www.w3.org/XML/1998/namespace}space": "preserve"} if "\n" in value else {}
+    ET.SubElement(inline_string, _tag("t"), text_attributes).text = value
 
 
 def _worksheet_xml(
@@ -220,7 +230,7 @@ def _worksheet_xml(
                 row_element,
                 row_number,
                 column_index,
-                row.get(column, ""),
+                _display_value(column, row.get(column, "")),
                 _cell_style(column, row.get("bound", "")),
                 numeric=column not in BASE_COLUMNS,
             )
@@ -245,7 +255,7 @@ def _worksheet_xml(
                 {"sqref": f"{column}2:{column}{len(rows) + 1}"},
             )
             for offset, (operator, threshold) in enumerate(
-                (("greaterThan", "1.2"), ("lessThan", "0.8"))
+                (("greaterThan", "1.15"), ("lessThan", "0.85"))
             ):
                 rule = ET.SubElement(
                     conditional,

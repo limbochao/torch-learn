@@ -65,9 +65,30 @@ python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_compare.py \
     prof_log/elementwise_dynamic_perf/baseline_001/summary.csv
 ```
 
+只进行 NPU 对比时，不需要补跑 CUDA。使用相同 `RUN_ID` 分别采集需要的 NPU execution，再执行同一个 compare
+命令即可，例如：
+
+```bash
+RUN_ID=npu_only_001 DEVICE=npu EXECUTION=static \
+    python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
+RUN_ID=npu_only_001 DEVICE=npu EXECUTION=dynamic COMPILE_SHAPE=8192 SYMBOLIC_DIMS=0 \
+    python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
+RUN_ID=npu_only_001 DEVICE=npu EXECUTION=custom COMPILE_SHAPE=8192 SYMBOLIC_DIMS=0 \
+    python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
+RUN_ID=npu_only_001 DEVICE=npu EXECUTION=group COMPILE_SHAPE=8192 SYMBOLIC_DIMS=0 \
+    python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_cases.py
+
+python scripts/tests/elementwise_dynamic_perf/elementwise_op_cost_compare.py \
+    prof_log/elementwise_dynamic_perf/npu_only_001/summary.csv
+```
+
+纯 NPU 结果只生成已有 execution 对应的 `npu_*` 列，以及它们相对 NPU static 的 ratio；不会生成 `cuda_*`、
+`npu_cuda_ratio_of_lift` 或 `npu_<execution>_cuda_ratio_of_lift` 列。
+
 产物固定写入 summary 同级目录的 `elementwise_op_cost_comparison.csv` 和
 `elementwise_op_cost_comparison.xlsx`。CSV 保持机器可读的完整重复值；XLSX 合并相邻的场景维度单元格，并增加
-冻结表头、筛选、列宽、分组底色和 ratio 异常值标红。两种产物的数值和动态列完全一致，所有数值保留三位小数；
+冻结表头、筛选、列宽和分组底色，tiling 使用 pretty JSON 展示；ratio 大于 `1.15` 或小于 `0.85` 时标红。
+两种产物的数值和动态列完全一致，所有数值保留三位小数；
 原始 summary 未运行的 device/execution 不生成对应列；已生成列中不存在的组合保持为空。输出唯一键为
 `scalar_ops + dtype + first_shape + runtime_shape`；若不同 case 产生相同键，脚本会打印冲突 warning。
 
