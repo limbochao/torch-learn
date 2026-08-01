@@ -122,11 +122,12 @@ def position_concat_kernel(
 def _load_block(block_ptr, EVEN_M: tl.constexpr, EVEN_N: tl.constexpr):
     if EVEN_M & EVEN_N:
         return tl.load(block_ptr)
-    if EVEN_M:
+    elif EVEN_M:
         return tl.load(block_ptr, boundary_check=(1,), padding_option="zero")
-    if EVEN_N:
+    elif EVEN_N:
         return tl.load(block_ptr, boundary_check=(0,), padding_option="zero")
-    return tl.load(block_ptr, boundary_check=(0, 1), padding_option="zero")
+    else:
+        return tl.load(block_ptr, boundary_check=(0, 1), padding_option="zero")
 
 
 @triton.jit
