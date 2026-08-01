@@ -48,7 +48,8 @@ torch._dynamo.config.fake_tensor_cache_enabled = False
 torch._inductor.config.reorder_for_peak_memory = False
 torch._inductor.config.max_autotune = True
 torch._inductor.config.coordinate_descent_tuning = True
-torch._inductor.config.trace.enabled = False
+torch._inductor.config.trace.enabled = True
+torch._inductor.config.trace.output_code = True
 torch._inductor.config.trace.save_real_tensors = False
 torch._inductor.config.trace.debug_dir = None
 torch._functorch.config.functionalize_rng_ops = False
@@ -10777,6 +10778,17 @@ def initialize_repeat_counts(args):
             repeats[:remainder].add_(1)
 
 
+def latest_output_code_path():
+    debug_root = Path(torch._dynamo.config.debug_dir_root)
+    output_codes = [path for path in debug_root.rglob("output_code.py") if path.is_file()]
+    if not output_codes:
+        raise RuntimeError(f"No output_code.py found below compile debug root {debug_root}")
+    return max(
+        output_codes,
+        key=lambda path: (path.stat().st_mtime_ns, path.stat().st_ctime_ns, str(path)),
+    )
+
+
 def profile_compiled(compiled, args, marked_dims):
     warmup = int(os.environ.get("WARMUP", "1"))
     active = int(os.environ.get("ACTIVE", "10"))
@@ -10876,6 +10888,7 @@ def main():
         outputs = compiled(*args)
     torch.npu.synchronize()
     print(f"compiled run completed: outputs={len(outputs)}")
+    print(f"output_code={latest_output_code_path()}")
     profile_compiled(compiled, args, marked_dims)
 
 
