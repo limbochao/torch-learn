@@ -18,7 +18,7 @@ register_inductor_npu()
 from torch import tensor, device
 import torch.fx as fx
 from torch._dynamo.testing import rand_strided
-from math import inf
+from math import inf, nan
 import torch._inductor.inductor_prims
 
 from fx_graph_custom_kernels_npu import launch_model_kernel, register_model_kernels
