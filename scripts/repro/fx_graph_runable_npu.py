@@ -1,7 +1,14 @@
+import csv
 import os
+import sys
+from datetime import datetime
+from pathlib import Path
 
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPTS_DIR = os.path.dirname(SCRIPT_DIR)
+if SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, SCRIPTS_DIR)
 os.environ[GROUP_AUTOTUNE_ENV] = "1"
 os.environ.setdefault("TORCH_COMPILE_DEBUG", "1")
 os.environ.setdefault("TORCH_COMPILE_DEBUG_DIR", os.path.join(SCRIPT_DIR, "torch_compile_debug_root"))
@@ -22,6 +29,7 @@ from math import inf, nan
 import torch._inductor.inductor_prims
 
 from fx_graph_custom_kernels_npu import launch_model_kernel, register_model_kernels
+from tools.npu_profiler import ProfileResultParser, TorchNpuProfiler
 
 import torch._dynamo.config
 import torch._inductor.config
@@ -10751,6 +10759,97 @@ class SymbolicRepro(torch.nn.Module):
         return self.mod(*args)
 
 
+REPEAT_COUNTS_ARG_INDEX = 152
+
+
+def initialize_repeat_counts(args):
+    """Create valid segment lengths whose sum matches repeat_interleave output_size."""
+    repeats = args[REPEAT_COUNTS_ARG_INDEX]
+    token_count = int(args[1].shape[0])
+    segment_count = int(repeats.shape[0])
+    if segment_count <= 0:
+        raise ValueError("arg152_1 must contain at least one segment")
+
+    base, remainder = divmod(token_count, segment_count)
+    with torch.no_grad():
+        repeats.fill_(base)
+        if remainder:
+            repeats[:remainder].add_(1)
+
+
+def profile_compiled(compiled, args, marked_dims):
+    warmup = int(os.environ.get("WARMUP", "1"))
+    active = int(os.environ.get("ACTIVE", "10"))
+    repeat = int(os.environ.get("REPEAT", "1"))
+    if warmup < 0 or active <= 0 or repeat <= 0:
+        raise ValueError("WARMUP must be non-negative; ACTIVE and REPEAT must be positive")
+
+    run_id = os.environ.get("RUN_ID") or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    profile_root = Path(
+        os.environ.get("PROFILE_ROOT", os.path.join(SCRIPT_DIR, "prof_log", "fx_graph_runable_npu"))
+    )
+    run_root = profile_root / run_id
+    profile_dir = run_root / "profiles"
+    profile_dir.mkdir(parents=True, exist_ok=False)
+
+    profiler = TorchNpuProfiler(
+        profile_dir,
+        wait=0,
+        warmup=warmup,
+        active=active,
+        repeat=repeat,
+        with_stack=False,
+    )
+    with torch.no_grad():
+        profiler.run_steps(lambda: compiled(*args))
+
+    parser = ProfileResultParser(profile_dir)
+    kernel_summaries = parser.kernel_time_by_name()
+    kernel_count = sum(summary.count for summary in kernel_summaries)
+    if kernel_count == 0:
+        raise RuntimeError(f"No NPU device kernels found in {profile_dir}")
+
+    call_count = active * repeat
+    device_total_us = sum(summary.total_us for summary in kernel_summaries)
+    result = {
+        "run_id": run_id,
+        "device": "npu:0",
+        "group": os.environ[GROUP_AUTOTUNE_ENV],
+        "dynamic": "None",
+        "s0": int(s0),
+        "s2": int(s2),
+        "s13": int(s13),
+        "s167": int(s167),
+        "s169": int(s169),
+        "s219": int(s219),
+        "s242": int(s242),
+        "s243": int(s243),
+        "marked_dims": str(marked_dims),
+        "warmup": warmup,
+        "active": active,
+        "repeat": repeat,
+        "profile_calls": call_count,
+        "kernel_count": kernel_count,
+        "kernels_per_call": f"{kernel_count / call_count:.3f}",
+        "device_total_us": f"{device_total_us:.3f}",
+        "device_mean_us": f"{device_total_us / call_count:.3f}",
+        "step_mean_us": f"{parser.average_step_time_us():.3f}",
+        "profile_dir": str(profile_dir),
+    }
+    result_path = run_root / "performance.csv"
+    with result_path.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=result)
+        writer.writeheader()
+        writer.writerow(result)
+
+    print(f"profile_dir={profile_dir}")
+    print(f"performance_csv={result_path}")
+    print(
+        f"device_mean_us={result['device_mean_us']} "
+        f"step_mean_us={result['step_mean_us']}"
+    )
+
+
 def main():
     from torch._dynamo.debug_utils import InputReader
 
@@ -10758,6 +10857,7 @@ def main():
     reader = SymbolicInputReader(InputReader(save_dir=None))
     load_args(reader)
     args = reader.args
+    initialize_repeat_counts(args)
     mod = SymbolicRepro(
         Repro(), reader.dynamic_tensor_dims, reader.symbolic_scalar_args
     )
@@ -10776,6 +10876,7 @@ def main():
         outputs = compiled(*args)
     torch.npu.synchronize()
     print(f"compiled run completed: outputs={len(outputs)}")
+    profile_compiled(compiled, args, marked_dims)
 
 
 if __name__ == "__main__":
