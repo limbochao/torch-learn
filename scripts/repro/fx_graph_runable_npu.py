@@ -17,6 +17,8 @@ from torch._dynamo.testing import rand_strided
 from math import inf
 import torch._inductor.inductor_prims
 
+from fx_graph_custom_kernels_npu import register_model_kernels
+
 import torch._dynamo.config
 import torch._inductor.config
 import torch._functorch.config
@@ -41,6 +43,8 @@ torch._functorch.config.functionalize_rng_ops = False
 torch._functorch.config.debug_partitioner = True
 torch._functorch.config.fake_tensor_allow_unsafe_data_ptr_access = True
 torch._functorch.config.unlift_effect_tokens = True
+
+register_model_kernels()
 
 
 
@@ -560,7 +564,7 @@ class Repro(torch.nn.Module):
         slice_252 = torch.ops.aten.slice.Tensor(arg19_1, 1, 47603, 47619)
         _tensor_constant0 = self._tensor_constant0
         lift_fresh_copy = torch.ops.aten.lift_fresh_copy.default(_tensor_constant0);  _tensor_constant0 = None
-        fused_slice_cat = torch.ops.custom_lib.fused_slice_cat.default(arg19_1, lift_fresh_copy, arg2_1, 13040, 69876, 256);  lift_fresh_copy = None
+        fused_slice_cat = torch.ops.aten.index_select.default(arg19_1, 1, lift_fresh_copy);  lift_fresh_copy = None
         slice_253 = torch.ops.aten.slice.Tensor(fused_slice_cat, 1, 0, 256)
         clone_1 = torch.ops.aten.clone.default(slice_253);  slice_253 = None
         slice_254 = torch.ops.aten.slice.Tensor(fused_slice_cat, 1, 256, 2176)
