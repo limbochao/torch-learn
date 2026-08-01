@@ -1,15 +1,29 @@
+import argparse
 import csv
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the NPU FX graph repro")
+    parser.add_argument(
+        "--execution",
+        choices=("dynamic", "static"),
+        default="dynamic",
+        help="dynamic uses mark_dynamic + dynamic=None; static uses dynamic=False",
+    )
+    return parser.parse_args()
+
+
+SCRIPT_ARGS = parse_args()
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(SCRIPT_DIR)
 if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
-os.environ[GROUP_AUTOTUNE_ENV] = "1"
+os.environ[GROUP_AUTOTUNE_ENV] = "1" if SCRIPT_ARGS.execution == "dynamic" else "0"
 os.environ.setdefault("TORCH_COMPILE_DEBUG", "1")
 os.environ.setdefault("TORCH_COMPILE_DEBUG_DIR", os.path.join(SCRIPT_DIR, "torch_compile_debug_root"))
 os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", "/tmp/torchinductor_root")
@@ -41,9 +55,6 @@ torch._dynamo.config.automatic_dynamic_shapes = True
 torch._dynamo.config.allow_ignore_mark_dynamic = True
 torch._dynamo.config.capture_scalar_outputs = True
 torch._dynamo.config.capture_dynamic_output_shape_ops = True
-torch._dynamo.config.debug_dir_root = os.path.join(
-    os.environ["TORCH_COMPILE_DEBUG_DIR"], "torch_compile_debug"
-)
 torch._dynamo.config.fake_tensor_cache_enabled = False
 torch._inductor.config.reorder_for_peak_memory = False
 torch._inductor.config.max_autotune = True
@@ -10712,9 +10723,10 @@ load_args._version = 0
 
 
 class SymbolicInputReader:
-    def __init__(self, reader):
+    def __init__(self, reader, mark_dynamic_dims):
         self.reader = reader
-        self.dynamic_tensor_dims = {}
+        self.mark_dynamic_dims = mark_dynamic_dims
+        self.symbolic_tensor_dims = {}
         self.symbolic_scalar_args = {}
 
     @property
@@ -10726,8 +10738,9 @@ class SymbolicInputReader:
         value = self.reader.tensor(storage, shape, *args, **kwargs)
         for dim, size in enumerate(shape):
             if isinstance(size, ShapeHint):
-                torch._dynamo.mark_dynamic(value, dim)
-                self.dynamic_tensor_dims.setdefault(size.symbol, []).append(
+                if self.mark_dynamic_dims:
+                    torch._dynamo.mark_dynamic(value, dim)
+                self.symbolic_tensor_dims.setdefault(size.symbol, []).append(
                     (arg_index, dim)
                 )
         return value
@@ -10743,11 +10756,11 @@ class SymbolicInputReader:
 
 
 class SymbolicRepro(torch.nn.Module):
-    def __init__(self, mod, dynamic_tensor_dims, symbolic_scalar_args):
+    def __init__(self, mod, symbolic_tensor_dims, symbolic_scalar_args):
         super().__init__()
         self.mod = mod
         self.symbol_bindings = tuple(
-            (dynamic_tensor_dims[symbol][0], tuple(scalar_arg_indices))
+            (symbolic_tensor_dims[symbol][0], tuple(scalar_arg_indices))
             for symbol, scalar_arg_indices in symbolic_scalar_args.items()
         )
 
@@ -10789,18 +10802,25 @@ def latest_output_code_path():
     )
 
 
-def profile_compiled(compiled, args, marked_dims):
+def prepare_result_root(execution):
+    run_id = os.environ.get("RUN_ID") or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    profile_root = Path(
+        os.environ.get("PROFILE_ROOT", os.path.join(SCRIPT_DIR, "prof_log", "fx_graph_runable_npu"))
+    )
+    run_root = profile_root / run_id / execution
+    run_root.mkdir(parents=True, exist_ok=False)
+    torch._dynamo.config.debug_dir_root = str(run_root)
+    torch._inductor.config.trace.debug_dir = str(run_root)
+    return run_id, run_root
+
+
+def profile_compiled(compiled, args, marked_dims, execution, run_id, run_root):
     warmup = int(os.environ.get("WARMUP", "1"))
     active = int(os.environ.get("ACTIVE", "10"))
     repeat = int(os.environ.get("REPEAT", "1"))
     if warmup < 0 or active <= 0 or repeat <= 0:
         raise ValueError("WARMUP must be non-negative; ACTIVE and REPEAT must be positive")
 
-    run_id = os.environ.get("RUN_ID") or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    profile_root = Path(
-        os.environ.get("PROFILE_ROOT", os.path.join(SCRIPT_DIR, "prof_log", "fx_graph_runable_npu"))
-    )
-    run_root = profile_root / run_id
     profile_dir = run_root / "profiles"
     profile_dir.mkdir(parents=True, exist_ok=False)
 
@@ -10825,9 +10845,10 @@ def profile_compiled(compiled, args, marked_dims):
     device_total_us = sum(summary.total_us for summary in kernel_summaries)
     result = {
         "run_id": run_id,
+        "execution": execution,
         "device": "npu:0",
         "group": os.environ[GROUP_AUTOTUNE_ENV],
-        "dynamic": "None",
+        "dynamic": "None" if execution == "dynamic" else "False",
         "s0": int(s0),
         "s2": int(s2),
         "s13": int(s13),
@@ -10865,31 +10886,54 @@ def profile_compiled(compiled, args, marked_dims):
 def main():
     from torch._dynamo.debug_utils import InputReader
 
+    execution = SCRIPT_ARGS.execution
+    run_id, run_root = prepare_result_root(execution)
     torch.npu.set_device(0)
-    reader = SymbolicInputReader(InputReader(save_dir=None))
+    reader = SymbolicInputReader(
+        InputReader(save_dir=None),
+        mark_dynamic_dims=execution == "dynamic",
+    )
     load_args(reader)
     args = reader.args
     initialize_repeat_counts(args)
     mod = SymbolicRepro(
-        Repro(), reader.dynamic_tensor_dims, reader.symbolic_scalar_args
+        Repro(), reader.symbolic_tensor_dims, reader.symbolic_scalar_args
     )
-    marked_dims = {
-        symbol: len(tensor_dims)
-        for symbol, tensor_dims in reader.dynamic_tensor_dims.items()
-    }
+    marked_dims = (
+        {
+            symbol: len(tensor_dims)
+            for symbol, tensor_dims in reader.symbolic_tensor_dims.items()
+        }
+        if execution == "dynamic"
+        else {}
+    )
+    compile_dynamic = None if execution == "dynamic" else False
     print(
-        f"device=npu group={os.environ[GROUP_AUTOTUNE_ENV]} "
-        f"dynamic=None marked_dims={marked_dims} "
+        f"device=npu execution={execution} group={os.environ[GROUP_AUTOTUNE_ENV]} "
+        f"dynamic={compile_dynamic} marked_dims={marked_dims} "
         f"inputs={len(args)}"
     )
+    print(f"result_dir={run_root}")
 
-    compiled = torch.compile(mod, backend="inductor", dynamic=None, fullgraph=True)
+    compiled = torch.compile(
+        mod,
+        backend="inductor",
+        dynamic=compile_dynamic,
+        fullgraph=True,
+    )
     with torch.no_grad():
         outputs = compiled(*args)
     torch.npu.synchronize()
     print(f"compiled run completed: outputs={len(outputs)}")
     print(f"output_code={latest_output_code_path()}")
-    profile_compiled(compiled, args, marked_dims)
+    profile_compiled(
+        compiled,
+        args,
+        marked_dims,
+        execution,
+        run_id,
+        run_root,
+    )
 
 
 if __name__ == "__main__":
