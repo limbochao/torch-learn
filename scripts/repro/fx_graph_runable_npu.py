@@ -17,7 +17,7 @@ from torch._dynamo.testing import rand_strided
 from math import inf
 import torch._inductor.inductor_prims
 
-from fx_graph_custom_kernels_npu import register_model_kernels
+from fx_graph_custom_kernels_npu import launch_model_kernel, register_model_kernels
 
 import torch._dynamo.config
 import torch._inductor.config
@@ -2475,16 +2475,16 @@ class Repro(torch.nn.Module):
         floordiv_3 = sub_15 // 1024;  sub_15 = None
         add_18 = arg0_1 + sym_size_int_10
         empty = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 1, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_164, 'y_ptr': index_15, 'o_ptr': empty, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_164 = index_15 = empty = None
+        triton_kernel_wrapper_functional_proxy = launch_model_kernel(kernel_idx = 1, constant_args_idx = 1, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_164, 'y_ptr': index_15, 'o_ptr': empty, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_164 = index_15 = empty = None
         getitem = triton_kernel_wrapper_functional_proxy['o_ptr'];  triton_kernel_wrapper_functional_proxy = None
         add_19 = torch.ops.aten.add.Tensor(constant_pad_nd_1, constant_pad_nd)
         empty_1 = torch.ops.aten.empty.memory_format([add_18], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_1 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 3, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_109, 'o_ptr': empty_1, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_109 = empty_1 = None
+        triton_kernel_wrapper_functional_proxy_1 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 3, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_109, 'o_ptr': empty_1, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_109 = empty_1 = None
         getitem_1 = triton_kernel_wrapper_functional_proxy_1['o_ptr'];  triton_kernel_wrapper_functional_proxy_1 = None
         full_default_25 = torch.ops.aten.full.default([arg2_1], 0, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         full_23 = torch.ops.aten.full.default([sym_size_int_10], 1, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_2 = torch.ops.aten.empty.memory_format([add_18], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_2 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 4, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_23, 'o_ptr': empty_2, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_23 = empty_2 = constant_pad_nd = None
+        triton_kernel_wrapper_functional_proxy_2 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 4, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_23, 'o_ptr': empty_2, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_23 = empty_2 = constant_pad_nd = None
         getitem_2 = triton_kernel_wrapper_functional_proxy_2['o_ptr'];  triton_kernel_wrapper_functional_proxy_2 = None
         add_20 = arg0_1 + 2400
         eq_319 = torch.ops.aten.eq.Scalar(getitem_2, 0);  getitem_2 = None
@@ -2535,7 +2535,7 @@ class Repro(torch.nn.Module):
         add_25 = add_20 + 128;  add_20 = None
         sub_18 = add_25 - 1;  add_25 = None
         floordiv_4 = sub_18 // 128;  sub_18 = None
-        triton_kernel_wrapper_functional_proxy_3 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 5, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_166, 'k_ptr': view_167, 'v_ptr': view_168, 'o_ptr': empty_3, 'l_ptr': empty_4, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_166 = view_167 = view_168 = empty_3 = empty_4 = None
+        triton_kernel_wrapper_functional_proxy_3 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 5, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_166, 'k_ptr': view_167, 'v_ptr': view_168, 'o_ptr': empty_3, 'l_ptr': empty_4, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_166 = view_167 = view_168 = empty_3 = empty_4 = None
         getitem_7 = triton_kernel_wrapper_functional_proxy_3['o_ptr']
         getitem_8 = triton_kernel_wrapper_functional_proxy_3['l_ptr'];  triton_kernel_wrapper_functional_proxy_3 = getitem_8 = None
         view_169 = torch.ops.aten.view.default(getitem_7, [-1, 512]);  getitem_7 = None
@@ -2552,7 +2552,7 @@ class Repro(torch.nn.Module):
         add_27 = sym_sum + 2048
         sub_19 = add_27 - 1;  add_27 = None
         floordiv_5 = sub_19 // 2048;  sub_19 = None
-        triton_kernel_wrapper_functional_proxy_4 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 6, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_26, 'y_ptr': permute_368, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_26 = permute_368 = None
+        triton_kernel_wrapper_functional_proxy_4 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 6, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_26, 'y_ptr': permute_368, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_26 = permute_368 = None
         getitem_9 = triton_kernel_wrapper_functional_proxy_4['y_ptr'];  triton_kernel_wrapper_functional_proxy_4 = None
         convert_element_type_616 = torch.ops.prims.convert_element_type.default(getitem_9, torch.float32)
         var_mean_2 = torch.ops.aten.var_mean.correction(convert_element_type_616, [1], correction = 0, keepdim = True)
@@ -2572,7 +2572,7 @@ class Repro(torch.nn.Module):
         sub_21 = add_30 - 1;  add_30 = None
         floordiv_6 = sub_21 // 128;  sub_21 = None
         mul_118 = floordiv_6 * 16;  floordiv_6 = None
-        triton_kernel_wrapper_functional_proxy_5 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 7, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_617, 'w_g_ptr': arg524_1, 'w_fc_ptr': arg525_1, 'b_g_ptr': arg526_1, 'b_fc_ptr': arg527_1, 'y_ptr': empty_8, 'g_ptr': empty_6, 'fc_ptr': empty_7, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_617 = arg524_1 = arg525_1 = arg526_1 = arg527_1 = empty_8 = empty_6 = empty_7 = None
+        triton_kernel_wrapper_functional_proxy_5 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 7, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_617, 'w_g_ptr': arg524_1, 'w_fc_ptr': arg525_1, 'b_g_ptr': arg526_1, 'b_fc_ptr': arg527_1, 'y_ptr': empty_8, 'g_ptr': empty_6, 'fc_ptr': empty_7, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_617 = arg524_1 = arg525_1 = arg526_1 = arg527_1 = empty_8 = empty_6 = empty_7 = None
         getitem_12 = triton_kernel_wrapper_functional_proxy_5['y_ptr'];  triton_kernel_wrapper_functional_proxy_5 = None
         convert_element_type_618 = torch.ops.prims.convert_element_type.default(arg529_1, torch.float32);  convert_element_type_618 = None
         convert_element_type_619 = torch.ops.prims.convert_element_type.default(getitem_12, torch.float32);  convert_element_type_619 = None
@@ -2581,7 +2581,7 @@ class Repro(torch.nn.Module):
         add_31 = torch.ops.aten.add.Tensor(addmm_183, getitem_9);  addmm_183 = getitem_9 = None
         empty_9 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_371 = torch.ops.aten.permute.default(empty_9, [0, 1]);  empty_9 = None
-        triton_kernel_wrapper_functional_proxy_6 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 8, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_31, 'y_ptr': permute_371, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_31 = permute_371 = None
+        triton_kernel_wrapper_functional_proxy_6 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 8, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_31, 'y_ptr': permute_371, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_31 = permute_371 = None
         getitem_13 = triton_kernel_wrapper_functional_proxy_6['y_ptr'];  triton_kernel_wrapper_functional_proxy_6 = None
         convert_element_type_621 = torch.ops.prims.convert_element_type.default(getitem_13, torch.float32)
         var_mean_3 = torch.ops.aten.var_mean.correction(convert_element_type_621, [1], correction = 0, keepdim = True)
@@ -2611,7 +2611,7 @@ class Repro(torch.nn.Module):
         view_172 = torch.ops.aten.view.default(addmm_186, [-1, 8, 64]);  addmm_186 = None
         empty_10 = torch.ops.aten.empty.memory_format([add_18, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_11 = torch.ops.aten.empty.memory_format([add_18, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_7 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 9, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_170, 'k_ptr': view_171, 'v_ptr': view_172, 'o_ptr': empty_10, 'l_ptr': empty_11, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_170 = view_171 = view_172 = empty_10 = empty_11 = None
+        triton_kernel_wrapper_functional_proxy_7 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 9, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_170, 'k_ptr': view_171, 'v_ptr': view_172, 'o_ptr': empty_10, 'l_ptr': empty_11, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_170 = view_171 = view_172 = empty_10 = empty_11 = None
         getitem_16 = triton_kernel_wrapper_functional_proxy_7['o_ptr']
         getitem_17 = triton_kernel_wrapper_functional_proxy_7['l_ptr'];  triton_kernel_wrapper_functional_proxy_7 = getitem_17 = None
         view_173 = torch.ops.aten.view.default(getitem_16, [-1, 512]);  getitem_16 = None
@@ -2622,7 +2622,7 @@ class Repro(torch.nn.Module):
         add_34 = torch.ops.aten.add.Tensor(addmm_187, getitem_13);  addmm_187 = getitem_13 = None
         empty_12 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_380 = torch.ops.aten.permute.default(empty_12, [0, 1]);  empty_12 = None
-        triton_kernel_wrapper_functional_proxy_8 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 10, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_34, 'y_ptr': permute_380, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_34 = permute_380 = None
+        triton_kernel_wrapper_functional_proxy_8 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 10, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_34, 'y_ptr': permute_380, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_34 = permute_380 = None
         getitem_18 = triton_kernel_wrapper_functional_proxy_8['y_ptr'];  triton_kernel_wrapper_functional_proxy_8 = None
         convert_element_type_635 = torch.ops.prims.convert_element_type.default(getitem_18, torch.float32)
         var_mean_4 = torch.ops.aten.var_mean.correction(convert_element_type_635, [1], correction = 0, keepdim = True)
@@ -2638,7 +2638,7 @@ class Repro(torch.nn.Module):
         empty_13 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_14 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_15 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_9 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 11, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_636, 'w_g_ptr': arg542_1, 'w_fc_ptr': arg543_1, 'b_g_ptr': arg544_1, 'b_fc_ptr': arg545_1, 'y_ptr': empty_15, 'g_ptr': empty_13, 'fc_ptr': empty_14, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_636 = arg542_1 = arg543_1 = arg544_1 = arg545_1 = empty_15 = empty_13 = empty_14 = None
+        triton_kernel_wrapper_functional_proxy_9 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 11, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_636, 'w_g_ptr': arg542_1, 'w_fc_ptr': arg543_1, 'b_g_ptr': arg544_1, 'b_fc_ptr': arg545_1, 'y_ptr': empty_15, 'g_ptr': empty_13, 'fc_ptr': empty_14, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_636 = arg542_1 = arg543_1 = arg544_1 = arg545_1 = empty_15 = empty_13 = empty_14 = None
         getitem_21 = triton_kernel_wrapper_functional_proxy_9['y_ptr'];  triton_kernel_wrapper_functional_proxy_9 = None
         convert_element_type_637 = torch.ops.prims.convert_element_type.default(arg547_1, torch.float32);  convert_element_type_637 = None
         convert_element_type_638 = torch.ops.prims.convert_element_type.default(getitem_21, torch.float32);  convert_element_type_638 = None
@@ -2647,7 +2647,7 @@ class Repro(torch.nn.Module):
         add_37 = torch.ops.aten.add.Tensor(addmm_188, getitem_18);  addmm_188 = getitem_18 = None
         empty_16 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_383 = torch.ops.aten.permute.default(empty_16, [0, 1]);  empty_16 = None
-        triton_kernel_wrapper_functional_proxy_10 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 12, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_37, 'y_ptr': permute_383, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_37 = permute_383 = None
+        triton_kernel_wrapper_functional_proxy_10 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 12, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_37, 'y_ptr': permute_383, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_37 = permute_383 = None
         getitem_22 = triton_kernel_wrapper_functional_proxy_10['y_ptr'];  triton_kernel_wrapper_functional_proxy_10 = None
         convert_element_type_640 = torch.ops.prims.convert_element_type.default(getitem_22, torch.float32)
         var_mean_5 = torch.ops.aten.var_mean.correction(convert_element_type_640, [1], correction = 0, keepdim = True)
@@ -2677,7 +2677,7 @@ class Repro(torch.nn.Module):
         view_176 = torch.ops.aten.view.default(addmm_191, [-1, 8, 64]);  addmm_191 = None
         empty_17 = torch.ops.aten.empty.memory_format([add_18, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_18 = torch.ops.aten.empty.memory_format([add_18, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_11 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 13, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_174, 'k_ptr': view_175, 'v_ptr': view_176, 'o_ptr': empty_17, 'l_ptr': empty_18, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_174 = view_175 = view_176 = empty_17 = empty_18 = None
+        triton_kernel_wrapper_functional_proxy_11 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 13, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_174, 'k_ptr': view_175, 'v_ptr': view_176, 'o_ptr': empty_17, 'l_ptr': empty_18, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_174 = view_175 = view_176 = empty_17 = empty_18 = None
         getitem_25 = triton_kernel_wrapper_functional_proxy_11['o_ptr']
         getitem_26 = triton_kernel_wrapper_functional_proxy_11['l_ptr'];  triton_kernel_wrapper_functional_proxy_11 = getitem_26 = None
         view_177 = torch.ops.aten.view.default(getitem_25, [-1, 512]);  getitem_25 = None
@@ -2688,7 +2688,7 @@ class Repro(torch.nn.Module):
         add_40 = torch.ops.aten.add.Tensor(addmm_192, getitem_22);  addmm_192 = getitem_22 = None
         empty_19 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_392 = torch.ops.aten.permute.default(empty_19, [0, 1]);  empty_19 = None
-        triton_kernel_wrapper_functional_proxy_12 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 14, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_40, 'y_ptr': permute_392, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_40 = permute_392 = None
+        triton_kernel_wrapper_functional_proxy_12 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 14, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_40, 'y_ptr': permute_392, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_40 = permute_392 = None
         getitem_27 = triton_kernel_wrapper_functional_proxy_12['y_ptr'];  triton_kernel_wrapper_functional_proxy_12 = None
         convert_element_type_654 = torch.ops.prims.convert_element_type.default(getitem_27, torch.float32)
         var_mean_6 = torch.ops.aten.var_mean.correction(convert_element_type_654, [1], correction = 0, keepdim = True)
@@ -2704,7 +2704,7 @@ class Repro(torch.nn.Module):
         empty_20 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_21 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_22 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_13 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 15, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_655, 'w_g_ptr': arg560_1, 'w_fc_ptr': arg561_1, 'b_g_ptr': arg562_1, 'b_fc_ptr': arg563_1, 'y_ptr': empty_22, 'g_ptr': empty_20, 'fc_ptr': empty_21, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_655 = arg560_1 = arg561_1 = arg562_1 = arg563_1 = empty_22 = empty_20 = empty_21 = None
+        triton_kernel_wrapper_functional_proxy_13 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 15, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_655, 'w_g_ptr': arg560_1, 'w_fc_ptr': arg561_1, 'b_g_ptr': arg562_1, 'b_fc_ptr': arg563_1, 'y_ptr': empty_22, 'g_ptr': empty_20, 'fc_ptr': empty_21, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_655 = arg560_1 = arg561_1 = arg562_1 = arg563_1 = empty_22 = empty_20 = empty_21 = None
         getitem_30 = triton_kernel_wrapper_functional_proxy_13['y_ptr'];  triton_kernel_wrapper_functional_proxy_13 = None
         convert_element_type_656 = torch.ops.prims.convert_element_type.default(arg565_1, torch.float32);  convert_element_type_656 = None
         convert_element_type_657 = torch.ops.prims.convert_element_type.default(getitem_30, torch.float32);  convert_element_type_657 = None
@@ -2713,7 +2713,7 @@ class Repro(torch.nn.Module):
         add_43 = torch.ops.aten.add.Tensor(addmm_193, getitem_27);  addmm_193 = getitem_27 = None
         empty_23 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_395 = torch.ops.aten.permute.default(empty_23, [0, 1]);  empty_23 = None
-        triton_kernel_wrapper_functional_proxy_14 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 16, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_43, 'y_ptr': permute_395, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_43 = permute_395 = None
+        triton_kernel_wrapper_functional_proxy_14 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 16, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_43, 'y_ptr': permute_395, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_43 = permute_395 = None
         getitem_31 = triton_kernel_wrapper_functional_proxy_14['y_ptr'];  triton_kernel_wrapper_functional_proxy_14 = None
         convert_element_type_659 = torch.ops.prims.convert_element_type.default(getitem_31, torch.float32)
         var_mean_7 = torch.ops.aten.var_mean.correction(convert_element_type_659, [1], correction = 0, keepdim = True)
@@ -2743,7 +2743,7 @@ class Repro(torch.nn.Module):
         view_180 = torch.ops.aten.view.default(addmm_196, [-1, 8, 64]);  addmm_196 = None
         empty_24 = torch.ops.aten.empty.memory_format([add_18, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_25 = torch.ops.aten.empty.memory_format([add_18, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_15 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 17, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_178, 'k_ptr': view_179, 'v_ptr': view_180, 'o_ptr': empty_24, 'l_ptr': empty_25, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_178 = view_179 = view_180 = empty_24 = empty_25 = None
+        triton_kernel_wrapper_functional_proxy_15 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 17, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_178, 'k_ptr': view_179, 'v_ptr': view_180, 'o_ptr': empty_24, 'l_ptr': empty_25, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  view_178 = view_179 = view_180 = empty_24 = empty_25 = None
         getitem_34 = triton_kernel_wrapper_functional_proxy_15['o_ptr']
         getitem_35 = triton_kernel_wrapper_functional_proxy_15['l_ptr'];  triton_kernel_wrapper_functional_proxy_15 = getitem_35 = None
         view_181 = torch.ops.aten.view.default(getitem_34, [-1, 512]);  getitem_34 = None
@@ -2754,7 +2754,7 @@ class Repro(torch.nn.Module):
         add_46 = torch.ops.aten.add.Tensor(addmm_197, getitem_31);  addmm_197 = getitem_31 = None
         empty_26 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_404 = torch.ops.aten.permute.default(empty_26, [0, 1]);  empty_26 = None
-        triton_kernel_wrapper_functional_proxy_16 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 18, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_46, 'y_ptr': permute_404, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_46 = permute_404 = None
+        triton_kernel_wrapper_functional_proxy_16 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 18, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_46, 'y_ptr': permute_404, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_46 = permute_404 = None
         getitem_36 = triton_kernel_wrapper_functional_proxy_16['y_ptr'];  triton_kernel_wrapper_functional_proxy_16 = None
         convert_element_type_673 = torch.ops.prims.convert_element_type.default(getitem_36, torch.float32)
         var_mean_8 = torch.ops.aten.var_mean.correction(convert_element_type_673, [1], correction = 0, keepdim = True)
@@ -2770,7 +2770,7 @@ class Repro(torch.nn.Module):
         empty_27 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_28 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_29 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_17 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 19, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_674, 'w_g_ptr': arg578_1, 'w_fc_ptr': arg579_1, 'b_g_ptr': arg580_1, 'b_fc_ptr': arg581_1, 'y_ptr': empty_29, 'g_ptr': empty_27, 'fc_ptr': empty_28, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_674 = arg578_1 = arg579_1 = arg580_1 = arg581_1 = empty_29 = empty_27 = empty_28 = None
+        triton_kernel_wrapper_functional_proxy_17 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 19, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_674, 'w_g_ptr': arg578_1, 'w_fc_ptr': arg579_1, 'b_g_ptr': arg580_1, 'b_fc_ptr': arg581_1, 'y_ptr': empty_29, 'g_ptr': empty_27, 'fc_ptr': empty_28, 'M': add_18}, tensors_to_clone = ['y_ptr']);  convert_element_type_674 = arg578_1 = arg579_1 = arg580_1 = arg581_1 = empty_29 = empty_27 = empty_28 = None
         getitem_39 = triton_kernel_wrapper_functional_proxy_17['y_ptr'];  triton_kernel_wrapper_functional_proxy_17 = None
         convert_element_type_675 = torch.ops.prims.convert_element_type.default(arg583_1, torch.float32);  convert_element_type_675 = None
         convert_element_type_676 = torch.ops.prims.convert_element_type.default(getitem_39, torch.float32);  convert_element_type_676 = None
@@ -2779,7 +2779,7 @@ class Repro(torch.nn.Module):
         add_49 = torch.ops.aten.add.Tensor(addmm_198, getitem_36);  addmm_198 = getitem_36 = None
         empty_30 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_407 = torch.ops.aten.permute.default(empty_30, [0, 1]);  empty_30 = None
-        triton_kernel_wrapper_functional_proxy_18 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 20, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_49, 'y_ptr': permute_407, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_49 = permute_407 = None
+        triton_kernel_wrapper_functional_proxy_18 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 20, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_49, 'y_ptr': permute_407, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_49 = permute_407 = None
         getitem_40 = triton_kernel_wrapper_functional_proxy_18['y_ptr'];  triton_kernel_wrapper_functional_proxy_18 = None
         convert_element_type_678 = torch.ops.prims.convert_element_type.default(getitem_40, torch.float32)
         var_mean_9 = torch.ops.aten.var_mean.correction(convert_element_type_678, [1], correction = 0, keepdim = True)
@@ -2809,7 +2809,7 @@ class Repro(torch.nn.Module):
         view_184 = torch.ops.aten.view.default(addmm_201, [-1, 8, 64]);  addmm_201 = None
         empty_31 = torch.ops.aten.empty.memory_format([add_18, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_32 = torch.ops.aten.empty.memory_format([add_18, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_19 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 21, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_182, 'k_ptr': view_183, 'v_ptr': view_184, 'o_ptr': empty_31, 'l_ptr': empty_32, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_4 = view_182 = view_183 = view_184 = empty_31 = empty_32 = None
+        triton_kernel_wrapper_functional_proxy_19 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 21, grid = [(floordiv_4, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_182, 'k_ptr': view_183, 'v_ptr': view_184, 'o_ptr': empty_31, 'l_ptr': empty_32, 'q_attn_arg_ptr': getitem_1, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': add_19, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_4 = view_182 = view_183 = view_184 = empty_31 = empty_32 = None
         getitem_43 = triton_kernel_wrapper_functional_proxy_19['o_ptr']
         getitem_44 = triton_kernel_wrapper_functional_proxy_19['l_ptr'];  triton_kernel_wrapper_functional_proxy_19 = getitem_44 = None
         view_185 = torch.ops.aten.view.default(getitem_43, [-1, 512]);  getitem_43 = None
@@ -2820,7 +2820,7 @@ class Repro(torch.nn.Module):
         add_52 = torch.ops.aten.add.Tensor(addmm_202, getitem_40);  addmm_202 = getitem_40 = None
         empty_33 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_416 = torch.ops.aten.permute.default(empty_33, [0, 1]);  empty_33 = None
-        triton_kernel_wrapper_functional_proxy_20 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 22, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_52, 'y_ptr': permute_416, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_52 = permute_416 = None
+        triton_kernel_wrapper_functional_proxy_20 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 22, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_52, 'y_ptr': permute_416, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  add_52 = permute_416 = None
         getitem_45 = triton_kernel_wrapper_functional_proxy_20['y_ptr'];  triton_kernel_wrapper_functional_proxy_20 = None
         convert_element_type_692 = torch.ops.prims.convert_element_type.default(getitem_45, torch.float32)
         var_mean_10 = torch.ops.aten.var_mean.correction(convert_element_type_692, [1], correction = 0, keepdim = True)
@@ -2836,7 +2836,7 @@ class Repro(torch.nn.Module):
         empty_34 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_35 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_36 = torch.ops.aten.empty.memory_format([add_18, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_21 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 23, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_693, 'w_g_ptr': arg596_1, 'w_fc_ptr': arg597_1, 'b_g_ptr': arg598_1, 'b_fc_ptr': arg599_1, 'y_ptr': empty_36, 'g_ptr': empty_34, 'fc_ptr': empty_35, 'M': add_18}, tensors_to_clone = ['y_ptr']);  mul_118 = convert_element_type_693 = arg596_1 = arg597_1 = arg598_1 = arg599_1 = empty_36 = empty_34 = empty_35 = None
+        triton_kernel_wrapper_functional_proxy_21 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 23, grid = [(mul_118, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_693, 'w_g_ptr': arg596_1, 'w_fc_ptr': arg597_1, 'b_g_ptr': arg598_1, 'b_fc_ptr': arg599_1, 'y_ptr': empty_36, 'g_ptr': empty_34, 'fc_ptr': empty_35, 'M': add_18}, tensors_to_clone = ['y_ptr']);  mul_118 = convert_element_type_693 = arg596_1 = arg597_1 = arg598_1 = arg599_1 = empty_36 = empty_34 = empty_35 = None
         getitem_48 = triton_kernel_wrapper_functional_proxy_21['y_ptr'];  triton_kernel_wrapper_functional_proxy_21 = None
         convert_element_type_694 = torch.ops.prims.convert_element_type.default(arg601_1, torch.float32);  convert_element_type_694 = None
         convert_element_type_695 = torch.ops.prims.convert_element_type.default(getitem_48, torch.float32);  convert_element_type_695 = None
@@ -2845,7 +2845,7 @@ class Repro(torch.nn.Module):
         add_55 = torch.ops.aten.add.Tensor(addmm_203, getitem_45);  addmm_203 = getitem_45 = None
         empty_37 = torch.ops.aten.empty.memory_format([add_18, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_419 = torch.ops.aten.permute.default(empty_37, [0, 1]);  empty_37 = None
-        triton_kernel_wrapper_functional_proxy_22 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 24, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_55, 'y_ptr': permute_419, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  floordiv_5 = add_55 = permute_419 = sym_sum = None
+        triton_kernel_wrapper_functional_proxy_22 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 24, grid = [(floordiv_5, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_55, 'y_ptr': permute_419, 'n_elements': sym_sum}, tensors_to_clone = ['y_ptr']);  floordiv_5 = add_55 = permute_419 = sym_sum = None
         getitem_49 = triton_kernel_wrapper_functional_proxy_22['y_ptr'];  triton_kernel_wrapper_functional_proxy_22 = None
         index_16 = torch.ops.aten.index.Tensor(getitem_49, [squeeze_16])
         convert_element_type_697 = torch.ops.prims.convert_element_type.default(getitem_49, torch.float32);  getitem_49 = None
@@ -2895,7 +2895,7 @@ class Repro(torch.nn.Module):
         add_58 = _local_scalar_dense + 128;  _local_scalar_dense = None
         sub_32 = add_58 - 1;  add_58 = None
         floordiv_7 = sub_32 // 128;  sub_32 = None
-        triton_kernel_wrapper_functional_proxy_23 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 25, grid = [(floordiv_7, 16, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_186, 'k_ptr': view_187, 'v_ptr': view_188, 'o_ptr': empty_38, 'l_ptr': empty_39, 'q_attn_arg_ptr': index_19, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': index_18, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_7 = view_186 = view_187 = view_188 = empty_38 = empty_39 = index_19 = getitem_1 = index_18 = add_19 = None
+        triton_kernel_wrapper_functional_proxy_23 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 25, grid = [(floordiv_7, 16, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_186, 'k_ptr': view_187, 'v_ptr': view_188, 'o_ptr': empty_38, 'l_ptr': empty_39, 'q_attn_arg_ptr': index_19, 'k_attn_arg_ptr': getitem_1, 'cu_seqlens_q': index_18, 'cu_seqlens_k': add_19}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_7 = view_186 = view_187 = view_188 = empty_38 = empty_39 = index_19 = getitem_1 = index_18 = add_19 = None
         getitem_52 = triton_kernel_wrapper_functional_proxy_23['o_ptr']
         getitem_53 = triton_kernel_wrapper_functional_proxy_23['l_ptr'];  triton_kernel_wrapper_functional_proxy_23 = getitem_53 = None
         view_189 = torch.ops.aten.view.default(getitem_52, [-1, 512]);  getitem_52 = None
@@ -2909,7 +2909,7 @@ class Repro(torch.nn.Module):
         add_60 = mul_115 + 2048
         sub_33 = add_60 - 1;  add_60 = None
         floordiv_8 = sub_33 // 2048;  sub_33 = None
-        triton_kernel_wrapper_functional_proxy_24 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 26, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_59, 'y_ptr': permute_428, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_59 = permute_428 = None
+        triton_kernel_wrapper_functional_proxy_24 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 26, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_59, 'y_ptr': permute_428, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_59 = permute_428 = None
         getitem_54 = triton_kernel_wrapper_functional_proxy_24['y_ptr'];  triton_kernel_wrapper_functional_proxy_24 = None
         convert_element_type_713 = torch.ops.prims.convert_element_type.default(getitem_54, torch.float32)
         var_mean_12 = torch.ops.aten.var_mean.correction(convert_element_type_713, [1], correction = 0, keepdim = True)
@@ -2929,7 +2929,7 @@ class Repro(torch.nn.Module):
         sub_35 = add_63 - 1;  add_63 = None
         floordiv_9 = sub_35 // 128;  sub_35 = None
         mul_139 = floordiv_9 * 16
-        triton_kernel_wrapper_functional_proxy_25 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 27, grid = [(mul_139, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_714, 'w_g_ptr': arg614_1, 'w_fc_ptr': arg615_1, 'b_g_ptr': arg616_1, 'b_fc_ptr': arg617_1, 'y_ptr': empty_43, 'g_ptr': empty_41, 'fc_ptr': empty_42, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  mul_139 = convert_element_type_714 = arg614_1 = arg615_1 = arg616_1 = arg617_1 = empty_43 = empty_41 = empty_42 = None
+        triton_kernel_wrapper_functional_proxy_25 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 27, grid = [(mul_139, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_714, 'w_g_ptr': arg614_1, 'w_fc_ptr': arg615_1, 'b_g_ptr': arg616_1, 'b_fc_ptr': arg617_1, 'y_ptr': empty_43, 'g_ptr': empty_41, 'fc_ptr': empty_42, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  mul_139 = convert_element_type_714 = arg614_1 = arg615_1 = arg616_1 = arg617_1 = empty_43 = empty_41 = empty_42 = None
         getitem_57 = triton_kernel_wrapper_functional_proxy_25['y_ptr'];  triton_kernel_wrapper_functional_proxy_25 = None
         convert_element_type_715 = torch.ops.prims.convert_element_type.default(arg619_1, torch.float32);  convert_element_type_715 = None
         convert_element_type_716 = torch.ops.prims.convert_element_type.default(getitem_57, torch.float32);  convert_element_type_716 = None
@@ -2938,7 +2938,7 @@ class Repro(torch.nn.Module):
         add_64 = torch.ops.aten.add.Tensor(addmm_208, getitem_54);  addmm_208 = getitem_54 = None
         empty_44 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_431 = torch.ops.aten.permute.default(empty_44, [0, 1]);  empty_44 = None
-        triton_kernel_wrapper_functional_proxy_26 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 28, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_64, 'y_ptr': permute_431, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_64 = permute_431 = None
+        triton_kernel_wrapper_functional_proxy_26 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 28, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_64, 'y_ptr': permute_431, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_64 = permute_431 = None
         getitem_58 = triton_kernel_wrapper_functional_proxy_26['y_ptr'];  triton_kernel_wrapper_functional_proxy_26 = None
         view_190 = torch.ops.aten.view.default(getitem_58, [-1, 512]);  getitem_58 = None
         full_25 = torch.ops.aten.full.default([arg0_1, 512], 0, dtype = torch.float16, layout = torch.strided, device = device(type='cpu'), pin_memory = False);  full_25 = None
@@ -2993,15 +2993,15 @@ class Repro(torch.nn.Module):
         view_197 = torch.ops.aten.view.default(addmm_212, [-1, 512]);  addmm_212 = None
         add_66 = arg0_1 + sym_size_int_12
         empty_45 = torch.ops.aten.empty.memory_format([add_66, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_27 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 30, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_197, 'y_ptr': index_20, 'o_ptr': empty_45, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_3, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_197 = index_20 = empty_45 = None
+        triton_kernel_wrapper_functional_proxy_27 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 30, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_197, 'y_ptr': index_20, 'o_ptr': empty_45, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_3, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_197 = index_20 = empty_45 = None
         getitem_59 = triton_kernel_wrapper_functional_proxy_27['o_ptr'];  triton_kernel_wrapper_functional_proxy_27 = None
         add_67 = torch.ops.aten.add.Tensor(constant_pad_nd_1, constant_pad_nd_3)
         empty_46 = torch.ops.aten.empty.memory_format([add_66], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_28 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 32, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_141, 'o_ptr': empty_46, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_3, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_141 = empty_46 = None
+        triton_kernel_wrapper_functional_proxy_28 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 32, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_141, 'o_ptr': empty_46, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_3, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_141 = empty_46 = None
         getitem_60 = triton_kernel_wrapper_functional_proxy_28['o_ptr'];  triton_kernel_wrapper_functional_proxy_28 = None
         full_27 = torch.ops.aten.full.default([sym_size_int_12], 1, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_47 = torch.ops.aten.empty.memory_format([add_66], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_29 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 33, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_27, 'o_ptr': empty_47, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_3, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_27 = empty_47 = constant_pad_nd_3 = None
+        triton_kernel_wrapper_functional_proxy_29 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 33, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_27, 'o_ptr': empty_47, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_3, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_27 = empty_47 = constant_pad_nd_3 = None
         getitem_61 = triton_kernel_wrapper_functional_proxy_29['o_ptr'];  triton_kernel_wrapper_functional_proxy_29 = None
         add_68 = arg0_1 + 86
         eq_321 = torch.ops.aten.eq.Scalar(getitem_61, 0);  getitem_61 = None
@@ -3051,7 +3051,7 @@ class Repro(torch.nn.Module):
         add_73 = add_68 + 128;  add_68 = None
         sub_38 = add_73 - 1
         floordiv_10 = sub_38 // 128;  sub_38 = None
-        triton_kernel_wrapper_functional_proxy_30 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 34, grid = [(floordiv_10, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_198, 'k_ptr': view_199, 'v_ptr': view_200, 'o_ptr': empty_48, 'l_ptr': empty_49, 'q_attn_arg_ptr': getitem_60, 'k_attn_arg_ptr': getitem_60, 'cu_seqlens_q': add_67, 'cu_seqlens_k': add_67}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_10 = view_198 = view_199 = view_200 = empty_48 = empty_49 = None
+        triton_kernel_wrapper_functional_proxy_30 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 34, grid = [(floordiv_10, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_198, 'k_ptr': view_199, 'v_ptr': view_200, 'o_ptr': empty_48, 'l_ptr': empty_49, 'q_attn_arg_ptr': getitem_60, 'k_attn_arg_ptr': getitem_60, 'cu_seqlens_q': add_67, 'cu_seqlens_k': add_67}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_10 = view_198 = view_199 = view_200 = empty_48 = empty_49 = None
         getitem_66 = triton_kernel_wrapper_functional_proxy_30['o_ptr']
         getitem_67 = triton_kernel_wrapper_functional_proxy_30['l_ptr'];  triton_kernel_wrapper_functional_proxy_30 = getitem_67 = None
         view_201 = torch.ops.aten.view.default(getitem_66, [-1, 512]);  getitem_66 = None
@@ -3067,7 +3067,7 @@ class Repro(torch.nn.Module):
         add_75 = sym_sum_1 + 2048
         sub_39 = add_75 - 1;  add_75 = None
         floordiv_11 = sub_39 // 2048;  sub_39 = None
-        triton_kernel_wrapper_functional_proxy_31 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 35, grid = [(floordiv_11, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_74, 'y_ptr': permute_450, 'n_elements': sym_sum_1}, tensors_to_clone = ['y_ptr']);  add_74 = permute_450 = None
+        triton_kernel_wrapper_functional_proxy_31 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 35, grid = [(floordiv_11, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_74, 'y_ptr': permute_450, 'n_elements': sym_sum_1}, tensors_to_clone = ['y_ptr']);  add_74 = permute_450 = None
         getitem_68 = triton_kernel_wrapper_functional_proxy_31['y_ptr'];  triton_kernel_wrapper_functional_proxy_31 = None
         convert_element_type_750 = torch.ops.prims.convert_element_type.default(getitem_68, torch.float32)
         var_mean_15 = torch.ops.aten.var_mean.correction(convert_element_type_750, [1], correction = 0, keepdim = True)
@@ -3087,7 +3087,7 @@ class Repro(torch.nn.Module):
         sub_41 = add_78 - 1;  add_78 = None
         floordiv_12 = sub_41 // 128;  sub_41 = None
         mul_149 = floordiv_12 * 8;  floordiv_12 = None
-        triton_kernel_wrapper_functional_proxy_32 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 36, grid = [(mul_149, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_751, 'w_g_ptr': arg652_1, 'w_fc_ptr': arg653_1, 'b_g_ptr': arg654_1, 'b_fc_ptr': arg655_1, 'y_ptr': empty_53, 'g_ptr': empty_51, 'fc_ptr': empty_52, 'M': add_66}, tensors_to_clone = ['y_ptr']);  mul_149 = convert_element_type_751 = arg652_1 = arg653_1 = arg654_1 = arg655_1 = empty_53 = empty_51 = empty_52 = None
+        triton_kernel_wrapper_functional_proxy_32 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 36, grid = [(mul_149, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_751, 'w_g_ptr': arg652_1, 'w_fc_ptr': arg653_1, 'b_g_ptr': arg654_1, 'b_fc_ptr': arg655_1, 'y_ptr': empty_53, 'g_ptr': empty_51, 'fc_ptr': empty_52, 'M': add_66}, tensors_to_clone = ['y_ptr']);  mul_149 = convert_element_type_751 = arg652_1 = arg653_1 = arg654_1 = arg655_1 = empty_53 = empty_51 = empty_52 = None
         getitem_71 = triton_kernel_wrapper_functional_proxy_32['y_ptr'];  triton_kernel_wrapper_functional_proxy_32 = None
         convert_element_type_752 = torch.ops.prims.convert_element_type.default(arg657_1, torch.float32);  convert_element_type_752 = None
         convert_element_type_753 = torch.ops.prims.convert_element_type.default(getitem_71, torch.float32);  convert_element_type_753 = None
@@ -3096,7 +3096,7 @@ class Repro(torch.nn.Module):
         add_79 = torch.ops.aten.add.Tensor(addmm_217, getitem_68);  addmm_217 = getitem_68 = None
         empty_54 = torch.ops.aten.empty.memory_format([add_66, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_453 = torch.ops.aten.permute.default(empty_54, [0, 1]);  empty_54 = None
-        triton_kernel_wrapper_functional_proxy_33 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 37, grid = [(floordiv_11, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_79, 'y_ptr': permute_453, 'n_elements': sym_sum_1}, tensors_to_clone = ['y_ptr']);  floordiv_11 = add_79 = permute_453 = sym_sum_1 = None
+        triton_kernel_wrapper_functional_proxy_33 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 37, grid = [(floordiv_11, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_79, 'y_ptr': permute_453, 'n_elements': sym_sum_1}, tensors_to_clone = ['y_ptr']);  floordiv_11 = add_79 = permute_453 = sym_sum_1 = None
         getitem_72 = triton_kernel_wrapper_functional_proxy_33['y_ptr'];  triton_kernel_wrapper_functional_proxy_33 = None
         index_21 = torch.ops.aten.index.Tensor(getitem_72, [squeeze_17])
         convert_element_type_755 = torch.ops.prims.convert_element_type.default(getitem_72, torch.float32);  getitem_72 = None
@@ -3146,7 +3146,7 @@ class Repro(torch.nn.Module):
         add_82 = _local_scalar_dense_1 + 128;  _local_scalar_dense_1 = None
         sub_44 = add_82 - 1;  add_82 = None
         floordiv_13 = sub_44 // 128;  sub_44 = None
-        triton_kernel_wrapper_functional_proxy_34 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 38, grid = [(floordiv_13, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_202, 'k_ptr': view_203, 'v_ptr': view_204, 'o_ptr': empty_55, 'l_ptr': empty_56, 'q_attn_arg_ptr': index_24, 'k_attn_arg_ptr': getitem_60, 'cu_seqlens_q': index_23, 'cu_seqlens_k': add_67}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_13 = view_202 = view_203 = view_204 = empty_55 = empty_56 = index_24 = getitem_60 = index_23 = add_67 = None
+        triton_kernel_wrapper_functional_proxy_34 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 38, grid = [(floordiv_13, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_202, 'k_ptr': view_203, 'v_ptr': view_204, 'o_ptr': empty_55, 'l_ptr': empty_56, 'q_attn_arg_ptr': index_24, 'k_attn_arg_ptr': getitem_60, 'cu_seqlens_q': index_23, 'cu_seqlens_k': add_67}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_13 = view_202 = view_203 = view_204 = empty_55 = empty_56 = index_24 = getitem_60 = index_23 = add_67 = None
         getitem_75 = triton_kernel_wrapper_functional_proxy_34['o_ptr']
         getitem_76 = triton_kernel_wrapper_functional_proxy_34['l_ptr'];  triton_kernel_wrapper_functional_proxy_34 = getitem_76 = None
         view_205 = torch.ops.aten.view.default(getitem_75, [-1, 512]);  getitem_75 = None
@@ -3157,7 +3157,7 @@ class Repro(torch.nn.Module):
         add_83 = torch.ops.aten.add.Tensor(addmm_221, index_21);  addmm_221 = index_21 = None
         empty_57 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_462 = torch.ops.aten.permute.default(empty_57, [0, 1]);  empty_57 = None
-        triton_kernel_wrapper_functional_proxy_35 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 39, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_83, 'y_ptr': permute_462, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_83 = permute_462 = None
+        triton_kernel_wrapper_functional_proxy_35 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 39, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_83, 'y_ptr': permute_462, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_83 = permute_462 = None
         getitem_77 = triton_kernel_wrapper_functional_proxy_35['y_ptr'];  triton_kernel_wrapper_functional_proxy_35 = None
         convert_element_type_771 = torch.ops.prims.convert_element_type.default(getitem_77, torch.float32)
         var_mean_17 = torch.ops.aten.var_mean.correction(convert_element_type_771, [1], correction = 0, keepdim = True)
@@ -3174,7 +3174,7 @@ class Repro(torch.nn.Module):
         empty_59 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_60 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         mul_154 = floordiv_9 * 8;  floordiv_9 = None
-        triton_kernel_wrapper_functional_proxy_36 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 40, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_772, 'w_g_ptr': arg670_1, 'w_fc_ptr': arg671_1, 'b_g_ptr': arg672_1, 'b_fc_ptr': arg673_1, 'y_ptr': empty_60, 'g_ptr': empty_58, 'fc_ptr': empty_59, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  convert_element_type_772 = arg670_1 = arg671_1 = arg672_1 = arg673_1 = empty_60 = empty_58 = empty_59 = None
+        triton_kernel_wrapper_functional_proxy_36 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 40, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_772, 'w_g_ptr': arg670_1, 'w_fc_ptr': arg671_1, 'b_g_ptr': arg672_1, 'b_fc_ptr': arg673_1, 'y_ptr': empty_60, 'g_ptr': empty_58, 'fc_ptr': empty_59, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  convert_element_type_772 = arg670_1 = arg671_1 = arg672_1 = arg673_1 = empty_60 = empty_58 = empty_59 = None
         getitem_80 = triton_kernel_wrapper_functional_proxy_36['y_ptr'];  triton_kernel_wrapper_functional_proxy_36 = None
         convert_element_type_773 = torch.ops.prims.convert_element_type.default(arg675_1, torch.float32);  convert_element_type_773 = None
         convert_element_type_774 = torch.ops.prims.convert_element_type.default(getitem_80, torch.float32);  convert_element_type_774 = None
@@ -3183,7 +3183,7 @@ class Repro(torch.nn.Module):
         add_86 = torch.ops.aten.add.Tensor(addmm_222, getitem_77);  addmm_222 = getitem_77 = None
         empty_61 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_465 = torch.ops.aten.permute.default(empty_61, [0, 1]);  empty_61 = None
-        triton_kernel_wrapper_functional_proxy_37 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 41, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_86, 'y_ptr': permute_465, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_86 = permute_465 = None
+        triton_kernel_wrapper_functional_proxy_37 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 41, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_86, 'y_ptr': permute_465, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_86 = permute_465 = None
         getitem_81 = triton_kernel_wrapper_functional_proxy_37['y_ptr'];  triton_kernel_wrapper_functional_proxy_37 = None
         view_206 = torch.ops.aten.view.default(getitem_81, [-1, 512]);  getitem_81 = None
         where_193 = torch.ops.aten.where.self(logical_or_10, full_default_27, view_206);  view_206 = None
@@ -3236,15 +3236,15 @@ class Repro(torch.nn.Module):
         view_213 = torch.ops.aten.view.default(addmm_226, [-1, 512]);  addmm_226 = None
         add_88 = arg0_1 + sym_size_int_14
         empty_62 = torch.ops.aten.empty.memory_format([add_88, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_38 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 43, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_213, 'y_ptr': index_25, 'o_ptr': empty_62, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_5, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_213 = index_25 = empty_62 = None
+        triton_kernel_wrapper_functional_proxy_38 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 43, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_213, 'y_ptr': index_25, 'o_ptr': empty_62, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_5, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_213 = index_25 = empty_62 = None
         getitem_82 = triton_kernel_wrapper_functional_proxy_38['o_ptr'];  triton_kernel_wrapper_functional_proxy_38 = None
         add_89 = torch.ops.aten.add.Tensor(constant_pad_nd_1, constant_pad_nd_5)
         empty_63 = torch.ops.aten.empty.memory_format([add_88], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_39 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 45, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_156, 'o_ptr': empty_63, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_5, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_156 = empty_63 = None
+        triton_kernel_wrapper_functional_proxy_39 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 45, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_156, 'o_ptr': empty_63, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_5, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_156 = empty_63 = None
         getitem_83 = triton_kernel_wrapper_functional_proxy_39['o_ptr'];  triton_kernel_wrapper_functional_proxy_39 = None
         full_30 = torch.ops.aten.full.default([sym_size_int_14], 1, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_64 = torch.ops.aten.empty.memory_format([add_88], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_40 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 46, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_30, 'o_ptr': empty_64, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_5, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_30 = empty_64 = constant_pad_nd_5 = None
+        triton_kernel_wrapper_functional_proxy_40 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 46, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_30, 'o_ptr': empty_64, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_5, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_30 = empty_64 = constant_pad_nd_5 = None
         getitem_84 = triton_kernel_wrapper_functional_proxy_40['o_ptr'];  triton_kernel_wrapper_functional_proxy_40 = None
         add_90 = arg0_1 + 60
         eq_323 = torch.ops.aten.eq.Scalar(getitem_84, 0);  getitem_84 = None
@@ -3294,7 +3294,7 @@ class Repro(torch.nn.Module):
         add_95 = add_90 + 128;  add_90 = None
         sub_48 = add_95 - 1;  add_95 = None
         floordiv_14 = sub_48 // 128;  sub_48 = None
-        triton_kernel_wrapper_functional_proxy_41 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 47, grid = [(floordiv_14, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_214, 'k_ptr': view_215, 'v_ptr': view_216, 'o_ptr': empty_65, 'l_ptr': empty_66, 'q_attn_arg_ptr': getitem_83, 'k_attn_arg_ptr': getitem_83, 'cu_seqlens_q': add_89, 'cu_seqlens_k': add_89}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_14 = view_214 = view_215 = view_216 = empty_65 = empty_66 = None
+        triton_kernel_wrapper_functional_proxy_41 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 47, grid = [(floordiv_14, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_214, 'k_ptr': view_215, 'v_ptr': view_216, 'o_ptr': empty_65, 'l_ptr': empty_66, 'q_attn_arg_ptr': getitem_83, 'k_attn_arg_ptr': getitem_83, 'cu_seqlens_q': add_89, 'cu_seqlens_k': add_89}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_14 = view_214 = view_215 = view_216 = empty_65 = empty_66 = None
         getitem_89 = triton_kernel_wrapper_functional_proxy_41['o_ptr']
         getitem_90 = triton_kernel_wrapper_functional_proxy_41['l_ptr'];  triton_kernel_wrapper_functional_proxy_41 = getitem_90 = None
         view_217 = torch.ops.aten.view.default(getitem_89, [-1, 512]);  getitem_89 = None
@@ -3310,7 +3310,7 @@ class Repro(torch.nn.Module):
         add_97 = sym_sum_2 + 2048
         sub_49 = add_97 - 1;  add_97 = None
         floordiv_15 = sub_49 // 2048;  sub_49 = None
-        triton_kernel_wrapper_functional_proxy_42 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 48, grid = [(floordiv_15, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_96, 'y_ptr': permute_484, 'n_elements': sym_sum_2}, tensors_to_clone = ['y_ptr']);  add_96 = permute_484 = None
+        triton_kernel_wrapper_functional_proxy_42 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 48, grid = [(floordiv_15, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_96, 'y_ptr': permute_484, 'n_elements': sym_sum_2}, tensors_to_clone = ['y_ptr']);  add_96 = permute_484 = None
         getitem_91 = triton_kernel_wrapper_functional_proxy_42['y_ptr'];  triton_kernel_wrapper_functional_proxy_42 = None
         convert_element_type_807 = torch.ops.prims.convert_element_type.default(getitem_91, torch.float32)
         var_mean_20 = torch.ops.aten.var_mean.correction(convert_element_type_807, [1], correction = 0, keepdim = True)
@@ -3330,7 +3330,7 @@ class Repro(torch.nn.Module):
         sub_51 = add_100 - 1;  add_100 = None
         floordiv_16 = sub_51 // 128;  sub_51 = None
         mul_164 = floordiv_16 * 8;  floordiv_16 = None
-        triton_kernel_wrapper_functional_proxy_43 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 49, grid = [(mul_164, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_808, 'w_g_ptr': arg708_1, 'w_fc_ptr': arg709_1, 'b_g_ptr': arg710_1, 'b_fc_ptr': arg711_1, 'y_ptr': empty_70, 'g_ptr': empty_68, 'fc_ptr': empty_69, 'M': add_88}, tensors_to_clone = ['y_ptr']);  mul_164 = convert_element_type_808 = arg708_1 = arg709_1 = arg710_1 = arg711_1 = empty_70 = empty_68 = empty_69 = None
+        triton_kernel_wrapper_functional_proxy_43 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 49, grid = [(mul_164, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_808, 'w_g_ptr': arg708_1, 'w_fc_ptr': arg709_1, 'b_g_ptr': arg710_1, 'b_fc_ptr': arg711_1, 'y_ptr': empty_70, 'g_ptr': empty_68, 'fc_ptr': empty_69, 'M': add_88}, tensors_to_clone = ['y_ptr']);  mul_164 = convert_element_type_808 = arg708_1 = arg709_1 = arg710_1 = arg711_1 = empty_70 = empty_68 = empty_69 = None
         getitem_94 = triton_kernel_wrapper_functional_proxy_43['y_ptr'];  triton_kernel_wrapper_functional_proxy_43 = None
         convert_element_type_809 = torch.ops.prims.convert_element_type.default(arg713_1, torch.float32);  convert_element_type_809 = None
         convert_element_type_810 = torch.ops.prims.convert_element_type.default(getitem_94, torch.float32);  convert_element_type_810 = None
@@ -3339,7 +3339,7 @@ class Repro(torch.nn.Module):
         add_101 = torch.ops.aten.add.Tensor(addmm_231, getitem_91);  addmm_231 = getitem_91 = None
         empty_71 = torch.ops.aten.empty.memory_format([add_88, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_487 = torch.ops.aten.permute.default(empty_71, [0, 1]);  empty_71 = None
-        triton_kernel_wrapper_functional_proxy_44 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 50, grid = [(floordiv_15, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_101, 'y_ptr': permute_487, 'n_elements': sym_sum_2}, tensors_to_clone = ['y_ptr']);  floordiv_15 = add_101 = permute_487 = sym_sum_2 = None
+        triton_kernel_wrapper_functional_proxy_44 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 50, grid = [(floordiv_15, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_101, 'y_ptr': permute_487, 'n_elements': sym_sum_2}, tensors_to_clone = ['y_ptr']);  floordiv_15 = add_101 = permute_487 = sym_sum_2 = None
         getitem_95 = triton_kernel_wrapper_functional_proxy_44['y_ptr'];  triton_kernel_wrapper_functional_proxy_44 = None
         index_26 = torch.ops.aten.index.Tensor(getitem_95, [squeeze_18])
         convert_element_type_812 = torch.ops.prims.convert_element_type.default(getitem_95, torch.float32);  getitem_95 = None
@@ -3389,7 +3389,7 @@ class Repro(torch.nn.Module):
         add_104 = _local_scalar_dense_2 + 128;  _local_scalar_dense_2 = None
         sub_54 = add_104 - 1;  add_104 = None
         floordiv_17 = sub_54 // 128;  sub_54 = None
-        triton_kernel_wrapper_functional_proxy_45 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 51, grid = [(floordiv_17, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_218, 'k_ptr': view_219, 'v_ptr': view_220, 'o_ptr': empty_72, 'l_ptr': empty_73, 'q_attn_arg_ptr': index_29, 'k_attn_arg_ptr': getitem_83, 'cu_seqlens_q': index_28, 'cu_seqlens_k': add_89}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_17 = view_218 = view_219 = view_220 = empty_72 = empty_73 = index_29 = getitem_83 = index_28 = add_89 = None
+        triton_kernel_wrapper_functional_proxy_45 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 51, grid = [(floordiv_17, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_218, 'k_ptr': view_219, 'v_ptr': view_220, 'o_ptr': empty_72, 'l_ptr': empty_73, 'q_attn_arg_ptr': index_29, 'k_attn_arg_ptr': getitem_83, 'cu_seqlens_q': index_28, 'cu_seqlens_k': add_89}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_17 = view_218 = view_219 = view_220 = empty_72 = empty_73 = index_29 = getitem_83 = index_28 = add_89 = None
         getitem_98 = triton_kernel_wrapper_functional_proxy_45['o_ptr']
         getitem_99 = triton_kernel_wrapper_functional_proxy_45['l_ptr'];  triton_kernel_wrapper_functional_proxy_45 = getitem_99 = None
         view_221 = torch.ops.aten.view.default(getitem_98, [-1, 512]);  getitem_98 = None
@@ -3400,7 +3400,7 @@ class Repro(torch.nn.Module):
         add_105 = torch.ops.aten.add.Tensor(addmm_235, index_26);  addmm_235 = index_26 = None
         empty_74 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_496 = torch.ops.aten.permute.default(empty_74, [0, 1]);  empty_74 = None
-        triton_kernel_wrapper_functional_proxy_46 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 52, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_105, 'y_ptr': permute_496, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_105 = permute_496 = None
+        triton_kernel_wrapper_functional_proxy_46 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 52, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_105, 'y_ptr': permute_496, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_105 = permute_496 = None
         getitem_100 = triton_kernel_wrapper_functional_proxy_46['y_ptr'];  triton_kernel_wrapper_functional_proxy_46 = None
         convert_element_type_828 = torch.ops.prims.convert_element_type.default(getitem_100, torch.float32)
         var_mean_22 = torch.ops.aten.var_mean.correction(convert_element_type_828, [1], correction = 0, keepdim = True)
@@ -3416,7 +3416,7 @@ class Repro(torch.nn.Module):
         empty_75 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_76 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_77 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_47 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 53, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_829, 'w_g_ptr': arg726_1, 'w_fc_ptr': arg727_1, 'b_g_ptr': arg728_1, 'b_fc_ptr': arg729_1, 'y_ptr': empty_77, 'g_ptr': empty_75, 'fc_ptr': empty_76, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  convert_element_type_829 = arg726_1 = arg727_1 = arg728_1 = arg729_1 = empty_77 = empty_75 = empty_76 = None
+        triton_kernel_wrapper_functional_proxy_47 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 53, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_829, 'w_g_ptr': arg726_1, 'w_fc_ptr': arg727_1, 'b_g_ptr': arg728_1, 'b_fc_ptr': arg729_1, 'y_ptr': empty_77, 'g_ptr': empty_75, 'fc_ptr': empty_76, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  convert_element_type_829 = arg726_1 = arg727_1 = arg728_1 = arg729_1 = empty_77 = empty_75 = empty_76 = None
         getitem_103 = triton_kernel_wrapper_functional_proxy_47['y_ptr'];  triton_kernel_wrapper_functional_proxy_47 = None
         convert_element_type_830 = torch.ops.prims.convert_element_type.default(arg731_1, torch.float32);  convert_element_type_830 = None
         convert_element_type_831 = torch.ops.prims.convert_element_type.default(getitem_103, torch.float32);  convert_element_type_831 = None
@@ -3425,7 +3425,7 @@ class Repro(torch.nn.Module):
         add_108 = torch.ops.aten.add.Tensor(addmm_236, getitem_100);  addmm_236 = getitem_100 = None
         empty_78 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_499 = torch.ops.aten.permute.default(empty_78, [0, 1]);  empty_78 = None
-        triton_kernel_wrapper_functional_proxy_48 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 54, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_108, 'y_ptr': permute_499, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_108 = permute_499 = None
+        triton_kernel_wrapper_functional_proxy_48 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 54, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_108, 'y_ptr': permute_499, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_108 = permute_499 = None
         getitem_104 = triton_kernel_wrapper_functional_proxy_48['y_ptr'];  triton_kernel_wrapper_functional_proxy_48 = None
         view_222 = torch.ops.aten.view.default(getitem_104, [-1, 512]);  getitem_104 = None
         where_195 = torch.ops.aten.where.self(logical_or_10, full_default_27, view_222);  view_222 = None
@@ -3479,15 +3479,15 @@ class Repro(torch.nn.Module):
         view_228 = torch.ops.aten.view.default(addmm_240, [-1, 512]);  addmm_240 = None
         add_109 = arg0_1 + sym_size_int_15
         empty_79 = torch.ops.aten.empty.memory_format([add_109, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_49 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 56, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_228, 'y_ptr': index_30, 'o_ptr': empty_79, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_7, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_228 = index_30 = empty_79 = None
+        triton_kernel_wrapper_functional_proxy_49 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 56, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_228, 'y_ptr': index_30, 'o_ptr': empty_79, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_7, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_228 = index_30 = empty_79 = None
         getitem_105 = triton_kernel_wrapper_functional_proxy_49['o_ptr'];  triton_kernel_wrapper_functional_proxy_49 = None
         add_110 = torch.ops.aten.add.Tensor(constant_pad_nd_1, constant_pad_nd_7)
         empty_80 = torch.ops.aten.empty.memory_format([add_109], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_50 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 58, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_170, 'o_ptr': empty_80, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_7, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_170 = empty_80 = None
+        triton_kernel_wrapper_functional_proxy_50 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 58, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_170, 'o_ptr': empty_80, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_7, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  mul_170 = empty_80 = None
         getitem_106 = triton_kernel_wrapper_functional_proxy_50['o_ptr'];  triton_kernel_wrapper_functional_proxy_50 = None
         full_34 = torch.ops.aten.full.default([sym_size_int_15], 1, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_81 = torch.ops.aten.empty.memory_format([add_109], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_51 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 59, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_34, 'o_ptr': empty_81, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_7, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_34 = empty_81 = constant_pad_nd_7 = None
+        triton_kernel_wrapper_functional_proxy_51 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 59, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_34, 'o_ptr': empty_81, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_7, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_34 = empty_81 = constant_pad_nd_7 = None
         getitem_107 = triton_kernel_wrapper_functional_proxy_51['o_ptr'];  triton_kernel_wrapper_functional_proxy_51 = None
         eq_324 = torch.ops.aten.eq.Scalar(getitem_107, 0);  getitem_107 = None
         nonzero_7 = torch.ops.aten.nonzero.default(eq_324);  eq_324 = None
@@ -3534,7 +3534,7 @@ class Repro(torch.nn.Module):
         empty_82 = torch.ops.aten.empty.memory_format([add_109, 4, 128], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_83 = torch.ops.aten.empty.memory_format([add_109, 4], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         floordiv_18 = add_73 // 128;  add_73 = None
-        triton_kernel_wrapper_functional_proxy_52 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 60, grid = [(floordiv_18, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_229, 'k_ptr': view_230, 'v_ptr': view_231, 'o_ptr': empty_82, 'l_ptr': empty_83, 'q_attn_arg_ptr': getitem_106, 'k_attn_arg_ptr': getitem_106, 'cu_seqlens_q': add_110, 'cu_seqlens_k': add_110}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_18 = view_229 = view_230 = view_231 = empty_82 = empty_83 = None
+        triton_kernel_wrapper_functional_proxy_52 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 60, grid = [(floordiv_18, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_229, 'k_ptr': view_230, 'v_ptr': view_231, 'o_ptr': empty_82, 'l_ptr': empty_83, 'q_attn_arg_ptr': getitem_106, 'k_attn_arg_ptr': getitem_106, 'cu_seqlens_q': add_110, 'cu_seqlens_k': add_110}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_18 = view_229 = view_230 = view_231 = empty_82 = empty_83 = None
         getitem_112 = triton_kernel_wrapper_functional_proxy_52['o_ptr']
         getitem_113 = triton_kernel_wrapper_functional_proxy_52['l_ptr'];  triton_kernel_wrapper_functional_proxy_52 = getitem_113 = None
         view_232 = torch.ops.aten.view.default(getitem_112, [-1, 512]);  getitem_112 = None
@@ -3550,7 +3550,7 @@ class Repro(torch.nn.Module):
         add_116 = sym_sum_3 + 2048
         sub_58 = add_116 - 1;  add_116 = None
         floordiv_19 = sub_58 // 2048;  sub_58 = None
-        triton_kernel_wrapper_functional_proxy_53 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 61, grid = [(floordiv_19, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_115, 'y_ptr': permute_518, 'n_elements': sym_sum_3}, tensors_to_clone = ['y_ptr']);  add_115 = permute_518 = None
+        triton_kernel_wrapper_functional_proxy_53 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 61, grid = [(floordiv_19, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_115, 'y_ptr': permute_518, 'n_elements': sym_sum_3}, tensors_to_clone = ['y_ptr']);  add_115 = permute_518 = None
         getitem_114 = triton_kernel_wrapper_functional_proxy_53['y_ptr'];  triton_kernel_wrapper_functional_proxy_53 = None
         convert_element_type_866 = torch.ops.prims.convert_element_type.default(getitem_114, torch.float32)
         var_mean_25 = torch.ops.aten.var_mean.correction(convert_element_type_866, [1], correction = 0, keepdim = True)
@@ -3570,7 +3570,7 @@ class Repro(torch.nn.Module):
         sub_60 = add_119 - 1;  add_119 = None
         floordiv_20 = sub_60 // 128;  sub_60 = None
         mul_178 = floordiv_20 * 8;  floordiv_20 = None
-        triton_kernel_wrapper_functional_proxy_54 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 62, grid = [(mul_178, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_867, 'w_g_ptr': arg764_1, 'w_fc_ptr': arg765_1, 'b_g_ptr': arg766_1, 'b_fc_ptr': arg767_1, 'y_ptr': empty_87, 'g_ptr': empty_85, 'fc_ptr': empty_86, 'M': add_109}, tensors_to_clone = ['y_ptr']);  mul_178 = convert_element_type_867 = arg764_1 = arg765_1 = arg766_1 = arg767_1 = empty_87 = empty_85 = empty_86 = None
+        triton_kernel_wrapper_functional_proxy_54 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 62, grid = [(mul_178, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_867, 'w_g_ptr': arg764_1, 'w_fc_ptr': arg765_1, 'b_g_ptr': arg766_1, 'b_fc_ptr': arg767_1, 'y_ptr': empty_87, 'g_ptr': empty_85, 'fc_ptr': empty_86, 'M': add_109}, tensors_to_clone = ['y_ptr']);  mul_178 = convert_element_type_867 = arg764_1 = arg765_1 = arg766_1 = arg767_1 = empty_87 = empty_85 = empty_86 = None
         getitem_117 = triton_kernel_wrapper_functional_proxy_54['y_ptr'];  triton_kernel_wrapper_functional_proxy_54 = None
         convert_element_type_868 = torch.ops.prims.convert_element_type.default(arg769_1, torch.float32);  convert_element_type_868 = None
         convert_element_type_869 = torch.ops.prims.convert_element_type.default(getitem_117, torch.float32);  convert_element_type_869 = None
@@ -3579,7 +3579,7 @@ class Repro(torch.nn.Module):
         add_120 = torch.ops.aten.add.Tensor(addmm_246, getitem_114);  addmm_246 = getitem_114 = None
         empty_88 = torch.ops.aten.empty.memory_format([add_109, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_521 = torch.ops.aten.permute.default(empty_88, [0, 1]);  empty_88 = None
-        triton_kernel_wrapper_functional_proxy_55 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 63, grid = [(floordiv_19, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_120, 'y_ptr': permute_521, 'n_elements': sym_sum_3}, tensors_to_clone = ['y_ptr']);  floordiv_19 = add_120 = permute_521 = sym_sum_3 = None
+        triton_kernel_wrapper_functional_proxy_55 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 63, grid = [(floordiv_19, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_120, 'y_ptr': permute_521, 'n_elements': sym_sum_3}, tensors_to_clone = ['y_ptr']);  floordiv_19 = add_120 = permute_521 = sym_sum_3 = None
         getitem_118 = triton_kernel_wrapper_functional_proxy_55['y_ptr'];  triton_kernel_wrapper_functional_proxy_55 = None
         index_31 = torch.ops.aten.index.Tensor(getitem_118, [squeeze_19])
         convert_element_type_871 = torch.ops.prims.convert_element_type.default(getitem_118, torch.float32);  getitem_118 = None
@@ -3629,7 +3629,7 @@ class Repro(torch.nn.Module):
         add_123 = _local_scalar_dense_3 + 128;  _local_scalar_dense_3 = None
         sub_63 = add_123 - 1;  add_123 = None
         floordiv_21 = sub_63 // 128;  sub_63 = None
-        triton_kernel_wrapper_functional_proxy_56 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 64, grid = [(floordiv_21, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_233, 'k_ptr': view_234, 'v_ptr': view_235, 'o_ptr': empty_89, 'l_ptr': empty_90, 'q_attn_arg_ptr': index_34, 'k_attn_arg_ptr': getitem_106, 'cu_seqlens_q': index_33, 'cu_seqlens_k': add_110}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_21 = view_233 = view_234 = view_235 = empty_89 = empty_90 = index_34 = getitem_106 = index_33 = add_110 = None
+        triton_kernel_wrapper_functional_proxy_56 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 64, grid = [(floordiv_21, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_233, 'k_ptr': view_234, 'v_ptr': view_235, 'o_ptr': empty_89, 'l_ptr': empty_90, 'q_attn_arg_ptr': index_34, 'k_attn_arg_ptr': getitem_106, 'cu_seqlens_q': index_33, 'cu_seqlens_k': add_110}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_21 = view_233 = view_234 = view_235 = empty_89 = empty_90 = index_34 = getitem_106 = index_33 = add_110 = None
         getitem_121 = triton_kernel_wrapper_functional_proxy_56['o_ptr']
         getitem_122 = triton_kernel_wrapper_functional_proxy_56['l_ptr'];  triton_kernel_wrapper_functional_proxy_56 = getitem_122 = None
         view_236 = torch.ops.aten.view.default(getitem_121, [-1, 512]);  getitem_121 = None
@@ -3640,7 +3640,7 @@ class Repro(torch.nn.Module):
         add_124 = torch.ops.aten.add.Tensor(addmm_250, index_31);  addmm_250 = index_31 = None
         empty_91 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_530 = torch.ops.aten.permute.default(empty_91, [0, 1]);  empty_91 = None
-        triton_kernel_wrapper_functional_proxy_57 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 65, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_124, 'y_ptr': permute_530, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_124 = permute_530 = None
+        triton_kernel_wrapper_functional_proxy_57 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 65, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_124, 'y_ptr': permute_530, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_124 = permute_530 = None
         getitem_123 = triton_kernel_wrapper_functional_proxy_57['y_ptr'];  triton_kernel_wrapper_functional_proxy_57 = None
         convert_element_type_887 = torch.ops.prims.convert_element_type.default(getitem_123, torch.float32)
         var_mean_27 = torch.ops.aten.var_mean.correction(convert_element_type_887, [1], correction = 0, keepdim = True)
@@ -3656,7 +3656,7 @@ class Repro(torch.nn.Module):
         empty_92 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_93 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_94 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_58 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 66, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_888, 'w_g_ptr': arg782_1, 'w_fc_ptr': arg783_1, 'b_g_ptr': arg784_1, 'b_fc_ptr': arg785_1, 'y_ptr': empty_94, 'g_ptr': empty_92, 'fc_ptr': empty_93, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  convert_element_type_888 = arg782_1 = arg783_1 = arg784_1 = arg785_1 = empty_94 = empty_92 = empty_93 = None
+        triton_kernel_wrapper_functional_proxy_58 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 66, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_888, 'w_g_ptr': arg782_1, 'w_fc_ptr': arg783_1, 'b_g_ptr': arg784_1, 'b_fc_ptr': arg785_1, 'y_ptr': empty_94, 'g_ptr': empty_92, 'fc_ptr': empty_93, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  convert_element_type_888 = arg782_1 = arg783_1 = arg784_1 = arg785_1 = empty_94 = empty_92 = empty_93 = None
         getitem_126 = triton_kernel_wrapper_functional_proxy_58['y_ptr'];  triton_kernel_wrapper_functional_proxy_58 = None
         convert_element_type_889 = torch.ops.prims.convert_element_type.default(arg787_1, torch.float32);  convert_element_type_889 = None
         convert_element_type_890 = torch.ops.prims.convert_element_type.default(getitem_126, torch.float32);  convert_element_type_890 = None
@@ -3665,7 +3665,7 @@ class Repro(torch.nn.Module):
         add_127 = torch.ops.aten.add.Tensor(addmm_251, getitem_123);  addmm_251 = getitem_123 = None
         empty_95 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_533 = torch.ops.aten.permute.default(empty_95, [0, 1]);  empty_95 = None
-        triton_kernel_wrapper_functional_proxy_59 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 67, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_127, 'y_ptr': permute_533, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_127 = permute_533 = None
+        triton_kernel_wrapper_functional_proxy_59 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 67, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_127, 'y_ptr': permute_533, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_127 = permute_533 = None
         getitem_127 = triton_kernel_wrapper_functional_proxy_59['y_ptr'];  triton_kernel_wrapper_functional_proxy_59 = None
         view_237 = torch.ops.aten.view.default(getitem_127, [-1, 512]);  getitem_127 = None
         where_197 = torch.ops.aten.where.self(logical_or_10, full_default_27, view_237);  view_237 = None
@@ -3718,15 +3718,15 @@ class Repro(torch.nn.Module):
         view_244 = torch.ops.aten.view.default(addmm_255, [-1, 512]);  addmm_255 = None
         add_129 = arg0_1 + sym_size_int_17
         empty_96 = torch.ops.aten.empty.memory_format([add_129, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_60 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 69, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_244, 'y_ptr': index_35, 'o_ptr': empty_96, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_9, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_244 = index_35 = empty_96 = None
+        triton_kernel_wrapper_functional_proxy_60 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 69, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_244, 'y_ptr': index_35, 'o_ptr': empty_96, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_9, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_244 = index_35 = empty_96 = None
         getitem_128 = triton_kernel_wrapper_functional_proxy_60['o_ptr'];  triton_kernel_wrapper_functional_proxy_60 = None
         add_130 = torch.ops.aten.add.Tensor(constant_pad_nd_1, constant_pad_nd_9)
         empty_97 = torch.ops.aten.empty.memory_format([add_129], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_61 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 71, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_184, 'o_ptr': empty_97, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_9, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_165 = mul_184 = empty_97 = None
+        triton_kernel_wrapper_functional_proxy_61 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 71, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_165, 'y_ptr': mul_184, 'o_ptr': empty_97, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_9, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_165 = mul_184 = empty_97 = None
         getitem_129 = triton_kernel_wrapper_functional_proxy_61['o_ptr'];  triton_kernel_wrapper_functional_proxy_61 = None
         full_37 = torch.ops.aten.full.default([sym_size_int_17], 1, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_98 = torch.ops.aten.empty.memory_format([add_129], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_62 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 72, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_37, 'o_ptr': empty_98, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_9, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_default_25 = full_37 = empty_98 = constant_pad_nd_9 = None
+        triton_kernel_wrapper_functional_proxy_62 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 72, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_25, 'y_ptr': full_37, 'o_ptr': empty_98, 'x_offset_ptr': constant_pad_nd_1, 'y_offset_ptr': constant_pad_nd_9, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_default_25 = full_37 = empty_98 = constant_pad_nd_9 = None
         getitem_130 = triton_kernel_wrapper_functional_proxy_62['o_ptr'];  triton_kernel_wrapper_functional_proxy_62 = None
         add_131 = arg0_1 + 54
         eq_326 = torch.ops.aten.eq.Scalar(getitem_130, 0);  getitem_130 = None
@@ -3776,7 +3776,7 @@ class Repro(torch.nn.Module):
         add_136 = add_131 + 128;  add_131 = None
         sub_67 = add_136 - 1;  add_136 = None
         floordiv_22 = sub_67 // 128;  sub_67 = None
-        triton_kernel_wrapper_functional_proxy_63 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 73, grid = [(floordiv_22, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_245, 'k_ptr': view_246, 'v_ptr': view_247, 'o_ptr': empty_99, 'l_ptr': empty_100, 'q_attn_arg_ptr': getitem_129, 'k_attn_arg_ptr': getitem_129, 'cu_seqlens_q': add_130, 'cu_seqlens_k': add_130}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_22 = view_245 = view_246 = view_247 = empty_99 = empty_100 = None
+        triton_kernel_wrapper_functional_proxy_63 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 73, grid = [(floordiv_22, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_245, 'k_ptr': view_246, 'v_ptr': view_247, 'o_ptr': empty_99, 'l_ptr': empty_100, 'q_attn_arg_ptr': getitem_129, 'k_attn_arg_ptr': getitem_129, 'cu_seqlens_q': add_130, 'cu_seqlens_k': add_130}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_22 = view_245 = view_246 = view_247 = empty_99 = empty_100 = None
         getitem_135 = triton_kernel_wrapper_functional_proxy_63['o_ptr']
         getitem_136 = triton_kernel_wrapper_functional_proxy_63['l_ptr'];  triton_kernel_wrapper_functional_proxy_63 = getitem_136 = None
         view_248 = torch.ops.aten.view.default(getitem_135, [-1, 512]);  getitem_135 = None
@@ -3792,7 +3792,7 @@ class Repro(torch.nn.Module):
         add_138 = sym_sum_4 + 2048
         sub_68 = add_138 - 1;  add_138 = None
         floordiv_23 = sub_68 // 2048;  sub_68 = None
-        triton_kernel_wrapper_functional_proxy_64 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 74, grid = [(floordiv_23, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_137, 'y_ptr': permute_552, 'n_elements': sym_sum_4}, tensors_to_clone = ['y_ptr']);  add_137 = permute_552 = None
+        triton_kernel_wrapper_functional_proxy_64 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 74, grid = [(floordiv_23, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_137, 'y_ptr': permute_552, 'n_elements': sym_sum_4}, tensors_to_clone = ['y_ptr']);  add_137 = permute_552 = None
         getitem_137 = triton_kernel_wrapper_functional_proxy_64['y_ptr'];  triton_kernel_wrapper_functional_proxy_64 = None
         convert_element_type_923 = torch.ops.prims.convert_element_type.default(getitem_137, torch.float32)
         var_mean_30 = torch.ops.aten.var_mean.correction(convert_element_type_923, [1], correction = 0, keepdim = True)
@@ -3812,7 +3812,7 @@ class Repro(torch.nn.Module):
         sub_70 = add_141 - 1;  add_141 = None
         floordiv_24 = sub_70 // 128;  sub_70 = None
         mul_192 = floordiv_24 * 8;  floordiv_24 = None
-        triton_kernel_wrapper_functional_proxy_65 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 75, grid = [(mul_192, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_924, 'w_g_ptr': arg820_1, 'w_fc_ptr': arg821_1, 'b_g_ptr': arg822_1, 'b_fc_ptr': arg823_1, 'y_ptr': empty_104, 'g_ptr': empty_102, 'fc_ptr': empty_103, 'M': add_129}, tensors_to_clone = ['y_ptr']);  mul_192 = convert_element_type_924 = arg820_1 = arg821_1 = arg822_1 = arg823_1 = empty_104 = empty_102 = empty_103 = None
+        triton_kernel_wrapper_functional_proxy_65 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 75, grid = [(mul_192, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_924, 'w_g_ptr': arg820_1, 'w_fc_ptr': arg821_1, 'b_g_ptr': arg822_1, 'b_fc_ptr': arg823_1, 'y_ptr': empty_104, 'g_ptr': empty_102, 'fc_ptr': empty_103, 'M': add_129}, tensors_to_clone = ['y_ptr']);  mul_192 = convert_element_type_924 = arg820_1 = arg821_1 = arg822_1 = arg823_1 = empty_104 = empty_102 = empty_103 = None
         getitem_140 = triton_kernel_wrapper_functional_proxy_65['y_ptr'];  triton_kernel_wrapper_functional_proxy_65 = None
         convert_element_type_925 = torch.ops.prims.convert_element_type.default(arg825_1, torch.float32);  convert_element_type_925 = None
         convert_element_type_926 = torch.ops.prims.convert_element_type.default(getitem_140, torch.float32);  convert_element_type_926 = None
@@ -3821,7 +3821,7 @@ class Repro(torch.nn.Module):
         add_142 = torch.ops.aten.add.Tensor(addmm_260, getitem_137);  addmm_260 = getitem_137 = None
         empty_105 = torch.ops.aten.empty.memory_format([add_129, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_555 = torch.ops.aten.permute.default(empty_105, [0, 1]);  empty_105 = None
-        triton_kernel_wrapper_functional_proxy_66 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 76, grid = [(floordiv_23, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_142, 'y_ptr': permute_555, 'n_elements': sym_sum_4}, tensors_to_clone = ['y_ptr']);  floordiv_23 = add_142 = permute_555 = sym_sum_4 = None
+        triton_kernel_wrapper_functional_proxy_66 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 76, grid = [(floordiv_23, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_142, 'y_ptr': permute_555, 'n_elements': sym_sum_4}, tensors_to_clone = ['y_ptr']);  floordiv_23 = add_142 = permute_555 = sym_sum_4 = None
         getitem_141 = triton_kernel_wrapper_functional_proxy_66['y_ptr'];  triton_kernel_wrapper_functional_proxy_66 = None
         index_36 = torch.ops.aten.index.Tensor(getitem_141, [squeeze_20])
         convert_element_type_928 = torch.ops.prims.convert_element_type.default(getitem_141, torch.float32);  getitem_141 = None
@@ -3871,7 +3871,7 @@ class Repro(torch.nn.Module):
         add_145 = _local_scalar_dense_4 + 128;  _local_scalar_dense_4 = None
         sub_73 = add_145 - 1;  add_145 = None
         floordiv_25 = sub_73 // 128;  sub_73 = None
-        triton_kernel_wrapper_functional_proxy_67 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 77, grid = [(floordiv_25, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_249, 'k_ptr': view_250, 'v_ptr': view_251, 'o_ptr': empty_106, 'l_ptr': empty_107, 'q_attn_arg_ptr': index_39, 'k_attn_arg_ptr': getitem_129, 'cu_seqlens_q': index_38, 'cu_seqlens_k': add_130}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_25 = view_249 = view_250 = view_251 = empty_106 = empty_107 = index_39 = getitem_129 = index_38 = add_130 = None
+        triton_kernel_wrapper_functional_proxy_67 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 77, grid = [(floordiv_25, 4, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': view_249, 'k_ptr': view_250, 'v_ptr': view_251, 'o_ptr': empty_106, 'l_ptr': empty_107, 'q_attn_arg_ptr': index_39, 'k_attn_arg_ptr': getitem_129, 'cu_seqlens_q': index_38, 'cu_seqlens_k': add_130}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_25 = view_249 = view_250 = view_251 = empty_106 = empty_107 = index_39 = getitem_129 = index_38 = add_130 = None
         getitem_144 = triton_kernel_wrapper_functional_proxy_67['o_ptr']
         getitem_145 = triton_kernel_wrapper_functional_proxy_67['l_ptr'];  triton_kernel_wrapper_functional_proxy_67 = getitem_145 = None
         view_252 = torch.ops.aten.view.default(getitem_144, [-1, 512]);  getitem_144 = None
@@ -3882,7 +3882,7 @@ class Repro(torch.nn.Module):
         add_146 = torch.ops.aten.add.Tensor(addmm_264, index_36);  addmm_264 = index_36 = None
         empty_108 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_564 = torch.ops.aten.permute.default(empty_108, [0, 1]);  empty_108 = None
-        triton_kernel_wrapper_functional_proxy_68 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 78, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_146, 'y_ptr': permute_564, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_146 = permute_564 = None
+        triton_kernel_wrapper_functional_proxy_68 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 78, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_146, 'y_ptr': permute_564, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  add_146 = permute_564 = None
         getitem_146 = triton_kernel_wrapper_functional_proxy_68['y_ptr'];  triton_kernel_wrapper_functional_proxy_68 = None
         convert_element_type_944 = torch.ops.prims.convert_element_type.default(getitem_146, torch.float32)
         var_mean_32 = torch.ops.aten.var_mean.correction(convert_element_type_944, [1], correction = 0, keepdim = True)
@@ -3898,7 +3898,7 @@ class Repro(torch.nn.Module):
         empty_109 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_110 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_111 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_69 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 79, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_945, 'w_g_ptr': arg838_1, 'w_fc_ptr': arg839_1, 'b_g_ptr': arg840_1, 'b_fc_ptr': arg841_1, 'y_ptr': empty_111, 'g_ptr': empty_109, 'fc_ptr': empty_110, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  mul_154 = convert_element_type_945 = arg838_1 = arg839_1 = arg840_1 = arg841_1 = empty_111 = empty_109 = empty_110 = None
+        triton_kernel_wrapper_functional_proxy_69 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 79, grid = [(mul_154, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_945, 'w_g_ptr': arg838_1, 'w_fc_ptr': arg839_1, 'b_g_ptr': arg840_1, 'b_fc_ptr': arg841_1, 'y_ptr': empty_111, 'g_ptr': empty_109, 'fc_ptr': empty_110, 'M': arg0_1}, tensors_to_clone = ['y_ptr']);  mul_154 = convert_element_type_945 = arg838_1 = arg839_1 = arg840_1 = arg841_1 = empty_111 = empty_109 = empty_110 = None
         getitem_149 = triton_kernel_wrapper_functional_proxy_69['y_ptr'];  triton_kernel_wrapper_functional_proxy_69 = None
         convert_element_type_946 = torch.ops.prims.convert_element_type.default(arg843_1, torch.float32);  convert_element_type_946 = None
         convert_element_type_947 = torch.ops.prims.convert_element_type.default(getitem_149, torch.float32);  convert_element_type_947 = None
@@ -3907,7 +3907,7 @@ class Repro(torch.nn.Module):
         add_149 = torch.ops.aten.add.Tensor(addmm_265, getitem_146);  addmm_265 = getitem_146 = None
         empty_112 = torch.ops.aten.empty.memory_format([arg0_1, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_567 = torch.ops.aten.permute.default(empty_112, [0, 1]);  empty_112 = None
-        triton_kernel_wrapper_functional_proxy_70 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 80, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_149, 'y_ptr': permute_567, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  floordiv_8 = add_149 = permute_567 = mul_115 = None
+        triton_kernel_wrapper_functional_proxy_70 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 80, grid = [(floordiv_8, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_149, 'y_ptr': permute_567, 'n_elements': mul_115}, tensors_to_clone = ['y_ptr']);  floordiv_8 = add_149 = permute_567 = mul_115 = None
         getitem_150 = triton_kernel_wrapper_functional_proxy_70['y_ptr'];  triton_kernel_wrapper_functional_proxy_70 = None
         view_253 = torch.ops.aten.view.default(getitem_150, [-1, 512]);  getitem_150 = None
         where_199 = torch.ops.aten.where.self(logical_or_10, full_default_27, view_253);  full_default_27 = view_253 = None
@@ -5831,23 +5831,23 @@ class Repro(torch.nn.Module):
         view_317 = torch.ops.aten.view.default(cat_122, [-1, 512]);  cat_122 = None
         view_318 = torch.ops.aten.view.default(repeat_9, [mul_443]);  repeat_9 = None
         empty_113 = torch.ops.aten.empty.memory_format([arg151_1], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_71 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 0, constant_args_idx = 81, grid = [(floordiv, 1, 1), (floordiv_1, 1, 1), (floordiv_2, 1, 1), (floordiv_3, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'pos_ptr': repeat_10, 'offset_ptr': mul_442, 'output_ptr': empty_113, 'batch_size': arg151_1}, tensors_to_clone = ['output_ptr']);  floordiv = floordiv_1 = floordiv_2 = floordiv_3 = empty_113 = None
+        triton_kernel_wrapper_functional_proxy_71 = launch_model_kernel(kernel_idx = 0, constant_args_idx = 81, grid = [(floordiv, 1, 1), (floordiv_1, 1, 1), (floordiv_2, 1, 1), (floordiv_3, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'pos_ptr': repeat_10, 'offset_ptr': mul_442, 'output_ptr': empty_113, 'batch_size': arg151_1}, tensors_to_clone = ['output_ptr']);  floordiv = floordiv_1 = floordiv_2 = floordiv_3 = empty_113 = None
         getitem_325 = triton_kernel_wrapper_functional_proxy_71['output_ptr'];  triton_kernel_wrapper_functional_proxy_71 = None
         add_374 = mul_443 + sym_size_int_22
         empty_114 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_72 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 82, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_317, 'y_ptr': index_41, 'o_ptr': empty_114, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_317 = index_41 = empty_114 = None
+        triton_kernel_wrapper_functional_proxy_72 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 82, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_317, 'y_ptr': index_41, 'o_ptr': empty_114, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_317 = index_41 = empty_114 = None
         getitem_326 = triton_kernel_wrapper_functional_proxy_72['o_ptr'];  triton_kernel_wrapper_functional_proxy_72 = None
         add_375 = torch.ops.aten.add.Tensor(mul_442, constant_pad_nd_11)
         empty_115 = torch.ops.aten.empty.memory_format([add_374], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_73 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 2, constant_args_idx = 83, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': repeat_10, 'y_ptr': index_40, 'o_ptr': empty_115, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'position_offset_ptr': getitem_325, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  repeat_10 = index_40 = empty_115 = getitem_325 = None
+        triton_kernel_wrapper_functional_proxy_73 = launch_model_kernel(kernel_idx = 2, constant_args_idx = 83, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': repeat_10, 'y_ptr': index_40, 'o_ptr': empty_115, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'position_offset_ptr': getitem_325, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  repeat_10 = index_40 = empty_115 = getitem_325 = None
         getitem_327 = triton_kernel_wrapper_functional_proxy_73['o_ptr'];  triton_kernel_wrapper_functional_proxy_73 = None
         empty_116 = torch.ops.aten.empty.memory_format([add_374], dtype = torch.int64, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_74 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 84, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_318, 'y_ptr': mul_441, 'o_ptr': empty_116, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_318 = mul_441 = empty_116 = None
+        triton_kernel_wrapper_functional_proxy_74 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 84, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': view_318, 'y_ptr': mul_441, 'o_ptr': empty_116, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  view_318 = mul_441 = empty_116 = None
         getitem_328 = triton_kernel_wrapper_functional_proxy_74['o_ptr'];  triton_kernel_wrapper_functional_proxy_74 = None
         full_default_41 = torch.ops.aten.full.default([mul_443], 0, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         full_48 = torch.ops.aten.full.default([sym_size_int_22], 1, dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_117 = torch.ops.aten.empty.memory_format([add_374], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_75 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 1, constant_args_idx = 85, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_41, 'y_ptr': full_48, 'o_ptr': empty_117, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_default_41 = full_48 = empty_117 = mul_442 = constant_pad_nd_11 = None
+        triton_kernel_wrapper_functional_proxy_75 = launch_model_kernel(kernel_idx = 1, constant_args_idx = 85, grid = [(84, 1, 1), (84, 1, 1), (84, 1, 1), (128, 1, 1), (128, 1, 1), (128, 1, 1), (92, 1, 1), (92, 1, 1), (92, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': full_default_41, 'y_ptr': full_48, 'o_ptr': empty_117, 'x_offset_ptr': mul_442, 'y_offset_ptr': constant_pad_nd_11, 'batchsize': arg151_1}, tensors_to_clone = ['o_ptr']);  full_default_41 = full_48 = empty_117 = mul_442 = constant_pad_nd_11 = None
         getitem_329 = triton_kernel_wrapper_functional_proxy_75['o_ptr'];  triton_kernel_wrapper_functional_proxy_75 = None
         add_376 = mul_443 + 256
         eq_362 = torch.ops.aten.eq.Scalar(getitem_329, 0);  getitem_329 = None
@@ -5899,17 +5899,17 @@ class Repro(torch.nn.Module):
         add_381 = add_376 + 16
         sub_163 = add_381 - 1;  add_381 = None
         floordiv_26 = sub_163 // 16;  sub_163 = None
-        triton_kernel_wrapper_functional_proxy_76 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 86, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_319, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_118}, tensors_to_clone = ['out_ptr']);  view_319 = empty_118 = None
+        triton_kernel_wrapper_functional_proxy_76 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 86, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_319, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_118}, tensors_to_clone = ['out_ptr']);  view_319 = empty_118 = None
         getitem_334 = triton_kernel_wrapper_functional_proxy_76['out_ptr'];  triton_kernel_wrapper_functional_proxy_76 = None
         empty_119 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_77 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 87, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_320, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_119}, tensors_to_clone = ['out_ptr']);  view_320 = empty_119 = None
+        triton_kernel_wrapper_functional_proxy_77 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 87, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_320, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_119}, tensors_to_clone = ['out_ptr']);  view_320 = empty_119 = None
         getitem_335 = triton_kernel_wrapper_functional_proxy_77['out_ptr'];  triton_kernel_wrapper_functional_proxy_77 = None
         empty_120 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_121 = torch.ops.aten.empty.memory_format([add_374, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         add_382 = add_376 + 128;  add_376 = None
         sub_164 = add_382 - 1;  add_382 = None
         floordiv_27 = sub_164 // 128;  sub_164 = None
-        triton_kernel_wrapper_functional_proxy_78 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 88, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_334, 'k_ptr': getitem_335, 'v_ptr': view_321, 'o_ptr': empty_120, 'l_ptr': empty_121, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_334 = getitem_335 = view_321 = empty_120 = empty_121 = None
+        triton_kernel_wrapper_functional_proxy_78 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 88, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_334, 'k_ptr': getitem_335, 'v_ptr': view_321, 'o_ptr': empty_120, 'l_ptr': empty_121, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_334 = getitem_335 = view_321 = empty_120 = empty_121 = None
         getitem_336 = triton_kernel_wrapper_functional_proxy_78['o_ptr']
         getitem_337 = triton_kernel_wrapper_functional_proxy_78['l_ptr'];  triton_kernel_wrapper_functional_proxy_78 = getitem_337 = None
         view_322 = torch.ops.aten.view.default(getitem_336, [-1, 512]);  getitem_336 = None
@@ -5926,7 +5926,7 @@ class Repro(torch.nn.Module):
         add_384 = sym_sum_5 + 2048
         sub_165 = add_384 - 1;  add_384 = None
         floordiv_28 = sub_165 // 2048;  sub_165 = None
-        triton_kernel_wrapper_functional_proxy_79 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 89, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_383, 'y_ptr': permute_792, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_383 = permute_792 = None
+        triton_kernel_wrapper_functional_proxy_79 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 89, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_383, 'y_ptr': permute_792, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_383 = permute_792 = None
         getitem_338 = triton_kernel_wrapper_functional_proxy_79['y_ptr'];  triton_kernel_wrapper_functional_proxy_79 = None
         convert_element_type_1537 = torch.ops.prims.convert_element_type.default(getitem_338, torch.float32)
         var_mean_120 = torch.ops.aten.var_mean.correction(convert_element_type_1537, [1], correction = 0, keepdim = True)
@@ -5946,7 +5946,7 @@ class Repro(torch.nn.Module):
         sub_167 = add_387 - 1;  add_387 = None
         floordiv_29 = sub_167 // 128;  sub_167 = None
         mul_452 = floordiv_29 * 16;  floordiv_29 = None
-        triton_kernel_wrapper_functional_proxy_80 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 90, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1538, 'w_g_ptr': arg1365_1, 'w_fc_ptr': arg1366_1, 'b_g_ptr': arg1367_1, 'b_fc_ptr': arg1368_1, 'y_ptr': empty_125, 'g_ptr': empty_123, 'fc_ptr': empty_124, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1538 = arg1365_1 = arg1366_1 = arg1367_1 = arg1368_1 = empty_125 = empty_123 = empty_124 = None
+        triton_kernel_wrapper_functional_proxy_80 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 90, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1538, 'w_g_ptr': arg1365_1, 'w_fc_ptr': arg1366_1, 'b_g_ptr': arg1367_1, 'b_fc_ptr': arg1368_1, 'y_ptr': empty_125, 'g_ptr': empty_123, 'fc_ptr': empty_124, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1538 = arg1365_1 = arg1366_1 = arg1367_1 = arg1368_1 = empty_125 = empty_123 = empty_124 = None
         getitem_341 = triton_kernel_wrapper_functional_proxy_80['y_ptr'];  triton_kernel_wrapper_functional_proxy_80 = None
         convert_element_type_1539 = torch.ops.prims.convert_element_type.default(arg1370_1, torch.float32);  convert_element_type_1539 = None
         convert_element_type_1540 = torch.ops.prims.convert_element_type.default(getitem_341, torch.float32);  convert_element_type_1540 = None
@@ -5955,7 +5955,7 @@ class Repro(torch.nn.Module):
         add_388 = torch.ops.aten.add.Tensor(addmm_369, getitem_338);  addmm_369 = getitem_338 = None
         empty_126 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_795 = torch.ops.aten.permute.default(empty_126, [0, 1]);  empty_126 = None
-        triton_kernel_wrapper_functional_proxy_81 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 91, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_388, 'y_ptr': permute_795, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_388 = permute_795 = None
+        triton_kernel_wrapper_functional_proxy_81 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 91, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_388, 'y_ptr': permute_795, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_388 = permute_795 = None
         getitem_342 = triton_kernel_wrapper_functional_proxy_81['y_ptr'];  triton_kernel_wrapper_functional_proxy_81 = None
         convert_element_type_1542 = torch.ops.prims.convert_element_type.default(getitem_342, torch.float32)
         var_mean_121 = torch.ops.aten.var_mean.correction(convert_element_type_1542, [1], correction = 0, keepdim = True)
@@ -5984,14 +5984,14 @@ class Repro(torch.nn.Module):
         view_324 = torch.ops.aten.view.default(addmm_371, [-1, 8, 64]);  addmm_371 = None
         view_325 = torch.ops.aten.view.default(addmm_372, [-1, 8, 64]);  addmm_372 = None
         empty_127 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_82 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 92, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_323, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_127}, tensors_to_clone = ['out_ptr']);  view_323 = empty_127 = None
+        triton_kernel_wrapper_functional_proxy_82 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 92, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_323, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_127}, tensors_to_clone = ['out_ptr']);  view_323 = empty_127 = None
         getitem_345 = triton_kernel_wrapper_functional_proxy_82['out_ptr'];  triton_kernel_wrapper_functional_proxy_82 = None
         empty_128 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_83 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 93, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_324, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_128}, tensors_to_clone = ['out_ptr']);  view_324 = empty_128 = None
+        triton_kernel_wrapper_functional_proxy_83 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 93, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_324, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_128}, tensors_to_clone = ['out_ptr']);  view_324 = empty_128 = None
         getitem_346 = triton_kernel_wrapper_functional_proxy_83['out_ptr'];  triton_kernel_wrapper_functional_proxy_83 = None
         empty_129 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_130 = torch.ops.aten.empty.memory_format([add_374, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_84 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 94, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_345, 'k_ptr': getitem_346, 'v_ptr': view_325, 'o_ptr': empty_129, 'l_ptr': empty_130, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_345 = getitem_346 = view_325 = empty_129 = empty_130 = None
+        triton_kernel_wrapper_functional_proxy_84 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 94, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_345, 'k_ptr': getitem_346, 'v_ptr': view_325, 'o_ptr': empty_129, 'l_ptr': empty_130, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_345 = getitem_346 = view_325 = empty_129 = empty_130 = None
         getitem_347 = triton_kernel_wrapper_functional_proxy_84['o_ptr']
         getitem_348 = triton_kernel_wrapper_functional_proxy_84['l_ptr'];  triton_kernel_wrapper_functional_proxy_84 = getitem_348 = None
         view_326 = torch.ops.aten.view.default(getitem_347, [-1, 512]);  getitem_347 = None
@@ -6002,7 +6002,7 @@ class Repro(torch.nn.Module):
         add_391 = torch.ops.aten.add.Tensor(addmm_373, getitem_342);  addmm_373 = getitem_342 = None
         empty_131 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_804 = torch.ops.aten.permute.default(empty_131, [0, 1]);  empty_131 = None
-        triton_kernel_wrapper_functional_proxy_85 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 95, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_391, 'y_ptr': permute_804, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_391 = permute_804 = None
+        triton_kernel_wrapper_functional_proxy_85 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 95, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_391, 'y_ptr': permute_804, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_391 = permute_804 = None
         getitem_349 = triton_kernel_wrapper_functional_proxy_85['y_ptr'];  triton_kernel_wrapper_functional_proxy_85 = None
         convert_element_type_1556 = torch.ops.prims.convert_element_type.default(getitem_349, torch.float32)
         var_mean_122 = torch.ops.aten.var_mean.correction(convert_element_type_1556, [1], correction = 0, keepdim = True)
@@ -6018,7 +6018,7 @@ class Repro(torch.nn.Module):
         empty_132 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_133 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_134 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_86 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 96, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1557, 'w_g_ptr': arg1383_1, 'w_fc_ptr': arg1384_1, 'b_g_ptr': arg1385_1, 'b_fc_ptr': arg1386_1, 'y_ptr': empty_134, 'g_ptr': empty_132, 'fc_ptr': empty_133, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1557 = arg1383_1 = arg1384_1 = arg1385_1 = arg1386_1 = empty_134 = empty_132 = empty_133 = None
+        triton_kernel_wrapper_functional_proxy_86 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 96, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1557, 'w_g_ptr': arg1383_1, 'w_fc_ptr': arg1384_1, 'b_g_ptr': arg1385_1, 'b_fc_ptr': arg1386_1, 'y_ptr': empty_134, 'g_ptr': empty_132, 'fc_ptr': empty_133, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1557 = arg1383_1 = arg1384_1 = arg1385_1 = arg1386_1 = empty_134 = empty_132 = empty_133 = None
         getitem_352 = triton_kernel_wrapper_functional_proxy_86['y_ptr'];  triton_kernel_wrapper_functional_proxy_86 = None
         convert_element_type_1558 = torch.ops.prims.convert_element_type.default(arg1388_1, torch.float32);  convert_element_type_1558 = None
         convert_element_type_1559 = torch.ops.prims.convert_element_type.default(getitem_352, torch.float32);  convert_element_type_1559 = None
@@ -6027,7 +6027,7 @@ class Repro(torch.nn.Module):
         add_394 = torch.ops.aten.add.Tensor(addmm_374, getitem_349);  addmm_374 = getitem_349 = None
         empty_135 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_807 = torch.ops.aten.permute.default(empty_135, [0, 1]);  empty_135 = None
-        triton_kernel_wrapper_functional_proxy_87 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 97, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_394, 'y_ptr': permute_807, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_394 = permute_807 = None
+        triton_kernel_wrapper_functional_proxy_87 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 97, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_394, 'y_ptr': permute_807, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_394 = permute_807 = None
         getitem_353 = triton_kernel_wrapper_functional_proxy_87['y_ptr'];  triton_kernel_wrapper_functional_proxy_87 = None
         convert_element_type_1561 = torch.ops.prims.convert_element_type.default(getitem_353, torch.float32)
         var_mean_123 = torch.ops.aten.var_mean.correction(convert_element_type_1561, [1], correction = 0, keepdim = True)
@@ -6056,14 +6056,14 @@ class Repro(torch.nn.Module):
         view_328 = torch.ops.aten.view.default(addmm_376, [-1, 8, 64]);  addmm_376 = None
         view_329 = torch.ops.aten.view.default(addmm_377, [-1, 8, 64]);  addmm_377 = None
         empty_136 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_88 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 98, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_327, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_136}, tensors_to_clone = ['out_ptr']);  view_327 = empty_136 = None
+        triton_kernel_wrapper_functional_proxy_88 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 98, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_327, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_136}, tensors_to_clone = ['out_ptr']);  view_327 = empty_136 = None
         getitem_356 = triton_kernel_wrapper_functional_proxy_88['out_ptr'];  triton_kernel_wrapper_functional_proxy_88 = None
         empty_137 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_89 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 99, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_328, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_137}, tensors_to_clone = ['out_ptr']);  view_328 = empty_137 = None
+        triton_kernel_wrapper_functional_proxy_89 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 99, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_328, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_137}, tensors_to_clone = ['out_ptr']);  view_328 = empty_137 = None
         getitem_357 = triton_kernel_wrapper_functional_proxy_89['out_ptr'];  triton_kernel_wrapper_functional_proxy_89 = None
         empty_138 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_139 = torch.ops.aten.empty.memory_format([add_374, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_90 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 100, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_356, 'k_ptr': getitem_357, 'v_ptr': view_329, 'o_ptr': empty_138, 'l_ptr': empty_139, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_356 = getitem_357 = view_329 = empty_138 = empty_139 = None
+        triton_kernel_wrapper_functional_proxy_90 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 100, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_356, 'k_ptr': getitem_357, 'v_ptr': view_329, 'o_ptr': empty_138, 'l_ptr': empty_139, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_356 = getitem_357 = view_329 = empty_138 = empty_139 = None
         getitem_358 = triton_kernel_wrapper_functional_proxy_90['o_ptr']
         getitem_359 = triton_kernel_wrapper_functional_proxy_90['l_ptr'];  triton_kernel_wrapper_functional_proxy_90 = getitem_359 = None
         view_330 = torch.ops.aten.view.default(getitem_358, [-1, 512]);  getitem_358 = None
@@ -6074,7 +6074,7 @@ class Repro(torch.nn.Module):
         add_397 = torch.ops.aten.add.Tensor(addmm_378, getitem_353);  addmm_378 = getitem_353 = None
         empty_140 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_816 = torch.ops.aten.permute.default(empty_140, [0, 1]);  empty_140 = None
-        triton_kernel_wrapper_functional_proxy_91 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 101, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_397, 'y_ptr': permute_816, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_397 = permute_816 = None
+        triton_kernel_wrapper_functional_proxy_91 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 101, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_397, 'y_ptr': permute_816, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_397 = permute_816 = None
         getitem_360 = triton_kernel_wrapper_functional_proxy_91['y_ptr'];  triton_kernel_wrapper_functional_proxy_91 = None
         convert_element_type_1575 = torch.ops.prims.convert_element_type.default(getitem_360, torch.float32)
         var_mean_124 = torch.ops.aten.var_mean.correction(convert_element_type_1575, [1], correction = 0, keepdim = True)
@@ -6090,7 +6090,7 @@ class Repro(torch.nn.Module):
         empty_141 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_142 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_143 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_92 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 102, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1576, 'w_g_ptr': arg1401_1, 'w_fc_ptr': arg1402_1, 'b_g_ptr': arg1403_1, 'b_fc_ptr': arg1404_1, 'y_ptr': empty_143, 'g_ptr': empty_141, 'fc_ptr': empty_142, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1576 = arg1401_1 = arg1402_1 = arg1403_1 = arg1404_1 = empty_143 = empty_141 = empty_142 = None
+        triton_kernel_wrapper_functional_proxy_92 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 102, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1576, 'w_g_ptr': arg1401_1, 'w_fc_ptr': arg1402_1, 'b_g_ptr': arg1403_1, 'b_fc_ptr': arg1404_1, 'y_ptr': empty_143, 'g_ptr': empty_141, 'fc_ptr': empty_142, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1576 = arg1401_1 = arg1402_1 = arg1403_1 = arg1404_1 = empty_143 = empty_141 = empty_142 = None
         getitem_363 = triton_kernel_wrapper_functional_proxy_92['y_ptr'];  triton_kernel_wrapper_functional_proxy_92 = None
         convert_element_type_1577 = torch.ops.prims.convert_element_type.default(arg1406_1, torch.float32);  convert_element_type_1577 = None
         convert_element_type_1578 = torch.ops.prims.convert_element_type.default(getitem_363, torch.float32);  convert_element_type_1578 = None
@@ -6099,7 +6099,7 @@ class Repro(torch.nn.Module):
         add_400 = torch.ops.aten.add.Tensor(addmm_379, getitem_360);  addmm_379 = getitem_360 = None
         empty_144 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_819 = torch.ops.aten.permute.default(empty_144, [0, 1]);  empty_144 = None
-        triton_kernel_wrapper_functional_proxy_93 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 103, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_400, 'y_ptr': permute_819, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_400 = permute_819 = None
+        triton_kernel_wrapper_functional_proxy_93 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 103, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_400, 'y_ptr': permute_819, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_400 = permute_819 = None
         getitem_364 = triton_kernel_wrapper_functional_proxy_93['y_ptr'];  triton_kernel_wrapper_functional_proxy_93 = None
         convert_element_type_1580 = torch.ops.prims.convert_element_type.default(getitem_364, torch.float32)
         var_mean_125 = torch.ops.aten.var_mean.correction(convert_element_type_1580, [1], correction = 0, keepdim = True)
@@ -6128,14 +6128,14 @@ class Repro(torch.nn.Module):
         view_332 = torch.ops.aten.view.default(addmm_381, [-1, 8, 64]);  addmm_381 = None
         view_333 = torch.ops.aten.view.default(addmm_382, [-1, 8, 64]);  addmm_382 = None
         empty_145 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_94 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 104, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_331, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_145}, tensors_to_clone = ['out_ptr']);  view_331 = empty_145 = None
+        triton_kernel_wrapper_functional_proxy_94 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 104, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_331, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_145}, tensors_to_clone = ['out_ptr']);  view_331 = empty_145 = None
         getitem_367 = triton_kernel_wrapper_functional_proxy_94['out_ptr'];  triton_kernel_wrapper_functional_proxy_94 = None
         empty_146 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_95 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 105, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_332, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_146}, tensors_to_clone = ['out_ptr']);  view_332 = empty_146 = None
+        triton_kernel_wrapper_functional_proxy_95 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 105, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_332, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_146}, tensors_to_clone = ['out_ptr']);  view_332 = empty_146 = None
         getitem_368 = triton_kernel_wrapper_functional_proxy_95['out_ptr'];  triton_kernel_wrapper_functional_proxy_95 = None
         empty_147 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_148 = torch.ops.aten.empty.memory_format([add_374, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_96 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 106, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_367, 'k_ptr': getitem_368, 'v_ptr': view_333, 'o_ptr': empty_147, 'l_ptr': empty_148, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_367 = getitem_368 = view_333 = empty_147 = empty_148 = None
+        triton_kernel_wrapper_functional_proxy_96 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 106, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_367, 'k_ptr': getitem_368, 'v_ptr': view_333, 'o_ptr': empty_147, 'l_ptr': empty_148, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  getitem_367 = getitem_368 = view_333 = empty_147 = empty_148 = None
         getitem_369 = triton_kernel_wrapper_functional_proxy_96['o_ptr']
         getitem_370 = triton_kernel_wrapper_functional_proxy_96['l_ptr'];  triton_kernel_wrapper_functional_proxy_96 = getitem_370 = None
         view_334 = torch.ops.aten.view.default(getitem_369, [-1, 512]);  getitem_369 = None
@@ -6146,7 +6146,7 @@ class Repro(torch.nn.Module):
         add_403 = torch.ops.aten.add.Tensor(addmm_383, getitem_364);  addmm_383 = getitem_364 = None
         empty_149 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_828 = torch.ops.aten.permute.default(empty_149, [0, 1]);  empty_149 = None
-        triton_kernel_wrapper_functional_proxy_97 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 107, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_403, 'y_ptr': permute_828, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_403 = permute_828 = None
+        triton_kernel_wrapper_functional_proxy_97 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 107, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_403, 'y_ptr': permute_828, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_403 = permute_828 = None
         getitem_371 = triton_kernel_wrapper_functional_proxy_97['y_ptr'];  triton_kernel_wrapper_functional_proxy_97 = None
         convert_element_type_1594 = torch.ops.prims.convert_element_type.default(getitem_371, torch.float32)
         var_mean_126 = torch.ops.aten.var_mean.correction(convert_element_type_1594, [1], correction = 0, keepdim = True)
@@ -6162,7 +6162,7 @@ class Repro(torch.nn.Module):
         empty_150 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_151 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_152 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_98 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 108, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1595, 'w_g_ptr': arg1419_1, 'w_fc_ptr': arg1420_1, 'b_g_ptr': arg1421_1, 'b_fc_ptr': arg1422_1, 'y_ptr': empty_152, 'g_ptr': empty_150, 'fc_ptr': empty_151, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1595 = arg1419_1 = arg1420_1 = arg1421_1 = arg1422_1 = empty_152 = empty_150 = empty_151 = None
+        triton_kernel_wrapper_functional_proxy_98 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 108, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1595, 'w_g_ptr': arg1419_1, 'w_fc_ptr': arg1420_1, 'b_g_ptr': arg1421_1, 'b_fc_ptr': arg1422_1, 'y_ptr': empty_152, 'g_ptr': empty_150, 'fc_ptr': empty_151, 'M': add_374}, tensors_to_clone = ['y_ptr']);  convert_element_type_1595 = arg1419_1 = arg1420_1 = arg1421_1 = arg1422_1 = empty_152 = empty_150 = empty_151 = None
         getitem_374 = triton_kernel_wrapper_functional_proxy_98['y_ptr'];  triton_kernel_wrapper_functional_proxy_98 = None
         convert_element_type_1596 = torch.ops.prims.convert_element_type.default(arg1424_1, torch.float32);  convert_element_type_1596 = None
         convert_element_type_1597 = torch.ops.prims.convert_element_type.default(getitem_374, torch.float32);  convert_element_type_1597 = None
@@ -6171,7 +6171,7 @@ class Repro(torch.nn.Module):
         add_406 = torch.ops.aten.add.Tensor(addmm_384, getitem_371);  addmm_384 = getitem_371 = None
         empty_153 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_831 = torch.ops.aten.permute.default(empty_153, [0, 1]);  empty_153 = None
-        triton_kernel_wrapper_functional_proxy_99 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 109, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_406, 'y_ptr': permute_831, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_406 = permute_831 = None
+        triton_kernel_wrapper_functional_proxy_99 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 109, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_406, 'y_ptr': permute_831, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_406 = permute_831 = None
         getitem_375 = triton_kernel_wrapper_functional_proxy_99['y_ptr'];  triton_kernel_wrapper_functional_proxy_99 = None
         convert_element_type_1599 = torch.ops.prims.convert_element_type.default(getitem_375, torch.float32)
         var_mean_127 = torch.ops.aten.var_mean.correction(convert_element_type_1599, [1], correction = 0, keepdim = True)
@@ -6200,14 +6200,14 @@ class Repro(torch.nn.Module):
         view_336 = torch.ops.aten.view.default(addmm_386, [-1, 8, 64]);  addmm_386 = None
         view_337 = torch.ops.aten.view.default(addmm_387, [-1, 8, 64]);  addmm_387 = None
         empty_154 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_100 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 110, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_335, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_154}, tensors_to_clone = ['out_ptr']);  view_335 = empty_154 = None
+        triton_kernel_wrapper_functional_proxy_100 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 110, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_335, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_154}, tensors_to_clone = ['out_ptr']);  view_335 = empty_154 = None
         getitem_378 = triton_kernel_wrapper_functional_proxy_100['out_ptr'];  triton_kernel_wrapper_functional_proxy_100 = None
         empty_155 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_101 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 111, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_336, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_155}, tensors_to_clone = ['out_ptr']);  view_336 = empty_155 = None
+        triton_kernel_wrapper_functional_proxy_101 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 111, grid = [(floordiv_26, arg151_1, 8)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_336, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_155}, tensors_to_clone = ['out_ptr']);  view_336 = empty_155 = None
         getitem_379 = triton_kernel_wrapper_functional_proxy_101['out_ptr'];  triton_kernel_wrapper_functional_proxy_101 = None
         empty_156 = torch.ops.aten.empty.memory_format([add_374, 8, 64], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_157 = torch.ops.aten.empty.memory_format([add_374, 8], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_102 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 112, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_378, 'k_ptr': getitem_379, 'v_ptr': view_337, 'o_ptr': empty_156, 'l_ptr': empty_157, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_27 = getitem_378 = getitem_379 = view_337 = empty_156 = empty_157 = None
+        triton_kernel_wrapper_functional_proxy_102 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 112, grid = [(floordiv_27, 8, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_378, 'k_ptr': getitem_379, 'v_ptr': view_337, 'o_ptr': empty_156, 'l_ptr': empty_157, 'q_attn_arg_ptr': getitem_328, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': add_375, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_27 = getitem_378 = getitem_379 = view_337 = empty_156 = empty_157 = None
         getitem_380 = triton_kernel_wrapper_functional_proxy_102['o_ptr']
         getitem_381 = triton_kernel_wrapper_functional_proxy_102['l_ptr'];  triton_kernel_wrapper_functional_proxy_102 = getitem_381 = None
         view_338 = torch.ops.aten.view.default(getitem_380, [-1, 512]);  getitem_380 = None
@@ -6218,7 +6218,7 @@ class Repro(torch.nn.Module):
         add_409 = torch.ops.aten.add.Tensor(addmm_388, getitem_375);  addmm_388 = getitem_375 = None
         empty_158 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_840 = torch.ops.aten.permute.default(empty_158, [0, 1]);  empty_158 = None
-        triton_kernel_wrapper_functional_proxy_103 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 113, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_409, 'y_ptr': permute_840, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_409 = permute_840 = None
+        triton_kernel_wrapper_functional_proxy_103 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 113, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_409, 'y_ptr': permute_840, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  add_409 = permute_840 = None
         getitem_382 = triton_kernel_wrapper_functional_proxy_103['y_ptr'];  triton_kernel_wrapper_functional_proxy_103 = None
         convert_element_type_1613 = torch.ops.prims.convert_element_type.default(getitem_382, torch.float32)
         var_mean_128 = torch.ops.aten.var_mean.correction(convert_element_type_1613, [1], correction = 0, keepdim = True)
@@ -6234,7 +6234,7 @@ class Repro(torch.nn.Module):
         empty_159 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_160 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_161 = torch.ops.aten.empty.memory_format([add_374, 1024], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
-        triton_kernel_wrapper_functional_proxy_104 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 114, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1614, 'w_g_ptr': arg1437_1, 'w_fc_ptr': arg1438_1, 'b_g_ptr': arg1439_1, 'b_fc_ptr': arg1440_1, 'y_ptr': empty_161, 'g_ptr': empty_159, 'fc_ptr': empty_160, 'M': add_374}, tensors_to_clone = ['y_ptr']);  mul_452 = convert_element_type_1614 = arg1437_1 = arg1438_1 = arg1439_1 = arg1440_1 = empty_161 = empty_159 = empty_160 = None
+        triton_kernel_wrapper_functional_proxy_104 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 114, grid = [(mul_452, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1614, 'w_g_ptr': arg1437_1, 'w_fc_ptr': arg1438_1, 'b_g_ptr': arg1439_1, 'b_fc_ptr': arg1440_1, 'y_ptr': empty_161, 'g_ptr': empty_159, 'fc_ptr': empty_160, 'M': add_374}, tensors_to_clone = ['y_ptr']);  mul_452 = convert_element_type_1614 = arg1437_1 = arg1438_1 = arg1439_1 = arg1440_1 = empty_161 = empty_159 = empty_160 = None
         getitem_385 = triton_kernel_wrapper_functional_proxy_104['y_ptr'];  triton_kernel_wrapper_functional_proxy_104 = None
         convert_element_type_1615 = torch.ops.prims.convert_element_type.default(arg1442_1, torch.float32);  convert_element_type_1615 = None
         convert_element_type_1616 = torch.ops.prims.convert_element_type.default(getitem_385, torch.float32);  convert_element_type_1616 = None
@@ -6243,7 +6243,7 @@ class Repro(torch.nn.Module):
         add_412 = torch.ops.aten.add.Tensor(addmm_389, getitem_382);  addmm_389 = getitem_382 = None
         empty_162 = torch.ops.aten.empty.memory_format([add_374, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         permute_843 = torch.ops.aten.permute.default(empty_162, [0, 1]);  empty_162 = None
-        triton_kernel_wrapper_functional_proxy_105 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 115, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_412, 'y_ptr': permute_843, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  floordiv_28 = add_412 = permute_843 = sym_sum_5 = None
+        triton_kernel_wrapper_functional_proxy_105 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 115, grid = [(floordiv_28, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_412, 'y_ptr': permute_843, 'n_elements': sym_sum_5}, tensors_to_clone = ['y_ptr']);  floordiv_28 = add_412 = permute_843 = sym_sum_5 = None
         getitem_386 = triton_kernel_wrapper_functional_proxy_105['y_ptr'];  triton_kernel_wrapper_functional_proxy_105 = None
         index_42 = torch.ops.aten.index.Tensor(getitem_386, [squeeze_43])
         convert_element_type_1618 = torch.ops.prims.convert_element_type.default(getitem_386, torch.float32);  getitem_386 = None
@@ -6293,17 +6293,17 @@ class Repro(torch.nn.Module):
         add_415 = _local_scalar_dense_5 + 16
         sub_178 = add_415 - 1;  add_415 = None
         floordiv_30 = sub_178 // 16;  sub_178 = None
-        triton_kernel_wrapper_functional_proxy_106 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 116, grid = [(floordiv_30, arg151_1, 16)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_339, 'pos_ptr': index_45, 'cu_seqlens': index_44, 'out_ptr': empty_163}, tensors_to_clone = ['out_ptr']);  floordiv_30 = view_339 = index_45 = empty_163 = None
+        triton_kernel_wrapper_functional_proxy_106 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 116, grid = [(floordiv_30, arg151_1, 16)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_339, 'pos_ptr': index_45, 'cu_seqlens': index_44, 'out_ptr': empty_163}, tensors_to_clone = ['out_ptr']);  floordiv_30 = view_339 = index_45 = empty_163 = None
         getitem_389 = triton_kernel_wrapper_functional_proxy_106['out_ptr'];  triton_kernel_wrapper_functional_proxy_106 = None
         empty_164 = torch.ops.aten.empty.memory_format([add_374, 16, 32], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False);  add_374 = None
-        triton_kernel_wrapper_functional_proxy_107 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 6, constant_args_idx = 117, grid = [(floordiv_26, arg151_1, 16)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_340, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_164}, tensors_to_clone = ['out_ptr']);  floordiv_26 = view_340 = getitem_327 = empty_164 = None
+        triton_kernel_wrapper_functional_proxy_107 = launch_model_kernel(kernel_idx = 6, constant_args_idx = 117, grid = [(floordiv_26, arg151_1, 16)], tma_descriptor_metadata = {}, kwargs = {'in_ptr': view_340, 'pos_ptr': getitem_327, 'cu_seqlens': add_375, 'out_ptr': empty_164}, tensors_to_clone = ['out_ptr']);  floordiv_26 = view_340 = getitem_327 = empty_164 = None
         getitem_390 = triton_kernel_wrapper_functional_proxy_107['out_ptr'];  triton_kernel_wrapper_functional_proxy_107 = None
         empty_165 = torch.ops.aten.empty.memory_format([mul_443, 16, 32], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         empty_166 = torch.ops.aten.empty.memory_format([mul_443, 16], dtype = torch.float32, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False)
         add_416 = _local_scalar_dense_5 + 128;  _local_scalar_dense_5 = None
         sub_179 = add_416 - 1;  add_416 = None
         floordiv_31 = sub_179 // 128;  sub_179 = None
-        triton_kernel_wrapper_functional_proxy_108 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 3, constant_args_idx = 118, grid = [(floordiv_31, 16, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_389, 'k_ptr': getitem_390, 'v_ptr': view_341, 'o_ptr': empty_165, 'l_ptr': empty_166, 'q_attn_arg_ptr': index_46, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': index_44, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_31 = arg151_1 = getitem_389 = getitem_390 = view_341 = empty_165 = empty_166 = index_46 = getitem_328 = index_44 = add_375 = None
+        triton_kernel_wrapper_functional_proxy_108 = launch_model_kernel(kernel_idx = 3, constant_args_idx = 118, grid = [(floordiv_31, 16, arg151_1)], tma_descriptor_metadata = {}, kwargs = {'q_ptr': getitem_389, 'k_ptr': getitem_390, 'v_ptr': view_341, 'o_ptr': empty_165, 'l_ptr': empty_166, 'q_attn_arg_ptr': index_46, 'k_attn_arg_ptr': getitem_328, 'cu_seqlens_q': index_44, 'cu_seqlens_k': add_375}, tensors_to_clone = ['o_ptr', 'l_ptr']);  floordiv_31 = arg151_1 = getitem_389 = getitem_390 = view_341 = empty_165 = empty_166 = index_46 = getitem_328 = index_44 = add_375 = None
         getitem_391 = triton_kernel_wrapper_functional_proxy_108['o_ptr']
         getitem_392 = triton_kernel_wrapper_functional_proxy_108['l_ptr'];  triton_kernel_wrapper_functional_proxy_108 = getitem_392 = None
         view_342 = torch.ops.aten.view.default(getitem_391, [-1, 512]);  getitem_391 = None
@@ -6317,7 +6317,7 @@ class Repro(torch.nn.Module):
         add_418 = mul_449 + 2048
         sub_180 = add_418 - 1;  add_418 = None
         floordiv_32 = sub_180 // 2048;  sub_180 = None
-        triton_kernel_wrapper_functional_proxy_109 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 119, grid = [(floordiv_32, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_417, 'y_ptr': permute_852, 'n_elements': mul_449}, tensors_to_clone = ['y_ptr']);  add_417 = permute_852 = None
+        triton_kernel_wrapper_functional_proxy_109 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 119, grid = [(floordiv_32, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_417, 'y_ptr': permute_852, 'n_elements': mul_449}, tensors_to_clone = ['y_ptr']);  add_417 = permute_852 = None
         getitem_393 = triton_kernel_wrapper_functional_proxy_109['y_ptr'];  triton_kernel_wrapper_functional_proxy_109 = None
         convert_element_type_1634 = torch.ops.prims.convert_element_type.default(getitem_393, torch.float32)
         var_mean_130 = torch.ops.aten.var_mean.correction(convert_element_type_1634, [1], correction = 0, keepdim = True)
@@ -6337,7 +6337,7 @@ class Repro(torch.nn.Module):
         sub_182 = add_421 - 1;  add_421 = None
         floordiv_33 = sub_182 // 128;  sub_182 = None
         mul_473 = floordiv_33 * 16;  floordiv_33 = None
-        triton_kernel_wrapper_functional_proxy_110 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 5, constant_args_idx = 120, grid = [(mul_473, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1635, 'w_g_ptr': arg1455_1, 'w_fc_ptr': arg1456_1, 'b_g_ptr': arg1457_1, 'b_fc_ptr': arg1458_1, 'y_ptr': empty_170, 'g_ptr': empty_168, 'fc_ptr': empty_169, 'M': mul_443}, tensors_to_clone = ['y_ptr']);  mul_473 = convert_element_type_1635 = arg1455_1 = arg1456_1 = arg1457_1 = arg1458_1 = empty_170 = empty_168 = empty_169 = None
+        triton_kernel_wrapper_functional_proxy_110 = launch_model_kernel(kernel_idx = 5, constant_args_idx = 120, grid = [(mul_473, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': convert_element_type_1635, 'w_g_ptr': arg1455_1, 'w_fc_ptr': arg1456_1, 'b_g_ptr': arg1457_1, 'b_fc_ptr': arg1458_1, 'y_ptr': empty_170, 'g_ptr': empty_168, 'fc_ptr': empty_169, 'M': mul_443}, tensors_to_clone = ['y_ptr']);  mul_473 = convert_element_type_1635 = arg1455_1 = arg1456_1 = arg1457_1 = arg1458_1 = empty_170 = empty_168 = empty_169 = None
         getitem_396 = triton_kernel_wrapper_functional_proxy_110['y_ptr'];  triton_kernel_wrapper_functional_proxy_110 = None
         convert_element_type_1636 = torch.ops.prims.convert_element_type.default(arg1460_1, torch.float32);  convert_element_type_1636 = None
         convert_element_type_1637 = torch.ops.prims.convert_element_type.default(getitem_396, torch.float32);  convert_element_type_1637 = None
@@ -6346,7 +6346,7 @@ class Repro(torch.nn.Module):
         add_422 = torch.ops.aten.add.Tensor(addmm_394, getitem_393);  addmm_394 = getitem_393 = None
         empty_171 = torch.ops.aten.empty.memory_format([mul_443, 512], dtype = torch.float16, layout = torch.strided, device = device(type='npu', index=0), pin_memory = False);  mul_443 = None
         permute_855 = torch.ops.aten.permute.default(empty_171, [0, 1]);  empty_171 = None
-        triton_kernel_wrapper_functional_proxy_111 = torch.ops.higher_order.triton_kernel_wrapper_functional(kernel_idx = 4, constant_args_idx = 121, grid = [(floordiv_32, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_422, 'y_ptr': permute_855, 'n_elements': mul_449}, tensors_to_clone = ['y_ptr']);  floordiv_32 = add_422 = permute_855 = mul_449 = None
+        triton_kernel_wrapper_functional_proxy_111 = launch_model_kernel(kernel_idx = 4, constant_args_idx = 121, grid = [(floordiv_32, 1, 1)], tma_descriptor_metadata = {}, kwargs = {'x_ptr': add_422, 'y_ptr': permute_855, 'n_elements': mul_449}, tensors_to_clone = ['y_ptr']);  floordiv_32 = add_422 = permute_855 = mul_449 = None
         getitem_397 = triton_kernel_wrapper_functional_proxy_111['y_ptr'];  triton_kernel_wrapper_functional_proxy_111 = None
         view_343 = torch.ops.aten.view.default(getitem_397, [-1, 1024]);  getitem_397 = None
         full_50 = torch.ops.aten.full.default([arg0_1, 1024], 0, dtype = torch.float16, layout = torch.strided, device = device(type='cpu'), pin_memory = False);  full_50 = None

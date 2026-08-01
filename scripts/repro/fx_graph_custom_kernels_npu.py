@@ -567,6 +567,64 @@ def _build_constant_args():
     return constants
 
 
+_MODEL_CONSTANT_ARGS = _build_constant_args()
+
+
+def launch_model_kernel(
+    *,
+    kernel_idx,
+    constant_args_idx,
+    grid,
+    tma_descriptor_metadata,
+    kwargs,
+    tensors_to_clone,
+):
+    if tma_descriptor_metadata:
+        raise RuntimeError("TMA descriptors are not supported by this runnable")
+
+    if kernel_idx == 0:
+        kernel = position_offset_kernel
+
+        def launch_grid(meta):
+            if meta["BLOCK"] == 128:
+                return grid[0]
+            if meta["BLOCK"] == 256:
+                return grid[1]
+            if meta["BLOCK"] == 512:
+                return grid[2]
+            return grid[3]
+
+    elif kernel_idx == 1:
+        kernel = nested_concat_kernel
+
+        def launch_grid(meta):
+            return (meta["NUM_SM"], 1, 1)
+
+    elif kernel_idx == 2:
+        kernel = position_concat_kernel
+
+        def launch_grid(meta):
+            return (meta["NUM_SM"], 1, 1)
+
+    elif kernel_idx == 3:
+        kernel = flash_attention_kernel
+        launch_grid = grid[0]
+    elif kernel_idx == 4:
+        kernel = softcap_kernel
+        launch_grid = grid[0]
+    elif kernel_idx == 5:
+        kernel = fused_swiglu_kernel
+        launch_grid = grid[0]
+    elif kernel_idx == 6:
+        kernel = rope_kernel
+        launch_grid = grid[0]
+    else:
+        raise RuntimeError(f"unknown model kernel index: {kernel_idx}")
+
+    kernel[launch_grid](**kwargs, **_MODEL_CONSTANT_ARGS[constant_args_idx])
+    return {name: kwargs[name] for name in tensors_to_clone}
+
+
 def register_model_kernels():
     kernels = (
         position_offset_kernel,
@@ -582,4 +640,3 @@ def register_model_kernels():
         actual_index = kernel_side_table.add_kernel(kernel)
         if actual_index != expected_index:
             raise RuntimeError(f"kernel index mismatch: expected {expected_index}, got {actual_index}")
-    kernel_side_table.constant_args = _build_constant_args()
