@@ -11,6 +11,10 @@ os.environ.setdefault("TORCHINDUCTOR_MAX_AUTOTUNE_GEMM_BACKENDS", "ATen")
 
 import torch
 import torch_npu
+from torch_npu.utils._dynamo import register_inductor_npu
+
+register_inductor_npu()
+
 from torch import tensor, device
 import torch.fx as fx
 from torch._dynamo.testing import rand_strided
