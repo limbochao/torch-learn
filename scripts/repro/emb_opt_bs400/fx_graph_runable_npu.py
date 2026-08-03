@@ -20,7 +20,7 @@ def parse_args():
 SCRIPT_ARGS = parse_args()
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SCRIPTS_DIR = os.path.dirname(SCRIPT_DIR)
+SCRIPTS_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 os.environ[GROUP_AUTOTUNE_ENV] = "1" if SCRIPT_ARGS.execution == "dynamic" else "0"

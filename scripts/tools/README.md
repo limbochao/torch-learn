@@ -2,6 +2,19 @@
 
 本目录存放可被测试、复现和分析脚本复用的辅助工具。
 
+## Triton kernel extraction
+
+`extract_triton_kernel.py` 从 Inductor `output_code.py` 抽取一个独立 Triton kernel 文件。传入生成文件和 kernel 变量名；同一 kernel 有多次 `.run(...)` 调用时，只使用第一次调用的参数：
+
+```bash
+python scripts/tools/extract_triton_kernel.py \
+  /path/to/output_code.py \
+  triton_poi_fused_add_0 \
+  -o /path/to/triton_poi_fused_add_0.py
+```
+
+输出包括公共导入、Triton DSL、`async_compile.wait(...)`、从 `benchmark_compiled_module` 提取的输入，以及首次调用依赖的局部变量和 launch 语句。未指定 `-o` 时写到当前目录的 `<kernel_name>.py`。
+
 ## CUDA profiler
 
 `cuda_profiler.py` 提供 `TorchCudaProfiler` 采集 PyTorch CUDA profiler Chrome Trace，并通过
