@@ -142,6 +142,103 @@ _QIANCHUAN_META.impl("fused_swiglu", _fused_swiglu_meta)
 _QIANCHUAN_META.impl("rope", _rope_meta)
 
 
+# The captured output keeps these as external calls, so fallbacks only preserve downstream shape contracts.
+def _ascend_create_position_offset_placeholder(position, offsets):
+    return offsets.new_zeros((offsets.shape[0] - 1,))
+
+
+def _ascend_seq_tensor_concat_placeholder(first, second, first_offsets, second_offsets):
+    return torch.cat((first, second), dim=0)
+
+
+def _ascend_position_concat_placeholder(first, second, first_offsets, second_offsets, position_offsets):
+    return torch.cat((first, second), dim=0)
+
+
+def _ascend_flash_attention_placeholder(
+    query,
+    key,
+    value,
+    query_seq,
+    key_seq,
+    query_offsets,
+    key_offsets,
+    max_query_len,
+    max_key_len,
+    scale,
+    layout,
+):
+    return query.clone(memory_format=torch.contiguous_format)
+
+
+def _ascend_create_position_offset_meta(position, offsets):
+    return offsets.new_empty((offsets.shape[0] - 1,))
+
+
+def _ascend_seq_tensor_concat_meta(first, second, first_offsets, second_offsets):
+    return first.new_empty((first.shape[0] + second.shape[0], *first.shape[1:]))
+
+
+def _ascend_position_concat_meta(first, second, first_offsets, second_offsets, position_offsets):
+    return first.new_empty((first.shape[0] + second.shape[0],))
+
+
+def _ascend_flash_attention_meta(
+    query,
+    key,
+    value,
+    query_seq,
+    key_seq,
+    query_offsets,
+    key_offsets,
+    max_query_len,
+    max_key_len,
+    scale,
+    layout,
+):
+    return query.new_empty(query.shape)
+
+
+_ASCEND_TRITON_SCHEMAS = {
+    "ascend_create_position_offset": "ascend_create_position_offset(Tensor position, Tensor offsets) -> Tensor",
+    "ascend_seq_tensor_concat": (
+        "ascend_seq_tensor_concat(Tensor first, Tensor second, Tensor first_offsets, Tensor second_offsets) -> Tensor"
+    ),
+    "ascend_position_concat": (
+        "ascend_position_concat(Tensor first, Tensor second, Tensor first_offsets, Tensor second_offsets, "
+        "Tensor position_offsets) -> Tensor"
+    ),
+    "ascend_flash_attention": (
+        "ascend_flash_attention(Tensor query, Tensor key, Tensor value, Tensor query_seq, Tensor key_seq, "
+        "Tensor query_offsets, Tensor key_offsets, SymInt max_query_len, SymInt max_key_len, float scale, "
+        "int layout) -> Tensor"
+    ),
+}
+_ASCEND_TRITON_NPU_IMPLS = {
+    "ascend_create_position_offset": _ascend_create_position_offset_placeholder,
+    "ascend_seq_tensor_concat": _ascend_seq_tensor_concat_placeholder,
+    "ascend_position_concat": _ascend_position_concat_placeholder,
+    "ascend_flash_attention": _ascend_flash_attention_placeholder,
+}
+_ASCEND_TRITON_META_IMPLS = {
+    "ascend_create_position_offset": _ascend_create_position_offset_meta,
+    "ascend_seq_tensor_concat": _ascend_seq_tensor_concat_meta,
+    "ascend_position_concat": _ascend_position_concat_meta,
+    "ascend_flash_attention": _ascend_flash_attention_meta,
+}
+_MISSING_ASCEND_TRITON_OPS = [
+    name for name in _ASCEND_TRITON_SCHEMAS if not hasattr(torch.ops.ascend_triton, name)
+]
+if _MISSING_ASCEND_TRITON_OPS:
+    _ASCEND_TRITON_DEF = torch.library.Library("ascend_triton", "FRAGMENT")
+    _ASCEND_TRITON_NPU = torch.library.Library("ascend_triton", "IMPL", "PrivateUse1")
+    _ASCEND_TRITON_META = torch.library.Library("ascend_triton", "IMPL", "Meta")
+    for _op_name in _MISSING_ASCEND_TRITON_OPS:
+        _ASCEND_TRITON_DEF.define(_ASCEND_TRITON_SCHEMAS[_op_name])
+        _ASCEND_TRITON_NPU.impl(_op_name, _ASCEND_TRITON_NPU_IMPLS[_op_name])
+        _ASCEND_TRITON_META.impl(_op_name, _ASCEND_TRITON_META_IMPLS[_op_name])
+
+
 class ShapeHint(int):
     def __new__(cls, value, symbol):
         hint = super().__new__(cls, value)
