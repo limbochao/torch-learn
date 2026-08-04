@@ -142,17 +142,44 @@ _QIANCHUAN_META.impl("fused_swiglu", _fused_swiglu_meta)
 _QIANCHUAN_META.impl("rope", _rope_meta)
 
 
-# The captured output keeps these as external calls, so fallbacks only preserve downstream shape contracts.
+# The captured NPU output keeps these as external calls. Reproduce the CUDA sequence mapping with NPU tensor ops.
 def _ascend_create_position_offset_placeholder(position, offsets):
-    return offsets.new_zeros((offsets.shape[0] - 1,))
+    position = position.reshape(-1)
+    begins = offsets[:-1]
+    ends = offsets[1:]
+    last_positions = position[torch.clamp(ends - 1, min=0)]
+    return torch.where(begins == ends, torch.zeros_like(last_positions), last_positions + 1)
+
+
+def _nested_sequence_concat(first, second, first_offsets, second_offsets, position_offsets=None):
+    row_shape = first.shape[1:]
+    first = first.reshape(first.shape[0], *row_shape)
+    second = second.reshape(second.shape[0], *row_shape)
+    output = first.new_empty((first.shape[0] + second.shape[0], *row_shape))
+    first_offsets = first_offsets.detach().cpu().tolist()
+    second_offsets = second_offsets.detach().cpu().tolist()
+
+    for index in range(len(first_offsets) - 1):
+        first_begin, first_end = first_offsets[index : index + 2]
+        second_begin, second_end = second_offsets[index : index + 2]
+        output_begin = first_begin + second_begin
+        output[output_begin : first_end + second_begin].copy_(first[first_begin:first_end])
+
+        output_begin = first_end + second_begin
+        second_segment = second[second_begin:second_end]
+        if position_offsets is not None:
+            second_segment = second_segment + position_offsets[index]
+        output[output_begin : first_end + second_end].copy_(second_segment)
+
+    return output
 
 
 def _ascend_seq_tensor_concat_placeholder(first, second, first_offsets, second_offsets):
-    return torch.cat((first, second), dim=0)
+    return _nested_sequence_concat(first, second, first_offsets, second_offsets)
 
 
 def _ascend_position_concat_placeholder(first, second, first_offsets, second_offsets, position_offsets):
-    return torch.cat((first, second), dim=0)
+    return _nested_sequence_concat(first, second, first_offsets, second_offsets, position_offsets)
 
 
 def _ascend_flash_attention_placeholder(

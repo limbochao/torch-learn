@@ -5,10 +5,11 @@
 symbolic group autotune 和 NPU profile。
 
 原模型依赖的 `qianchuan_triton` 算子在本地没有原始实现。主脚本通过 `torch.library` 注册同名的确定性 NPU
-占位算子。`ascend_triton` 的 4 个算子则仅在运行环境没有原始注册时使用占位实现。占位实现保留
-external/fallback 边界及输出 shape、dtype、device，其中 concat 类算子只保证拼接后的长度，不复现原模型的
-sequence interleave 语义；flash attention 直接复制 query。因此该脚本用于分析 Inductor 生成 kernel 的
-dynamic/group 行为，不能用于整网正确性验证，也不能把占位算子耗时当作原模型耗时。
+占位算子。`ascend_triton` 的 4 个算子则仅在运行环境没有原始注册时使用占位实现。sequence concat 相关实现
+参考 CUDA 产物，使用 offsets 按 batch 交错复制两个输入；flash attention 直接复制 query。它们保留
+external/fallback 边界及输出 shape、dtype、device，但没有复现原始自定义 kernel 的性能。因此该脚本用于
+分析 Inductor 生成 kernel 的 dynamic/group 行为，不能用于整网正确性验证，也不能把占位算子耗时当作原模型
+耗时。
 
 ## 运行整图
 
