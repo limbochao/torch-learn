@@ -9,7 +9,8 @@ symbolic group autotune 和 NPU profile。
 参考 CUDA 产物，使用 offsets 按 batch 交错复制两个输入；flash attention 直接复制 query。它们保留
 external/fallback 边界及输出 shape、dtype、device，但没有复现原始自定义 kernel 的性能。因此该脚本用于
 分析 Inductor 生成 kernel 的 dynamic/group 行为，不能用于整网正确性验证，也不能把占位算子耗时当作原模型
-耗时。
+耗时。由于原始 storage 未保存，脚本会将 `arg147` 的 7 组序列长度替换为均匀分配且总和为当前 batch size
+的确定性值，避免随机输入破坏 sequence concat 后续的 shape guard。
 
 ## 运行整图
 

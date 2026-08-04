@@ -174,6 +174,12 @@ def _nested_sequence_concat(first, second, first_offsets, second_offsets, positi
     return output
 
 
+def _balanced_sequence_lengths(template, total):
+    group_count = template.numel()
+    base, remainder = divmod(total, group_count)
+    return template.new_tensor([base + (index < remainder) for index in range(group_count)])
+
+
 def _ascend_seq_tensor_concat_placeholder(first, second, first_offsets, second_offsets):
     return _nested_sequence_concat(first, second, first_offsets, second_offsets)
 
@@ -8893,6 +8899,8 @@ def main():
     symbolic = SCRIPT_ARGS.execution != "static"
     reader = SymbolicInputReader(InputReader(save_dir=None), mark_dynamic_dims=symbolic)
     load_args(reader)
+    # arg147 contains seven sequence lengths; random values violate the captured graph's sum(lengths) == bs guard.
+    reader.args[147] = _balanced_sequence_lengths(reader.args[147], SCRIPT_ARGS.bs)
     args = reader.args
     compile_dynamic = False if SCRIPT_ARGS.execution == "static" else None
     print(
