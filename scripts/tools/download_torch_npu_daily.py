@@ -18,9 +18,9 @@
 * ``--list-builds N``：列出分支最近 N 个日构建号后退出，N 必须为正整数，默认关闭；仅适用于
   ``--source daily``。
 * ``--resolve-only``：只打印选中的对象信息和下载 URL，不下载文件，默认关闭。
-* ``--endpoint``：OBS endpoint，默认
-  ``https://pytorch-package.obs.cn-north-4.myhuaweicloud.com``。这是隐藏的调试配置。
 * ``--timeout``：单次 OBS 请求超时秒数，接受浮点数，默认 ``30.0``。这是隐藏的调试配置。
+
+HTTPS 请求默认不校验证书，行为等价于 ``curl -k``，用于兼容代理注入自签名证书的环境。
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ import argparse
 import os
 import platform
 import re
+import ssl
 import sys
 import tempfile
 import urllib.error
@@ -75,14 +76,17 @@ def build_sort_key(build: str) -> tuple[int, int]:
 
 
 class ObsClient:
-    def __init__(self, endpoint: str = DEFAULT_ENDPOINT, timeout: float = 30.0) -> None:
-        self.endpoint = endpoint.rstrip("/")
+    def __init__(self, timeout: float = 30.0) -> None:
+        self.endpoint = DEFAULT_ENDPOINT
         self.timeout = timeout
+        self.ssl_context = ssl.create_default_context()
+        self.ssl_context.check_hostname = False
+        self.ssl_context.verify_mode = ssl.CERT_NONE
 
     def _open(self, url: str):
         request = urllib.request.Request(url, headers={"User-Agent": "torch-npu-build-downloader/1.0"})
         try:
-            return urllib.request.urlopen(request, timeout=self.timeout)
+            return urllib.request.urlopen(request, timeout=self.timeout, context=self.ssl_context)
         except urllib.error.HTTPError as error:
             raise BuildError(f"OBS request failed with HTTP {error.code}: {url}") from error
         except urllib.error.URLError as error:
@@ -227,7 +231,6 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list-branches", action="store_true", help="list branches and exit")
     parser.add_argument("--list-builds", type=int, metavar="N", help="list the newest N daily build IDs and exit")
     parser.add_argument("--resolve-only", action="store_true", help="print the selected URL without downloading")
-    parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help=argparse.SUPPRESS)
     parser.add_argument("--timeout", type=float, default=30.0, help=argparse.SUPPRESS)
     return parser
 
@@ -235,7 +238,7 @@ def create_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
-    client = ObsClient(args.endpoint, args.timeout)
+    client = ObsClient(args.timeout)
     try:
         if args.list_branches:
             print("\n".join(list_branches(client, args.source)))
