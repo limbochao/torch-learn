@@ -1,5 +1,27 @@
 #!/usr/bin/env python3
-"""Discover and download public torch_npu branch builds from Huawei OBS."""
+"""从华为云 OBS 查询并下载 torch_npu 分支对应的 PyTorch 构建包。
+
+命令行配置：
+
+* ``branch``：torch_npu 分支名，例如 ``master``、``v2.7.1``。无默认值；除使用
+  ``--list-branches`` 外均为必填。
+* ``--source``：构建来源，可选 ``daily``、``cache``，默认 ``daily``。``daily`` 保留带构建号的
+  历史日构建；``cache`` 是按分支滚动更新的最新缓存。
+* ``--build``：日构建号，可选 ``latest`` 或 ``YYYYMMDD.N`` 格式，默认 ``latest``。仅适用于
+  ``--source daily``；``latest`` 会选择包含目标 Python 包的最新构建。
+* ``--python-version``：目标 Python 版本，支持 ``3.11``、``311``、``python311`` 等写法，默认使用
+  当前运行脚本的 Python 主次版本。
+* ``--arch``：目标架构，通常为 ``x86_64`` 或 ``aarch64``，默认使用当前机器架构。``amd64``、``x64``
+  会转换为 ``x86_64``，``arm64`` 会转换为 ``aarch64``；仅适用于 ``--source cache``。
+* ``--output-dir``：下载目录，默认当前工作目录。
+* ``--list-branches``：列出指定 source 下的可用分支后退出，默认关闭；使用时无需提供 ``branch``。
+* ``--list-builds N``：列出分支最近 N 个日构建号后退出，N 必须为正整数，默认关闭；仅适用于
+  ``--source daily``。
+* ``--resolve-only``：只打印选中的对象信息和下载 URL，不下载文件，默认关闭。
+* ``--endpoint``：OBS endpoint，默认
+  ``https://pytorch-package.obs.cn-north-4.myhuaweicloud.com``。这是隐藏的调试配置。
+* ``--timeout``：单次 OBS 请求超时秒数，接受浮点数，默认 ``30.0``。这是隐藏的调试配置。
+"""
 
 from __future__ import annotations
 
@@ -188,7 +210,9 @@ def resolve_cache(client: ObsClient, branch: str, python_tag: str, arch: str) ->
 
 
 def create_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Discover and download public torch_npu branch builds from Huawei OBS."
+    )
     parser.add_argument("branch", nargs="?", help="torch_npu branch, for example master or v2.7.1")
     parser.add_argument("--source", choices=("daily", "cache"), default="daily")
     parser.add_argument("--build", default="latest", help="daily build ID (YYYYMMDD.N), default: latest")
