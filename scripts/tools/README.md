@@ -2,6 +2,25 @@
 
 本目录存放可被测试、复现和分析脚本复用的辅助工具。
 
+## torch_npu 分支日构建包
+
+`download_torch_npu_daily.py` 通过公开的华为云 OBS 对象列表查询指定 torch_npu 分支的 PyTorch
+日构建包。默认选择包含当前 Python 版本的最新日构建；使用 `--resolve-only` 可以只查看下载地址：
+
+```bash
+python scripts/tools/download_torch_npu_daily.py master --python-version 3.11 --resolve-only
+```
+
+指定历史构建，或下载滚动更新的分支缓存：
+
+```bash
+python scripts/tools/download_torch_npu_daily.py v2.7.1 --build 20260804.2 --python-version 3.11
+python scripts/tools/download_torch_npu_daily.py v2.7.1 \
+  --source cache --python-version 3.11 --arch x86_64
+```
+
+使用 `--list-branches` 查看分支，使用 `BRANCH --list-builds N` 查看最近 N 个日构建。
+
 ## Triton kernel extraction
 
 `extract_triton_kernel.py` 从 Inductor `output_code.py` 抽取一个独立 Triton kernel 文件。传入生成文件和 kernel 变量名；同一 kernel 有多次 `.run(...)` 调用时，只使用第一次调用的参数：

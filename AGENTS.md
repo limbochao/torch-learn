@@ -13,7 +13,8 @@
 ## 测试脚本约定
 
 - 本仓库不承载业务代码，不设置独立的 `tests/` 单元测试目录。
-- 公共工具统一放在 `scripts/tools/`，用于支持测试、复现和分析脚本，不要求为这些工具补充单元测试。
+- 公共工具统一放在 `scripts/tools/`，用于支持测试、复现和分析脚本；工具类脚本禁止编写单元测试，
+  也禁止为其创建 `tests/`、`scripts/ut/` 等单元测试目录。
 - 功能测试、实验验证和回归测试脚本放在 `scripts/tests/`，问题复现脚本放在 `scripts/repro/`。
 - 脚本说明统一放在 `scripts/` 内，其它目录只保留引用入口，不重复维护说明。
 - Skill 自带的 `scripts/` 属于需要随 Skill 安装的 bundled resources，不纳入仓库级 `scripts/`。
