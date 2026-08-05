@@ -354,6 +354,15 @@ class Repro(torch.nn.Module):
     
     def forward(self, arg0_1, arg1_1, arg2_1, arg3_1, arg4_1, arg5_1, arg6_1, arg7_1, arg8_1, arg9_1, arg10_1, arg11_1, arg12_1, arg13_1, arg14_1, arg15_1, arg16_1, arg17_1, arg18_1, arg19_1, arg20_1, arg21_1, arg22_1, arg23_1, arg24_1, arg25_1, arg26_1, arg27_1, arg28_1, arg29_1, arg30_1, arg31_1, arg32_1, arg33_1, arg34_1, arg35_1, arg36_1, arg37_1, arg38_1, arg39_1, arg40_1, arg41_1, arg42_1, arg43_1, arg44_1, arg45_1, arg46_1, arg47_1, arg48_1, arg49_1, arg50_1, arg51_1, arg52_1, arg53_1, arg54_1, arg55_1, arg56_1, arg57_1, arg58_1, arg59_1, arg60_1, arg61_1, arg62_1, arg63_1, arg64_1, arg65_1, arg66_1, arg67_1, arg68_1, arg69_1, arg70_1, arg71_1, arg72_1, arg73_1, arg74_1, arg75_1, arg76_1, arg77_1, arg78_1, arg79_1, arg80_1, arg81_1, arg82_1, arg83_1, arg84_1, arg85_1, arg86_1, arg87_1, arg88_1, arg89_1, arg90_1, arg91_1, arg92_1, arg93_1, arg94_1, arg95_1, arg96_1, arg97_1, arg98_1, arg99_1, arg100_1, arg101_1, arg102_1, arg103_1, arg104_1, arg105_1, arg106_1, arg107_1, arg108_1, arg109_1, arg110_1, arg111_1, arg112_1, arg113_1, arg114_1, arg115_1, arg116_1, arg117_1, arg118_1, arg119_1, arg120_1, arg121_1, arg122_1, arg123_1, arg124_1, arg125_1, arg126_1, arg127_1, arg128_1, arg129_1, arg130_1, arg131_1, arg132_1, arg133_1, arg134_1, arg135_1, arg136_1, arg137_1, arg138_1, arg139_1, arg140_1, arg141_1, arg142_1, arg143_1, arg144_1, arg145_1, arg146_1, arg147_1, arg148_1, arg149_1, arg150_1, arg151_1, arg152_1, arg153_1, arg154_1, arg155_1, arg156_1, arg157_1, arg158_1, arg159_1, arg160_1, arg161_1, arg162_1, arg163_1, arg164_1, arg165_1, arg166_1, arg167_1, arg168_1, arg169_1, arg170_1, arg171_1, arg172_1, arg173_1, arg174_1, arg175_1, arg176_1, arg177_1, arg178_1, arg179_1, arg180_1, arg181_1, arg182_1, arg183_1, arg184_1, arg185_1, arg186_1, arg187_1, arg188_1, arg189_1, arg190_1, arg191_1, arg192_1, arg193_1, arg194_1, arg195_1, arg196_1, arg197_1, arg198_1, arg199_1, arg200_1, arg201_1, arg202_1, arg203_1, arg204_1, arg205_1, arg206_1, arg207_1, arg208_1, arg209_1, arg210_1, arg211_1, arg212_1, arg213_1, arg214_1, arg215_1, arg216_1, arg217_1, arg218_1, arg219_1, arg220_1, arg221_1, arg222_1, arg223_1, arg224_1, arg225_1, arg226_1, arg227_1, arg228_1, arg229_1, arg230_1, arg231_1, arg232_1, arg233_1, arg234_1, arg235_1, arg236_1, arg237_1, arg238_1, arg239_1, arg240_1, arg241_1, arg242_1, arg243_1, arg244_1, arg245_1, arg246_1, arg247_1, arg248_1, arg249_1, arg250_1, arg251_1, arg252_1, arg253_1, arg254_1, arg255_1, arg256_1, arg257_1, arg258_1, arg259_1, arg260_1, arg261_1, arg262_1, arg263_1, arg264_1, arg265_1, arg266_1, arg267_1, arg268_1, arg269_1, arg270_1, arg271_1, arg272_1, arg273_1, arg274_1, arg275_1, arg276_1, arg277_1, arg278_1, arg279_1, arg280_1, arg281_1, arg282_1, arg283_1, arg284_1, arg285_1, arg286_1, arg287_1, arg288_1, arg289_1, arg290_1, arg291_1, arg292_1, arg293_1, arg294_1, arg295_1, arg296_1, arg297_1, arg298_1, arg299_1, arg300_1, arg301_1, arg302_1, arg303_1, arg304_1, arg305_1, arg306_1, arg307_1, arg308_1, arg309_1, arg310_1, arg311_1, arg312_1, arg313_1, arg314_1, arg315_1, arg316_1, arg317_1, arg318_1, arg319_1, arg320_1, arg321_1, arg322_1, arg323_1, arg324_1, arg325_1, arg326_1, arg327_1, arg328_1, arg329_1, arg330_1, arg331_1, arg332_1, arg333_1, arg334_1, arg335_1, arg336_1, arg337_1, arg338_1, arg339_1, arg340_1, arg341_1, arg342_1, arg343_1, arg344_1, arg345_1, arg346_1, arg347_1, arg348_1, arg349_1, arg350_1, arg351_1, arg352_1, arg353_1, arg354_1, arg355_1, arg356_1, arg357_1, arg358_1, arg359_1, arg360_1, arg361_1, arg362_1, arg363_1, arg364_1, arg365_1, arg366_1, arg367_1, arg368_1, arg369_1, arg370_1, arg371_1, arg372_1, arg373_1, arg374_1, arg375_1, arg376_1, arg377_1, arg378_1, arg379_1, arg380_1, arg381_1, arg382_1, arg383_1, arg384_1, arg385_1, arg386_1, arg387_1, arg388_1, arg389_1, arg390_1, arg391_1, arg392_1, arg393_1, arg394_1, arg395_1, arg396_1, arg397_1, arg398_1, arg399_1, arg400_1, arg401_1, arg402_1, arg403_1, arg404_1, arg405_1, arg406_1, arg407_1, arg408_1, arg409_1, arg410_1, arg411_1, arg412_1, arg413_1, arg414_1, arg415_1, arg416_1, arg417_1, arg418_1, arg419_1, arg420_1, arg421_1, arg422_1, arg423_1, arg424_1, arg425_1, arg426_1, arg427_1, arg428_1, arg429_1, arg430_1, arg431_1, arg432_1, arg433_1, arg434_1, arg435_1, arg436_1, arg437_1, arg438_1, arg439_1, arg440_1, arg441_1, arg442_1, arg443_1, arg444_1, arg445_1, arg446_1, arg447_1, arg448_1, arg449_1, arg450_1, arg451_1, arg452_1, arg453_1, arg454_1, arg455_1, arg456_1, arg457_1, arg458_1, arg459_1, arg460_1, arg461_1, arg462_1, arg463_1, arg464_1, arg465_1, arg466_1, arg467_1, arg468_1, arg469_1, arg470_1, arg471_1, arg472_1, arg473_1, arg474_1, arg475_1, arg476_1, arg477_1, arg478_1, arg479_1, arg480_1, arg481_1, arg482_1, arg483_1, arg484_1, arg485_1, arg486_1, arg487_1, arg488_1, arg489_1, arg490_1, arg491_1, arg492_1, arg493_1, arg494_1, arg495_1, arg496_1, arg497_1, arg498_1, arg499_1, arg500_1, arg501_1, arg502_1, arg503_1, arg504_1, arg505_1, arg506_1, arg507_1, arg508_1, arg509_1, arg510_1, arg511_1, arg512_1, arg513_1, arg514_1, arg515_1, arg516_1, arg517_1, arg518_1, arg519_1, arg520_1, arg521_1, arg522_1, arg523_1, arg524_1, arg525_1, arg526_1, arg527_1, arg528_1, arg529_1, arg530_1, arg531_1, arg532_1, arg533_1, arg534_1, arg535_1, arg536_1, arg537_1, arg538_1, arg539_1, arg540_1, arg541_1, arg542_1, arg543_1, arg544_1, arg545_1, arg546_1, arg547_1, arg548_1, arg549_1, arg550_1, arg551_1, arg552_1, arg553_1, arg554_1, arg555_1, arg556_1, arg557_1, arg558_1, arg559_1, arg560_1, arg561_1, arg562_1, arg563_1, arg564_1, arg565_1, arg566_1, arg567_1, arg568_1, arg569_1, arg570_1, arg571_1, arg572_1, arg573_1, arg574_1, arg575_1, arg576_1, arg577_1, arg578_1, arg579_1, arg580_1, arg581_1, arg582_1, arg583_1, arg584_1, arg585_1, arg586_1, arg587_1, arg588_1, arg589_1, arg590_1, arg591_1, arg592_1, arg593_1, arg594_1, arg595_1, arg596_1, arg597_1, arg598_1, arg599_1, arg600_1, arg601_1, arg602_1, arg603_1, arg604_1, arg605_1, arg606_1, arg607_1, arg608_1, arg609_1, arg610_1, arg611_1, arg612_1, arg613_1, arg614_1, arg615_1, arg616_1, arg617_1, arg618_1, arg619_1, arg620_1, arg621_1, arg622_1, arg623_1, arg624_1, arg625_1, arg626_1, arg627_1, arg628_1, arg629_1, arg630_1, arg631_1, arg632_1, arg633_1, arg634_1, arg635_1, arg636_1, arg637_1, arg638_1, arg639_1, arg640_1, arg641_1, arg642_1, arg643_1, arg644_1, arg645_1, arg646_1, arg647_1, arg648_1, arg649_1, arg650_1, arg651_1, arg652_1, arg653_1, arg654_1, arg655_1, arg656_1, arg657_1, arg658_1, arg659_1, arg660_1, arg661_1, arg662_1, arg663_1, arg664_1, arg665_1, arg666_1, arg667_1, arg668_1, arg669_1, arg670_1, arg671_1, arg672_1, arg673_1, arg674_1, arg675_1, arg676_1, arg677_1, arg678_1, arg679_1, arg680_1, arg681_1, arg682_1, arg683_1, arg684_1, arg685_1, arg686_1, arg687_1, arg688_1, arg689_1, arg690_1, arg691_1, arg692_1, arg693_1, arg694_1, arg695_1, arg696_1, arg697_1, arg698_1, arg699_1, arg700_1, arg701_1, arg702_1, arg703_1, arg704_1, arg705_1, arg706_1, arg707_1, arg708_1, arg709_1, arg710_1, arg711_1, arg712_1, arg713_1, arg714_1, arg715_1, arg716_1, arg717_1, arg718_1, arg719_1, arg720_1, arg721_1, arg722_1, arg723_1, arg724_1, arg725_1, arg726_1, arg727_1, arg728_1, arg729_1, arg730_1, arg731_1, arg732_1, arg733_1, arg734_1, arg735_1, arg736_1, arg737_1, arg738_1, arg739_1, arg740_1, arg741_1, arg742_1, arg743_1, arg744_1, arg745_1, arg746_1, arg747_1, arg748_1, arg749_1, arg750_1, arg751_1, arg752_1, arg753_1, arg754_1, arg755_1, arg756_1, arg757_1, arg758_1, arg759_1, arg760_1, arg761_1, arg762_1, arg763_1, arg764_1, arg765_1, arg766_1, arg767_1, arg768_1, arg769_1, arg770_1, arg771_1, arg772_1, arg773_1, arg774_1, arg775_1, arg776_1, arg777_1, arg778_1, arg779_1, arg780_1, arg781_1, arg782_1, arg783_1, arg784_1, arg785_1, arg786_1, arg787_1, arg788_1, arg789_1, arg790_1, arg791_1, arg792_1, arg793_1, arg794_1, arg795_1, arg796_1, arg797_1, arg798_1, arg799_1, arg800_1, arg801_1, arg802_1, arg803_1, arg804_1, arg805_1, arg806_1, arg807_1, arg808_1, arg809_1, arg810_1, arg811_1, arg812_1, arg813_1, arg814_1, arg815_1, arg816_1, arg817_1, arg818_1, arg819_1, arg820_1, arg821_1, arg822_1, arg823_1, arg824_1, arg825_1, arg826_1, arg827_1, arg828_1, arg829_1, arg830_1, arg831_1, arg832_1, arg833_1, arg834_1, arg835_1, arg836_1, arg837_1, arg838_1, arg839_1, arg840_1, arg841_1, arg842_1, arg843_1, arg844_1, arg845_1, arg846_1, arg847_1, arg848_1, arg849_1, arg850_1, arg851_1, arg852_1, arg853_1, arg854_1, arg855_1, arg856_1, arg857_1, arg858_1, arg859_1, arg860_1, arg861_1, arg862_1, arg863_1, arg864_1, arg865_1, arg866_1, arg867_1, arg868_1, arg869_1, arg870_1, arg871_1, arg872_1, arg873_1, arg874_1, arg875_1, arg876_1, arg877_1, arg878_1, arg879_1, arg880_1, arg881_1, arg882_1, arg883_1, arg884_1, arg885_1, arg886_1, arg887_1, arg888_1, arg889_1, arg890_1, arg891_1, arg892_1, arg893_1, arg894_1, arg895_1, arg896_1, arg897_1, arg898_1, arg899_1, arg900_1, arg901_1, arg902_1, arg903_1, arg904_1, arg905_1, arg906_1, arg907_1, arg908_1, arg909_1, arg910_1, arg911_1, arg912_1, arg913_1, arg914_1, arg915_1, arg916_1, arg917_1, arg918_1, arg919_1, arg920_1, arg921_1, arg922_1, arg923_1, arg924_1, arg925_1, arg926_1, arg927_1, arg928_1, arg929_1, arg930_1, arg931_1, arg932_1, arg933_1, arg934_1, arg935_1, arg936_1, arg937_1, arg938_1, arg939_1, arg940_1, arg941_1, arg942_1, arg943_1, arg944_1, arg945_1, arg946_1, arg947_1, arg948_1, arg949_1, arg950_1, arg951_1, arg952_1, arg953_1, arg954_1, arg955_1, arg956_1, arg957_1, arg958_1, arg959_1, arg960_1, arg961_1, arg962_1, arg963_1, arg964_1, arg965_1, arg966_1, arg967_1, arg968_1, arg969_1, arg970_1, arg971_1, arg972_1, arg973_1, arg974_1, arg975_1, arg976_1, arg977_1, arg978_1, arg979_1, arg980_1, arg981_1, arg982_1, arg983_1, arg984_1, arg985_1, arg986_1, arg987_1, arg988_1, arg989_1, arg990_1, arg991_1, arg992_1, arg993_1, arg994_1, arg995_1, arg996_1, arg997_1, arg998_1, arg999_1, arg1000_1, arg1001_1, arg1002_1, arg1003_1, arg1004_1, arg1005_1, arg1006_1, arg1007_1, arg1008_1, arg1009_1, arg1010_1, arg1011_1, arg1012_1, arg1013_1, arg1014_1, arg1015_1, arg1016_1, arg1017_1, arg1018_1, arg1019_1, arg1020_1, arg1021_1, arg1022_1, arg1023_1, arg1024_1, arg1025_1, arg1026_1, arg1027_1, arg1028_1, arg1029_1, arg1030_1, arg1031_1, arg1032_1, arg1033_1, arg1034_1, arg1035_1, arg1036_1, arg1037_1, arg1038_1, arg1039_1, arg1040_1, arg1041_1, arg1042_1, arg1043_1, arg1044_1, arg1045_1, arg1046_1, arg1047_1, arg1048_1, arg1049_1, arg1050_1, arg1051_1, arg1052_1, arg1053_1, arg1054_1, arg1055_1, arg1056_1, arg1057_1, arg1058_1, arg1059_1, arg1060_1, arg1061_1, arg1062_1, arg1063_1, arg1064_1, arg1065_1, arg1066_1, arg1067_1, arg1068_1, arg1069_1, arg1070_1, arg1071_1, arg1072_1, arg1073_1, arg1074_1, arg1075_1, arg1076_1, arg1077_1, arg1078_1, arg1079_1, arg1080_1, arg1081_1, arg1082_1, arg1083_1, arg1084_1, arg1085_1, arg1086_1, arg1087_1, arg1088_1, arg1089_1, arg1090_1, arg1091_1, arg1092_1, arg1093_1, arg1094_1, arg1095_1, arg1096_1, arg1097_1, arg1098_1, arg1099_1, arg1100_1, arg1101_1, arg1102_1, arg1103_1, arg1104_1, arg1105_1, arg1106_1, arg1107_1, arg1108_1, arg1109_1, arg1110_1, arg1111_1, arg1112_1, arg1113_1, arg1114_1, arg1115_1, arg1116_1, arg1117_1, arg1118_1, arg1119_1, arg1120_1, arg1121_1, arg1122_1, arg1123_1, arg1124_1, arg1125_1, arg1126_1, arg1127_1, arg1128_1, arg1129_1, arg1130_1, arg1131_1, arg1132_1, arg1133_1, arg1134_1, arg1135_1, arg1136_1, arg1137_1, arg1138_1, arg1139_1, arg1140_1, arg1141_1, arg1142_1, arg1143_1, arg1144_1, arg1145_1, arg1146_1, arg1147_1, arg1148_1, arg1149_1, arg1150_1, arg1151_1, arg1152_1, arg1153_1, arg1154_1, arg1155_1, arg1156_1, arg1157_1, arg1158_1, arg1159_1, arg1160_1, arg1161_1, arg1162_1, arg1163_1, arg1164_1, arg1165_1, arg1166_1, arg1167_1, arg1168_1, arg1169_1, arg1170_1, arg1171_1, arg1172_1, arg1173_1, arg1174_1, arg1175_1, arg1176_1, arg1177_1, arg1178_1, arg1179_1, arg1180_1, arg1181_1, arg1182_1, arg1183_1, arg1184_1, arg1185_1, arg1186_1, arg1187_1, arg1188_1, arg1189_1, arg1190_1, arg1191_1, arg1192_1, arg1193_1, arg1194_1, arg1195_1, arg1196_1, arg1197_1, arg1198_1, arg1199_1, arg1200_1, arg1201_1, arg1202_1, arg1203_1, arg1204_1, arg1205_1, arg1206_1, arg1207_1, arg1208_1, arg1209_1, arg1210_1, arg1211_1, arg1212_1, arg1213_1, arg1214_1, arg1215_1, arg1216_1, arg1217_1, arg1218_1, arg1219_1, arg1220_1, arg1221_1, arg1222_1, arg1223_1, arg1224_1, arg1225_1, arg1226_1, arg1227_1, arg1228_1, arg1229_1, arg1230_1, arg1231_1, arg1232_1, arg1233_1, arg1234_1, arg1235_1, arg1236_1, arg1237_1, arg1238_1, arg1239_1, arg1240_1, arg1241_1, arg1242_1, arg1243_1, arg1244_1, arg1245_1, arg1246_1, arg1247_1, arg1248_1, arg1249_1, arg1250_1, arg1251_1, arg1252_1, arg1253_1, arg1254_1, arg1255_1, arg1256_1, arg1257_1, arg1258_1, arg1259_1, arg1260_1, arg1261_1, arg1262_1, arg1263_1, arg1264_1, arg1265_1, arg1266_1, arg1267_1, arg1268_1, arg1269_1, arg1270_1, arg1271_1, arg1272_1, arg1273_1, arg1274_1, arg1275_1, arg1276_1, arg1277_1, arg1278_1, arg1279_1, arg1280_1, arg1281_1, arg1282_1, arg1283_1, arg1284_1, arg1285_1, arg1286_1, arg1287_1, arg1288_1, arg1289_1, arg1290_1, arg1291_1, arg1292_1, arg1293_1, arg1294_1, arg1295_1, arg1296_1, arg1297_1, arg1298_1, arg1299_1, arg1300_1, arg1301_1, arg1302_1, arg1303_1, arg1304_1, arg1305_1, arg1306_1, arg1307_1, arg1308_1, arg1309_1, arg1310_1, arg1311_1, arg1312_1, arg1313_1, arg1314_1, arg1315_1, arg1316_1, arg1317_1, arg1318_1, arg1319_1, arg1320_1, arg1321_1, arg1322_1, arg1323_1, arg1324_1, arg1325_1, arg1326_1, arg1327_1, arg1328_1, arg1329_1, arg1330_1, arg1331_1, arg1332_1, arg1333_1, arg1334_1, arg1335_1, arg1336_1, arg1337_1, arg1338_1, arg1339_1, arg1340_1, arg1341_1, arg1342_1, arg1343_1, arg1344_1, arg1345_1, arg1346_1, arg1347_1, arg1348_1, arg1349_1, arg1350_1, arg1351_1, arg1352_1, arg1353_1, arg1354_1, arg1355_1, arg1356_1, arg1357_1, arg1358_1, arg1359_1, arg1360_1, arg1361_1, arg1362_1, arg1363_1, arg1364_1, arg1365_1, arg1366_1, arg1367_1, arg1368_1, arg1369_1, arg1370_1, arg1371_1, arg1372_1, arg1373_1, arg1374_1, arg1375_1, arg1376_1, arg1377_1, arg1378_1, arg1379_1, arg1380_1, arg1381_1, arg1382_1, arg1383_1, arg1384_1, arg1385_1, arg1386_1, arg1387_1, arg1388_1, arg1389_1, arg1390_1, arg1391_1, arg1392_1, arg1393_1, arg1394_1, arg1395_1, arg1396_1, arg1397_1, arg1398_1, arg1399_1, arg1400_1, arg1401_1, arg1402_1, arg1403_1, arg1404_1, arg1405_1, arg1406_1, arg1407_1, arg1408_1, arg1409_1, arg1410_1, arg1411_1, arg1412_1, arg1413_1, arg1414_1, arg1415_1, arg1416_1, arg1417_1, arg1418_1, arg1419_1, arg1420_1, arg1421_1, arg1422_1, arg1423_1, arg1424_1, arg1425_1, arg1426_1, arg1427_1, arg1428_1, arg1429_1, arg1430_1, arg1431_1, arg1432_1, arg1433_1, arg1434_1, arg1435_1, arg1436_1, arg1437_1, arg1438_1, arg1439_1, arg1440_1, arg1441_1, arg1442_1, arg1443_1, arg1444_1, arg1445_1, arg1446_1, arg1447_1, arg1448_1, arg1449_1, arg1450_1, arg1451_1, arg1452_1, arg1453_1, arg1454_1, arg1455_1, arg1456_1, arg1457_1, arg1458_1, arg1459_1, arg1460_1, arg1461_1, arg1462_1, arg1463_1, arg1464_1, arg1465_1, arg1466_1, arg1467_1, arg1468_1, arg1469_1, arg1470_1, arg1471_1, arg1472_1, arg1473_1, arg1474_1, arg1475_1, arg1476_1, arg1477_1, arg1478_1, arg1479_1, arg1480_1, arg1481_1, arg1482_1, arg1483_1, arg1484_1, arg1485_1, arg1486_1, arg1487_1, arg1488_1, arg1489_1, arg1490_1, arg1491_1, arg1492_1, arg1493_1, arg1494_1, arg1495_1, arg1496_1, arg1497_1, arg1498_1, arg1499_1, arg1500_1, arg1501_1, arg1502_1, arg1503_1, arg1504_1, arg1505_1, arg1506_1, arg1507_1, arg1508_1, arg1509_1, arg1510_1, arg1511_1, arg1512_1, arg1513_1, arg1514_1, arg1515_1, arg1516_1, arg1517_1, arg1518_1, arg1519_1, arg1520_1, arg1521_1, arg1522_1, arg1523_1, arg1524_1, arg1525_1, arg1526_1, arg1527_1, arg1528_1, arg1529_1, arg1530_1, arg1531_1, arg1532_1, arg1533_1, arg1534_1, arg1535_1, arg1536_1, arg1537_1, arg1538_1, arg1539_1, arg1540_1, arg1541_1, arg1542_1, arg1543_1, arg1544_1, arg1545_1, arg1546_1, arg1547_1, arg1548_1, arg1549_1, arg1550_1, arg1551_1, arg1552_1, arg1553_1, arg1554_1, arg1555_1, arg1556_1, arg1557_1, arg1558_1, arg1559_1, arg1560_1, arg1561_1, arg1562_1, arg1563_1, arg1564_1, arg1565_1, arg1566_1, arg1567_1, arg1568_1, arg1569_1, arg1570_1, arg1571_1, arg1572_1, arg1573_1, arg1574_1, arg1575_1, arg1576_1, arg1577_1, arg1578_1, arg1579_1, arg1580_1, arg1581_1, arg1582_1, arg1583_1, arg1584_1, arg1585_1, arg1586_1, arg1587_1, arg1588_1, arg1589_1, arg1590_1, arg1591_1, arg1592_1, arg1593_1, arg1594_1, arg1595_1, arg1596_1, arg1597_1, arg1598_1, arg1599_1, arg1600_1, arg1601_1, arg1602_1, arg1603_1, arg1604_1, arg1605_1, arg1606_1, arg1607_1, arg1608_1, arg1609_1, arg1610_1, arg1611_1, arg1612_1, arg1613_1, arg1614_1, arg1615_1, arg1616_1, arg1617_1, arg1618_1, arg1619_1, arg1620_1, arg1621_1, arg1622_1, arg1623_1, arg1624_1, arg1625_1, arg1626_1, arg1627_1, arg1628_1, arg1629_1, arg1630_1, arg1631_1, arg1632_1, arg1633_1, arg1634_1, arg1635_1, arg1636_1, arg1637_1, arg1638_1, arg1639_1, arg1640_1, arg1641_1, arg1642_1, arg1643_1, arg1644_1, arg1645_1, arg1646_1, arg1647_1, arg1648_1, arg1649_1, arg1650_1, arg1651_1, arg1652_1, arg1653_1, arg1654_1, arg1655_1, arg1656_1, arg1657_1, arg1658_1, arg1659_1, arg1660_1, arg1661_1, arg1662_1, arg1663_1, arg1664_1, arg1665_1, arg1666_1, arg1667_1, arg1668_1, arg1669_1, arg1670_1, arg1671_1, arg1672_1, arg1673_1, arg1674_1, arg1675_1, arg1676_1, arg1677_1, arg1678_1, arg1679_1, arg1680_1, arg1681_1, arg1682_1, arg1683_1, arg1684_1, arg1685_1, arg1686_1, arg1687_1, arg1688_1, arg1689_1, arg1690_1, arg1691_1, arg1692_1, arg1693_1, arg1694_1, arg1695_1, arg1696_1, arg1697_1, arg1698_1, arg1699_1, arg1700_1, arg1701_1, arg1702_1, arg1703_1, arg1704_1, arg1705_1, arg1706_1, arg1707_1):
         batch_size = arg0_1.shape[0]
+        batch_size_x32 = batch_size * 32
+        batch_size_x64 = batch_size * 64
+        batch_size_x80 = batch_size * 80
+        attention_max_seq_0 = batch_size + 2400
+        attention_max_seq_1 = batch_size + 86
+        attention_max_seq_2 = batch_size + 60
+        attention_max_seq_3 = batch_size + 87
+        attention_max_seq_4 = batch_size + 54
+        attention_max_seq_5 = 2 * batch_size + 256
         convert_element_type = torch.ops.prims.convert_element_type.default(arg0_1, torch.bool);  arg0_1 = None
         convert_element_type_1 = torch.ops.prims.convert_element_type.default(arg1_1, torch.bool);  arg1_1 = None
         convert_element_type_2 = torch.ops.prims.convert_element_type.default(arg2_1, torch.bool);  arg2_1 = None
@@ -1776,15 +1785,15 @@ class Repro(torch.nn.Module):
         sub = torch.ops.aten.sub.Tensor(expand_2, add)
         mul_48 = torch.ops.aten.mul.Tensor(expand_2, add)
         cat_81 = torch.ops.aten.cat.default([expand_2, add, sub, mul_48], -1);  expand_2 = sub = mul_48 = None
-        view_169 = torch.ops.aten.view.default(cat_81, [12800, 128]);  cat_81 = None
+        view_169 = torch.ops.aten.view.default(cat_81, [batch_size_x64, 128]);  cat_81 = None
         addmm_85 = torch.ops.aten.addmm.default(arg250_1, view_169, arg249_1);  arg250_1 = view_169 = arg249_1 = None
         view_170 = torch.ops.aten.view.default(addmm_85, [batch_size, 64, 256]);  addmm_85 = None
         relu_29 = torch.ops.aten.relu.default(view_170);  view_170 = None
-        view_171 = torch.ops.aten.view.default(relu_29, [12800, 256]);  relu_29 = None
+        view_171 = torch.ops.aten.view.default(relu_29, [batch_size_x64, 256]);  relu_29 = None
         addmm_86 = torch.ops.aten.addmm.default(arg252_1, view_171, arg251_1);  arg252_1 = view_171 = arg251_1 = None
         view_172 = torch.ops.aten.view.default(addmm_86, [batch_size, 64, 128]);  addmm_86 = None
         relu_30 = torch.ops.aten.relu.default(view_172);  view_172 = None
-        view_173 = torch.ops.aten.view.default(relu_30, [12800, 128]);  relu_30 = None
+        view_173 = torch.ops.aten.view.default(relu_30, [batch_size_x64, 128]);  relu_30 = None
         addmm_87 = torch.ops.aten.addmm.default(arg254_1, view_173, arg253_1);  arg254_1 = view_173 = arg253_1 = None
         view_174 = torch.ops.aten.view.default(addmm_87, [batch_size, 64, 32]);  addmm_87 = None
         mul_49 = torch.ops.aten.mul.Tensor(view_174, arg255_1);  view_174 = arg255_1 = None
@@ -1842,15 +1851,15 @@ class Repro(torch.nn.Module):
         sub_1 = torch.ops.aten.sub.Tensor(expand_5, add_1)
         mul_54 = torch.ops.aten.mul.Tensor(expand_5, add_1)
         cat_84 = torch.ops.aten.cat.default([expand_5, add_1, sub_1, mul_54], -1);  expand_5 = sub_1 = mul_54 = None
-        view_180 = torch.ops.aten.view.default(cat_84, [6400, 128]);  cat_84 = None
+        view_180 = torch.ops.aten.view.default(cat_84, [batch_size_x32, 128]);  cat_84 = None
         addmm_93 = torch.ops.aten.addmm.default(arg270_1, view_180, arg269_1);  arg270_1 = view_180 = arg269_1 = None
         view_181 = torch.ops.aten.view.default(addmm_93, [batch_size, 32, 256]);  addmm_93 = None
         relu_33 = torch.ops.aten.relu.default(view_181);  view_181 = None
-        view_182 = torch.ops.aten.view.default(relu_33, [6400, 256]);  relu_33 = None
+        view_182 = torch.ops.aten.view.default(relu_33, [batch_size_x32, 256]);  relu_33 = None
         addmm_94 = torch.ops.aten.addmm.default(arg272_1, view_182, arg271_1);  arg272_1 = view_182 = arg271_1 = None
         view_183 = torch.ops.aten.view.default(addmm_94, [batch_size, 32, 128]);  addmm_94 = None
         relu_34 = torch.ops.aten.relu.default(view_183);  view_183 = None
-        view_184 = torch.ops.aten.view.default(relu_34, [6400, 128]);  relu_34 = None
+        view_184 = torch.ops.aten.view.default(relu_34, [batch_size_x32, 128]);  relu_34 = None
         addmm_95 = torch.ops.aten.addmm.default(arg274_1, view_184, arg273_1);  arg274_1 = view_184 = arg273_1 = None
         view_185 = torch.ops.aten.view.default(addmm_95, [batch_size, 32, 32]);  addmm_95 = None
         mul_55 = torch.ops.aten.mul.Tensor(view_185, arg275_1);  view_185 = arg275_1 = None
@@ -1905,15 +1914,15 @@ class Repro(torch.nn.Module):
         sub_2 = torch.ops.aten.sub.Tensor(expand_8, add_2)
         mul_60 = torch.ops.aten.mul.Tensor(expand_8, add_2)
         cat_87 = torch.ops.aten.cat.default([expand_8, add_2, sub_2, mul_60], -1);  expand_8 = sub_2 = mul_60 = None
-        view_191 = torch.ops.aten.view.default(cat_87, [12800, 128]);  cat_87 = None
+        view_191 = torch.ops.aten.view.default(cat_87, [batch_size_x64, 128]);  cat_87 = None
         addmm_101 = torch.ops.aten.addmm.default(arg290_1, view_191, arg289_1);  arg290_1 = view_191 = arg289_1 = None
         view_192 = torch.ops.aten.view.default(addmm_101, [batch_size, 64, 256]);  addmm_101 = None
         relu_37 = torch.ops.aten.relu.default(view_192);  view_192 = None
-        view_193 = torch.ops.aten.view.default(relu_37, [12800, 256]);  relu_37 = None
+        view_193 = torch.ops.aten.view.default(relu_37, [batch_size_x64, 256]);  relu_37 = None
         addmm_102 = torch.ops.aten.addmm.default(arg292_1, view_193, arg291_1);  arg292_1 = view_193 = arg291_1 = None
         view_194 = torch.ops.aten.view.default(addmm_102, [batch_size, 64, 128]);  addmm_102 = None
         relu_38 = torch.ops.aten.relu.default(view_194);  view_194 = None
-        view_195 = torch.ops.aten.view.default(relu_38, [12800, 128]);  relu_38 = None
+        view_195 = torch.ops.aten.view.default(relu_38, [batch_size_x64, 128]);  relu_38 = None
         addmm_103 = torch.ops.aten.addmm.default(arg294_1, view_195, arg293_1);  arg294_1 = view_195 = arg293_1 = None
         view_196 = torch.ops.aten.view.default(addmm_103, [batch_size, 64, 32]);  addmm_103 = None
         mul_61 = torch.ops.aten.mul.Tensor(view_196, arg295_1);  view_196 = arg295_1 = None
@@ -1985,15 +1994,15 @@ class Repro(torch.nn.Module):
         sub_3 = torch.ops.aten.sub.Tensor(expand_11, add_3)
         mul_66 = torch.ops.aten.mul.Tensor(expand_11, add_3)
         cat_90 = torch.ops.aten.cat.default([expand_11, add_3, sub_3, mul_66], -1);  expand_11 = sub_3 = mul_66 = None
-        view_202 = torch.ops.aten.view.default(cat_90, [12800, 128]);  cat_90 = None
+        view_202 = torch.ops.aten.view.default(cat_90, [batch_size_x64, 128]);  cat_90 = None
         addmm_109 = torch.ops.aten.addmm.default(arg310_1, view_202, arg309_1);  arg310_1 = view_202 = arg309_1 = None
         view_203 = torch.ops.aten.view.default(addmm_109, [batch_size, 64, 256]);  addmm_109 = None
         relu_41 = torch.ops.aten.relu.default(view_203);  view_203 = None
-        view_204 = torch.ops.aten.view.default(relu_41, [12800, 256]);  relu_41 = None
+        view_204 = torch.ops.aten.view.default(relu_41, [batch_size_x64, 256]);  relu_41 = None
         addmm_110 = torch.ops.aten.addmm.default(arg312_1, view_204, arg311_1);  arg312_1 = view_204 = arg311_1 = None
         view_205 = torch.ops.aten.view.default(addmm_110, [batch_size, 64, 128]);  addmm_110 = None
         relu_42 = torch.ops.aten.relu.default(view_205);  view_205 = None
-        view_206 = torch.ops.aten.view.default(relu_42, [12800, 128]);  relu_42 = None
+        view_206 = torch.ops.aten.view.default(relu_42, [batch_size_x64, 128]);  relu_42 = None
         addmm_111 = torch.ops.aten.addmm.default(arg314_1, view_206, arg313_1);  arg314_1 = view_206 = arg313_1 = None
         view_207 = torch.ops.aten.view.default(addmm_111, [batch_size, 64, 32]);  addmm_111 = None
         mul_67 = torch.ops.aten.mul.Tensor(view_207, arg315_1);  view_207 = arg315_1 = None
@@ -2052,15 +2061,15 @@ class Repro(torch.nn.Module):
         sub_4 = torch.ops.aten.sub.Tensor(expand_14, add_4)
         mul_72 = torch.ops.aten.mul.Tensor(expand_14, add_4)
         cat_93 = torch.ops.aten.cat.default([expand_14, add_4, sub_4, mul_72], -1);  expand_14 = sub_4 = mul_72 = None
-        view_213 = torch.ops.aten.view.default(cat_93, [12800, 128]);  cat_93 = None
+        view_213 = torch.ops.aten.view.default(cat_93, [batch_size_x64, 128]);  cat_93 = None
         addmm_117 = torch.ops.aten.addmm.default(arg330_1, view_213, arg329_1);  arg330_1 = view_213 = arg329_1 = None
         view_214 = torch.ops.aten.view.default(addmm_117, [batch_size, 64, 256]);  addmm_117 = None
         relu_45 = torch.ops.aten.relu.default(view_214);  view_214 = None
-        view_215 = torch.ops.aten.view.default(relu_45, [12800, 256]);  relu_45 = None
+        view_215 = torch.ops.aten.view.default(relu_45, [batch_size_x64, 256]);  relu_45 = None
         addmm_118 = torch.ops.aten.addmm.default(arg332_1, view_215, arg331_1);  arg332_1 = view_215 = arg331_1 = None
         view_216 = torch.ops.aten.view.default(addmm_118, [batch_size, 64, 128]);  addmm_118 = None
         relu_46 = torch.ops.aten.relu.default(view_216);  view_216 = None
-        view_217 = torch.ops.aten.view.default(relu_46, [12800, 128]);  relu_46 = None
+        view_217 = torch.ops.aten.view.default(relu_46, [batch_size_x64, 128]);  relu_46 = None
         addmm_119 = torch.ops.aten.addmm.default(arg334_1, view_217, arg333_1);  arg334_1 = view_217 = arg333_1 = None
         view_218 = torch.ops.aten.view.default(addmm_119, [batch_size, 64, 32]);  addmm_119 = None
         mul_73 = torch.ops.aten.mul.Tensor(view_218, arg335_1);  view_218 = arg335_1 = None
@@ -2115,15 +2124,15 @@ class Repro(torch.nn.Module):
         sub_5 = torch.ops.aten.sub.Tensor(expand_17, add_5)
         mul_78 = torch.ops.aten.mul.Tensor(expand_17, add_5)
         cat_96 = torch.ops.aten.cat.default([expand_17, add_5, sub_5, mul_78], -1);  expand_17 = sub_5 = mul_78 = None
-        view_224 = torch.ops.aten.view.default(cat_96, [12800, 128]);  cat_96 = None
+        view_224 = torch.ops.aten.view.default(cat_96, [batch_size_x64, 128]);  cat_96 = None
         addmm_125 = torch.ops.aten.addmm.default(arg350_1, view_224, arg349_1);  arg350_1 = view_224 = arg349_1 = None
         view_225 = torch.ops.aten.view.default(addmm_125, [batch_size, 64, 256]);  addmm_125 = None
         relu_49 = torch.ops.aten.relu.default(view_225);  view_225 = None
-        view_226 = torch.ops.aten.view.default(relu_49, [12800, 256]);  relu_49 = None
+        view_226 = torch.ops.aten.view.default(relu_49, [batch_size_x64, 256]);  relu_49 = None
         addmm_126 = torch.ops.aten.addmm.default(arg352_1, view_226, arg351_1);  arg352_1 = view_226 = arg351_1 = None
         view_227 = torch.ops.aten.view.default(addmm_126, [batch_size, 64, 128]);  addmm_126 = None
         relu_50 = torch.ops.aten.relu.default(view_227);  view_227 = None
-        view_228 = torch.ops.aten.view.default(relu_50, [12800, 128]);  relu_50 = None
+        view_228 = torch.ops.aten.view.default(relu_50, [batch_size_x64, 128]);  relu_50 = None
         addmm_127 = torch.ops.aten.addmm.default(arg354_1, view_228, arg353_1);  arg354_1 = view_228 = arg353_1 = None
         view_229 = torch.ops.aten.view.default(addmm_127, [batch_size, 64, 32]);  addmm_127 = None
         mul_79 = torch.ops.aten.mul.Tensor(view_229, arg355_1);  view_229 = arg355_1 = None
@@ -2178,15 +2187,15 @@ class Repro(torch.nn.Module):
         sub_6 = torch.ops.aten.sub.Tensor(expand_20, add_6)
         mul_84 = torch.ops.aten.mul.Tensor(expand_20, add_6)
         cat_99 = torch.ops.aten.cat.default([expand_20, add_6, sub_6, mul_84], -1);  expand_20 = sub_6 = mul_84 = None
-        view_235 = torch.ops.aten.view.default(cat_99, [12800, 128]);  cat_99 = None
+        view_235 = torch.ops.aten.view.default(cat_99, [batch_size_x64, 128]);  cat_99 = None
         addmm_133 = torch.ops.aten.addmm.default(arg370_1, view_235, arg369_1);  arg370_1 = view_235 = arg369_1 = None
         view_236 = torch.ops.aten.view.default(addmm_133, [batch_size, 64, 256]);  addmm_133 = None
         relu_53 = torch.ops.aten.relu.default(view_236);  view_236 = None
-        view_237 = torch.ops.aten.view.default(relu_53, [12800, 256]);  relu_53 = None
+        view_237 = torch.ops.aten.view.default(relu_53, [batch_size_x64, 256]);  relu_53 = None
         addmm_134 = torch.ops.aten.addmm.default(arg372_1, view_237, arg371_1);  arg372_1 = view_237 = arg371_1 = None
         view_238 = torch.ops.aten.view.default(addmm_134, [batch_size, 64, 128]);  addmm_134 = None
         relu_54 = torch.ops.aten.relu.default(view_238);  view_238 = None
-        view_239 = torch.ops.aten.view.default(relu_54, [12800, 128]);  relu_54 = None
+        view_239 = torch.ops.aten.view.default(relu_54, [batch_size_x64, 128]);  relu_54 = None
         addmm_135 = torch.ops.aten.addmm.default(arg374_1, view_239, arg373_1);  arg374_1 = view_239 = arg373_1 = None
         view_240 = torch.ops.aten.view.default(addmm_135, [batch_size, 64, 32]);  addmm_135 = None
         mul_85 = torch.ops.aten.mul.Tensor(view_240, arg375_1);  view_240 = arg375_1 = None
@@ -2242,15 +2251,15 @@ class Repro(torch.nn.Module):
         sub_7 = torch.ops.aten.sub.Tensor(expand_23, add_7)
         mul_90 = torch.ops.aten.mul.Tensor(expand_23, add_7)
         cat_102 = torch.ops.aten.cat.default([expand_23, add_7, sub_7, mul_90], -1);  expand_23 = sub_7 = mul_90 = None
-        view_246 = torch.ops.aten.view.default(cat_102, [16000, 128]);  cat_102 = None
+        view_246 = torch.ops.aten.view.default(cat_102, [batch_size_x80, 128]);  cat_102 = None
         addmm_141 = torch.ops.aten.addmm.default(arg390_1, view_246, arg389_1);  arg390_1 = view_246 = arg389_1 = None
         view_247 = torch.ops.aten.view.default(addmm_141, [batch_size, 80, 256]);  addmm_141 = None
         relu_57 = torch.ops.aten.relu.default(view_247);  view_247 = None
-        view_248 = torch.ops.aten.view.default(relu_57, [16000, 256]);  relu_57 = None
+        view_248 = torch.ops.aten.view.default(relu_57, [batch_size_x80, 256]);  relu_57 = None
         addmm_142 = torch.ops.aten.addmm.default(arg392_1, view_248, arg391_1);  arg392_1 = view_248 = arg391_1 = None
         view_249 = torch.ops.aten.view.default(addmm_142, [batch_size, 80, 128]);  addmm_142 = None
         relu_58 = torch.ops.aten.relu.default(view_249);  view_249 = None
-        view_250 = torch.ops.aten.view.default(relu_58, [16000, 128]);  relu_58 = None
+        view_250 = torch.ops.aten.view.default(relu_58, [batch_size_x80, 128]);  relu_58 = None
         addmm_143 = torch.ops.aten.addmm.default(arg394_1, view_250, arg393_1);  arg394_1 = view_250 = arg393_1 = None
         view_251 = torch.ops.aten.view.default(addmm_143, [batch_size, 80, 32]);  addmm_143 = None
         mul_91 = torch.ops.aten.mul.Tensor(view_251, arg395_1);  view_251 = arg395_1 = None
@@ -2322,15 +2331,15 @@ class Repro(torch.nn.Module):
         sub_8 = torch.ops.aten.sub.Tensor(expand_26, add_8)
         mul_96 = torch.ops.aten.mul.Tensor(expand_26, add_8)
         cat_105 = torch.ops.aten.cat.default([expand_26, add_8, sub_8, mul_96], -1);  expand_26 = sub_8 = mul_96 = None
-        view_257 = torch.ops.aten.view.default(cat_105, [12800, 256]);  cat_105 = None
+        view_257 = torch.ops.aten.view.default(cat_105, [batch_size_x64, 256]);  cat_105 = None
         addmm_149 = torch.ops.aten.addmm.default(arg410_1, view_257, arg409_1);  arg410_1 = view_257 = arg409_1 = None
         view_258 = torch.ops.aten.view.default(addmm_149, [batch_size, 64, 256]);  addmm_149 = None
         relu_61 = torch.ops.aten.relu.default(view_258);  view_258 = None
-        view_259 = torch.ops.aten.view.default(relu_61, [12800, 256]);  relu_61 = None
+        view_259 = torch.ops.aten.view.default(relu_61, [batch_size_x64, 256]);  relu_61 = None
         addmm_150 = torch.ops.aten.addmm.default(arg412_1, view_259, arg411_1);  arg412_1 = view_259 = arg411_1 = None
         view_260 = torch.ops.aten.view.default(addmm_150, [batch_size, 64, 128]);  addmm_150 = None
         relu_62 = torch.ops.aten.relu.default(view_260);  view_260 = None
-        view_261 = torch.ops.aten.view.default(relu_62, [12800, 128]);  relu_62 = None
+        view_261 = torch.ops.aten.view.default(relu_62, [batch_size_x64, 128]);  relu_62 = None
         addmm_151 = torch.ops.aten.addmm.default(arg414_1, view_261, arg413_1);  arg414_1 = view_261 = arg413_1 = None
         view_262 = torch.ops.aten.view.default(addmm_151, [batch_size, 64, 64]);  addmm_151 = None
         mul_97 = torch.ops.aten.mul.Tensor(view_262, arg415_1);  view_262 = arg415_1 = None
@@ -2406,15 +2415,15 @@ class Repro(torch.nn.Module):
         sub_9 = torch.ops.aten.sub.Tensor(expand_29, add_9)
         mul_102 = torch.ops.aten.mul.Tensor(expand_29, add_9)
         cat_108 = torch.ops.aten.cat.default([expand_29, add_9, sub_9, mul_102], -1);  expand_29 = sub_9 = mul_102 = None
-        view_268 = torch.ops.aten.view.default(cat_108, [12800, 128]);  cat_108 = None
+        view_268 = torch.ops.aten.view.default(cat_108, [batch_size_x64, 128]);  cat_108 = None
         addmm_157 = torch.ops.aten.addmm.default(arg430_1, view_268, arg429_1);  arg430_1 = view_268 = arg429_1 = None
         view_269 = torch.ops.aten.view.default(addmm_157, [batch_size, 64, 256]);  addmm_157 = None
         relu_65 = torch.ops.aten.relu.default(view_269);  view_269 = None
-        view_270 = torch.ops.aten.view.default(relu_65, [12800, 256]);  relu_65 = None
+        view_270 = torch.ops.aten.view.default(relu_65, [batch_size_x64, 256]);  relu_65 = None
         addmm_158 = torch.ops.aten.addmm.default(arg432_1, view_270, arg431_1);  arg432_1 = view_270 = arg431_1 = None
         view_271 = torch.ops.aten.view.default(addmm_158, [batch_size, 64, 128]);  addmm_158 = None
         relu_66 = torch.ops.aten.relu.default(view_271);  view_271 = None
-        view_272 = torch.ops.aten.view.default(relu_66, [12800, 128]);  relu_66 = None
+        view_272 = torch.ops.aten.view.default(relu_66, [batch_size_x64, 128]);  relu_66 = None
         addmm_159 = torch.ops.aten.addmm.default(arg434_1, view_272, arg433_1);  arg434_1 = view_272 = arg433_1 = None
         view_273 = torch.ops.aten.view.default(addmm_159, [batch_size, 64, 32]);  addmm_159 = None
         mul_103 = torch.ops.aten.mul.Tensor(view_273, arg435_1);  view_273 = arg435_1 = None
@@ -2490,15 +2499,15 @@ class Repro(torch.nn.Module):
         sub_10 = torch.ops.aten.sub.Tensor(expand_32, add_10)
         mul_108 = torch.ops.aten.mul.Tensor(expand_32, add_10)
         cat_111 = torch.ops.aten.cat.default([expand_32, add_10, sub_10, mul_108], -1);  expand_32 = sub_10 = mul_108 = None
-        view_279 = torch.ops.aten.view.default(cat_111, [12800, 128]);  cat_111 = None
+        view_279 = torch.ops.aten.view.default(cat_111, [batch_size_x64, 128]);  cat_111 = None
         addmm_165 = torch.ops.aten.addmm.default(arg450_1, view_279, arg449_1);  arg450_1 = view_279 = arg449_1 = None
         view_280 = torch.ops.aten.view.default(addmm_165, [batch_size, 64, 256]);  addmm_165 = None
         relu_69 = torch.ops.aten.relu.default(view_280);  view_280 = None
-        view_281 = torch.ops.aten.view.default(relu_69, [12800, 256]);  relu_69 = None
+        view_281 = torch.ops.aten.view.default(relu_69, [batch_size_x64, 256]);  relu_69 = None
         addmm_166 = torch.ops.aten.addmm.default(arg452_1, view_281, arg451_1);  arg452_1 = view_281 = arg451_1 = None
         view_282 = torch.ops.aten.view.default(addmm_166, [batch_size, 64, 128]);  addmm_166 = None
         relu_70 = torch.ops.aten.relu.default(view_282);  view_282 = None
-        view_283 = torch.ops.aten.view.default(relu_70, [12800, 128]);  relu_70 = None
+        view_283 = torch.ops.aten.view.default(relu_70, [batch_size_x64, 128]);  relu_70 = None
         addmm_167 = torch.ops.aten.addmm.default(arg454_1, view_283, arg453_1);  arg454_1 = view_283 = arg453_1 = None
         view_284 = torch.ops.aten.view.default(addmm_167, [batch_size, 64, 32]);  addmm_167 = None
         mul_109 = torch.ops.aten.mul.Tensor(view_284, arg455_1);  view_284 = arg455_1 = None
@@ -2610,15 +2619,15 @@ class Repro(torch.nn.Module):
         sub_11 = torch.ops.aten.sub.Tensor(expand_35, add_11)
         mul_119 = torch.ops.aten.mul.Tensor(expand_35, add_11)
         cat_115 = torch.ops.aten.cat.default([expand_35, add_11, sub_11, mul_119], -1);  expand_35 = sub_11 = mul_119 = None
-        view_291 = torch.ops.aten.view.default(cat_115, [12800, 128]);  cat_115 = None
+        view_291 = torch.ops.aten.view.default(cat_115, [batch_size_x64, 128]);  cat_115 = None
         addmm_174 = torch.ops.aten.addmm.default(arg488_1, view_291, arg487_1);  arg488_1 = view_291 = arg487_1 = None
         view_292 = torch.ops.aten.view.default(addmm_174, [batch_size, 64, 256]);  addmm_174 = None
         relu_73 = torch.ops.aten.relu.default(view_292);  view_292 = None
-        view_293 = torch.ops.aten.view.default(relu_73, [12800, 256]);  relu_73 = None
+        view_293 = torch.ops.aten.view.default(relu_73, [batch_size_x64, 256]);  relu_73 = None
         addmm_175 = torch.ops.aten.addmm.default(arg490_1, view_293, arg489_1);  arg490_1 = view_293 = arg489_1 = None
         view_294 = torch.ops.aten.view.default(addmm_175, [batch_size, 64, 128]);  addmm_175 = None
         relu_74 = torch.ops.aten.relu.default(view_294);  view_294 = None
-        view_295 = torch.ops.aten.view.default(relu_74, [12800, 128]);  relu_74 = None
+        view_295 = torch.ops.aten.view.default(relu_74, [batch_size_x64, 128]);  relu_74 = None
         addmm_176 = torch.ops.aten.addmm.default(arg492_1, view_295, arg491_1);  arg492_1 = view_295 = arg491_1 = None
         view_296 = torch.ops.aten.view.default(addmm_176, [batch_size, 64, 32]);  addmm_176 = None
         mul_120 = torch.ops.aten.mul.Tensor(view_296, arg493_1);  view_296 = arg493_1 = None
@@ -2707,7 +2716,7 @@ class Repro(torch.nn.Module):
         view_309 = torch.ops.aten.view.default(addmm_181, [-1, 8, 64]);  addmm_181 = None
         view_310 = torch.ops.aten.view.default(addmm_182, [-1, 8, 64]);  addmm_182 = None
         view_311 = torch.ops.aten.view.default(addmm_183, [-1, 8, 64]);  addmm_183 = None
-        ascend_flash_attention = torch.ops.ascend_triton.ascend_flash_attention.default(view_309, view_310, view_311, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, 2600, 2600, 0.125, 1);  view_309 = view_310 = view_311 = None
+        ascend_flash_attention = torch.ops.ascend_triton.ascend_flash_attention.default(view_309, view_310, view_311, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, attention_max_seq_0, attention_max_seq_0, 0.125, 1);  view_309 = view_310 = view_311 = None
         view_312 = torch.ops.aten.view.default(ascend_flash_attention, [-1, 512]);  ascend_flash_attention = None
         addmm_184 = torch.ops.aten.addmm.default(arg515_1, view_312, arg514_1);  arg515_1 = view_312 = arg514_1 = None
         add_96 = torch.ops.aten.add.Tensor(addmm_184, getitem);  addmm_184 = getitem = None
@@ -2726,7 +2735,7 @@ class Repro(torch.nn.Module):
         view_313 = torch.ops.aten.view.default(addmm_186, [-1, 8, 64]);  addmm_186 = None
         view_314 = torch.ops.aten.view.default(addmm_187, [-1, 8, 64]);  addmm_187 = None
         view_315 = torch.ops.aten.view.default(addmm_188, [-1, 8, 64]);  addmm_188 = None
-        ascend_flash_attention_1 = torch.ops.ascend_triton.ascend_flash_attention.default(view_313, view_314, view_315, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, 2600, 2600, 0.125, 1);  view_313 = view_314 = view_315 = None
+        ascend_flash_attention_1 = torch.ops.ascend_triton.ascend_flash_attention.default(view_313, view_314, view_315, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, attention_max_seq_0, attention_max_seq_0, 0.125, 1);  view_313 = view_314 = view_315 = None
         view_316 = torch.ops.aten.view.default(ascend_flash_attention_1, [-1, 512]);  ascend_flash_attention_1 = None
         addmm_189 = torch.ops.aten.addmm.default(arg533_1, view_316, arg532_1);  arg533_1 = view_316 = arg532_1 = None
         add_165 = torch.ops.aten.add.Tensor(addmm_189, softcap_1);  addmm_189 = softcap_1 = None
@@ -2745,7 +2754,7 @@ class Repro(torch.nn.Module):
         view_317 = torch.ops.aten.view.default(addmm_191, [-1, 8, 64]);  addmm_191 = None
         view_318 = torch.ops.aten.view.default(addmm_192, [-1, 8, 64]);  addmm_192 = None
         view_319 = torch.ops.aten.view.default(addmm_193, [-1, 8, 64]);  addmm_193 = None
-        ascend_flash_attention_2 = torch.ops.ascend_triton.ascend_flash_attention.default(view_317, view_318, view_319, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, 2600, 2600, 0.125, 1);  view_317 = view_318 = view_319 = None
+        ascend_flash_attention_2 = torch.ops.ascend_triton.ascend_flash_attention.default(view_317, view_318, view_319, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, attention_max_seq_0, attention_max_seq_0, 0.125, 1);  view_317 = view_318 = view_319 = None
         view_320 = torch.ops.aten.view.default(ascend_flash_attention_2, [-1, 512]);  ascend_flash_attention_2 = None
         addmm_194 = torch.ops.aten.addmm.default(arg551_1, view_320, arg550_1);  arg551_1 = view_320 = arg550_1 = None
         add_234 = torch.ops.aten.add.Tensor(addmm_194, softcap_3);  addmm_194 = softcap_3 = None
@@ -2764,7 +2773,7 @@ class Repro(torch.nn.Module):
         view_321 = torch.ops.aten.view.default(addmm_196, [-1, 8, 64]);  addmm_196 = None
         view_322 = torch.ops.aten.view.default(addmm_197, [-1, 8, 64]);  addmm_197 = None
         view_323 = torch.ops.aten.view.default(addmm_198, [-1, 8, 64]);  addmm_198 = None
-        ascend_flash_attention_3 = torch.ops.ascend_triton.ascend_flash_attention.default(view_321, view_322, view_323, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, 2600, 2600, 0.125, 1);  view_321 = view_322 = view_323 = None
+        ascend_flash_attention_3 = torch.ops.ascend_triton.ascend_flash_attention.default(view_321, view_322, view_323, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, attention_max_seq_0, attention_max_seq_0, 0.125, 1);  view_321 = view_322 = view_323 = None
         view_324 = torch.ops.aten.view.default(ascend_flash_attention_3, [-1, 512]);  ascend_flash_attention_3 = None
         addmm_199 = torch.ops.aten.addmm.default(arg569_1, view_324, arg568_1);  arg569_1 = view_324 = arg568_1 = None
         add_303 = torch.ops.aten.add.Tensor(addmm_199, softcap_5);  addmm_199 = softcap_5 = None
@@ -2783,7 +2792,7 @@ class Repro(torch.nn.Module):
         view_325 = torch.ops.aten.view.default(addmm_201, [-1, 8, 64]);  addmm_201 = None
         view_326 = torch.ops.aten.view.default(addmm_202, [-1, 8, 64]);  addmm_202 = None
         view_327 = torch.ops.aten.view.default(addmm_203, [-1, 8, 64]);  addmm_203 = None
-        ascend_flash_attention_4 = torch.ops.ascend_triton.ascend_flash_attention.default(view_325, view_326, view_327, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, 2600, 2600, 0.125, 1);  view_325 = view_326 = view_327 = None
+        ascend_flash_attention_4 = torch.ops.ascend_triton.ascend_flash_attention.default(view_325, view_326, view_327, ascend_seq_tensor_concat_1, ascend_seq_tensor_concat_1, add_33, add_33, attention_max_seq_0, attention_max_seq_0, 0.125, 1);  view_325 = view_326 = view_327 = None
         view_328 = torch.ops.aten.view.default(ascend_flash_attention_4, [-1, 512]);  ascend_flash_attention_4 = None
         addmm_204 = torch.ops.aten.addmm.default(arg587_1, view_328, arg586_1);  arg587_1 = view_328 = arg586_1 = None
         add_372 = torch.ops.aten.add.Tensor(addmm_204, softcap_7);  addmm_204 = softcap_7 = None
@@ -2817,7 +2826,7 @@ class Repro(torch.nn.Module):
         view_329 = torch.ops.aten.view.default(addmm_206, [-1, 16, 32]);  addmm_206 = None
         view_330 = torch.ops.aten.view.default(addmm_207, [-1, 16, 32]);  addmm_207 = None
         view_331 = torch.ops.aten.view.default(addmm_208, [-1, 16, 32]);  addmm_208 = None
-        ascend_flash_attention_5 = torch.ops.ascend_triton.ascend_flash_attention.default(view_329, view_330, view_331, index_24, ascend_seq_tensor_concat_1, index_22, add_33, _local_scalar_dense, 2600, 0.17677669529663687, 1);  view_329 = view_330 = view_331 = index_24 = ascend_seq_tensor_concat_1 = index_22 = add_33 = _local_scalar_dense = None
+        ascend_flash_attention_5 = torch.ops.ascend_triton.ascend_flash_attention.default(view_329, view_330, view_331, index_24, ascend_seq_tensor_concat_1, index_22, add_33, _local_scalar_dense, attention_max_seq_0, 0.17677669529663687, 1);  view_329 = view_330 = view_331 = index_24 = ascend_seq_tensor_concat_1 = index_22 = add_33 = _local_scalar_dense = None
         view_332 = torch.ops.aten.view.default(ascend_flash_attention_5, [-1, 512]);  ascend_flash_attention_5 = None
         addmm_209 = torch.ops.aten.addmm.default(arg605_1, view_332, arg604_1);  arg605_1 = view_332 = arg604_1 = None
         add_448 = torch.ops.aten.add.Tensor(addmm_209, index_17);  addmm_209 = index_17 = None
@@ -2913,7 +2922,7 @@ class Repro(torch.nn.Module):
         view_347 = torch.ops.aten.view.default(addmm_219, [-1, 4, 128]);  addmm_219 = None
         view_348 = torch.ops.aten.view.default(addmm_220, [-1, 4, 128]);  addmm_220 = None
         view_349 = torch.ops.aten.view.default(addmm_221, [-1, 4, 128]);  addmm_221 = None
-        ascend_flash_attention_6 = torch.ops.ascend_triton.ascend_flash_attention.default(view_347, view_348, view_349, ascend_seq_tensor_concat_4, ascend_seq_tensor_concat_4, add_471, add_471, 286, 286, 0.08838834764831843, 1);  view_347 = view_348 = view_349 = None
+        ascend_flash_attention_6 = torch.ops.ascend_triton.ascend_flash_attention.default(view_347, view_348, view_349, ascend_seq_tensor_concat_4, ascend_seq_tensor_concat_4, add_471, add_471, attention_max_seq_1, attention_max_seq_1, 0.08838834764831843, 1);  view_347 = view_348 = view_349 = None
         view_350 = torch.ops.aten.view.default(ascend_flash_attention_6, [-1, 512]);  ascend_flash_attention_6 = None
         addmm_222 = torch.ops.aten.addmm.default(arg643_1, view_350, arg642_1);  arg643_1 = view_350 = arg642_1 = None
         add_534 = torch.ops.aten.add.Tensor(addmm_222, getitem_39);  addmm_222 = getitem_39 = None
@@ -2947,7 +2956,7 @@ class Repro(torch.nn.Module):
         view_351 = torch.ops.aten.view.default(addmm_224, [-1, 8, 64]);  addmm_224 = None
         view_352 = torch.ops.aten.view.default(addmm_225, [-1, 8, 64]);  addmm_225 = None
         view_353 = torch.ops.aten.view.default(addmm_226, [-1, 8, 64]);  addmm_226 = None
-        ascend_flash_attention_7 = torch.ops.ascend_triton.ascend_flash_attention.default(view_351, view_352, view_353, index_34, ascend_seq_tensor_concat_4, index_32, add_471, _local_scalar_dense_1, 286, 0.125, 1);  view_351 = view_352 = view_353 = index_34 = ascend_seq_tensor_concat_4 = index_32 = add_471 = _local_scalar_dense_1 = None
+        ascend_flash_attention_7 = torch.ops.ascend_triton.ascend_flash_attention.default(view_351, view_352, view_353, index_34, ascend_seq_tensor_concat_4, index_32, add_471, _local_scalar_dense_1, attention_max_seq_1, 0.125, 1);  view_351 = view_352 = view_353 = index_34 = ascend_seq_tensor_concat_4 = index_32 = add_471 = _local_scalar_dense_1 = None
         view_354 = torch.ops.aten.view.default(ascend_flash_attention_7, [-1, 512]);  ascend_flash_attention_7 = None
         addmm_227 = torch.ops.aten.addmm.default(arg661_1, view_354, arg660_1);  arg661_1 = view_354 = arg660_1 = None
         add_610 = torch.ops.aten.add.Tensor(addmm_227, index_27);  addmm_227 = index_27 = None
@@ -3043,7 +3052,7 @@ class Repro(torch.nn.Module):
         view_369 = torch.ops.aten.view.default(addmm_237, [-1, 4, 128]);  addmm_237 = None
         view_370 = torch.ops.aten.view.default(addmm_238, [-1, 4, 128]);  addmm_238 = None
         view_371 = torch.ops.aten.view.default(addmm_239, [-1, 4, 128]);  addmm_239 = None
-        ascend_flash_attention_8 = torch.ops.ascend_triton.ascend_flash_attention.default(view_369, view_370, view_371, ascend_seq_tensor_concat_7, ascend_seq_tensor_concat_7, add_633, add_633, 260, 260, 0.08838834764831843, 1);  view_369 = view_370 = view_371 = None
+        ascend_flash_attention_8 = torch.ops.ascend_triton.ascend_flash_attention.default(view_369, view_370, view_371, ascend_seq_tensor_concat_7, ascend_seq_tensor_concat_7, add_633, add_633, attention_max_seq_2, attention_max_seq_2, 0.08838834764831843, 1);  view_369 = view_370 = view_371 = None
         view_372 = torch.ops.aten.view.default(ascend_flash_attention_8, [-1, 512]);  ascend_flash_attention_8 = None
         addmm_240 = torch.ops.aten.addmm.default(arg699_1, view_372, arg698_1);  arg699_1 = view_372 = arg698_1 = None
         add_696 = torch.ops.aten.add.Tensor(addmm_240, getitem_54);  addmm_240 = getitem_54 = None
@@ -3077,7 +3086,7 @@ class Repro(torch.nn.Module):
         view_373 = torch.ops.aten.view.default(addmm_242, [-1, 4, 128]);  addmm_242 = None
         view_374 = torch.ops.aten.view.default(addmm_243, [-1, 4, 128]);  addmm_243 = None
         view_375 = torch.ops.aten.view.default(addmm_244, [-1, 4, 128]);  addmm_244 = None
-        ascend_flash_attention_9 = torch.ops.ascend_triton.ascend_flash_attention.default(view_373, view_374, view_375, index_44, ascend_seq_tensor_concat_7, index_42, add_633, _local_scalar_dense_2, 260, 0.08838834764831843, 1);  view_373 = view_374 = view_375 = index_44 = ascend_seq_tensor_concat_7 = index_42 = add_633 = _local_scalar_dense_2 = None
+        ascend_flash_attention_9 = torch.ops.ascend_triton.ascend_flash_attention.default(view_373, view_374, view_375, index_44, ascend_seq_tensor_concat_7, index_42, add_633, _local_scalar_dense_2, attention_max_seq_2, 0.08838834764831843, 1);  view_373 = view_374 = view_375 = index_44 = ascend_seq_tensor_concat_7 = index_42 = add_633 = _local_scalar_dense_2 = None
         view_376 = torch.ops.aten.view.default(ascend_flash_attention_9, [-1, 512]);  ascend_flash_attention_9 = None
         addmm_245 = torch.ops.aten.addmm.default(arg717_1, view_376, arg716_1);  arg717_1 = view_376 = arg716_1 = None
         add_772 = torch.ops.aten.add.Tensor(addmm_245, index_37);  addmm_245 = index_37 = None
@@ -3169,7 +3178,7 @@ class Repro(torch.nn.Module):
         view_390 = torch.ops.aten.view.default(addmm_256, [-1, 4, 128]);  addmm_256 = None
         view_391 = torch.ops.aten.view.default(addmm_257, [-1, 4, 128]);  addmm_257 = None
         view_392 = torch.ops.aten.view.default(addmm_258, [-1, 4, 128]);  addmm_258 = None
-        ascend_flash_attention_10 = torch.ops.ascend_triton.ascend_flash_attention.default(view_390, view_391, view_392, ascend_seq_tensor_concat_10, ascend_seq_tensor_concat_10, add_794, add_794, 287, 287, 0.08838834764831843, 1);  view_390 = view_391 = view_392 = None
+        ascend_flash_attention_10 = torch.ops.ascend_triton.ascend_flash_attention.default(view_390, view_391, view_392, ascend_seq_tensor_concat_10, ascend_seq_tensor_concat_10, add_794, add_794, attention_max_seq_3, attention_max_seq_3, 0.08838834764831843, 1);  view_390 = view_391 = view_392 = None
         view_393 = torch.ops.aten.view.default(ascend_flash_attention_10, [-1, 512]);  ascend_flash_attention_10 = None
         addmm_259 = torch.ops.aten.addmm.default(arg755_1, view_393, arg754_1);  arg755_1 = view_393 = arg754_1 = None
         add_857 = torch.ops.aten.add.Tensor(addmm_259, getitem_69);  addmm_259 = getitem_69 = None
@@ -3203,7 +3212,7 @@ class Repro(torch.nn.Module):
         view_394 = torch.ops.aten.view.default(addmm_261, [-1, 4, 128]);  addmm_261 = None
         view_395 = torch.ops.aten.view.default(addmm_262, [-1, 4, 128]);  addmm_262 = None
         view_396 = torch.ops.aten.view.default(addmm_263, [-1, 4, 128]);  addmm_263 = None
-        ascend_flash_attention_11 = torch.ops.ascend_triton.ascend_flash_attention.default(view_394, view_395, view_396, index_54, ascend_seq_tensor_concat_10, index_52, add_794, _local_scalar_dense_3, 287, 0.08838834764831843, 1);  view_394 = view_395 = view_396 = index_54 = ascend_seq_tensor_concat_10 = index_52 = add_794 = _local_scalar_dense_3 = None
+        ascend_flash_attention_11 = torch.ops.ascend_triton.ascend_flash_attention.default(view_394, view_395, view_396, index_54, ascend_seq_tensor_concat_10, index_52, add_794, _local_scalar_dense_3, attention_max_seq_3, 0.08838834764831843, 1);  view_394 = view_395 = view_396 = index_54 = ascend_seq_tensor_concat_10 = index_52 = add_794 = _local_scalar_dense_3 = None
         view_397 = torch.ops.aten.view.default(ascend_flash_attention_11, [-1, 512]);  ascend_flash_attention_11 = None
         addmm_264 = torch.ops.aten.addmm.default(arg773_1, view_397, arg772_1);  arg773_1 = view_397 = arg772_1 = None
         add_933 = torch.ops.aten.add.Tensor(addmm_264, index_47);  addmm_264 = index_47 = None
@@ -3299,7 +3308,7 @@ class Repro(torch.nn.Module):
         view_412 = torch.ops.aten.view.default(addmm_274, [-1, 4, 128]);  addmm_274 = None
         view_413 = torch.ops.aten.view.default(addmm_275, [-1, 4, 128]);  addmm_275 = None
         view_414 = torch.ops.aten.view.default(addmm_276, [-1, 4, 128]);  addmm_276 = None
-        ascend_flash_attention_12 = torch.ops.ascend_triton.ascend_flash_attention.default(view_412, view_413, view_414, ascend_seq_tensor_concat_13, ascend_seq_tensor_concat_13, add_956, add_956, 254, 254, 0.08838834764831843, 1);  view_412 = view_413 = view_414 = None
+        ascend_flash_attention_12 = torch.ops.ascend_triton.ascend_flash_attention.default(view_412, view_413, view_414, ascend_seq_tensor_concat_13, ascend_seq_tensor_concat_13, add_956, add_956, attention_max_seq_4, attention_max_seq_4, 0.08838834764831843, 1);  view_412 = view_413 = view_414 = None
         view_415 = torch.ops.aten.view.default(ascend_flash_attention_12, [-1, 512]);  ascend_flash_attention_12 = None
         addmm_277 = torch.ops.aten.addmm.default(arg811_1, view_415, arg810_1);  arg811_1 = view_415 = arg810_1 = None
         add_1019 = torch.ops.aten.add.Tensor(addmm_277, getitem_84);  addmm_277 = getitem_84 = None
@@ -3333,7 +3342,7 @@ class Repro(torch.nn.Module):
         view_416 = torch.ops.aten.view.default(addmm_279, [-1, 4, 128]);  addmm_279 = None
         view_417 = torch.ops.aten.view.default(addmm_280, [-1, 4, 128]);  addmm_280 = None
         view_418 = torch.ops.aten.view.default(addmm_281, [-1, 4, 128]);  addmm_281 = None
-        ascend_flash_attention_13 = torch.ops.ascend_triton.ascend_flash_attention.default(view_416, view_417, view_418, index_64, ascend_seq_tensor_concat_13, index_62, add_956, _local_scalar_dense_4, 254, 0.08838834764831843, 1);  view_416 = view_417 = view_418 = index_64 = ascend_seq_tensor_concat_13 = index_62 = add_956 = _local_scalar_dense_4 = None
+        ascend_flash_attention_13 = torch.ops.ascend_triton.ascend_flash_attention.default(view_416, view_417, view_418, index_64, ascend_seq_tensor_concat_13, index_62, add_956, _local_scalar_dense_4, attention_max_seq_4, 0.08838834764831843, 1);  view_416 = view_417 = view_418 = index_64 = ascend_seq_tensor_concat_13 = index_62 = add_956 = _local_scalar_dense_4 = None
         view_419 = torch.ops.aten.view.default(ascend_flash_attention_13, [-1, 512]);  ascend_flash_attention_13 = None
         addmm_282 = torch.ops.aten.addmm.default(arg829_1, view_419, arg828_1);  arg829_1 = view_419 = arg828_1 = None
         add_1095 = torch.ops.aten.add.Tensor(addmm_282, index_57);  addmm_282 = index_57 = None
@@ -4222,9 +4231,9 @@ class Repro(torch.nn.Module):
         view_567 = torch.ops.aten.view.default(addmm_387, [-1, 8, 64]);  addmm_387 = None
         view_568 = torch.ops.aten.view.default(addmm_388, [-1, 8, 64]);  addmm_388 = None
         view_569 = torch.ops.aten.view.default(addmm_389, [-1, 8, 64]);  addmm_389 = None
-        rope = torch.ops.qianchuan_triton.rope.default(view_567, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_567 = None
-        rope_1 = torch.ops.qianchuan_triton.rope.default(view_568, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_568 = None
-        ascend_flash_attention_14 = torch.ops.ascend_triton.ascend_flash_attention.default(rope, rope_1, view_569, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, 656, 656, 0.125, 1);  rope = rope_1 = view_569 = None
+        rope = torch.ops.qianchuan_triton.rope.default(view_567, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_567 = None
+        rope_1 = torch.ops.qianchuan_triton.rope.default(view_568, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_568 = None
+        ascend_flash_attention_14 = torch.ops.ascend_triton.ascend_flash_attention.default(rope, rope_1, view_569, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, attention_max_seq_5, attention_max_seq_5, 0.125, 1);  rope = rope_1 = view_569 = None
         view_570 = torch.ops.aten.view.default(ascend_flash_attention_14, [-1, 512]);  ascend_flash_attention_14 = None
         addmm_390 = torch.ops.aten.addmm.default(arg1355_1, view_570, arg1354_1);  arg1355_1 = view_570 = arg1354_1 = None
         add_1240 = torch.ops.aten.add.Tensor(addmm_390, getitem_367);  addmm_390 = getitem_367 = None
@@ -4243,9 +4252,9 @@ class Repro(torch.nn.Module):
         view_571 = torch.ops.aten.view.default(addmm_392, [-1, 8, 64]);  addmm_392 = None
         view_572 = torch.ops.aten.view.default(addmm_393, [-1, 8, 64]);  addmm_393 = None
         view_573 = torch.ops.aten.view.default(addmm_394, [-1, 8, 64]);  addmm_394 = None
-        rope_2 = torch.ops.qianchuan_triton.rope.default(view_571, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_571 = None
-        rope_3 = torch.ops.qianchuan_triton.rope.default(view_572, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_572 = None
-        ascend_flash_attention_15 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_2, rope_3, view_573, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, 656, 656, 0.125, 1);  rope_2 = rope_3 = view_573 = None
+        rope_2 = torch.ops.qianchuan_triton.rope.default(view_571, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_571 = None
+        rope_3 = torch.ops.qianchuan_triton.rope.default(view_572, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_572 = None
+        ascend_flash_attention_15 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_2, rope_3, view_573, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, attention_max_seq_5, attention_max_seq_5, 0.125, 1);  rope_2 = rope_3 = view_573 = None
         view_574 = torch.ops.aten.view.default(ascend_flash_attention_15, [-1, 512]);  ascend_flash_attention_15 = None
         addmm_395 = torch.ops.aten.addmm.default(arg1373_1, view_574, arg1372_1);  arg1373_1 = view_574 = arg1372_1 = None
         add_1317 = torch.ops.aten.add.Tensor(addmm_395, softcap_29);  addmm_395 = softcap_29 = None
@@ -4264,9 +4273,9 @@ class Repro(torch.nn.Module):
         view_575 = torch.ops.aten.view.default(addmm_397, [-1, 8, 64]);  addmm_397 = None
         view_576 = torch.ops.aten.view.default(addmm_398, [-1, 8, 64]);  addmm_398 = None
         view_577 = torch.ops.aten.view.default(addmm_399, [-1, 8, 64]);  addmm_399 = None
-        rope_4 = torch.ops.qianchuan_triton.rope.default(view_575, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_575 = None
-        rope_5 = torch.ops.qianchuan_triton.rope.default(view_576, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_576 = None
-        ascend_flash_attention_16 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_4, rope_5, view_577, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, 656, 656, 0.125, 1);  rope_4 = rope_5 = view_577 = None
+        rope_4 = torch.ops.qianchuan_triton.rope.default(view_575, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_575 = None
+        rope_5 = torch.ops.qianchuan_triton.rope.default(view_576, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_576 = None
+        ascend_flash_attention_16 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_4, rope_5, view_577, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, attention_max_seq_5, attention_max_seq_5, 0.125, 1);  rope_4 = rope_5 = view_577 = None
         view_578 = torch.ops.aten.view.default(ascend_flash_attention_16, [-1, 512]);  ascend_flash_attention_16 = None
         addmm_400 = torch.ops.aten.addmm.default(arg1391_1, view_578, arg1390_1);  arg1391_1 = view_578 = arg1390_1 = None
         add_1394 = torch.ops.aten.add.Tensor(addmm_400, softcap_31);  addmm_400 = softcap_31 = None
@@ -4285,9 +4294,9 @@ class Repro(torch.nn.Module):
         view_579 = torch.ops.aten.view.default(addmm_402, [-1, 8, 64]);  addmm_402 = None
         view_580 = torch.ops.aten.view.default(addmm_403, [-1, 8, 64]);  addmm_403 = None
         view_581 = torch.ops.aten.view.default(addmm_404, [-1, 8, 64]);  addmm_404 = None
-        rope_6 = torch.ops.qianchuan_triton.rope.default(view_579, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_579 = None
-        rope_7 = torch.ops.qianchuan_triton.rope.default(view_580, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_580 = None
-        ascend_flash_attention_17 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_6, rope_7, view_581, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, 656, 656, 0.125, 1);  rope_6 = rope_7 = view_581 = None
+        rope_6 = torch.ops.qianchuan_triton.rope.default(view_579, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_579 = None
+        rope_7 = torch.ops.qianchuan_triton.rope.default(view_580, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_580 = None
+        ascend_flash_attention_17 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_6, rope_7, view_581, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, attention_max_seq_5, attention_max_seq_5, 0.125, 1);  rope_6 = rope_7 = view_581 = None
         view_582 = torch.ops.aten.view.default(ascend_flash_attention_17, [-1, 512]);  ascend_flash_attention_17 = None
         addmm_405 = torch.ops.aten.addmm.default(arg1409_1, view_582, arg1408_1);  arg1409_1 = view_582 = arg1408_1 = None
         add_1471 = torch.ops.aten.add.Tensor(addmm_405, softcap_33);  addmm_405 = softcap_33 = None
@@ -4306,9 +4315,9 @@ class Repro(torch.nn.Module):
         view_583 = torch.ops.aten.view.default(addmm_407, [-1, 8, 64]);  addmm_407 = None
         view_584 = torch.ops.aten.view.default(addmm_408, [-1, 8, 64]);  addmm_408 = None
         view_585 = torch.ops.aten.view.default(addmm_409, [-1, 8, 64]);  addmm_409 = None
-        rope_8 = torch.ops.qianchuan_triton.rope.default(view_583, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_583 = None
-        rope_9 = torch.ops.qianchuan_triton.rope.default(view_584, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_584 = None
-        ascend_flash_attention_18 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_8, rope_9, view_585, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, 656, 656, 0.125, 1);  rope_8 = rope_9 = view_585 = None
+        rope_8 = torch.ops.qianchuan_triton.rope.default(view_583, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_583 = None
+        rope_9 = torch.ops.qianchuan_triton.rope.default(view_584, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_584 = None
+        ascend_flash_attention_18 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_8, rope_9, view_585, ascend_seq_tensor_concat_16, ascend_seq_tensor_concat_16, add_1169, add_1169, attention_max_seq_5, attention_max_seq_5, 0.125, 1);  rope_8 = rope_9 = view_585 = None
         view_586 = torch.ops.aten.view.default(ascend_flash_attention_18, [-1, 512]);  ascend_flash_attention_18 = None
         addmm_410 = torch.ops.aten.addmm.default(arg1427_1, view_586, arg1426_1);  arg1427_1 = view_586 = arg1426_1 = None
         add_1548 = torch.ops.aten.add.Tensor(addmm_410, softcap_35);  addmm_410 = softcap_35 = None
@@ -4344,8 +4353,8 @@ class Repro(torch.nn.Module):
         view_588 = torch.ops.aten.view.default(addmm_413, [-1, 16, 32]);  addmm_413 = None
         view_589 = torch.ops.aten.view.default(addmm_414, [-1, 16, 32]);  addmm_414 = None
         rope_10 = torch.ops.qianchuan_triton.rope.default(view_587, index_73, index_72, _local_scalar_dense_5, 10000.0, False);  view_587 = index_73 = None
-        rope_11 = torch.ops.qianchuan_triton.rope.default(view_588, ascend_position_concat_5, add_1169, 656, 10000.0, False);  view_588 = ascend_position_concat_5 = None
-        ascend_flash_attention_19 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_10, rope_11, view_589, index_74, ascend_seq_tensor_concat_16, index_72, add_1169, _local_scalar_dense_5, 656, 0.17677669529663687, 1);  rope_10 = rope_11 = view_589 = index_74 = ascend_seq_tensor_concat_16 = index_72 = add_1169 = _local_scalar_dense_5 = None
+        rope_11 = torch.ops.qianchuan_triton.rope.default(view_588, ascend_position_concat_5, add_1169, attention_max_seq_5, 10000.0, False);  view_588 = ascend_position_concat_5 = None
+        ascend_flash_attention_19 = torch.ops.ascend_triton.ascend_flash_attention.default(rope_10, rope_11, view_589, index_74, ascend_seq_tensor_concat_16, index_72, add_1169, _local_scalar_dense_5, attention_max_seq_5, 0.17677669529663687, 1);  rope_10 = rope_11 = view_589 = index_74 = ascend_seq_tensor_concat_16 = index_72 = add_1169 = _local_scalar_dense_5 = None
         view_590 = torch.ops.aten.view.default(ascend_flash_attention_19, [-1, 512]);  ascend_flash_attention_19 = None
         addmm_415 = torch.ops.aten.addmm.default(arg1445_1, view_590, arg1444_1);  arg1445_1 = view_590 = arg1444_1 = None
         add_1628 = torch.ops.aten.add.Tensor(addmm_415, index_67);  addmm_415 = index_67 = None
