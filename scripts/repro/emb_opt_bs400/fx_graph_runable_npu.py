@@ -2,7 +2,6 @@ import argparse
 import csv
 import os
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -54,9 +53,6 @@ PROFILE_ROOT = Path(
 BS_LABEL = f"bs_{COMPILE_BS}" if len(BS_SEQUENCE) == 1 else f"bs_sequence_{'-'.join(map(str, BS_SEQUENCE))}"
 RUN_ROOT = PROFILE_ROOT / RUN_ID / BS_LABEL / SCRIPT_ARGS.execution
 RUN_ROOT.mkdir(parents=True, exist_ok=False)
-ORIGINAL_WORKING_DIR = Path.cwd()
-TEMPORARY_WORK_DIR = tempfile.TemporaryDirectory(prefix="emb_opt_bs400_")
-WORK_ROOT = Path(TEMPORARY_WORK_DIR.name)
 
 os.environ[GROUP_AUTOTUNE_ENV] = "1" if SCRIPT_ARGS.execution == "group" else "0"
 os.environ.setdefault("NPU_INDUCTOR_FALLBACK_LIST", "aten.cat")
@@ -72,9 +68,6 @@ os.environ.setdefault("TORCHINDUCTOR_ENABLE_FAST_GELU", "1")
 os.environ.setdefault("TORCH_DEVICE_BACKEND_AUTOLOAD", "1")
 os.environ.setdefault("TORCH_COMPILE_DEBUG", "1")
 os.environ.setdefault("TORCH_COMPILE_DEBUG_DIR", str(RUN_ROOT / "torch_compile_debug"))
-os.environ["TORCHINDUCTOR_CACHE_DIR"] = str(WORK_ROOT / "torchinductor")
-os.environ["TRITON_CACHE_DIR"] = str(WORK_ROOT / "triton")
-os.chdir(WORK_ROOT)
 
 import torch
 import torch_npu
@@ -8992,8 +8985,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        os.chdir(ORIGINAL_WORKING_DIR)
-        TEMPORARY_WORK_DIR.cleanup()
+    main()
