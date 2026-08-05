@@ -2,6 +2,7 @@ import argparse
 import csv
 import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -15,12 +16,30 @@ def parse_args():
         help="static uses dynamic=False; dynamic/group use mark_dynamic + dynamic=None",
     )
     parser.add_argument("--bs", type=int, default=200, help="Batch size used to construct and compile inputs")
+    parser.add_argument(
+        "--bs-sequence",
+        help="Comma-separated runtime batch sizes; the first value is the dynamic/group compile batch size",
+    )
     return parser.parse_args()
 
 
+def parse_bs_sequence(value, default_bs):
+    if value is None:
+        return (default_bs,)
+    try:
+        sequence = tuple(int(item.strip()) for item in value.split(",") if item.strip())
+    except ValueError as exc:
+        raise ValueError("--bs-sequence must contain comma-separated integers") from exc
+    if not sequence:
+        raise ValueError("--bs-sequence must not be empty")
+    return sequence
+
+
 SCRIPT_ARGS = parse_args()
-if SCRIPT_ARGS.bs <= 0:
-    raise ValueError("--bs must be positive")
+BS_SEQUENCE = parse_bs_sequence(SCRIPT_ARGS.bs_sequence, SCRIPT_ARGS.bs)
+if any(bs <= 0 for bs in BS_SEQUENCE):
+    raise ValueError("batch sizes must be positive")
+COMPILE_BS = BS_SEQUENCE[0]
 
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -29,9 +48,15 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 RUN_ID = os.environ.get("RUN_ID") or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-PROFILE_ROOT = Path(os.environ.get("PROFILE_ROOT", SCRIPT_DIR / "prof_log" / "fx_graph_runable_npu"))
-RUN_ROOT = PROFILE_ROOT / RUN_ID / f"bs_{SCRIPT_ARGS.bs}" / SCRIPT_ARGS.execution
+PROFILE_ROOT = Path(
+    os.environ.get("PROFILE_ROOT", SCRIPT_DIR / "prof_log" / "fx_graph_runable_npu")
+).expanduser().resolve()
+BS_LABEL = f"bs_{COMPILE_BS}" if len(BS_SEQUENCE) == 1 else f"bs_sequence_{'-'.join(map(str, BS_SEQUENCE))}"
+RUN_ROOT = PROFILE_ROOT / RUN_ID / BS_LABEL / SCRIPT_ARGS.execution
 RUN_ROOT.mkdir(parents=True, exist_ok=False)
+ORIGINAL_WORKING_DIR = Path.cwd()
+TEMPORARY_WORK_DIR = tempfile.TemporaryDirectory(prefix="emb_opt_bs400_")
+WORK_ROOT = Path(TEMPORARY_WORK_DIR.name)
 
 os.environ[GROUP_AUTOTUNE_ENV] = "1" if SCRIPT_ARGS.execution == "group" else "0"
 os.environ.setdefault("NPU_INDUCTOR_FALLBACK_LIST", "aten.cat")
@@ -47,8 +72,9 @@ os.environ.setdefault("TORCHINDUCTOR_ENABLE_FAST_GELU", "1")
 os.environ.setdefault("TORCH_DEVICE_BACKEND_AUTOLOAD", "1")
 os.environ.setdefault("TORCH_COMPILE_DEBUG", "1")
 os.environ.setdefault("TORCH_COMPILE_DEBUG_DIR", str(RUN_ROOT / "torch_compile_debug"))
-os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", str(RUN_ROOT / "torchinductor"))
-os.environ.setdefault("TRITON_CACHE_DIR", str(RUN_ROOT / "triton"))
+os.environ["TORCHINDUCTOR_CACHE_DIR"] = str(WORK_ROOT / "torchinductor")
+os.environ["TRITON_CACHE_DIR"] = str(WORK_ROOT / "triton")
+os.chdir(WORK_ROOT)
 
 import torch
 import torch_npu
@@ -279,7 +305,7 @@ class ShapeHint(int):
         return hint
 
 
-batch_size_hint = ShapeHint(SCRIPT_ARGS.bs, "bs")
+batch_size_hint = ShapeHint(COMPILE_BS, "bs")
 
 
 
@@ -8832,14 +8858,20 @@ def latest_output_code_path():
     return max(output_codes, key=lambda path: (path.stat().st_mtime_ns, str(path)))
 
 
-def profile_compiled(compiled, args):
+def runtime_result_root(sequence_index, runtime_bs):
+    if len(BS_SEQUENCE) == 1:
+        return RUN_ROOT
+    return RUN_ROOT / f"step_{sequence_index:03d}_bs_{runtime_bs}"
+
+
+def profile_compiled(compiled, args, sequence_index, runtime_bs):
     warmup = int(os.environ.get("WARMUP", "1"))
     active = int(os.environ.get("ACTIVE", "10"))
     repeat = int(os.environ.get("REPEAT", "1"))
     if warmup < 0 or active <= 0 or repeat <= 0:
         raise ValueError("WARMUP must be non-negative; ACTIVE and REPEAT must be positive")
 
-    profile_dir = RUN_ROOT / "profiles"
+    profile_dir = runtime_result_root(sequence_index, runtime_bs) / "profiles"
     profiler = TorchNpuProfiler(
         profile_dir,
         wait=0,
@@ -8859,11 +8891,14 @@ def profile_compiled(compiled, args):
 
     call_count = active * repeat
     device_total_us = sum(summary.total_us for summary in kernel_summaries)
-    result = {
+    return {
         "run_id": RUN_ID,
         "execution": SCRIPT_ARGS.execution,
         "device": "npu:0",
-        "bs": SCRIPT_ARGS.bs,
+        "sequence_index": sequence_index,
+        "compile_bs": runtime_bs if SCRIPT_ARGS.execution == "static" else COMPILE_BS,
+        "runtime_bs": runtime_bs,
+        "bs_sequence": ",".join(map(str, BS_SEQUENCE)),
         "group": os.environ[GROUP_AUTOTUNE_ENV],
         "dynamic": "False" if SCRIPT_ARGS.execution == "static" else "None",
         "warmup": warmup,
@@ -8877,15 +8912,26 @@ def profile_compiled(compiled, args):
         "step_mean_us": f"{parser.average_step_time_us():.3f}",
         "profile_dir": str(profile_dir),
     }
+
+
+def write_performance_results(results):
     result_path = RUN_ROOT / "performance.csv"
     with result_path.open("w", newline="", encoding="utf-8") as output:
-        writer = csv.DictWriter(output, fieldnames=result)
+        writer = csv.DictWriter(output, fieldnames=results[0])
         writer.writeheader()
-        writer.writerow(result)
+        writer.writerows(results)
 
-    print(f"profile_dir={profile_dir}")
     print(f"performance_csv={result_path}")
-    print(f"device_mean_us={result['device_mean_us']} step_mean_us={result['step_mean_us']}")
+
+
+def make_inputs(input_reader_cls, runtime_bs, symbolic):
+    global batch_size_hint
+    batch_size_hint = ShapeHint(runtime_bs, "bs")
+    reader = SymbolicInputReader(input_reader_cls(save_dir=None), mark_dynamic_dims=symbolic)
+    load_args(reader)
+    # arg147 contains seven sequence lengths; random values violate the captured graph's sum(lengths) == bs guard.
+    reader.args[147] = _balanced_sequence_lengths(reader.args[147], runtime_bs)
+    return reader.args, reader.marked_dims
 
 
 def main():
@@ -8897,33 +8943,48 @@ def main():
     torch._inductor.config.trace.debug_dir = str(debug_root)
 
     symbolic = SCRIPT_ARGS.execution != "static"
-    reader = SymbolicInputReader(InputReader(save_dir=None), mark_dynamic_dims=symbolic)
-    load_args(reader)
-    # arg147 contains seven sequence lengths; random values violate the captured graph's sum(lengths) == bs guard.
-    reader.args[147] = _balanced_sequence_lengths(reader.args[147], SCRIPT_ARGS.bs)
-    args = reader.args
     compile_dynamic = False if SCRIPT_ARGS.execution == "static" else None
     print(
-        f"device=npu execution={SCRIPT_ARGS.execution} bs={SCRIPT_ARGS.bs} "
-        f"group={os.environ[GROUP_AUTOTUNE_ENV]} dynamic={compile_dynamic} "
-        f"marked_dims={reader.marked_dims} inputs={len(args)}"
+        f"device=npu execution={SCRIPT_ARGS.execution} bs_sequence={BS_SEQUENCE} compile_bs={COMPILE_BS} "
+        f"group={os.environ[GROUP_AUTOTUNE_ENV]} dynamic={compile_dynamic}"
     )
     print(f"result_dir={RUN_ROOT}")
 
-    compiled = torch.compile(
-        Repro(),
-        backend="inductor",
-        dynamic=compile_dynamic,
-        fullgraph=True,
-    )
-    with torch.no_grad():
-        outputs = compiled(*args)
-    torch.npu.synchronize()
-    print(f"compiled run completed: outputs={len(outputs)}")
+    compiled = None
+    results = []
+    for sequence_index, runtime_bs in enumerate(BS_SEQUENCE):
+        args, marked_dims = make_inputs(InputReader, runtime_bs, symbolic)
+        if compiled is None or SCRIPT_ARGS.execution == "static":
+            compiled = torch.compile(
+                Repro(),
+                backend="inductor",
+                dynamic=compile_dynamic,
+                fullgraph=True,
+            )
+        with torch.no_grad():
+            outputs = compiled(*args)
+        torch.npu.synchronize()
+        print(
+            f"step={sequence_index} runtime_bs={runtime_bs} marked_dims={marked_dims} "
+            f"inputs={len(args)} outputs={len(outputs)}"
+        )
+        del outputs
+        result = profile_compiled(compiled, args, sequence_index, runtime_bs)
+        results.append(result)
+        print(
+            f"profile_dir={result['profile_dir']} device_mean_us={result['device_mean_us']} "
+            f"step_mean_us={result['step_mean_us']}"
+        )
+        del args
+
     output_code = latest_output_code_path()
     print(f"output_code={output_code or 'not found'}")
-    profile_compiled(compiled, args)
+    write_performance_results(results)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        os.chdir(ORIGINAL_WORKING_DIR)
+        TEMPORARY_WORK_DIR.cleanup()

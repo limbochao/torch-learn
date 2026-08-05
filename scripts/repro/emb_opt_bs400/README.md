@@ -27,6 +27,15 @@ python scripts/repro/emb_opt_bs400/fx_graph_runable_npu.py --execution dynamic -
 python scripts/repro/emb_opt_bs400/fx_graph_runable_npu.py --execution group --bs 200
 ```
 
+通过 `--bs-sequence` 可以在一个进程中按顺序运行多个 batch size。dynamic/group 使用第一个 BS 编译，后续 BS
+复用同一个 compiled callable；static 为每个 BS 分别执行静态编译。`--bs-sequence` 会覆盖 `--bs`：
+
+```bash
+# 首 shape 为 BS400，随后复用符号化 kernel 运行 BS200 和 BS100
+python scripts/repro/emb_opt_bs400/fx_graph_runable_npu.py \
+    --execution group --bs-sequence 400,200,100
+```
+
 不同执行方式可以复用同一个 `RUN_ID`：
 
 ```bash
@@ -35,18 +44,30 @@ RUN_ID=emb_opt_01 python scripts/repro/emb_opt_bs400/fx_graph_runable_npu.py --e
 RUN_ID=emb_opt_01 python scripts/repro/emb_opt_bs400/fx_graph_runable_npu.py --execution group --bs 200
 ```
 
-默认结果目录为：
+单 BS 的默认结果目录保持不变：
 
 ```text
 prof_log/fx_graph_runable_npu/<RUN_ID>/bs_<BS>/<execution>/
 ```
 
+BS sequence 的结果目录为：
+
+```text
+prof_log/fx_graph_runable_npu/<RUN_ID>/bs_sequence_<BS0>-<BS1>-.../<execution>/
+    step_000_bs_<BS0>/profiles/
+    step_001_bs_<BS1>/profiles/
+    ...
+```
+
 其中包含：
 
 - `profiles/`：torch_npu profiler 原始结果。
-- `performance.csv`：整次调用的 device 侧汇总耗时。
+- `performance.csv`：每个 sequence step 一行的 device 侧汇总耗时，包括 `sequence_index`、`compile_bs`、
+  `runtime_bs` 和 `bs_sequence`。
 - `torch_compile_debug/`：Inductor debug trace，包括生成成功时的 `output_code.py`。
-- `torchinductor/`、`triton/`：本次运行独立使用的编译缓存。
+
+Inductor、Triton 编译 cache，以及 autotune 使用当前工作目录生成的 `profile_result/`、`profile_results/`
+均写入本次进程独立的系统临时目录，退出时自动删除，不再保存到 `prof_log`。
 
 可用环境变量为 `PROFILE_ROOT`、`RUN_ID`、`WARMUP`、`ACTIVE`、`REPEAT`。profile 默认配置为
 `WARMUP=1 ACTIVE=10 REPEAT=1`。
