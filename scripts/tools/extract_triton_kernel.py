@@ -3,13 +3,26 @@
 
 import argparse
 import ast
+import keyword
 import re
 import textwrap
 from pathlib import Path
 
 
 KERNEL_MARKER = "# kernel path:"
+GRAPH_FRAGMENT_MARKER = "# Graph fragment:"
+GRAPH_LINE_PREFIX = "#   "
 ARG_NAME = re.compile(r"arg\d+_\d+")
+NODE_REFERENCE = re.compile(r"%([A-Za-z_]\w*)")
+PLACEHOLDER = re.compile(
+    r"^%([A-Za-z_]\w*)\s*(?::.*?)?\s*=\s*PlaceHolder\[target=.*\]$"
+)
+CALL_FUNCTION = re.compile(
+    r"^%([A-Za-z_]\w*)\s*(?::.*?)?\s*=\s*"
+    r"call_function\[target=([^]]+)\]\(args = (.*), kwargs = (.*)\)$"
+)
+RETURN = re.compile(r"^return(?:\s+(.*))?$")
+DEVICE_LITERAL = re.compile(r"(?:cpu|cuda|npu|xpu|mtia)(?::\d+)?")
 
 
 def parse_args():
@@ -26,6 +39,14 @@ def parse_args():
         "--output",
         type=Path,
         help="output path (default: <kernel_name>.py in the current directory)",
+    )
+    parser.add_argument(
+        "--include-eager",
+        action="store_true",
+        help=(
+            "generate eager_forward(...) from the kernel's Graph fragment "
+            "metadata"
+        ),
     )
     return parser.parse_args()
 
@@ -168,6 +189,148 @@ def kernel_block(lines, definition):
     return "".join(lines[start : definition.end_lineno]).rstrip()
 
 
+def graph_fragment(lines, definition):
+    marker = None
+    for index in range(definition.lineno - 2, -1, -1):
+        stripped = lines[index].lstrip()
+        if stripped.startswith(GRAPH_FRAGMENT_MARKER):
+            marker = index
+            break
+        if stripped.startswith(KERNEL_MARKER):
+            break
+    if marker is None:
+        raise ValueError(
+            f"kernel at line {definition.lineno} has no Graph fragment metadata"
+        )
+
+    fragment = []
+    for line in lines[marker + 1 : definition.lineno - 1]:
+        stripped = line.lstrip()
+        if stripped.startswith("# SchedulerNodes:"):
+            break
+        if stripped.startswith(GRAPH_LINE_PREFIX):
+            fragment.append(stripped[len(GRAPH_LINE_PREFIX) :].rstrip())
+    if not fragment:
+        raise ValueError(
+            f"kernel at line {definition.lineno} has an empty Graph fragment"
+        )
+    return fragment
+
+
+def split_top_level(text, delimiter):
+    parts = []
+    start = 0
+    stack = []
+    quote = None
+    escaped = False
+    pairs = {"(": ")", "[": "]", "{": "}"}
+
+    for index, char in enumerate(text):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {"'", '"'}:
+            quote = char
+        elif char in pairs:
+            stack.append(pairs[char])
+        elif stack and char == stack[-1]:
+            stack.pop()
+        elif char == delimiter and not stack:
+            parts.append(text[start:index].strip())
+            start = index + 1
+
+    if quote is not None or stack:
+        raise ValueError(f"unbalanced Graph fragment expression: {text!r}")
+    parts.append(text[start:].strip())
+    return parts
+
+
+def replace_node_references(expression):
+    return NODE_REFERENCE.sub(r"\1", expression)
+
+
+def render_kwargs(mapping):
+    if mapping == "{}":
+        return []
+    if not mapping.startswith("{") or not mapping.endswith("}"):
+        raise ValueError(f"unsupported Graph fragment kwargs: {mapping!r}")
+
+    entries = []
+    for item in split_top_level(mapping[1:-1], ","):
+        if not item:
+            continue
+        key_value = split_top_level(item, ":")
+        if len(key_value) < 2:
+            raise ValueError(f"unsupported Graph fragment kwarg: {item!r}")
+        name, value = key_value[0], ":".join(key_value[1:]).strip()
+        if not name.isidentifier() or keyword.iskeyword(name):
+            raise ValueError(f"invalid Graph fragment kwarg name: {name!r}")
+        value = replace_node_references(value)
+        if DEVICE_LITERAL.fullmatch(value):
+            value = f"torch.device({value!r})"
+        entries.append(f"{name}={value}")
+    return entries
+
+
+def render_call(target, args, kwargs):
+    if not args.startswith("(") or not args.endswith(")"):
+        raise ValueError(f"unsupported Graph fragment args: {args!r}")
+    arguments = [
+        replace_node_references(item)
+        for item in split_top_level(args[1:-1], ",")
+        if item
+    ]
+    arguments.extend(render_kwargs(kwargs))
+    return f"{target}({', '.join(arguments)})"
+
+
+def render_eager_forward(lines, definition):
+    inputs = []
+    statements = []
+    return_expression = None
+
+    for line in graph_fragment(lines, definition):
+        placeholder = PLACEHOLDER.match(line)
+        if placeholder:
+            name = placeholder.group(1)
+            if name not in inputs:
+                inputs.append(name)
+            continue
+
+        call = CALL_FUNCTION.match(line)
+        if call:
+            name, target, args, kwargs = call.groups()
+            if not name.isidentifier() or keyword.iskeyword(name):
+                raise ValueError(f"invalid Graph fragment node name: {name!r}")
+            statements.append(f"{name} = {render_call(target, args, kwargs)}")
+            continue
+
+        returned = RETURN.match(line)
+        if returned:
+            return_expression = replace_node_references(returned.group(1) or "None")
+            continue
+
+        raise ValueError(f"unsupported Graph fragment line: {line!r}")
+
+    if return_expression is None:
+        raise ValueError("Graph fragment has no return value")
+    signature = ", ".join(inputs)
+    body = statements + [f"return {return_expression}"]
+    function = [
+        "# Eager reference reconstructed from Inductor Graph fragment metadata.",
+        f"def eager_forward({signature}):",
+        textwrap.indent("\n".join(body), "    "),
+    ]
+    result = "\n".join(function)
+    ast.parse(result)
+    return result
+
+
 def common_header(lines, tree):
     for index, line in enumerate(lines):
         if line.lstrip().startswith(KERNEL_MARKER):
@@ -201,7 +364,7 @@ def device_setup(device, input_nodes):
     return [f"torch.{device}.set_device({index})"]
 
 
-def render_extraction(source, tree, kernel_name):
+def render_extraction(source, tree, kernel_name, include_eager=False):
     lines = source.splitlines(keepends=True)
     definitions = [
         node for node in tree.body if is_kernel_definition(node, kernel_name)
@@ -230,8 +393,10 @@ def render_extraction(source, tree, kernel_name):
     sections = [
         common_header(lines, tree),
         definition_text,
-        "async_compile.wait(globals())\ndel async_compile",
     ]
+    if include_eager:
+        sections.append(render_eager_forward(lines, definition))
+    sections.append("async_compile.wait(globals())\ndel async_compile")
     if inputs:
         sections.append(
             "from torch._dynamo.testing import rand_strided\n\n"
@@ -256,7 +421,7 @@ def main():
         source = source_path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(source_path))
         extracted, launch, launch_count = render_extraction(
-            source, tree, args.kernel_name
+            source, tree, args.kernel_name, include_eager=args.include_eager
         )
     except (OSError, SyntaxError, ValueError) as error:
         raise SystemExit(f"error: {error}") from error
