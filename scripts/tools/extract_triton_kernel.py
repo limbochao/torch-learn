@@ -23,6 +23,7 @@ CALL_FUNCTION = re.compile(
 )
 RETURN = re.compile(r"^return(?:\s+(.*))?$")
 DEVICE_LITERAL = re.compile(r"(?:cpu|cuda|npu|xpu|mtia)(?::\d+)?")
+TENSOR_SHAPE = re.compile(r':\s*Tensor\s+"[^"\[]+\[([^]]*)\]')
 
 
 def parse_args():
@@ -289,8 +290,26 @@ def render_call(target, args, kwargs):
     return f"{target}({', '.join(arguments)})"
 
 
+def symbolic_tensor_dims(line):
+    match = TENSOR_SHAPE.search(line)
+    if match is None or not match.group(1).strip():
+        return []
+
+    symbolic_dims = []
+    for dim, expression in enumerate(split_top_level(match.group(1), ",")):
+        try:
+            tree = ast.parse(expression, mode="eval")
+        except SyntaxError:
+            symbolic_dims.append(dim)
+            continue
+        if any(isinstance(node, ast.Name) for node in ast.walk(tree)):
+            symbolic_dims.append(dim)
+    return symbolic_dims
+
+
 def render_eager_forward(lines, definition):
     inputs = []
+    symbolic_dims = {}
     statements = []
     return_expression = None
 
@@ -300,6 +319,7 @@ def render_eager_forward(lines, definition):
             name = placeholder.group(1)
             if name not in inputs:
                 inputs.append(name)
+                symbolic_dims[name] = symbolic_tensor_dims(line)
             continue
 
         call = CALL_FUNCTION.match(line)
@@ -324,6 +344,30 @@ def render_eager_forward(lines, definition):
     function = [
         "# Eager reference reconstructed from Inductor Graph fragment metadata.",
         f"def eager_forward({signature}):",
+        textwrap.indent("\n".join(body), "    "),
+    ]
+    result = "\n".join(function)
+    ast.parse(result)
+    return result, inputs, symbolic_dims
+
+
+def render_compiled_eager(inputs, symbolic_dims):
+    signature = ", ".join(inputs)
+    body = []
+    for name in inputs:
+        body.extend(
+            f"torch._dynamo.mark_dynamic({name}, {dim})"
+            for dim in symbolic_dims[name]
+        )
+    body.extend(
+        [
+            "compiled_eager_forward = torch.compile(eager_forward, dynamic=None)",
+            f"return compiled_eager_forward({signature})",
+        ]
+    )
+    function = [
+        "# Compile and run the eager reference with the extracted inputs.",
+        f"def run_compiled_eager({signature}):",
         textwrap.indent("\n".join(body), "    "),
     ]
     result = "\n".join(function)
@@ -395,7 +439,15 @@ def render_extraction(source, tree, kernel_name, include_eager=False):
         definition_text,
     ]
     if include_eager:
-        sections.append(render_eager_forward(lines, definition))
+        eager_forward, eager_inputs, symbolic_dims = render_eager_forward(
+            lines, definition
+        )
+        sections.extend(
+            [
+                eager_forward,
+                render_compiled_eager(eager_inputs, symbolic_dims),
+            ]
+        )
     sections.append("async_compile.wait(globals())\ndel async_compile")
     if inputs:
         sections.append(
@@ -403,7 +455,12 @@ def render_extraction(source, tree, kernel_name, include_eager=False):
             + "\n".join(source_segment(source, node) for node in inputs)
         )
     setup = device_setup(kernel_device(definition), inputs)
-    body = setup + [source_segment(source, node) for node in locals_]
+    body = setup
+    if include_eager:
+        body.append(
+            f"eager_result = run_compiled_eager({', '.join(eager_inputs)})"
+        )
+    body.extend(source_segment(source, node) for node in locals_)
     body.append(source_segment(source, launch))
     sections.append("\n".join(body))
     extracted = "\n\n\n".join(sections).rstrip()

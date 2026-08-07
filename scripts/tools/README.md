@@ -46,8 +46,10 @@ python scripts/tools/extract_triton_kernel.py \
 ```
 
 生成的函数保留 Graph fragment 中的 placeholder 作为形参，并按 FX node 顺序调用对应的
-`torch.ops`。工具不推测 placeholder 与 Triton `.run(...)` 指针参数之间的对应关系，因此不会自动调用
-`eager_forward(...)`；涉及 in-place buffer 或多个输出时，由使用者显式传入 eager 输入。
+`torch.ops`。工具还会生成 `run_compiled_eager(...)`，使用抽取出的 tensor 调用
+`torch.compile(eager_forward, dynamic=None)`；Graph fragment 中原本含符号表达式的 tensor 维度会先通过
+`torch._dynamo.mark_dynamic(...)` 标记。涉及 in-place buffer 或多个输出时，eager 结果与 Triton 输出仍由
+使用者按实际 alias 关系进行比较。
 
 ## CUDA profiler
 
