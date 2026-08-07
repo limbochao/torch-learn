@@ -2,6 +2,12 @@
 
 本目录记录 PyTorch 相关问题的定位过程，重点保留可复现信息和结论依据。
 
+## 目录分类
+
+- `codegen/`：generated DSL、lowering、reduction 和 codegen 问题。
+- `dynamic-shape/`：static/dynamic graph 与 kernel 行为差异。
+- `symbolic-group/`：symbolic group 分组、config 和性能现象。
+
 ## 建议记录内容
 
 - 问题背景和现象。

@@ -5,7 +5,9 @@
 ## 建议分类
 
 - `frontend/`: Dynamo、FX、export 等前端机制。
-- `compiler/`: Inductor、codegen、scheduler、autotune 等编译相关内容。
+- `compiler/codegen/`: Inductor codegen 概念和 kernel 分类。
+- `compiler/symbolic-group/`: symbolic grouped autotune 线上机制。
+- `compiler/debugging/`: runnable 适配和通用调试方法。
 - `runtime/`: dispatcher、executor、device runtime 等运行时内容。
 - `ops/`: 算子语义、shape、dtype、layout 等专题记录。
 

@@ -21,12 +21,20 @@ title: 学习笔记
       <p>codegen 基础概念</p>
     </div>
     <div>
-      <a href="compiler/inductor-codegen-terms.html">Inductor Codegen 术语说明</a>
+      <a href="compiler/codegen/inductor-codegen-terms.html">Inductor Codegen 术语说明</a>
       <p>解释 DSL、reduction lane、tile、stride、tiling 等阅读生成 kernel 时常见的术语。</p>
     </div>
     <div>
-      <a href="compiler/inductor-pointwise-vs-elementwise.html">Inductor Pointwise 与 Elementwise 范围区别</a>
+      <a href="compiler/codegen/inductor-pointwise-vs-elementwise.html">Inductor Pointwise 与 Elementwise 范围区别</a>
       <p>说明 Triton pointwise 为什么大于狭义 elementwise，并列出 broadcast、view/reindex、mask、copy、fill 等子类。</p>
+    </div>
+    <div>
+      <a href="compiler/symbolic-group/inductor-symbolic-group-v2.10.html">torch_npu v2.10.0 Symbolic Group 实现</a>
+      <p>仅依据 v2.10.0 线上代码说明准入、代表 shape、candidate plan、autotune 和 dispatch。</p>
+    </div>
+    <div>
+      <a href="compiler/debugging/npu-fx-graph-runnable-adaptation.html">NPU FX Graph Runnable 通用适配</a>
+      <p>说明输入符号化、自定义算子占位、static/dynamic/group 模式和产物收集的通用边界。</p>
     </div>
   </li>
 </ul>

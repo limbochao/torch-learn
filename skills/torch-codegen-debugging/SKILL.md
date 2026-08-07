@@ -55,6 +55,77 @@ reduction kernel 要保留 non-contiguous stride pattern。把输入简化成 co
 
 debug log 要聚焦且容易删除。最终代码不要留下无条件噪声日志，除非用户明确要求保留。
 
+#### 使用现有工具抽取单个 Triton kernel
+
+当工作区中存在 `torch-learn` 仓库时，优先使用
+`scripts/tools/extract_triton_kernel.py` 从 Inductor `output_code.py` 提取可独立阅读和运行的 kernel，
+不要手工复制不完整代码。先用 `rg --files` 定位脚本和 `output_code.py`：
+
+```bash
+python <torch-learn>/scripts/tools/extract_triton_kernel.py \
+  /path/to/output_code.py \
+  triton_poi_fused_add_0 \
+  -o /path/to/triton_poi_fused_add_0.py
+```
+
+同名 kernel 有多次 `.run(...)` 时，工具只提取第一次调用的参数和依赖。输出包含公共导入、DSL、
+`async_compile.wait(globals())`、`del async_compile`、benchmark input 和首次 launch。
+
+需要同时查看 FX 语义时可以增加 `--include-eager`。生成的 `eager_forward(...)` 不会猜测
+FX placeholder 与 Triton pointer 参数的对应关系；涉及 in-place、多输出或别名时，调用者仍需显式构造 eager 输入。
+
+#### 记录最终 best tiling
+
+需要确认最终 selected config 时，使用
+`scripts/tools/autotune_tiling.py::BestTilingRecorder`，不要从 autotune 候选日志推测 winner：
+
+```python
+from scripts.tools.autotune_tiling import BestTilingRecorder
+
+recorder = BestTilingRecorder("npu")  # 或 "cuda"
+recorder.install()
+try:
+    recorder.start_capture()
+    try:
+        compiled_fn(*args)
+    finally:
+        records = recorder.stop_capture()
+finally:
+    recorder.uninstall()
+```
+
+hook 必须在目标 backend 导入后安装，并覆盖真正触发 autotune/dispatch 的调用。普通记录包含
+`kernel_name`、`selected_config`、`runtime_blocks`；NPU group 还包含 `group_id` 和
+`feature_inputs`。该工具使用 Inductor 内部接口，升级 torch/torch_npu 后必须在实际设备上确认 hook 仍生效。
+
+不要把 recorder 扩展成特定测试脚本的 CSV 汇总器。场景 ID、shape、execution 和落盘格式由调用脚本负责。
+
+### 3.1 定位 symbolic group 的通用证据链
+
+分析 grouped autotune 时，按生成期到运行期依次收集，避免把不同阶段的概念混在一起：
+
+1. generated metadata：`group_enabled`、`group_template`、`group_workload`、
+   `primary_group_axis`、`static_split_axes`、`secondary_runtime_symbolic_axes`、
+   `group_features`、`runtime_block_arg_names`。
+2. candidate plan：每组 representative feature/axis values、reachable group、variants、policies。
+3. runtime selection：真实 `feature_inputs`、解析出的 `group_id`、`selected_config`、
+   `runtime_blocks` 和实际 grid。
+4. device result：目标 kernel 的单次 device timing，以及 static/dynamic 对照。
+
+明确区分四层信息：
+
+- generated DSL body 决定数学计算、访问和 mask。
+- representative 只用于某个 group 的 autotune benchmark input，不是当前 runtime shape。
+- selected config 是该 group benchmark 后的 winner compile config。
+- runtime blocks / grid 是 winner 在真实 runtime shape 上 materialize 的 launch 参数。
+
+匹配 static、dynamic 和 group kernel 时，不要依赖 generated kernel 名称后缀。使用 graph fragment、输入输出、
+迭代域、indexing 和数学表达式建立对应关系。若 DSL body 相同但性能不同，优先逐项对齐 selected config、
+runtime blocks、grid、kernel type 和编译模式；若这些也相同，再检查 profile 噪声、cache 和调用上下文。
+
+只把能跨 case 复用的检查步骤写入 skill。具体 kernel 名、shape、性能数字、临时 patch 和尚未在线上代码验证的
+hypothesis 应进入 issue log，而不是固化为通用规则。
+
 ### 4. 机械阅读 DSL
 
 把 generated symbols 映射回 tensor semantics：

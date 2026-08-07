@@ -62,12 +62,12 @@ published: false
 
 可见：
 
-- static 起点：[`static_fx_graph_readable.py:1`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_fx_graph_readable.py#L1)
-- dynamic 起点：[`dynamic_fx_graph_readable.py:1`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_fx_graph_readable.py#L1)
+- static 起点：[`static_fx_graph_readable.py:1`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_fx_graph_readable.py#L1)
+- dynamic 起点：[`dynamic_fx_graph_readable.py:1`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_fx_graph_readable.py#L1)
 - static embedding 分支和后续主干：
-  [`static_fx_graph_readable.py:353`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_fx_graph_readable.py#L353)
+  [`static_fx_graph_readable.py:353`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_fx_graph_readable.py#L353)
 - dynamic embedding 分支和后续主干：
-  [`dynamic_fx_graph_readable.py:353`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_fx_graph_readable.py#L353)
+  [`dynamic_fx_graph_readable.py:353`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_fx_graph_readable.py#L353)
 
 ### 1.2 差异只在 shape 表达
 
@@ -103,12 +103,12 @@ published: false
 尤其是 embedding/sum 段：
 
 - static: `triton_red_fused_3`
-  [`static_output_code.py:228`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L228)
+  [`static_output_code.py:228`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L228)
 - dynamic:
   `triton_red_fused_embedding_slice_sum_3/4/5`
-  [`dynamic_output_code.py:366`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L366),
-  [`dynamic_output_code.py:783`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L783),
-  [`dynamic_output_code.py:1137`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L1137)
+  [`dynamic_output_code.py:366`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L366),
+  [`dynamic_output_code.py:783`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L783),
+  [`dynamic_output_code.py:1137`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L1137)
 
 ### 2.2 static 的 sparse 分支是什么形态
 
@@ -121,9 +121,9 @@ static 的关键 reduction kernel `triton_red_fused_3` 对应的 graph fragment 
 对应代码：
 
 - graph fragment:
-  [`static_output_code.py:216`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L216)
+  [`static_output_code.py:216`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L216)
 - kernel body:
-  [`static_output_code.py:228`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L228)
+  [`static_output_code.py:228`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L228)
 
 kernel 里的核心地址公式也和这个语义一致：
 
@@ -162,7 +162,7 @@ dynamic 没有得到上面那种单个 `[B, 50, 8]` sparse buffer，而是生成
 然后用一次真实的 `aten.cat.default` 把 50 个 `[B, 8]` 输出拼成 `[B, 400]`：
 
 - 三个 reduction kernel 调用和 cat：
-  [`dynamic_output_code.py:1678`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L1678)
+  [`dynamic_output_code.py:1678`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L1678)
 
 从 DSL 可以直接看到每个 kernel 都是在把多个固定 offset 的 slice 手工展开。
 
@@ -239,9 +239,9 @@ if should_skip_linearization_on_a5(self.var_ranges, self.indexing):
 `simt_only`：
 
 - static 示例：
-  [`static_output_code.py:70`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L70)
+  [`static_output_code.py:70`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L70)
 - dynamic 示例：
-  [`dynamic_output_code.py:70`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L70)
+  [`dynamic_output_code.py:70`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L70)
 
 这类差异属于“执行模板变化”，不是“数学语义变化”。
 
@@ -361,7 +361,7 @@ dynamic 没拿到这一步，因此才会被后面的 fusion size 限制切开�
 
 static sparse 分支产出的是单个 `buf25: [128, 50, 8]`：
 
-- [`static_output_code.py:670`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L670)
+- [`static_output_code.py:670`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L670)
 
 因此 static 可以直接把它当成一整块 sparse embedding，再和 dense 分支一起往
 `[128, 408]` 的 alias buffer 里写：
@@ -371,12 +371,12 @@ static sparse 分支产出的是单个 `buf25: [128, 50, 8]`：
 
 对应：
 
-- [`static_output_code.py:676`](../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L676)
+- [`static_output_code.py:676`](../../../artifacts/dlrm-dynamic-vs-static-codegen/static_output_code.py#L676)
 
 dynamic 没有这个 `[B, 50, 8]` buffer，而是先得到 50 个 `[B, 8]` buffer。
 于是它必须先做一次 50 输入的 `aten.cat.default`：
 
-- [`dynamic_output_code.py:1715`](../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L1715)
+- [`dynamic_output_code.py:1715`](../../../artifacts/dlrm-dynamic-vs-static-codegen/dynamic_output_code.py#L1715)
 
 然后才有后面的：
 

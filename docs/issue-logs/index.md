@@ -22,7 +22,7 @@ title: 问题定位日志
   <span class="tl-badge">Accuracy</span>
 </div>
 
-### [RMSNorm SIMD 多 reduction 轴 codegen 问题复盘](rms-norm-simd-multi-reduction-codegen.html)
+### [RMSNorm SIMD 多 reduction 轴 codegen 问题复盘](codegen/rms-norm-simd-multi-reduction-codegen.html)
 
 记录 RMSNorm weight grad 在 `torch.compile` 后出现 NPU Inductor 精度错误的定位过程，包含错误 DSL、axis flatten、mask/value 坐标和 store 位置分析。
 </article>
@@ -34,10 +34,22 @@ title: 问题定位日志
   <span class="tl-badge">DLRM</span>
 </div>
 
-### [DLRM dynamic 与 static codegen 对比分析](dlrm-dynamic-vs-static-codegen-analysis.html)
+### [DLRM dynamic 与 static codegen 对比分析](dynamic-shape/dlrm-dynamic-vs-static-codegen-analysis.html)
 
 对比 `dynamic=True` 与 `dynamic=False` 下的 FX graph 和 generated code，解释 dynamic shape、kernel type、
 SIMT 切分及后续 concat lowering 的差异。
+</article>
+
+<article class="tl-feature tl-card-accent-amber" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">Symbolic Group</span>
+  <span class="tl-badge">Performance</span>
+  <span class="tl-badge">Observation</span>
+</div>
+
+### [relu_40 / relu_42 性能差异记录](symbolic-group/inductor-symbolic-group-relu-40-42-performance.html)
+
+仅保存非线上代码产物中的性能现象和 kernel 信息，不把待验证推测写成根因。
 </article>
 </div>
 

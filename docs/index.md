@@ -22,15 +22,15 @@ title: 首页
 
 <ul class="tl-link-list">
   <li>
-    <a href="issue-logs/rms-norm-simd-multi-reduction-codegen.html">RMSNorm SIMD 多 reduction 轴问题复盘</a>
+    <a href="issue-logs/codegen/rms-norm-simd-multi-reduction-codegen.html">RMSNorm SIMD 多 reduction 轴问题复盘</a>
     <span>从现象、错误 DSL、代码路径到修复语义的完整定位记录。</span>
   </li>
   <li>
-    <a href="notes/compiler/inductor-codegen-terms.html">Inductor Codegen 术语说明</a>
+    <a href="notes/compiler/codegen/inductor-codegen-terms.html">Inductor Codegen 术语说明</a>
     <span>整理 DSL、reduction lane、tile、stride、tiling 等常用概念。</span>
   </li>
   <li>
-    <a href="issue-logs/dlrm-dynamic-vs-static-codegen-analysis.html">DLRM dynamic 与 static codegen 对比</a>
+    <a href="issue-logs/dynamic-shape/dlrm-dynamic-vs-static-codegen-analysis.html">DLRM dynamic 与 static codegen 对比</a>
     <span>从 FX graph、generated code 和 kernel type 解释 dynamic shape 带来的结构变化。</span>
   </li>
 </ul>
@@ -92,7 +92,7 @@ title: 首页
   <span class="tl-badge">SIMD reduction</span>
 </div>
 
-### [RMSNorm SIMD 多 reduction 轴 codegen 问题复盘](issue-logs/rms-norm-simd-multi-reduction-codegen.html)
+### [RMSNorm SIMD 多 reduction 轴 codegen 问题复盘](issue-logs/codegen/rms-norm-simd-multi-reduction-codegen.html)
 
 围绕 RMSNorm weight grad 的 `torch.compile` 精度问题，记录错误 DSL、axis layout、accumulator 生命周期和 store 位置的分析证据。
 </article>
@@ -104,7 +104,7 @@ title: 首页
   <span class="tl-badge">Codegen</span>
 </div>
 
-### [Inductor Codegen 术语说明](notes/compiler/inductor-codegen-terms.html)
+### [Inductor Codegen 术语说明](notes/compiler/codegen/inductor-codegen-terms.html)
 
 整理阅读 generated DSL 时经常遇到的基础术语，为后续 codegen 问题复盘提供统一上下文。
 </article>

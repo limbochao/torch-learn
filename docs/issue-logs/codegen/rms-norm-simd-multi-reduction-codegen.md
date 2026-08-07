@@ -8,7 +8,7 @@ title: RMSNorm SIMD 多 reduction 轴 codegen 问题复盘
 
 RMSNorm weight grad 在 `torch.compile` 后走 NPU Inductor codegen 路径，生成的 SIMD reduction kernel 结果和 eager 不一致。问题不在 eager 算子语义，而在 generated DSL 对连续多 reduction 轴的处理：accumulator 的生命周期、value/mask flatten 前的轴顺序、最终 `tl.sum` 的 reduction dim、以及 `tl.store` 的位置没有按同一套 layout 规则生成。
 
-A2 这类环境无法依赖 SIMT fallback 绕过 SIMD kernel，因此错误 DSL 会直接编译并运行，表现为 compiled output 精度错误。相关术语见：[Inductor Codegen 术语说明](../notes/compiler/inductor-codegen-terms.md)。
+A2 这类环境无法依赖 SIMT fallback 绕过 SIMD kernel，因此错误 DSL 会直接编译并运行，表现为 compiled output 精度错误。相关术语见：[Inductor Codegen 术语说明](../../notes/compiler/codegen/inductor-codegen-terms.md)。
 
 ## 复现方式
 
