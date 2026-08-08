@@ -4,6 +4,8 @@
 import argparse
 import ast
 import keyword
+import operator
+import pprint
 import re
 import textwrap
 from pathlib import Path
@@ -23,7 +25,34 @@ CALL_FUNCTION = re.compile(
 )
 RETURN = re.compile(r"^return(?:\s+(.*))?$")
 DEVICE_LITERAL = re.compile(r"(?:cpu|cuda|npu|xpu|mtia)(?::\d+)?")
-TENSOR_SHAPE = re.compile(r':\s*Tensor\s+"[^"\[]+\[([^]]*)\]')
+TENSOR_METADATA = re.compile(
+    r':\s*Tensor\s+"(?P<dtype>[^"\[]+)\[(?P<shape>[^]]*)\]'
+    r'\[(?P<stride>[^]]*)\](?P<device>[^"\s]+)"'
+)
+TORCH_DTYPES = {
+    "b8": "torch.bool",
+    "f16": "torch.float16",
+    "f32": "torch.float32",
+    "f64": "torch.float64",
+    "bf16": "torch.bfloat16",
+    "i8": "torch.int8",
+    "i16": "torch.int16",
+    "i32": "torch.int32",
+    "i64": "torch.int64",
+    "u8": "torch.uint8",
+}
+SAFE_BINARY_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+}
+SAFE_UNARY_OPERATORS = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+SAFE_DIMENSION_FUNCTIONS = {"max", "min"}
 
 
 def parse_args():
@@ -39,15 +68,24 @@ def parse_args():
         "-o",
         "--output",
         type=Path,
-        help="output path (default: <kernel_name>.py in the current directory)",
+        help=(
+            "output path (default: <kernel_name>.py, or "
+            "<kernel_name>_case.py with --only-eager)"
+        ),
     )
-    parser.add_argument(
+    eager_output = parser.add_mutually_exclusive_group()
+    eager_output.add_argument(
         "--include-eager",
         action="store_true",
         help=(
             "generate eager_forward(...) from the kernel's Graph fragment "
             "metadata"
         ),
+    )
+    eager_output.add_argument(
+        "--only-eager",
+        action="store_true",
+        help="generate only an eager benchmark case for the kernel",
     )
     return parser.parse_args()
 
@@ -290,26 +328,57 @@ def render_call(target, args, kwargs):
     return f"{target}({', '.join(arguments)})"
 
 
-def symbolic_tensor_dims(line):
-    match = TENSOR_SHAPE.search(line)
-    if match is None or not match.group(1).strip():
-        return []
+def tensor_metadata(line):
+    match = TENSOR_METADATA.search(line)
+    if match is None:
+        raise ValueError(f"cannot parse Graph fragment tensor metadata: {line!r}")
+    dtype = match.group("dtype")
+    if dtype not in TORCH_DTYPES:
+        raise ValueError(f"unsupported Graph fragment tensor dtype: {dtype!r}")
+
+    shape = [item for item in split_top_level(match.group("shape"), ",") if item]
+    stride = [item for item in split_top_level(match.group("stride"), ",") if item]
+    if len(shape) != len(stride):
+        raise ValueError(f"tensor shape and stride rank differ: {line!r}")
 
     symbolic_dims = []
-    for dim, expression in enumerate(split_top_level(match.group(1), ",")):
-        try:
-            tree = ast.parse(expression, mode="eval")
-        except SyntaxError:
+    for dim, expression in enumerate(shape):
+        if expression_symbols(expression):
             symbolic_dims.append(dim)
-            continue
-        if any(isinstance(node, ast.Name) for node in ast.walk(tree)):
-            symbolic_dims.append(dim)
-    return symbolic_dims
+    return {
+        "shape": shape,
+        "stride": stride,
+        "device": match.group("device"),
+        "dtype": TORCH_DTYPES[dtype],
+        "symbolic_dims": symbolic_dims,
+    }
+
+
+def expression_symbols(expression):
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as error:
+        raise ValueError(f"invalid symbolic dimension expression: {expression!r}") from error
+    called_names = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    unsupported = called_names - SAFE_DIMENSION_FUNCTIONS
+    if unsupported:
+        raise ValueError(
+            f"unsupported symbolic dimension function(s): {sorted(unsupported)}"
+        )
+    return {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id not in called_names
+    }
 
 
 def render_eager_forward(lines, definition):
     inputs = []
-    symbolic_dims = {}
+    input_metadata = {}
     statements = []
     return_expression = None
 
@@ -319,7 +388,7 @@ def render_eager_forward(lines, definition):
             name = placeholder.group(1)
             if name not in inputs:
                 inputs.append(name)
-                symbolic_dims[name] = symbolic_tensor_dims(line)
+                input_metadata[name] = tensor_metadata(line)
             continue
 
         call = CALL_FUNCTION.match(line)
@@ -348,16 +417,16 @@ def render_eager_forward(lines, definition):
     ]
     result = "\n".join(function)
     ast.parse(result)
-    return result, inputs, symbolic_dims
+    return result, inputs, input_metadata
 
 
-def render_compiled_eager(inputs, symbolic_dims):
+def render_compiled_eager(inputs, input_metadata):
     signature = ", ".join(inputs)
     body = []
     for name in inputs:
         body.extend(
             f"torch._dynamo.mark_dynamic({name}, {dim})"
-            for dim in symbolic_dims[name]
+            for dim in input_metadata[name]["symbolic_dims"]
         )
     body.extend(
         [
@@ -371,6 +440,182 @@ def render_compiled_eager(inputs, symbolic_dims):
         textwrap.indent("\n".join(body), "    "),
     ]
     result = "\n".join(function)
+    ast.parse(result)
+    return result
+
+
+def tuple_expression(items):
+    suffix = "," if len(items) == 1 else ""
+    return f"({', '.join(items)}{suffix})"
+
+
+def render_eager_inputs(inputs, input_metadata):
+    statements = []
+    argument_names = []
+    for index, name in enumerate(inputs):
+        metadata = input_metadata[name]
+        argument_name = f"eager_input_{index}"
+        argument_names.append(argument_name)
+        statements.append(
+            f"{argument_name} = rand_strided("
+            f"{tuple_expression(metadata['shape'])}, "
+            f"{tuple_expression(metadata['stride'])}, "
+            f"device={metadata['device']!r}, dtype={metadata['dtype']})"
+        )
+    result = "\n".join(statements)
+    ast.parse(result)
+    return result, argument_names
+
+
+def assignment_value(node):
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        return node.value
+    return None
+
+
+def all_simple_assignments(tree):
+    assignments = {}
+    for node in ast.walk(tree):
+        for name in assigned_names(node):
+            assignments.setdefault(name, []).append(node)
+    for nodes in assignments.values():
+        nodes.sort(key=lambda item: item.lineno)
+    return assignments
+
+
+def evaluate_integer_expression(node, resolve_name):
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+    ):
+        return node.value
+    if isinstance(node, ast.Name):
+        return resolve_name(node.id)
+    if isinstance(node, ast.UnaryOp) and type(node.op) in SAFE_UNARY_OPERATORS:
+        return SAFE_UNARY_OPERATORS[type(node.op)](
+            evaluate_integer_expression(node.operand, resolve_name)
+        )
+    if isinstance(node, ast.BinOp) and type(node.op) in SAFE_BINARY_OPERATORS:
+        return SAFE_BINARY_OPERATORS[type(node.op)](
+            evaluate_integer_expression(node.left, resolve_name),
+            evaluate_integer_expression(node.right, resolve_name),
+        )
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in SAFE_DIMENSION_FUNCTIONS
+        and not node.keywords
+    ):
+        values = [evaluate_integer_expression(arg, resolve_name) for arg in node.args]
+        return max(values) if node.func.id == "max" else min(values)
+    raise ValueError("expression is not a supported integer expression")
+
+
+def resolve_symbol_values(tree, symbols):
+    assignments = all_simple_assignments(tree)
+    resolved = {}
+
+    def resolve(name, resolving=()):
+        if name in resolved:
+            return resolved[name]
+        if name in resolving:
+            raise ValueError(f"cyclic assignment while resolving {name!r}")
+
+        values = set()
+        for assignment in assignments.get(name, ()):
+            value = assignment_value(assignment)
+            if value is None:
+                continue
+            try:
+                candidate = evaluate_integer_expression(
+                    value,
+                    lambda dependency: resolve(dependency, resolving + (name,)),
+                )
+            except (TypeError, ValueError, ZeroDivisionError):
+                continue
+            if candidate > 0:
+                values.add(candidate)
+        if len(values) != 1:
+            detail = "no value" if not values else f"ambiguous values {sorted(values)}"
+            raise ValueError(f"cannot resolve symbolic dimension {name!r}: {detail}")
+        resolved[name] = values.pop()
+        return resolved[name]
+
+    return {name: resolve(name) for name in sorted(symbols)}
+
+
+def sample_bindings(baseline):
+    samples = [dict(baseline)]
+    for name, value in baseline.items():
+        for candidate in (value - 1, value + 1):
+            if candidate <= 0:
+                continue
+            binding = dict(baseline)
+            binding[name] = candidate
+            if binding not in samples:
+                samples.append(binding)
+    keys = tuple(sorted(baseline))
+    return sorted(samples, key=lambda binding: tuple(binding[key] for key in keys))
+
+
+def render_binding_list(name, bindings):
+    items = [
+        textwrap.indent(
+            pprint.pformat(binding, width=84, sort_dicts=True), "    "
+        )
+        + ","
+        for binding in bindings
+    ]
+    return f"{name} = [\n" + "\n".join(items) + "\n]"
+
+
+def render_eager_case(kernel_name, eager_forward, inputs, input_metadata, tree):
+    symbols = set()
+    for metadata in input_metadata.values():
+        for expression in metadata["shape"] + metadata["stride"]:
+            symbols.update(expression_symbols(expression))
+    baseline = resolve_symbol_values(tree, symbols)
+    samples = sample_bindings(baseline)
+
+    setup = [f"{name} = binding[{name!r}]" for name in sorted(symbols)]
+    for name in inputs:
+        metadata = input_metadata[name]
+        setup.append(
+            f"{name} = rand_strided(\n"
+            f"    {tuple_expression(metadata['shape'])},\n"
+            f"    {tuple_expression(metadata['stride'])},\n"
+            f"    device=device,\n"
+            f"    dtype={metadata['dtype']},\n"
+            ")"
+        )
+    setup.append(f"return {tuple_expression(inputs)}, {{}}")
+
+    dynamic_dims = {
+        f"args[{index}]": tuple(input_metadata[name]["symbolic_dims"])
+        for index, name in enumerate(inputs)
+        if input_metadata[name]["symbolic_dims"]
+    }
+    sections = [
+        "import torch\nfrom torch._dynamo.testing import rand_strided",
+        eager_forward,
+        render_binding_list("SAMPLE_BINDINGS", samples),
+        render_binding_list("COMPILE_BINDINGS", [baseline]),
+        "def make_inputs(binding, device):\n"
+        + textwrap.indent("\n".join(setup), "    "),
+        "DYNAMIC_DIMS = "
+        + pprint.pformat(dynamic_dims, width=88, sort_dicts=True),
+        "CASE = {\n"
+        f"    'name': {kernel_name!r},\n"
+        "    'forward': eager_forward,\n"
+        "    'make_inputs': make_inputs,\n"
+        "    'sample_bindings': SAMPLE_BINDINGS,\n"
+        "    'compile_bindings': COMPILE_BINDINGS,\n"
+        "    'dynamic_dims': DYNAMIC_DIMS,\n"
+        "}",
+    ]
+    result = "\n\n\n".join(sections)
+    result = "\n".join(line.rstrip() for line in result.splitlines()) + "\n"
     ast.parse(result)
     return result
 
@@ -408,7 +653,9 @@ def device_setup(device, input_nodes):
     return [f"torch.{device}.set_device({index})"]
 
 
-def render_extraction(source, tree, kernel_name, include_eager=False):
+def render_extraction(
+    source, tree, kernel_name, include_eager=False, only_eager=False
+):
     lines = source.splitlines(keepends=True)
     definitions = [
         node for node in tree.body if is_kernel_definition(node, kernel_name)
@@ -426,12 +673,28 @@ def render_extraction(source, tree, kernel_name, include_eager=False):
     if not launches:
         raise ValueError(f"found no {kernel_name}.run(...) call")
     launch = launches[0]
-    scope = find_parent_function(tree, launch)
-    inputs, locals_ = collect_dependencies(
-        launch,
-        simple_assignments(scope, launch.lineno),
-        benchmark_assignments(tree),
-    )
+    if only_eager:
+        inputs, locals_ = [], []
+    else:
+        scope = find_parent_function(tree, launch)
+        inputs, locals_ = collect_dependencies(
+            launch,
+            simple_assignments(scope, launch.lineno),
+            benchmark_assignments(tree),
+        )
+
+    if only_eager:
+        lines = source.splitlines(keepends=True)
+        eager_forward, eager_inputs, input_metadata = render_eager_forward(
+            lines, definition
+        )
+        return (
+            render_eager_case(
+                kernel_name, eager_forward, eager_inputs, input_metadata, tree
+            ),
+            launch,
+            len(launches),
+        )
 
     definition_text = kernel_block(lines, definition)
     sections = [
@@ -439,28 +702,32 @@ def render_extraction(source, tree, kernel_name, include_eager=False):
         definition_text,
     ]
     if include_eager:
-        eager_forward, eager_inputs, symbolic_dims = render_eager_forward(
+        eager_forward, eager_inputs, input_metadata = render_eager_forward(
             lines, definition
         )
         sections.extend(
             [
                 eager_forward,
-                render_compiled_eager(eager_inputs, symbolic_dims),
+                render_compiled_eager(eager_inputs, input_metadata),
             ]
         )
     sections.append("async_compile.wait(globals())\ndel async_compile")
-    if inputs:
+    if inputs or include_eager:
+        input_construction = "\n".join(
+            source_segment(source, node) for node in inputs
+        )
         sections.append(
             "from torch._dynamo.testing import rand_strided\n\n"
-            + "\n".join(source_segment(source, node) for node in inputs)
+            + input_construction
         )
     setup = device_setup(kernel_device(definition), inputs)
-    body = setup
+    body = setup + [source_segment(source, node) for node in locals_]
     if include_eager:
-        body.append(
-            f"eager_result = run_compiled_eager({', '.join(eager_inputs)})"
+        eager_construction, eager_arguments = render_eager_inputs(
+            eager_inputs, input_metadata
         )
-    body.extend(source_segment(source, node) for node in locals_)
+        body.append(eager_construction)
+        body.append(f"eager_result = run_compiled_eager({', '.join(eager_arguments)})")
     body.append(source_segment(source, launch))
     sections.append("\n".join(body))
     extracted = "\n\n\n".join(sections).rstrip()
@@ -473,12 +740,19 @@ def main():
     if not args.kernel_name.isidentifier():
         raise SystemExit(f"invalid Python kernel name: {args.kernel_name!r}")
     source_path = args.source.resolve()
-    output_path = (args.output or Path(f"{args.kernel_name}.py")).resolve()
+    default_name = (
+        f"{args.kernel_name}_case.py" if args.only_eager else f"{args.kernel_name}.py"
+    )
+    output_path = (args.output or Path(default_name)).resolve()
     try:
         source = source_path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(source_path))
         extracted, launch, launch_count = render_extraction(
-            source, tree, args.kernel_name, include_eager=args.include_eager
+            source,
+            tree,
+            args.kernel_name,
+            include_eager=args.include_eager,
+            only_eager=args.only_eager,
         )
     except (OSError, SyntaxError, ValueError) as error:
         raise SystemExit(f"error: {error}") from error

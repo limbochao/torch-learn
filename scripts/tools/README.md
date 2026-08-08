@@ -45,11 +45,28 @@ python scripts/tools/extract_triton_kernel.py \
   -o /path/to/triton_poi_fused_add_0.py
 ```
 
+如果只需要把指定 kernel 对应的 Graph fragment 生成通用性能工具使用的 eager case，可以使用
+`--only-eager`。该模式不输出 Triton 定义和 launch，只输出 `eager_forward(...)`、`make_inputs(...)`、
+`SAMPLE_BINDINGS`、`COMPILE_BINDINGS`、`DYNAMIC_DIMS` 和 `CASE`：
+
+```bash
+python scripts/tools/extract_triton_kernel.py \
+  /path/to/output_code.py \
+  triton_poi_fused_add_0 \
+  --only-eager \
+  -o /path/to/triton_poi_fused_add_0_case.py
+```
+
+`SAMPLE_BINDINGS` 和 `COMPILE_BINDINGS` 使用符号维度的字典列表。工具从首次 launch 的整数赋值链推导
+符号基准值，并为每个符号生成基准值前后各一个示例；用户只需修改字典中的数值，不需要同步维护样本名。
+包含表达式的维度（例如 `2*s0 + 1`）也按基础符号绑定，生成输入后再由工具记录实际 shape。无法安全推导
+符号值时，`--only-eager` 会报错并要求输入文件中存在可解析的整数赋值。
+
 生成的函数保留 Graph fragment 中的 placeholder 作为形参，并按 FX node 顺序调用对应的
-`torch.ops`。工具还会生成 `run_compiled_eager(...)`，使用抽取出的 tensor 调用
-`torch.compile(eager_forward, dynamic=None)`；Graph fragment 中原本含符号表达式的 tensor 维度会先通过
-`torch._dynamo.mark_dynamic(...)` 标记。涉及 in-place buffer 或多个输出时，eager 结果与 Triton 输出仍由
-使用者按实际 alias 关系进行比较。
+`torch.ops`。工具根据 placeholder metadata 中的 shape、stride、dtype 和 device，通过 `rand_strided(...)`
+构造独立的 eager 输入，不复用 kernel launch buffer。Graph fragment 中原本含符号表达式的 tensor 维度会先
+通过 `torch._dynamo.mark_dynamic(...)` 标记，再调用 `torch.compile(eager_forward, dynamic=None)`。生成的
+`eager_forward(...)` 和 `run_compiled_eager(...)` 可独立用于 eager 编译性能对比。
 
 ## CUDA profiler
 
