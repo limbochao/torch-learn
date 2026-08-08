@@ -68,6 +68,51 @@ python scripts/tools/extract_triton_kernel.py \
 通过 `torch._dynamo.mark_dynamic(...)` 标记，再调用 `torch.compile(eager_forward, dynamic=None)`。生成的
 `eager_forward(...)` 和 `run_compiled_eager(...)` 可独立用于 eager 编译性能对比。
 
+## Compile mode performance
+
+`compile_mode_perf.py` 接收 `--only-eager` 生成的 case，用一条命令顺序采集 NPU static、普通 dynamic 和
+symbolic group 三类编译模式，并自动生成长表、宽表和 XLSX：
+
+```bash
+python scripts/tools/compile_mode_perf.py \
+  /path/to/triton_poi_fused_add_0_case.py \
+  --device npu:0 \
+  --run-id add_relu_001 \
+  --output prof_log/compile_mode_perf
+```
+
+执行顺序固定为：一轮 static、按 `COMPILE_BINDINGS` 顺序执行的多轮 dynamic、最后一轮 group。所有 worker
+严格串行，前一个进程退出并清理 cache 后才启动下一个。group 只使用第一个 compile binding 编译一次，然后
+运行全部 `SAMPLE_BINDINGS`；汇总时将同一份 group 结果复用到各个 dynamic first shape。
+
+每个 worker 使用本次 run 目录下独立的临时 `TORCHINDUCTOR_CACHE_DIR`。kernel 定义会先复制到对应的
+`torch_compile_debug/` 产物目录，worker 退出后立即删除 cache；无论运行成功、失败或中断，控制进程最后都会
+再次清理整个临时 cache 根目录，不操作全局 `/tmp/torchinductor_root`。
+
+结果写入 `<output>/<run-id>/`：
+
+```text
+run.json
+raw_results.jsonl
+summary.csv
+comparison.csv
+comparison.xlsx
+artifacts/
+```
+
+`raw_results.jsonl` 保留 binding 和每个 tensor 的 shape、stride、dtype、device；`summary.csv` 是按执行模式
+展开的长表。`comparison.csv` 和 `comparison.xlsx` 使用以下固定列顺序：
+
+```text
+case,first_shape,shape,static_us,static_tiling,dynamic_us,dynamic_static_ratio,
+dynamic_tiling,group_us,group_static_ratio,group_tiling
+```
+
+`first_shape` 和 `shape` 来自 `make_inputs(...)` 构造出的实际 tensor；多输入使用
+`args[0]=...;args[1]=...;kwargs.name=...` 展示。XLSX 合并 `case`、`first_shape`、`dynamic_tiling` 和
+`group_tiling`，冻结首行、启用筛选并 pretty-print tiling JSON。`dynamic_static_ratio` 或
+`group_static_ratio` 大于 `1.15` 时标红，小于或等于该值不设置条件格式。
+
 ## CUDA profiler
 
 `cuda_profiler.py` 提供 `TorchCudaProfiler` 采集 PyTorch CUDA profiler Chrome Trace，并通过
