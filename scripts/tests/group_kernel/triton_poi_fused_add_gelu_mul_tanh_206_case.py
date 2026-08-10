@@ -19,14 +19,14 @@ def eager_forward(bmm_32, arg1318_1, bmm_31, arg1316_1):
 
 
 SAMPLE_BINDINGS = [
-    {'s0': 199},
+    {'s0': 400},
     {'s0': 200},
-    {'s0': 201},
+    {'s0': 256},
 ]
 
 
 COMPILE_BINDINGS = [
-    {'s0': 200},
+    {'s0': 400},
 ]
 
 

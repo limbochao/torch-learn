@@ -14,14 +14,14 @@ def eager_forward(cat_150, getitem_352):
 
 
 SAMPLE_BINDINGS = [
-    {'s0': 199},
+    {'s0': 400},
     {'s0': 200},
-    {'s0': 201},
+    {'s0': 256},
 ]
 
 
 COMPILE_BINDINGS = [
-    {'s0': 200},
+    {'s0': 400},
 ]
 
 
