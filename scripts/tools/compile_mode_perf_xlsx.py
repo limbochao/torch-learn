@@ -189,7 +189,7 @@ def worksheet_xml(rows) -> bytes:
             "state": "frozen",
         },
     )
-    ET.SubElement(worksheet, tag("sheetFormatPr"), {"defaultRowHeight": "20"})
+    ET.SubElement(worksheet, tag("sheetFormatPr"), {"defaultRowHeight": "40"})
 
     widths = ET.SubElement(worksheet, tag("cols"))
     for index, column in enumerate(COLUMNS, start=1):
@@ -220,7 +220,11 @@ def worksheet_xml(rows) -> bytes:
         append_cell(header, 1, column_index, column, 1)
 
     for row_number, values in enumerate(rows, start=2):
-        row = ET.SubElement(data, tag("row"), {"r": str(row_number)})
+        row = ET.SubElement(
+            data,
+            tag("row"),
+            {"r": str(row_number), "ht": "40", "customHeight": "1"},
+        )
         for column_index, column in enumerate(COLUMNS, start=1):
             if (row_number, column_index) in merged_children:
                 continue

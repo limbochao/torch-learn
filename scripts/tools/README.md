@@ -98,7 +98,14 @@ summary.csv
 comparison.csv
 comparison.xlsx
 artifacts/
+  s/sNNN/
+  d/fNNN/sNNN/
+  g/sNNN/
 ```
+
+为避免 Windows 下载或解压时触发路径长度限制，artifact 使用紧凑目录名：`s`、`d`、`g` 分别表示 static、
+dynamic、group，`fNNN` 表示首次编译 binding 序号，`sNNN` 表示运行样本序号。完整 shape 仍保存在
+`raw_results.jsonl`、`summary.csv` 和 `comparison.*` 中，不再重复写入目录名。
 
 `raw_results.jsonl` 保留 binding 和每个 tensor 的 shape、stride、dtype、device；`summary.csv` 是按执行模式
 展开的长表。`comparison.csv` 和 `comparison.xlsx` 使用以下固定列顺序：
@@ -110,7 +117,8 @@ dynamic_tiling,group_us,group_static_ratio,group_tiling
 
 `first_shape` 和 `shape` 来自 `make_inputs(...)` 构造出的实际 tensor；多输入使用
 `args[0]=...;args[1]=...;kwargs.name=...` 展示。XLSX 合并 `case`、`first_shape`、`dynamic_tiling` 和
-`group_tiling`，冻结首行、启用筛选并 pretty-print tiling JSON。`dynamic_static_ratio` 或
+`group_tiling`，冻结首行、启用筛选并 pretty-print tiling JSON；除表头外的数据行固定为 40 行高。
+`dynamic_static_ratio` 或
 `group_static_ratio` 大于 `1.15` 时标红，小于或等于该值不设置条件格式。
 
 ## CUDA profiler

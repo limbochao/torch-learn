@@ -20,6 +20,11 @@ from typing import Any
 
 
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
+ARTIFACT_MODE_COMPONENTS = {
+    "static": "s",
+    "dynamic": "d",
+    "group": "g",
+}
 SUMMARY_COLUMNS = (
     "case",
     "mode",
@@ -140,11 +145,6 @@ def device_index(device: str) -> int:
     if match is None:
         raise ValueError("--device must be 'npu' or 'npu:<index>'")
     return int(match.group(1) or 0)
-
-
-def safe_component(value: str, limit: int = 48) -> str:
-    component = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._-")
-    return (component or "input")[:limit]
 
 
 def tensor_shape_label(signature: list[dict[str, object]]) -> str:
@@ -310,12 +310,25 @@ def compile_forward(torch: Any, case, args, kwargs, dynamic: bool):
     return compiled
 
 
-def artifact_path(run_root: Path, mode: str, sample_index: int, shape: str, first_index=None):
-    sample = f"sample_{sample_index:03d}_{safe_component(shape)}"
-    root = run_root / "artifacts" / mode
+def artifact_mode_root(run_root: Path, mode: str, first_index=None) -> Path:
+    try:
+        component = ARTIFACT_MODE_COMPONENTS[mode]
+    except KeyError as error:
+        raise ValueError(f"unsupported artifact mode: {mode}") from error
+    root = run_root / "artifacts" / component
     if first_index is not None:
-        root = root / f"first_{first_index:03d}"
-    return root / sample
+        root = root / f"f{first_index:03d}"
+    return root
+
+
+def artifact_path(
+    run_root: Path,
+    mode: str,
+    sample_index: int,
+    _shape: str,
+    first_index=None,
+) -> Path:
+    return artifact_mode_root(run_root, mode, first_index) / f"s{sample_index:03d}"
 
 
 def result_record(
@@ -406,9 +419,11 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
         )
     finally:
         compile_tiling = recorder.stop_capture()
-    compile_debug_root = run_root / "artifacts" / mode
-    if not group:
-        compile_debug_root = compile_debug_root / f"first_{first_index:03d}"
+    compile_debug_root = artifact_mode_root(
+        run_root,
+        mode,
+        first_index=None if group else first_index,
+    )
     replace_tree(
         latest_compile_debug_dir(Path(str(config["debug_root"]))),
         compile_debug_root / "torch_compile_debug",
