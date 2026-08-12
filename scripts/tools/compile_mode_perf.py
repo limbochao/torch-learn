@@ -35,6 +35,7 @@ SUMMARY_COLUMNS = (
     "samples",
     "kernel_count",
     "kernels",
+    "manual_tiling_dir",
     "result_dir",
 )
 COMPARISON_COLUMNS = (
@@ -264,6 +265,68 @@ def replace_tree(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
+def find_kernel_output_code(debug_dir: Path, kernel_name: str) -> Path:
+    marker = f"{kernel_name} = async_compile.triton("
+    matches = [
+        path
+        for path in debug_dir.rglob("output_code.py")
+        if marker in path.read_text(encoding="utf-8")
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected one output_code.py for {kernel_name!r}, found {len(matches)}"
+        )
+    return matches[0]
+
+
+def archive_manual_tiling(
+    debug_dir: Path,
+    output_root: Path,
+    tiling,
+    first_binding=None,
+    binding=None,
+) -> str:
+    if not tiling:
+        return ""
+    manual_root = output_root / "manual_tiling"
+    manual_root.mkdir(parents=True, exist_ok=True)
+    extractor = Path(__file__).with_name("extract_triton_kernel.py")
+    used_names: set[str] = set()
+    for index, record in enumerate(tiling):
+        kernel_name = str(record.get("kernel_name", ""))
+        if not kernel_name.isidentifier():
+            raise ValueError(f"invalid recorded kernel name: {kernel_name!r}")
+        suffix = "" if kernel_name not in used_names else f"_{index}"
+        used_names.add(kernel_name)
+        record_dir = manual_root / f"{kernel_name}{suffix}"
+        tiling_path = record_dir / "tiling.json"
+        write_json(tiling_path, record)
+        source = find_kernel_output_code(debug_dir, kernel_name)
+        output = record_dir / f"{kernel_name}_manual.py"
+        write_json(
+            record_dir / "case.json",
+            {
+                "compile_binding": first_binding or {},
+                "sample_binding": binding or first_binding or {},
+            },
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(extractor),
+                str(source),
+                kernel_name,
+                "--manual-tiling",
+                "--tiling-json",
+                str(tiling_path),
+                "-o",
+                str(output),
+            ],
+            check=True,
+        )
+    return str(manual_root)
+
+
 def prepare_profile_dir(path: Path) -> None:
     if path.exists():
         shutil.rmtree(path)
@@ -343,6 +406,7 @@ def result_record(
     first_index=None,
     first_binding=None,
     first_signature=None,
+    manual_tiling_dir="",
 ):
     return {
         "case": str(case["name"]),
@@ -360,6 +424,7 @@ def result_record(
         "kernel_count": timing["kernel_count"],
         "kernels": timing["kernels"],
         "tiling": tiling,
+        "manual_tiling_dir": manual_tiling_dir,
         "result_dir": str(profile_dir),
     }
 
@@ -378,9 +443,10 @@ def run_static(torch: Any, case, config, recorder):
             compiled = compile_forward(torch, case, args, kwargs, dynamic=False)
         finally:
             tiling = recorder.stop_capture()
-        replace_tree(
-            latest_compile_debug_dir(Path(str(config["debug_root"]))),
-            output_root / "torch_compile_debug",
+        debug_dir = output_root / "torch_compile_debug"
+        replace_tree(latest_compile_debug_dir(Path(str(config["debug_root"]))), debug_dir)
+        manual_tiling_dir = archive_manual_tiling(
+            debug_dir, output_root, tiling, binding, binding
         )
         timing = profile_npu(
             torch, compiled, args, kwargs, output_root / "profiles", config
@@ -395,6 +461,7 @@ def run_static(torch: Any, case, config, recorder):
                 timing,
                 tiling,
                 output_root / "profiles",
+                manual_tiling_dir=manual_tiling_dir,
             )
         )
     return records
@@ -428,6 +495,7 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
         latest_compile_debug_dir(Path(str(config["debug_root"]))),
         compile_debug_root / "torch_compile_debug",
     )
+    compile_debug_dir = compile_debug_root / "torch_compile_debug"
 
     records = []
     for sample_index, binding in enumerate(case["sample_bindings"]):
@@ -454,6 +522,9 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
                 torch, compiled, args, kwargs, output_root / "profiles", config
             )
             tiling = compile_tiling
+        manual_tiling_dir = archive_manual_tiling(
+            compile_debug_dir, output_root, tiling, first_binding, binding
+        )
         records.append(
             result_record(
                 case,
@@ -467,6 +538,7 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
                 first_index=None if group else first_index,
                 first_binding=first_binding,
                 first_signature=first_signature,
+                manual_tiling_dir=manual_tiling_dir,
             )
         )
     return records
@@ -557,6 +629,7 @@ def summary_rows(records: list[dict[str, object]]):
                 "samples": record["samples"],
                 "kernel_count": record["kernel_count"],
                 "kernels": "|".join(record["kernels"]),
+                "manual_tiling_dir": record.get("manual_tiling_dir", ""),
                 "result_dir": record["result_dir"],
             }
         )

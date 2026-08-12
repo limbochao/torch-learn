@@ -3,6 +3,7 @@
 
 import argparse
 import ast
+import json
 import keyword
 import operator
 import pprint
@@ -87,7 +88,27 @@ def parse_args():
         action="store_true",
         help="generate only an eager benchmark case for the kernel",
     )
+    parser.add_argument(
+        "--manual-tiling",
+        "--manual_tiling",
+        action="store_true",
+        help="emit a direct @triton.jit launch with explicit tiling",
+    )
+    parser.add_argument(
+        "--tiling-json",
+        "--tiling_json",
+        help="tiling record as JSON text or a path to a JSON file",
+    )
     return parser.parse_args()
+
+
+BACKEND_LAUNCH_OPTIONS = {
+    "compile_mode",
+    "multibuffer",
+    "num_ctas",
+    "num_stages",
+    "num_warps",
+}
 
 
 def assigned_names(node):
@@ -135,6 +156,158 @@ def source_segment(source, node):
     if segment is None:
         raise ValueError(f"cannot read source at line {node.lineno}")
     return textwrap.dedent(segment).rstrip()
+
+
+def load_tiling_record(value):
+    if value is None:
+        return None
+    try:
+        if value.lstrip().startswith("{"):
+            content = value
+        else:
+            content = Path(value).read_text(encoding="utf-8")
+        record = json.loads(content)
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read tiling JSON: {error}") from error
+    if not isinstance(record, dict):
+        raise ValueError("tiling JSON must contain an object")
+    return record
+
+
+def triton_source(definition):
+    if len(definition.value.args) < 2:
+        raise ValueError("async_compile.triton definition has no source argument")
+    source_arg = definition.value.args[1]
+    if not isinstance(source_arg, ast.Constant) or not isinstance(source_arg.value, str):
+        raise ValueError("async_compile.triton source must be a string literal")
+    return source_arg.value
+
+
+def manual_kernel_source(definition, kernel_name):
+    source = triton_source(definition)
+    tree = ast.parse(source)
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == kernel_name
+    ]
+    if len(functions) != 1:
+        raise ValueError(
+            f"expected one JIT definition for {kernel_name!r}, found {len(functions)}"
+        )
+    function = functions[0]
+    jit_decorators = [
+        decorator
+        for decorator in function.decorator_list
+        if isinstance(decorator, ast.Attribute)
+        and isinstance(decorator.value, ast.Name)
+        and decorator.value.id == "triton"
+        and decorator.attr == "jit"
+    ]
+    if len(jit_decorators) != 1:
+        raise ValueError(f"{kernel_name!r} does not have exactly one @triton.jit")
+    imports = [
+        node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
+    ]
+    import_text = "\n".join(source_segment(source, node) for node in imports)
+    function_text = source_segment(source, function)
+    return f"{import_text}\n\n@triton.jit\n{function_text}", function
+
+
+def constexpr_names(function):
+    names = []
+    for arg in function.args.args:
+        annotation = arg.annotation
+        if (
+            isinstance(annotation, ast.Attribute)
+            and isinstance(annotation.value, ast.Name)
+            and annotation.value.id == "tl"
+            and annotation.attr == "constexpr"
+        ):
+            names.append(arg.arg)
+    return tuple(names)
+
+
+def manual_tiling_config(function, record):
+    parameters = tuple(arg.arg for arg in function.args.args)
+    tiling_names = tuple(name for name in parameters if name.isupper())
+    config = {name: 1 for name in tiling_names}
+    backend = {
+        "compile_mode": "unstructured_in_simt",
+        "multibuffer": False,
+        "num_ctas": 1,
+        "num_stages": 2,
+        "num_warps": 1,
+    }
+    if record is None:
+        return config, backend
+
+    selected = record.get("selected_config", record)
+    runtime_blocks = record.get("runtime_blocks", {})
+    if not isinstance(selected, dict) or not isinstance(runtime_blocks, dict):
+        raise ValueError("tiling record config and runtime_blocks must be objects")
+    for name in tiling_names:
+        if name in selected:
+            config[name] = selected[name]
+        if name in runtime_blocks:
+            config[name] = runtime_blocks[name]
+    for name in BACKEND_LAUNCH_OPTIONS:
+        if name in selected:
+            backend[name] = selected[name]
+    return config, backend
+
+
+def manual_launch(launch, function, record):
+    parameters = tuple(arg.arg for arg in function.args.args)
+    config, backend = manual_tiling_config(function, record)
+    positional = [ast.unparse(arg) for arg in launch.args]
+    supplied_names = parameters[: len(positional)]
+    missing_required = [
+        name for name in parameters[len(positional) :] if name not in config
+    ]
+    if missing_required:
+        raise ValueError(
+            "manual launch cannot supply kernel parameters "
+            f"{missing_required}; the original .run call has too few arguments"
+        )
+
+    numel_expressions = {
+        name.removesuffix("_numel"): expression
+        for name, expression in zip(supplied_names, positional)
+        if name.endswith("_numel")
+    }
+    split_axes = []
+    selected = record.get("selected_config", record) if record else {}
+    raw_split_axes = selected.get("split_axis") if isinstance(selected, dict) else None
+    axis_names = tuple(numel_expressions)
+    if isinstance(raw_split_axes, (list, tuple)):
+        for axis_index in raw_split_axes:
+            if isinstance(axis_index, int) and 0 <= axis_index < len(axis_names):
+                split_axes.append(axis_names[axis_index])
+    if not split_axes:
+        split_axes = [
+            axis
+            for axis in axis_names
+            if f"{axis.upper()}BLOCK" in config
+            and f"{axis.upper()}BLOCK" not in constexpr_names(function)
+        ]
+    grid = []
+    for axis in split_axes[:3]:
+        block_name = f"{axis.upper()}BLOCK"
+        block = int(config[block_name])
+        grid.append(f"triton.cdiv({numel_expressions[axis]}, {block})")
+    grid.extend("1" for _ in range(3 - len(grid)))
+
+    keywords = [f"{name}={config[name]!r}" for name in config]
+    keywords.extend(f"{name}={backend[name]!r}" for name in sorted(backend))
+    arguments = positional + keywords
+    body = ",\n".join(f"    {argument}" for argument in arguments)
+    return (
+        f"{launch.func.value.id}[({', '.join(grid)})](\n"
+        f"{body},\n"
+        ")"
+    )
 
 
 def find_parent_function(tree, target):
@@ -637,6 +810,17 @@ def common_header(lines, tree):
     return "".join(lines[: min(node.lineno for node in definitions) - 1]).rstrip()
 
 
+def manual_common_header(lines, tree):
+    header = common_header(lines, tree)
+    omitted = (
+        "from torch._inductor.async_compile import AsyncCompile",
+        "async_compile = AsyncCompile()",
+    )
+    return "\n".join(
+        line for line in header.splitlines() if line.strip() not in omitted
+    ).rstrip()
+
+
 def kernel_device(definition):
     for keyword in definition.value.keywords:
         if keyword.arg == "device_str" and isinstance(keyword.value, ast.Constant):
@@ -654,7 +838,13 @@ def device_setup(device, input_nodes):
 
 
 def render_extraction(
-    source, tree, kernel_name, include_eager=False, only_eager=False
+    source,
+    tree,
+    kernel_name,
+    include_eager=False,
+    only_eager=False,
+    manual_tiling=False,
+    tiling_record=None,
 ):
     lines = source.splitlines(keepends=True)
     definitions = [
@@ -696,9 +886,12 @@ def render_extraction(
             len(launches),
         )
 
-    definition_text = kernel_block(lines, definition)
+    if manual_tiling:
+        definition_text, jit_function = manual_kernel_source(definition, kernel_name)
+    else:
+        definition_text = kernel_block(lines, definition)
     sections = [
-        common_header(lines, tree),
+        manual_common_header(lines, tree) if manual_tiling else common_header(lines, tree),
         definition_text,
     ]
     if include_eager:
@@ -711,7 +904,8 @@ def render_extraction(
                 render_compiled_eager(eager_inputs, input_metadata),
             ]
         )
-    sections.append("async_compile.wait(globals())\ndel async_compile")
+    if not manual_tiling:
+        sections.append("async_compile.wait(globals())\ndel async_compile")
     if inputs or include_eager:
         input_construction = "\n".join(
             source_segment(source, node) for node in inputs
@@ -728,7 +922,11 @@ def render_extraction(
         )
         body.append(eager_construction)
         body.append(f"eager_result = run_compiled_eager({', '.join(eager_arguments)})")
-    body.append(source_segment(source, launch))
+    body.append(
+        manual_launch(launch, jit_function, tiling_record)
+        if manual_tiling
+        else source_segment(source, launch)
+    )
     sections.append("\n".join(body))
     extracted = "\n\n\n".join(sections).rstrip()
     extracted = "\n".join(line.rstrip() for line in extracted.splitlines()) + "\n"
@@ -745,6 +943,11 @@ def main():
     )
     output_path = (args.output or Path(default_name)).resolve()
     try:
+        if args.tiling_json and not args.manual_tiling:
+            raise ValueError("--tiling-json requires --manual-tiling")
+        if args.manual_tiling and args.only_eager:
+            raise ValueError("--manual-tiling cannot be combined with --only-eager")
+        tiling_record = load_tiling_record(args.tiling_json)
         source = source_path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(source_path))
         extracted, launch, launch_count = render_extraction(
@@ -753,6 +956,8 @@ def main():
             args.kernel_name,
             include_eager=args.include_eager,
             only_eager=args.only_eager,
+            manual_tiling=args.manual_tiling,
+            tiling_record=tiling_record,
         )
     except (OSError, SyntaxError, ValueError) as error:
         raise SystemExit(f"error: {error}") from error
