@@ -51,6 +51,19 @@ SIMT 切分及后续 concat lowering 的差异。
 
 仅保存非线上代码产物中的性能现象和 kernel 信息，不把待验证推测写成根因。
 </article>
+
+<article class="tl-feature tl-card-accent-green" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">Symbolic Group</span>
+  <span class="tl-badge">Pointwise</span>
+  <span class="tl-badge">Implementation</span>
+</div>
+
+### [Pointwise default symbolic group 分组策略实现说明](symbolic-group/pointwise-default-grouping-strategy.html)
+
+说明动态 split、静态 split 前后关系、tiling product、`C_prefix * D` bucket normalization、
+代表 shape 以及后续 elementwise 扩展边界。
+</article>
 </div>
 
 <div class="tl-section-heading" markdown="1">
