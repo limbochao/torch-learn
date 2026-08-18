@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
         "case",
         nargs="*",
         type=Path,
-        help="one or more extracted eager cases",
+        help="one or more extracted eager case files or directories",
     )
     parser.add_argument(
         "--output",
@@ -843,17 +843,40 @@ def run_one_worker(run_root: Path, control_root: Path, base_config, execution, i
         shutil.rmtree(debug_root, ignore_errors=True)
 
 
-def validate_controller_args(args: argparse.Namespace) -> None:
+def expand_case_paths(case_inputs: list[Path]) -> list[Path]:
+    case_paths = []
+    seen = set()
+    for case_input in case_inputs:
+        if case_input.is_file():
+            candidates = [case_input]
+        elif case_input.is_dir():
+            candidates = sorted(
+                path for path in case_input.iterdir() if path.is_file() and path.name.endswith("_case.py")
+            )
+            if not candidates:
+                raise ValueError(f"case directory contains no *_case.py files: {case_input}")
+        else:
+            raise ValueError(f"case path does not exist: {case_input}")
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                case_paths.append(resolved)
+    if not case_paths:
+        raise ValueError("at least one case file or directory is required")
+    return case_paths
+
+
+def validate_controller_args(args: argparse.Namespace) -> list[Path]:
     if not args.case:
-        raise ValueError("at least one case path is required")
-    for case_path in args.case:
-        if not case_path.is_file():
-            raise ValueError(f"case file does not exist: {case_path}")
+        raise ValueError("at least one case file or directory is required")
+    case_paths = expand_case_paths(args.case)
     device_index(args.device)
     if args.warmup < 0 or args.active <= 0 or args.repeat <= 0:
         raise ValueError("warmup must be non-negative; active and repeat must be positive")
     if args.run_id and re.fullmatch(r"[A-Za-z0-9._-]+", args.run_id) is None:
         raise ValueError("run-id may only contain letters, digits, '.', '_', and '-'")
+    return case_paths
 
 
 def safe_case_directory_name(index: int, case_path: Path) -> str:
@@ -921,8 +944,7 @@ def run_case(
 
 
 def controller(args: argparse.Namespace) -> None:
-    validate_controller_args(args)
-    case_paths = [case_path.resolve() for case_path in args.case]
+    case_paths = validate_controller_args(args)
     batch = len(case_paths) > 1
     run_id = args.run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_root = (args.output / run_id).resolve()
