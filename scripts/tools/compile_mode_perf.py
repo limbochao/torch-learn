@@ -715,6 +715,41 @@ def comparison_rows(records: list[dict[str, object]]):
     return rows
 
 
+def runtime_binding_label(binding: object) -> str:
+    if not isinstance(binding, dict):
+        return str(binding)
+    return ",".join(f"{key}={binding[key]}" for key in sorted(binding))
+
+
+def print_static_group_summary(case_name: str, records: list[dict[str, object]]) -> None:
+    static = {
+        int(record["sample_index"]): record
+        for record in records
+        if record["mode"] == "static"
+    }
+    group = {
+        int(record["sample_index"]): record
+        for record in records
+        if record["mode"] == "group"
+    }
+
+    print()
+    print("=== static vs group summary ===")
+    print(f"case={case_name}")
+    print()
+    print("runtime".ljust(16) + "static_us".rjust(12) + "group_us".rjust(12) + "g/static".rjust(12))
+    for sample_index in sorted(static):
+        group_record = group.get(sample_index)
+        if group_record is None:
+            continue
+        static_us = float(static[sample_index]["mean_us"])
+        group_us = float(group_record["mean_us"])
+        print(
+            runtime_binding_label(static[sample_index].get("binding", {})).ljust(16)
+            + f"{static_us:12.3f}{group_us:12.3f}{ratio(group_us, static_us):>12}"
+        )
+
+
 def worker_environment(cache_dir: Path, group: bool) -> dict[str, str]:
     env = os.environ.copy()
     env[GROUP_AUTOTUNE_ENV] = "1" if group else "0"
@@ -846,11 +881,11 @@ def controller(args: argparse.Namespace) -> None:
         from compile_mode_perf_xlsx import write_xlsx_report
 
         write_xlsx_report(comparisons, run_root / "comparison.xlsx")
+        print_static_group_summary(str(discovered["name"]), records)
         manifest["status"] = "completed"
         manifest["result_count"] = len(records)
         write_json(run_root / "run.json", manifest)
         shutil.rmtree(control_root, ignore_errors=True)
-        print(f"wrote results to {run_root}")
     except BaseException as error:
         manifest["status"] = "failed"
         manifest["error"] = f"{type(error).__name__}: {error}"
