@@ -63,7 +63,12 @@ CASE_KEYS = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("case", nargs="?", type=Path, help="extracted eager case")
+    parser.add_argument(
+        "case",
+        nargs="*",
+        type=Path,
+        help="one or more extracted eager cases",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -641,77 +646,84 @@ def ratio(numerator: float, denominator: float) -> str:
 
 
 def comparison_rows(records: list[dict[str, object]]):
-    static = {
-        int(record["sample_index"]): record
-        for record in records
-        if record["mode"] == "static"
-    }
-    dynamic = {
-        (int(record["first_index"]), int(record["sample_index"])): record
-        for record in records
-        if record["mode"] == "dynamic"
-    }
-    group = {
-        int(record["sample_index"]): record
-        for record in records
-        if record["mode"] == "group"
-    }
-    first_indices = sorted({key[0] for key in dynamic})
-    sample_indices = sorted(static)
+    records_by_case: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        records_by_case.setdefault(str(record["case"]), []).append(record)
+
     rows = []
-    for first_index in first_indices:
-        for sample_index in sample_indices:
-            try:
-                static_record = static[sample_index]
-                dynamic_record = dynamic[first_index, sample_index]
-                group_record = group[sample_index]
-            except KeyError as error:
-                raise ValueError(
-                    f"incomplete result matrix at first={first_index}, "
-                    f"sample={sample_index}"
-                ) from error
-            shapes = {
-                static_record["shape"],
-                dynamic_record["shape"],
-                group_record["shape"],
-            }
-            if len(shapes) != 1:
-                raise ValueError(
-                    f"input shape mismatch at sample {sample_index}: {sorted(shapes)}"
-                )
-            signatures = {
-                compact_json(static_record["input_signature"]),
-                compact_json(dynamic_record["input_signature"]),
-                compact_json(group_record["input_signature"]),
-            }
-            if len(signatures) != 1:
-                raise ValueError(
-                    f"input signature mismatch at sample {sample_index}"
-                )
-            static_us = float(static_record["mean_us"])
-            dynamic_us = float(dynamic_record["mean_us"])
-            group_us = float(group_record["mean_us"])
-            rows.append(
-                {
-                    "case": dynamic_record["case"],
-                    "first_shape": dynamic_record["first_shape"],
-                    "shape": dynamic_record["shape"],
-                    "static_us": f"{static_us:.3f}",
-                    "static_tiling": compact_json(static_record["tiling"])
-                    if static_record["tiling"]
-                    else "",
-                    "dynamic_us": f"{dynamic_us:.3f}",
-                    "dynamic_static_ratio": ratio(dynamic_us, static_us),
-                    "dynamic_tiling": compact_json(dynamic_record["tiling"])
-                    if dynamic_record["tiling"]
-                    else "",
-                    "group_us": f"{group_us:.3f}",
-                    "group_static_ratio": ratio(group_us, static_us),
-                    "group_tiling": compact_json(group_record["tiling"])
-                    if group_record["tiling"]
-                    else "",
+    for case_name, case_records in records_by_case.items():
+        static = {
+            int(record["sample_index"]): record
+            for record in case_records
+            if record["mode"] == "static"
+        }
+        dynamic = {
+            (int(record["first_index"]), int(record["sample_index"])): record
+            for record in case_records
+            if record["mode"] == "dynamic"
+        }
+        group = {
+            int(record["sample_index"]): record
+            for record in case_records
+            if record["mode"] == "group"
+        }
+        first_indices = sorted({key[0] for key in dynamic})
+        sample_indices = sorted(static)
+        for first_index in first_indices:
+            for sample_index in sample_indices:
+                try:
+                    static_record = static[sample_index]
+                    dynamic_record = dynamic[first_index, sample_index]
+                    group_record = group[sample_index]
+                except KeyError as error:
+                    raise ValueError(
+                        f"incomplete result matrix for case={case_name}, "
+                        f"first={first_index}, sample={sample_index}"
+                    ) from error
+                shapes = {
+                    static_record["shape"],
+                    dynamic_record["shape"],
+                    group_record["shape"],
                 }
-            )
+                if len(shapes) != 1:
+                    raise ValueError(
+                        f"input shape mismatch for case={case_name}, "
+                        f"sample={sample_index}: {sorted(shapes)}"
+                    )
+                signatures = {
+                    compact_json(static_record["input_signature"]),
+                    compact_json(dynamic_record["input_signature"]),
+                    compact_json(group_record["input_signature"]),
+                }
+                if len(signatures) != 1:
+                    raise ValueError(
+                        f"input signature mismatch for case={case_name}, "
+                        f"sample={sample_index}"
+                    )
+                static_us = float(static_record["mean_us"])
+                dynamic_us = float(dynamic_record["mean_us"])
+                group_us = float(group_record["mean_us"])
+                rows.append(
+                    {
+                        "case": dynamic_record["case"],
+                        "first_shape": dynamic_record["first_shape"],
+                        "shape": dynamic_record["shape"],
+                        "static_us": f"{static_us:.3f}",
+                        "static_tiling": compact_json(static_record["tiling"])
+                        if static_record["tiling"]
+                        else "",
+                        "dynamic_us": f"{dynamic_us:.3f}",
+                        "dynamic_static_ratio": ratio(dynamic_us, static_us),
+                        "dynamic_tiling": compact_json(dynamic_record["tiling"])
+                        if dynamic_record["tiling"]
+                        else "",
+                        "group_us": f"{group_us:.3f}",
+                        "group_static_ratio": ratio(group_us, static_us),
+                        "group_tiling": compact_json(group_record["tiling"])
+                        if group_record["tiling"]
+                        else "",
+                    }
+                )
     return rows
 
 
@@ -721,7 +733,9 @@ def runtime_binding_label(binding: object) -> str:
     return ",".join(f"{key}={binding[key]}" for key in sorted(binding))
 
 
-def print_static_group_summary(case_name: str, records: list[dict[str, object]]) -> None:
+def static_group_summary_rows(
+    records: list[dict[str, object]],
+) -> list[tuple[str, float, float, str]]:
     static = {
         int(record["sample_index"]): record
         for record in records
@@ -732,22 +746,62 @@ def print_static_group_summary(case_name: str, records: list[dict[str, object]])
         for record in records
         if record["mode"] == "group"
     }
-
-    print()
-    print("=== static vs group summary ===")
-    print(f"case={case_name}")
-    print()
-    print("runtime".ljust(16) + "static_us".rjust(12) + "group_us".rjust(12) + "g/static".rjust(12))
+    rows = []
     for sample_index in sorted(static):
         group_record = group.get(sample_index)
         if group_record is None:
             continue
         static_us = float(static[sample_index]["mean_us"])
         group_us = float(group_record["mean_us"])
-        print(
-            runtime_binding_label(static[sample_index].get("binding", {})).ljust(16)
-            + f"{static_us:12.3f}{group_us:12.3f}{ratio(group_us, static_us):>12}"
+        rows.append(
+            (
+                runtime_binding_label(static[sample_index].get("binding", {})),
+                static_us,
+                group_us,
+                ratio(group_us, static_us),
+            )
         )
+    return rows
+
+
+def print_static_group_summary(case_name: str, records: list[dict[str, object]]) -> None:
+    rows = static_group_summary_rows(records)
+
+    print()
+    print("=== static vs group summary ===")
+    print(f"case={case_name}")
+    print()
+    print("runtime".ljust(16) + "static_us".rjust(12) + "group_us".rjust(12) + "g/static".rjust(12))
+    for runtime, static_us, group_us, group_ratio in rows:
+        print(
+            runtime.ljust(16)
+            + f"{static_us:12.3f}{group_us:12.3f}{group_ratio:>12}"
+        )
+
+
+def print_batch_static_group_summary(records: list[dict[str, object]]) -> None:
+    records_by_case: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        records_by_case.setdefault(str(record["case"]), []).append(record)
+
+    print()
+    print("=== batch static vs group summary ===")
+    print(
+        "case".ljust(64)
+        + "runtime".ljust(16)
+        + "static_us".rjust(12)
+        + "group_us".rjust(12)
+        + "g/static".rjust(12)
+    )
+    for case_name, case_records in records_by_case.items():
+        for runtime, static_us, group_us, group_ratio in static_group_summary_rows(
+            case_records
+        ):
+            print(
+                case_name.ljust(64)
+                + runtime.ljust(16)
+                + f"{static_us:12.3f}{group_us:12.3f}{group_ratio:>12}"
+            )
 
 
 def worker_environment(cache_dir: Path, group: bool) -> dict[str, str]:
@@ -790,10 +844,11 @@ def run_one_worker(run_root: Path, control_root: Path, base_config, execution, i
 
 
 def validate_controller_args(args: argparse.Namespace) -> None:
-    if args.case is None:
-        raise ValueError("case path is required")
-    if not args.case.is_file():
-        raise ValueError(f"case file does not exist: {args.case}")
+    if not args.case:
+        raise ValueError("at least one case path is required")
+    for case_path in args.case:
+        if not case_path.is_file():
+            raise ValueError(f"case file does not exist: {case_path}")
     device_index(args.device)
     if args.warmup < 0 or args.active <= 0 or args.repeat <= 0:
         raise ValueError("warmup must be non-negative; active and repeat must be positive")
@@ -801,16 +856,18 @@ def validate_controller_args(args: argparse.Namespace) -> None:
         raise ValueError("run-id may only contain letters, digits, '.', '_', and '-'")
 
 
-def controller(args: argparse.Namespace) -> None:
-    validate_controller_args(args)
-    run_id = args.run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_root = (args.output / run_id).resolve()
-    if run_root.exists():
-        raise ValueError(f"run directory already exists: {run_root}")
-    control_root = run_root / ".control"
-    control_root.mkdir(parents=True)
-    case_path = args.case.resolve()
+def safe_case_directory_name(index: int, case_path: Path) -> str:
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", case_path.stem).strip("._-")
+    return f"{index:03d}_{stem or 'case'}"
 
+
+def run_case(
+    case_path: Path,
+    case_root: Path,
+    args: argparse.Namespace,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    control_root = case_root / ".control"
+    control_root.mkdir(parents=True, exist_ok=True)
     discovery_result = control_root / "discovery.json"
     discovery_config = control_root / "discovery_config.json"
     write_json(
@@ -823,53 +880,96 @@ def controller(args: argparse.Namespace) -> None:
     run_internal("discover", discovery_config, discovery_env)
     discovered = read_json(discovery_result)
 
-    manifest = {
-        "run_id": run_id,
-        "case": discovered["name"],
-        "case_path": str(case_path),
-        "device": args.device,
-        "warmup": args.warmup,
-        "active": args.active,
-        "repeat": args.repeat,
-        "sample_bindings": discovered["sample_bindings"],
-        "compile_bindings": discovered["compile_bindings"],
-        "status": "running",
-    }
-    write_json(run_root / "run.json", manifest)
     base_config = {
         "case_path": str(case_path),
-        "run_root": str(run_root),
+        "run_root": str(case_root),
         "device": args.device,
         "warmup": args.warmup,
         "active": args.active,
         "repeat": args.repeat,
     }
-
     records = []
+    completed = False
     try:
-        records.extend(run_one_worker(run_root, control_root, base_config, "static"))
-        write_raw_results(run_root / "raw_results.jsonl", records)
+        records.extend(run_one_worker(case_root, control_root, base_config, "static"))
         for index in range(len(discovered["compile_bindings"])):
             records.extend(
                 run_one_worker(
-                    run_root,
+                    case_root,
                     control_root,
                     base_config,
                     "dynamic",
                     index,
                 )
             )
-            write_raw_results(run_root / "raw_results.jsonl", records)
         records.extend(
             run_one_worker(
-                run_root,
+                case_root,
                 control_root,
                 base_config,
                 "group",
                 0,
             )
         )
-        write_raw_results(run_root / "raw_results.jsonl", records)
+        completed = True
+        return discovered, records
+    finally:
+        shutil.rmtree(case_root / ".cache", ignore_errors=True)
+        shutil.rmtree(case_root / ".debug", ignore_errors=True)
+        if completed:
+            shutil.rmtree(control_root, ignore_errors=True)
+
+
+def controller(args: argparse.Namespace) -> None:
+    validate_controller_args(args)
+    case_paths = [case_path.resolve() for case_path in args.case]
+    batch = len(case_paths) > 1
+    run_id = args.run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_root = (args.output / run_id).resolve()
+    if run_root.exists():
+        raise ValueError(f"run directory already exists: {run_root}")
+    run_root.mkdir(parents=True)
+
+    manifest = {
+        "run_id": run_id,
+        "case_paths": [str(case_path) for case_path in case_paths],
+        "device": args.device,
+        "warmup": args.warmup,
+        "active": args.active,
+        "repeat": args.repeat,
+        "batch": batch,
+        "cases": [],
+        "status": "running",
+    }
+    write_json(run_root / "run.json", manifest)
+
+    records = []
+    discovered_cases = []
+    try:
+        for case_index, case_path in enumerate(case_paths):
+            case_root = (
+                run_root / "cases" / safe_case_directory_name(case_index, case_path)
+                if batch
+                else run_root
+            )
+            case_root.mkdir(parents=True, exist_ok=True)
+            discovered, case_records = run_case(case_path, case_root, args)
+            case_name = str(discovered["name"])
+            if any(item["name"] == case_name for item in discovered_cases):
+                raise ValueError(f"duplicate CASE name in batch: {case_name}")
+            discovered_cases.append(
+                {
+                    "name": case_name,
+                    "case_path": str(case_path),
+                    "sample_bindings": discovered["sample_bindings"],
+                    "compile_bindings": discovered["compile_bindings"],
+                }
+            )
+            records.extend(case_records)
+            write_raw_results(run_root / "raw_results.jsonl", records)
+            manifest["cases"] = discovered_cases
+            write_json(run_root / "run.json", manifest)
+            print_static_group_summary(case_name, case_records)
 
         write_csv(run_root / "summary.csv", SUMMARY_COLUMNS, summary_rows(records))
         comparisons = comparison_rows(records)
@@ -881,11 +981,14 @@ def controller(args: argparse.Namespace) -> None:
         from compile_mode_perf_xlsx import write_xlsx_report
 
         write_xlsx_report(comparisons, run_root / "comparison.xlsx")
-        print_static_group_summary(str(discovered["name"]), records)
+        if batch:
+            print_batch_static_group_summary(records)
         manifest["status"] = "completed"
         manifest["result_count"] = len(records)
+        if not batch:
+            case_info = discovered_cases[0]
+            manifest.update(case_info)
         write_json(run_root / "run.json", manifest)
-        shutil.rmtree(control_root, ignore_errors=True)
     except BaseException as error:
         manifest["status"] = "failed"
         manifest["error"] = f"{type(error).__name__}: {error}"

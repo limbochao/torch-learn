@@ -81,6 +81,20 @@ python scripts/tools/compile_mode_perf.py \
   --output prof_log/compile_mode_perf
 ```
 
+也可以在同一次运行中传入多个 case。各 case 仍按顺序独立执行，最终合并写入同一个
+`summary.csv`、`comparison.csv` 和 `comparison.xlsx`；批量模式下每个 case 的 artifacts 放在
+`cases/<index>_<case>/` 下。每个 case 完成后会立即打印该 case 的 static/group 摘要，全部完成后再打印
+一张包含所有 case 的 batch 摘要：
+
+```bash
+python scripts/tools/compile_mode_perf.py \
+  /path/to/pointwise_case_a.py \
+  /path/to/elementwise_case_b.py \
+  --device npu:0 \
+  --run-id selected_cases_001 \
+  --output prof_log/compile_mode_perf
+```
+
 执行顺序固定为：一轮 static、按 `COMPILE_BINDINGS` 顺序执行的多轮 dynamic、最后一轮 group。所有 worker
 严格串行，前一个进程退出并清理 cache 后才启动下一个。group 只使用第一个 compile binding 编译一次，然后
 运行全部 `SAMPLE_BINDINGS`；汇总时将同一份 group 结果复用到各个 dynamic first shape。
