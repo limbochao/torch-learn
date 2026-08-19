@@ -984,25 +984,50 @@ def controller(args: argparse.Namespace) -> None:
         "active": args.active,
         "repeat": args.repeat,
         "batch": batch,
+        "total_cases": len(case_paths),
+        "completed_cases": 0,
         "cases": [],
+        "failed_cases": [],
         "status": "running",
     }
     write_json(run_root / "run.json", manifest)
 
     records = []
     discovered_cases = []
+    failed_cases = []
     try:
         for case_index, case_path in enumerate(case_paths):
+            progress = f"[{case_index + 1}/{len(case_paths)}]"
+            print(f"{progress} starting case={case_path.name}", flush=True)
             case_root = (
                 run_root / "cases" / safe_case_directory_name(case_index, case_path)
                 if batch
                 else run_root
             )
             case_root.mkdir(parents=True, exist_ok=True)
-            discovered, case_records = run_case(case_path, case_root, args)
-            case_name = str(discovered["name"])
-            if any(item["name"] == case_name for item in discovered_cases):
-                raise ValueError(f"duplicate CASE name in batch: {case_name}")
+            try:
+                discovered, case_records = run_case(case_path, case_root, args)
+                case_name = str(discovered["name"])
+                if any(item["name"] == case_name for item in discovered_cases):
+                    raise ValueError(f"duplicate CASE name in batch: {case_name}")
+            except Exception as error:
+                if not batch:
+                    raise
+                failure = {
+                    "name": case_path.stem,
+                    "case_path": str(case_path),
+                    "error": f"{type(error).__name__}: {error}",
+                }
+                failed_cases.append(failure)
+                manifest["failed_cases"] = failed_cases
+                manifest["completed_cases"] = case_index + 1
+                write_json(run_root / "run.json", manifest)
+                print(
+                    f"{progress} failed case={case_path.name}; skipping: "
+                    f"{failure['error']}",
+                    flush=True,
+                )
+                continue
             discovered_cases.append(
                 {
                     "name": case_name,
@@ -1014,8 +1039,14 @@ def controller(args: argparse.Namespace) -> None:
             records.extend(case_records)
             write_raw_results(run_root / "raw_results.jsonl", records)
             manifest["cases"] = discovered_cases
+            manifest["completed_cases"] = case_index + 1
             write_json(run_root / "run.json", manifest)
             print_static_group_summary(case_name, case_records)
+            print(
+                f"{progress} completed case={case_name} "
+                f"(success={len(discovered_cases)}, failed={len(failed_cases)})",
+                flush=True,
+            )
 
         write_csv(run_root / "summary.csv", SUMMARY_COLUMNS, summary_rows(records))
         comparisons = comparison_rows(records)
@@ -1028,9 +1059,24 @@ def controller(args: argparse.Namespace) -> None:
 
         write_xlsx_report(comparisons, run_root / "comparison.xlsx")
         if batch:
-            print_batch_static_group_summary(records)
-        manifest["status"] = "completed"
+            if records:
+                print_batch_static_group_summary(records)
+            else:
+                print()
+                print("=== batch static vs group summary ===")
+                print("no successful cases")
+        if failed_cases:
+            print()
+            print(
+                f"=== batch failures ({len(failed_cases)}/{len(case_paths)}) ==="
+            )
+            for failure in failed_cases:
+                print(f"case={failure['name']} error={failure['error']}")
+        if not records:
+            raise RuntimeError("all batch cases failed; no comparison results generated")
+        manifest["status"] = "completed_with_failures" if failed_cases else "completed"
         manifest["result_count"] = len(records)
+        manifest["failed_cases"] = failed_cases
         if not batch:
             case_info = discovered_cases[0]
             manifest.update(case_info)
