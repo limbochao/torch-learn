@@ -126,12 +126,14 @@ dynamic、group，`fNNN` 表示首次编译 binding 序号，`sNNN` 表示运行
 
 ```text
 case,first_shape,shape,static_us,static_tiling,dynamic_us,dynamic_static_ratio,
-dynamic_tiling,group_us,group_static_ratio,group_tiling
+dynamic_tiling,group_us,group_static_ratio,group_buckets,group_tiling
 ```
 
 `first_shape` 和 `shape` 来自 `make_inputs(...)` 构造出的实际 tensor；多输入使用
 `args[0]=...;args[1]=...;kwargs.name=...` 展示。XLSX 合并 `case`、`first_shape`、`dynamic_tiling` 和
-`group_tiling`，冻结首行、启用筛选并 pretty-print tiling JSON；除表头外的数据行固定为 40 行高。
+`group_buckets`、`group_tiling`，冻结首行、启用筛选并 pretty-print JSON；除表头外的数据行固定为 40 行高。
+`group_buckets` 按 kernel 记录 symbolic group feature 的名称、来源、轴、bucket 边界和
+`bucket_factor`，用于结合 `group_tiling` 中的 `feature_inputs` 与 `group_id` 分析当前运行 shape 的分档。
 `dynamic_static_ratio` 或
 `group_static_ratio` 大于 `1.15` 时标红，小于或等于该值不设置条件格式。
 
@@ -190,7 +192,8 @@ finally:
 ```
 
 每条记录包含 `device`、`kernel_name`、`selected_config` 和 `runtime_blocks`。NPU group 记录还包含
-`group_id` 和 `feature_inputs`。调用方自行决定如何补充场景元数据和保存结果。recorder 使用 Inductor autotuner
+`group_id`、`feature_inputs` 和 `group_features`。调用方自行决定如何补充场景元数据和保存结果。
+recorder 使用 Inductor autotuner
 的内部接口，升级 PyTorch 或 torch_npu 后需要通过目标设备测试确认 hook 仍然有效。
 
 ## NPU profiler

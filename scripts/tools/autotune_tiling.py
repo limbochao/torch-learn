@@ -155,6 +155,7 @@ class BestTilingRecorder:
             ),
             group_id=group_id,
             feature_inputs=feature_inputs,
+            group_features=autotuner.candidate_plan.get("group_features", ()),
         )
 
     @staticmethod
@@ -179,6 +180,7 @@ class BestTilingRecorder:
         runtime_blocks: dict[str, object],
         group_id: int | None = None,
         feature_inputs: object = (),
+        group_features: object | None = None,
     ) -> None:
         with self._lock:
             if not self._capturing:
@@ -195,6 +197,8 @@ class BestTilingRecorder:
                 "selected_config": selected_config,
                 "runtime_blocks": runtime_blocks,
             }
+            if group_features is not None:
+                record["group_features"] = _json_value(group_features)
             serialized = json.dumps(record, sort_keys=True, separators=(",", ":"))
             if serialized in self._seen:
                 return

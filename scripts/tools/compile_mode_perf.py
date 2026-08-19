@@ -49,6 +49,7 @@ COMPARISON_COLUMNS = (
     "dynamic_tiling",
     "group_us",
     "group_static_ratio",
+    "group_buckets",
     "group_tiling",
 )
 CASE_KEYS = (
@@ -645,6 +646,25 @@ def ratio(numerator: float, denominator: float) -> str:
     return "" if denominator == 0 else f"{numerator / denominator:.3f}"
 
 
+def group_buckets(tiling: object) -> list[dict[str, object]]:
+    if not isinstance(tiling, list):
+        return []
+    buckets = []
+    for record in tiling:
+        if not isinstance(record, dict):
+            continue
+        features = record.get("group_features")
+        if not features:
+            continue
+        buckets.append(
+            {
+                "kernel_name": record.get("kernel_name", ""),
+                "group_features": features,
+            }
+        )
+    return buckets
+
+
 def comparison_rows(records: list[dict[str, object]]):
     records_by_case: dict[str, list[dict[str, object]]] = {}
     for record in records:
@@ -703,6 +723,7 @@ def comparison_rows(records: list[dict[str, object]]):
                 static_us = float(static_record["mean_us"])
                 dynamic_us = float(dynamic_record["mean_us"])
                 group_us = float(group_record["mean_us"])
+                bucket_records = group_buckets(group_record["tiling"])
                 rows.append(
                     {
                         "case": dynamic_record["case"],
@@ -719,6 +740,9 @@ def comparison_rows(records: list[dict[str, object]]):
                         else "",
                         "group_us": f"{group_us:.3f}",
                         "group_static_ratio": ratio(group_us, static_us),
+                        "group_buckets": compact_json(bucket_records)
+                        if bucket_records
+                        else "",
                         "group_tiling": compact_json(group_record["tiling"])
                         if group_record["tiling"]
                         else "",

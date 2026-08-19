@@ -21,6 +21,7 @@ COLUMNS = (
     "dynamic_tiling",
     "group_us",
     "group_static_ratio",
+    "group_buckets",
     "group_tiling",
 )
 NUMERIC_COLUMNS = {
@@ -103,6 +104,16 @@ def merge_ranges(rows):
     ranges.extend(
         contiguous_ranges(
             rows,
+            "group_buckets",
+            lambda row: (
+                row.get("case", ""),
+                row.get("group_buckets", ""),
+            ),
+        )
+    )
+    ranges.extend(
+        contiguous_ranges(
+            rows,
             "group_tiling",
             lambda row: (
                 row.get("case", ""),
@@ -116,7 +127,13 @@ def merge_ranges(rows):
 
 
 def display_value(column: str, value: str) -> str:
-    if not value or not column.endswith("_tiling"):
+    json_columns = (
+        "group_buckets",
+        "static_tiling",
+        "dynamic_tiling",
+        "group_tiling",
+    )
+    if not value or column not in json_columns:
         return value
     try:
         return json.dumps(json.loads(value), indent=2, sort_keys=True)
@@ -127,7 +144,7 @@ def display_value(column: str, value: str) -> str:
 def cell_style(column: str) -> int:
     if column in ("case", "first_shape", "shape"):
         return 2
-    if column.endswith("_tiling"):
+    if column.endswith("_tiling") or column == "group_buckets":
         return 4
     if "ratio" in column:
         return 6
@@ -142,7 +159,7 @@ def cell_style(column: str) -> int:
 
 def column_width(rows, column: str) -> int:
     width = max([len(column), *(len(row.get(column, "")) for row in rows)]) + 2
-    if column.endswith("_tiling"):
+    if column.endswith("_tiling") or column == "group_buckets":
         return min(max(width, 18), 48)
     if column in ("case", "first_shape", "shape"):
         return min(max(width, 14), 42)
