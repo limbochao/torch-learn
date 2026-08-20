@@ -16,15 +16,16 @@ def eager_forward(bmm_16, arg1278_1):
 
 
 SAMPLE_BINDINGS = [
-    {'s0': 400},
-    {'s0': 200},
+    {'s0': 64},
+    {'s0': 112},
+    {'s0': 160},
+    {'s0': 208},
     {'s0': 256},
-    {'s0': 512},
 ]
 
 
 COMPILE_BINDINGS = [
-    {'s0': 400},
+    {'s0': 64},
 ]
 
 
@@ -49,7 +50,7 @@ DYNAMIC_DIMS = {'args[0]': (1,)}
 
 
 CASE = {
-    'name': 'pointwise_triton_poi_fused_add_gelu_196',
+    'name': 'pointwise_non_first_split_triton_poi_fused_add_gelu_196',
     'forward': eager_forward,
     'make_inputs': make_inputs,
     'sample_bindings': SAMPLE_BINDINGS,
