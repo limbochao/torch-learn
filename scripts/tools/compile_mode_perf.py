@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ast
 import csv
+import glob
 import importlib.util
 import json
 import os
@@ -68,7 +69,7 @@ def parse_args() -> argparse.Namespace:
         "case",
         nargs="*",
         type=Path,
-        help="one or more extracted eager case files or directories",
+        help="one or more eager case files, directories, or glob patterns",
     )
     parser.add_argument(
         "--output",
@@ -871,21 +872,33 @@ def expand_case_paths(case_inputs: list[Path]) -> list[Path]:
     case_paths = []
     seen = set()
     for case_input in case_inputs:
-        if case_input.is_file():
-            candidates = [case_input]
-        elif case_input.is_dir():
-            candidates = sorted(
-                path for path in case_input.iterdir() if path.is_file() and path.name.endswith("_case.py")
-            )
-            if not candidates:
-                raise ValueError(f"case directory contains no *_case.py files: {case_input}")
+        pattern = str(case_input)
+        if glob.has_magic(pattern):
+            matched_paths = [Path(path) for path in sorted(glob.glob(pattern, recursive=True))]
+            if not matched_paths:
+                raise ValueError(f"case pattern matched no paths: {case_input}")
         else:
-            raise ValueError(f"case path does not exist: {case_input}")
-        for candidate in candidates:
-            resolved = candidate.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                case_paths.append(resolved)
+            matched_paths = [case_input]
+        for matched_path in matched_paths:
+            if matched_path.is_file():
+                candidates = [matched_path]
+            elif matched_path.is_dir():
+                candidates = sorted(
+                    path
+                    for path in matched_path.iterdir()
+                    if path.is_file() and path.name.endswith("_case.py")
+                )
+                if not candidates:
+                    raise ValueError(
+                        f"case directory contains no *_case.py files: {matched_path}"
+                    )
+            else:
+                raise ValueError(f"case path does not exist: {matched_path}")
+            for candidate in candidates:
+                resolved = candidate.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    case_paths.append(resolved)
     if not case_paths:
         raise ValueError("at least one case file or directory is required")
     return case_paths
