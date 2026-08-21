@@ -2,6 +2,7 @@ import torch
 from torch._dynamo.testing import rand_strided
 
 
+# Prefix static split axis case.
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(bmm_28, arg1310_1):
     add_12543 = torch.ops.aten.add.Tensor(bmm_28, arg1310_1)
