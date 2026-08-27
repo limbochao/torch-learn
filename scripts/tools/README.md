@@ -181,6 +181,23 @@ parser.export_kernel_csv("cuda_kernels.csv")
 `cuda_runtime`、`ac2g`、CPU operator 等非 kernel 事件不会写入 CSV。`grid` 或 `block` 缺失时对应字段为空。
 `cuda_kernel_label` 可为汇总表生成短名称；它不修改 Chrome Trace 或 parser 导出的原始 kernel 名称。
 
+### CUDA op statistic
+
+`cuda_op_statistic.py` 将 CUDA Chrome Trace 中的 device kernel 按关联的 CPU operator 聚合，生成与
+torch_npu `op_statistic.csv` 相同的列。CUDA trace 的 kernel 和 CPU operator 通过 `External id` 关联；
+`Total/Min/Avg/Max Time(us)` 使用 kernel device duration，`Ratio(%)` 以所有 kernel duration 之和为分母。
+默认去掉 `aten::` 前缀，并使用 1-based `Device_id` 和 `CUDA_CORE` 作为 `Core Type`：
+
+```bash
+python scripts/tools/cuda_op_statistic.py \
+  /path/to/trace.json \
+  -o /path/to/op_statistic.csv
+```
+
+省略 `-o` 时输出到输入 trace 所在目录的 `op_statistic.csv`。若需要按 CUDA kernel 符号而不是 CPU
+operator 聚合，可传入 `--name-by kernel`；无法通过 `External id` 找到 CPU operator 的 kernel 也会
+自动回退为 kernel 名称。
+
 ## Autotune best tiling
 
 `autotune_tiling.py` 提供 `BestTilingRecorder`，通过运行时 hook 记录 CUDA、NPU 普通 autotune 和 NPU
