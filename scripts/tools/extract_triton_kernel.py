@@ -374,17 +374,15 @@ def collect_dependencies(launch, local_assignments, benchmark):
             )
             continue
 
-        if ARG_NAME.fullmatch(name):
-            assignment = latest_assignment(benchmark, name, float("inf"))
-            if assignment is None:
-                raise ValueError(
-                    f"cannot find benchmark input construction for {name}"
-                )
+        assignment = latest_assignment(benchmark, name, float("inf"))
+        if assignment is not None:
             selected_inputs[assignment.lineno] = assignment
             pending.extend(
                 (dependency, assignment.lineno)
                 for dependency in loaded_names(assignment)
             )
+        elif ARG_NAME.fullmatch(name):
+            raise ValueError(f"cannot find benchmark input construction for {name}")
 
     return (
         [selected_inputs[line] for line in sorted(selected_inputs)],

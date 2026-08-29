@@ -23,3 +23,6 @@ skills/<skill-name>/
 - `debug-issue-archive/`: debug 类问题归档和去敏写作流程。
 - `torch-learn-skill-sync/`: source skill 与本地 installed skill 的同步流程。
 - `openai-image-generation/`: 使用 Codex 凭证或自定义 OpenAI-compatible 凭证调用 Responses API 生图、修图和局部重绘。
+- `gitcode-create-issue/`: 整理问题材料并通过 GitCode API 创建 Issue，默认目标为 `Ascend/pytorch`。
+- `gitcode-create-pr/`: 检查 branch/diff、生成仓库模板正文并通过 GitCode API 创建 PR，默认 target 为
+  `Ascend/pytorch:master`。

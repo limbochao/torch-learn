@@ -32,7 +32,7 @@ python scripts/tools/extract_triton_kernel.py \
   -o /path/to/triton_poi_fused_add_0.py
 ```
 
-输出包括公共导入、Triton DSL、`async_compile.wait(...)`、从 `benchmark_compiled_module` 提取的输入，以及首次调用依赖的局部变量和 launch 语句。未指定 `-o` 时写到当前目录的 `<kernel_name>.py`。
+输出包括公共导入、Triton DSL、`async_compile.wait(...)`、从 `benchmark_compiled_module` 提取的输入，以及首次调用依赖的局部变量和 launch 语句。输入按变量赋值关系提取，支持 `arg*`、`primals_*`、`where_*` 等从 `call(args)` 解包出的名称。未指定 `-o` 时写到当前目录的 `<kernel_name>.py`。
 
 使用 `--include-eager` 可以根据 kernel 前的 `Graph fragment` metadata，在结果文件中额外生成
 `eager_forward(...)`：
