@@ -62,11 +62,24 @@ python scripts/tools/extract_triton_kernel.py \
 包含表达式的维度（例如 `2*s0 + 1`）也按基础符号绑定，生成输入后再由工具记录实际 shape。无法安全推导
 符号值时，`--only-eager` 会报错并要求输入文件中存在可解析的整数赋值。
 
+如果符号只出现在输入 shape、但首次 launch 中没有可解析的整数赋值，可以通过 JSON 显式提供基准值：
+
+```bash
+python scripts/tools/extract_triton_kernel.py \
+  /path/to/output_code.py \
+  triton_poi_fused_add_0 \
+  --only-eager \
+  --symbol-values '{"s11": 64}'
+```
+
 生成的函数保留 Graph fragment 中的 placeholder 作为形参，并按 FX node 顺序调用对应的
 `torch.ops`。工具根据 placeholder metadata 中的 shape、stride、dtype 和 device，通过 `rand_strided(...)`
 构造独立的 eager 输入，不复用 kernel launch buffer。Graph fragment 中原本含符号表达式的 tensor 维度会先
 通过 `torch._dynamo.mark_dynamic(...)` 标记，再调用 `torch.compile(eager_forward, dynamic=None)`。生成的
 `eager_forward(...)` 和 `run_compiled_eager(...)` 可独立用于 eager 编译性能对比。
+
+Graph fragment 中没有 tensor metadata 的上游 placeholder 会被忽略；如果 fragment 仍引用未定义的节点，工具
+会直接报出缺失名称，而不会生成不可运行的 eager case。
 
 ## Compile mode performance
 

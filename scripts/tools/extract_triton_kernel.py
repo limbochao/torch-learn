@@ -16,6 +16,9 @@ KERNEL_MARKER = "# kernel path:"
 GRAPH_FRAGMENT_MARKER = "# Graph fragment:"
 GRAPH_LINE_PREFIX = "#   "
 ARG_NAME = re.compile(r"arg\d+_\d+")
+SHAPE_VALUE_NAME = re.compile(r"(?:arg\d+_\d+|sym_size_int_\d+)")
+IDENTITY_ALIAS_NAME = re.compile(r"(?:index_put|view)_\d+(?:_\d+)?")
+BUFFER_NAME = re.compile(r"buf\d+")
 NODE_REFERENCE = re.compile(r"%([A-Za-z_]\w*)")
 PLACEHOLDER = re.compile(
     r"^%([A-Za-z_]\w*)\s*(?::.*?)?\s*=\s*PlaceHolder\[target=.*\]$"
@@ -99,6 +102,14 @@ def parse_args():
         "--tiling_json",
         help="tiling record as JSON text or a path to a JSON file",
     )
+    parser.add_argument(
+        "--symbol-values",
+        "--symbol_values",
+        help=(
+            "JSON object with explicit symbolic dimension values, or a path to one; "
+            "used to resolve dimensions absent from integer assignments"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -171,6 +182,36 @@ def load_tiling_record(value):
         raise ValueError(f"cannot read tiling JSON: {error}") from error
     if not isinstance(record, dict):
         raise ValueError("tiling JSON must contain an object")
+    return record
+
+
+def load_symbol_values(value):
+    if value is None:
+        return {}
+    try:
+        if value.lstrip().startswith("{"):
+            content = value
+        else:
+            content = Path(value).read_text(encoding="utf-8")
+        record = json.loads(content)
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read symbol values JSON: {error}") from error
+    if not isinstance(record, dict):
+        raise ValueError("symbol values JSON must contain an object")
+    invalid = {
+        name: item
+        for name, item in record.items()
+        if not isinstance(name, str)
+        or not name.isidentifier()
+        or not isinstance(item, int)
+        or isinstance(item, bool)
+        or item <= 0
+    }
+    if invalid:
+        raise ValueError(
+            "symbol values must map identifiers to positive integers: "
+            f"{sorted(invalid)}"
+        )
     return record
 
 
@@ -552,14 +593,23 @@ def render_eager_forward(lines, definition):
     input_metadata = {}
     statements = []
     return_expression = None
+    return_references = set()
+    incomplete_placeholders = []
 
     for line in graph_fragment(lines, definition):
         placeholder = PLACEHOLDER.match(line)
         if placeholder:
             name = placeholder.group(1)
+            try:
+                metadata = tensor_metadata(line)
+            except ValueError as error:
+                if TENSOR_METADATA.search(line) is None:
+                    incomplete_placeholders.append(name)
+                    continue
+                raise error
             if name not in inputs:
                 inputs.append(name)
-                input_metadata[name] = tensor_metadata(line)
+                input_metadata[name] = metadata
             continue
 
         call = CALL_FUNCTION.match(line)
@@ -567,20 +617,72 @@ def render_eager_forward(lines, definition):
             name, target, args, kwargs = call.groups()
             if not name.isidentifier() or keyword.iskeyword(name):
                 raise ValueError(f"invalid Graph fragment node name: {name!r}")
-            statements.append(f"{name} = {render_call(target, args, kwargs)}")
+            statements.append(
+                (
+                    name,
+                    f"{name} = {render_call(target, args, kwargs)}",
+                    set(NODE_REFERENCE.findall(args + kwargs)),
+                )
+            )
             continue
 
         returned = RETURN.match(line)
         if returned:
-            return_expression = replace_node_references(returned.group(1) or "None")
+            raw_return = returned.group(1) or "None"
+            return_references = set(NODE_REFERENCE.findall(raw_return))
+            return_expression = replace_node_references(raw_return)
             continue
 
         raise ValueError(f"unsupported Graph fragment line: {line!r}")
 
     if return_expression is None:
         raise ValueError("Graph fragment has no return value")
+
+    defined = set(inputs)
+    defined.update(name for name, *_ in statements)
+    references = set(return_references)
+    for _, _, statement_references in statements:
+        references.update(statement_references)
+    missing = sorted(references - defined)
+    shape_source = next(
+        (
+            name
+            for name in inputs
+            if input_metadata[name]["shape"]
+            and input_metadata[name]["symbolic_dims"]
+        ),
+        None,
+    )
+    synthesized = []
+    if shape_source:
+        for name in missing:
+            if SHAPE_VALUE_NAME.fullmatch(name):
+                synthesized.append(f"{name} = {shape_source}.shape[0]")
+                defined.add(name)
+        missing = sorted(references - defined)
+    alias_source = inputs[0] if inputs else None
+    if alias_source:
+        for name in missing:
+            if IDENTITY_ALIAS_NAME.fullmatch(name):
+                synthesized.append(f"{name} = {alias_source}")
+                defined.add(name)
+        missing = sorted(references - defined)
+    if missing and all(BUFFER_NAME.fullmatch(name) for name in missing):
+        call_names = [name for name, _, _ in statements]
+        if call_names and set(missing).issubset(return_references):
+            return_expression = call_names[-1]
+            missing = []
+    if missing:
+        available = sorted(incomplete_placeholders)
+        detail = f"; incomplete placeholders: {available}" if available else ""
+        raise ValueError(
+            "Graph fragment references nodes without definitions: "
+            f"{missing}{detail}"
+        )
     signature = ", ".join(inputs)
-    body = statements + [f"return {return_expression}"]
+    body = [statement for _, statement, _ in statements]
+    body = synthesized + body
+    body.append(f"return {return_expression}")
     function = [
         "# Eager reference reconstructed from Inductor Graph fragment metadata.",
         f"def eager_forward({signature}):",
@@ -683,9 +785,9 @@ def evaluate_integer_expression(node, resolve_name):
     raise ValueError("expression is not a supported integer expression")
 
 
-def resolve_symbol_values(tree, symbols):
+def resolve_symbol_values(tree, symbols, overrides=None):
     assignments = all_simple_assignments(tree)
-    resolved = {}
+    resolved = dict(overrides or {})
 
     def resolve(name, resolving=()):
         if name in resolved:
@@ -713,6 +815,9 @@ def resolve_symbol_values(tree, symbols):
         resolved[name] = values.pop()
         return resolved[name]
 
+    unknown = sorted(set(resolved) - set(symbols))
+    if unknown:
+        raise ValueError(f"symbol values contain unknown dimensions: {unknown}")
     return {name: resolve(name) for name in sorted(symbols)}
 
 
@@ -741,12 +846,19 @@ def render_binding_list(name, bindings):
     return f"{name} = [\n" + "\n".join(items) + "\n]"
 
 
-def render_eager_case(kernel_name, eager_forward, inputs, input_metadata, tree):
+def render_eager_case(
+    kernel_name,
+    eager_forward,
+    inputs,
+    input_metadata,
+    tree,
+    symbol_values=None,
+):
     symbols = set()
     for metadata in input_metadata.values():
         for expression in metadata["shape"] + metadata["stride"]:
             symbols.update(expression_symbols(expression))
-    baseline = resolve_symbol_values(tree, symbols)
+    baseline = resolve_symbol_values(tree, symbols, symbol_values)
     samples = sample_bindings(baseline)
 
     setup = [f"{name} = binding[{name!r}]" for name in sorted(symbols)]
@@ -843,6 +955,7 @@ def render_extraction(
     only_eager=False,
     manual_tiling=False,
     tiling_record=None,
+    symbol_values=None,
 ):
     lines = source.splitlines(keepends=True)
     definitions = [
@@ -878,7 +991,12 @@ def render_extraction(
         )
         return (
             render_eager_case(
-                kernel_name, eager_forward, eager_inputs, input_metadata, tree
+                kernel_name,
+                eager_forward,
+                eager_inputs,
+                input_metadata,
+                tree,
+                symbol_values,
             ),
             launch,
             len(launches),
@@ -946,6 +1064,7 @@ def main():
         if args.manual_tiling and args.only_eager:
             raise ValueError("--manual-tiling cannot be combined with --only-eager")
         tiling_record = load_tiling_record(args.tiling_json)
+        symbol_values = load_symbol_values(args.symbol_values)
         source = source_path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(source_path))
         extracted, launch, launch_count = render_extraction(
@@ -956,6 +1075,7 @@ def main():
             only_eager=args.only_eager,
             manual_tiling=args.manual_tiling,
             tiling_record=tiling_record,
+            symbol_values=symbol_values,
         )
     except (OSError, SyntaxError, ValueError) as error:
         raise SystemExit(f"error: {error}") from error
