@@ -11,7 +11,13 @@
 访存分析和 lowering 的影响。
 
 `eager_forward.py` 按 `new_kernel.py` 的 Graph fragment 复原 eager 计算：先执行输入相加，再取
-`split_with_sizes([200, 960], -1)` 的第一部分，最后执行展开后的 GELU 计算链。
+`split_with_sizes([200, 960], -1)` 的第一部分，最后执行展开后的 GELU 计算链。文件同时提供
+`make_inputs(...)` 输入构造、`run_compiled_eager(...)` 的 `mark_dynamic` 与编译调用，以及 `main()` 入口，
+可直接运行：
+
+```bash
+DEVICE=npu:0 S0=256 python scripts/repro/symbolic_mask_perf/eager_forward.py
+```
 
 在 NPU 环境运行：
 
