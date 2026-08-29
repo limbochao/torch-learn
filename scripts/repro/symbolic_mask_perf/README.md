@@ -10,6 +10,9 @@
 `x2_mask` 前后的差异；B/C 用于区分性能变化来自 `x2 < 200` 比较本身，还是来自显式 full-shape mask 对后端
 访存分析和 lowering 的影响。
 
+`eager_forward.py` 按 `new_kernel.py` 的 Graph fragment 复原 eager 计算：先执行输入相加，再取
+`split_with_sizes([200, 960], -1)` 的第一部分，最后执行展开后的 GELU 计算链。
+
 在 NPU 环境运行：
 
 ```bash

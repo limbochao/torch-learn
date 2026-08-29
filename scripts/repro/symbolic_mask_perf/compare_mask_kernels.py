@@ -1,11 +1,7 @@
-"""
-Compare three equivalent x2 mask forms in the same generated SIMT kernel.
+"""Compare three equivalent x2 mask forms in the same generated SIMT kernel.
 
-Run on an NPU environment:
-
-    python scripts/repro/symbolic_mask_perf/compare_mask_kernels.py
-
-Optional environment variables: S0, WARMUP, REPEAT, CHECK, PRINT_KERNEL_SOURCE.
+Run this script in an NPU environment. Optional environment variables are S0, WARMUP, REPEAT, CHECK and
+PRINT_KERNEL_SOURCE.
 """
 
 import hashlib
@@ -39,87 +35,40 @@ from torch_npu._inductor.runtime import triton_heuristics
     filename=__file__,
     triton_meta={
         'signature': {
-            'in_ptr0': '*fp16',
-            'in_ptr1': '*fp16',
-            'out_ptr0': '*fp16',
-            'ks0': 'i64',
-            'z0_numel': 'i32',
-            'y1_numel': 'i32',
-            'x2_numel': 'i32',
-            'Z0BLOCK': 'i32',
-            'Y1BLOCK': 'i32',
+            'in_ptr0': '*fp16', 'in_ptr1': '*fp16', 'out_ptr0': '*fp16', 'ks0': 'i64',
+            'z0_numel': 'i32', 'y1_numel': 'i32', 'x2_numel': 'i32',
+            'Z0BLOCK': 'i32', 'Y1BLOCK': 'i32',
         },
         'device': DeviceProperties(
-            type='npu',
-            index=0,
-            multi_processor_count=56,
-            cc='Ascend950PR_9579',
-            major=None,
-            regs_per_multiprocessor=None,
-            max_threads_per_multi_processor=None,
-            max_threads_per_block=None,
-            warp_size=None,
+            type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579',
+            major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None,
+            max_threads_per_block=None, warp_size=None,
         ),
-        'constants': {},
-        'mix_mode': 'aiv',
+        'constants': {}, 'mix_mode': 'aiv',
     },
     inductor_meta={
-        'grid_type': 'GridNpu',
-        'autotune_hints': set(),
-        'kernel_name': '__KERNEL_NAME__',
-        'mutated_arg_names': [],
-        'backend_hash': '__BACKEND_HASH__',
-        'split_axis': [0, 1],
-        'tiling_axis': [0, 1, 2],
-        'no_loop_axis': [2],
-        'axis_names': ['z0', 'y1', 'x2'],
-        'axis_static_values': (('z0', 32), ('x2', 200)),
-        'low_dims': {2},
-        'numof_reduction_axis': 0,
-        'split_axis_dtype': torch.float16,
-        'dual_reduction': False,
-        'npu_kernel_type': 'simt_template',
-        'traced_graph_hash': 'TRACED_GRAPH_HASH',
-        'traced_graph_dir': 'TRACED_GRAPH_DIR',
-        'are_deterministic_algorithms_enabled': False,
-        'inductor_ascend_linear_mode': 'linear',
-        'runtime_block_arg_names': ('Z0BLOCK', 'Y1BLOCK'),
-        'assert_indirect_indexing': True,
-        'autotune_local_cache': True,
-        'autotune_pointwise': True,
-        'autotune_remote_cache': None,
-        'force_disable_caches': False,
-        'dynamic_scale_rblock': True,
-        'max_autotune': False,
-        'max_autotune_pointwise': False,
-        'min_split_scan_rblock': 256,
-        'spill_threshold': 16,
-        'store_cubin': False,
-        'deterministic': False,
-        'force_filter_reduction_configs': False,
-        'group_enabled': False,
-        'group_template': None,
-        'group_workload': None,
-        'primary_group_axis': None,
-        'static_split_axes': (),
-        'secondary_runtime_symbolic_axes': (),
-        'group_features': (),
+        'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': '__KERNEL_NAME__',
+        'mutated_arg_names': [], 'backend_hash': '__BACKEND_HASH__',
+        'split_axis': [0, 1], 'tiling_axis': [0, 1, 2], 'no_loop_axis': [2],
+        'axis_names': ['z0', 'y1', 'x2'], 'axis_static_values': (('z0', 32), ('x2', 200)), 'low_dims': {2},
+        'numof_reduction_axis': 0, 'split_axis_dtype': torch.float16, 'dual_reduction': False,
+        'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH',
+        'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False,
+        'inductor_ascend_linear_mode': 'linear', 'runtime_block_arg_names': ('Z0BLOCK', 'Y1BLOCK'),
+        'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True,
+        'autotune_remote_cache': None, 'force_disable_caches': False, 'dynamic_scale_rblock': True,
+        'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256,
+        'spill_threshold': 16, 'store_cubin': False, 'deterministic': False,
+        'force_filter_reduction_configs': False, 'group_enabled': False, 'group_template': None,
+        'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (),
+        'secondary_runtime_symbolic_axes': (), 'group_features': (),
     },
     min_elem_per_thread=0,
 )
 @triton.jit
 def __KERNEL_NAME__(
-    in_ptr0,
-    in_ptr1,
-    out_ptr0,
-    ks0,
-    z0_numel,
-    y1_numel,
-    x2_numel,
-    Z0BLOCK,
-    Y1BLOCK,
-    Z0BLOCK_SUB: tl.constexpr,
-    Y1BLOCK_SUB: tl.constexpr,
+    in_ptr0, in_ptr1, out_ptr0, ks0, z0_numel, y1_numel, x2_numel, Z0BLOCK, Y1BLOCK,
+    Z0BLOCK_SUB: tl.constexpr, Y1BLOCK_SUB: tl.constexpr,
 ):
     x2_numel = 200
     X2BLOCK_SUB: tl.constexpr = 200
@@ -139,13 +88,9 @@ def __KERNEL_NAME__(
             x2 = base_x2[None, None, :]
             __X2_MASK_SETUP__
             tmp0 = tl.load(
-                in_ptr0 + (x2 + 1160 * y1 + 1160 * ks0 * z0),
-                __INPUT0_MASK__,
+                in_ptr0 + (x2 + 1160 * y1 + 1160 * ks0 * z0), __INPUT0_MASK__
             ).to(tl.float32)
-            tmp1 = tl.load(
-                in_ptr1 + (x2 + 1160 * z0),
-                __INPUT1_MASK__,
-            ).to(tl.float32)
+            tmp1 = tl.load(in_ptr1 + (x2 + 1160 * z0), __INPUT1_MASK__).to(tl.float32)
             tmp2 = tmp0 + tmp1
             tmp3 = tmp2 * tmp2
             tmp4 = tmp3 * tmp2
@@ -156,31 +101,21 @@ def __KERNEL_NAME__(
             tmp9 = tmp7 * tmp8
             tmp10 = tl.sigmoid(tmp9)
             tmp11 = tmp2 * tmp10
-            tl.store(
-                out_ptr0 + (x2 + 200 * y1 + 200 * ks0 * z0),
-                tmp11,
-                __OUTPUT_MASK__,
-            )
+            tl.store(out_ptr0 + (x2 + 200 * y1 + 200 * ks0 * z0), tmp11, __OUTPUT_MASK__)
 '''
 
 
 MASK_VARIANTS = {
     'a_no_x2_mask': {
-        'setup': '',
-        'input0': 'y1_mask & z0_mask',
-        'input1': 'z0_mask',
-        'output': 'y1_mask & z0_mask',
+        'setup': '', 'input0': 'y1_mask & z0_mask', 'input1': 'z0_mask', 'output': 'y1_mask & z0_mask',
     },
     'b_range_x2_mask': {
-        'setup': 'x2_mask = x2 < 200',
-        'input0': 'x2_mask & y1_mask & z0_mask',
-        'input1': 'x2_mask & z0_mask',
-        'output': 'x2_mask & y1_mask & z0_mask',
+        'setup': 'x2_mask = x2 < 200', 'input0': 'x2_mask & y1_mask & z0_mask',
+        'input1': 'x2_mask & z0_mask', 'output': 'x2_mask & y1_mask & z0_mask',
     },
     'c_full_true_x2_mask': {
         'setup': 'x2_mask = tl.full((1, 1, 200), True, tl.int1)',
-        'input0': 'x2_mask & y1_mask & z0_mask',
-        'input1': 'x2_mask & z0_mask',
+        'input0': 'x2_mask & y1_mask & z0_mask', 'input1': 'x2_mask & z0_mask',
         'output': 'x2_mask & y1_mask & z0_mask',
     },
 }
@@ -189,10 +124,8 @@ MASK_VARIANTS = {
 def make_kernel_source(kernel_name, variant):
     source = KERNEL_TEMPLATE
     replacements = {
-        '__KERNEL_NAME__': kernel_name,
-        '__X2_MASK_SETUP__': variant['setup'],
-        '__INPUT0_MASK__': variant['input0'],
-        '__INPUT1_MASK__': variant['input1'],
+        '__KERNEL_NAME__': kernel_name, '__X2_MASK_SETUP__': variant['setup'],
+        '__INPUT0_MASK__': variant['input0'], '__INPUT1_MASK__': variant['input1'],
         '__OUTPUT_MASK__': variant['output'],
     }
     for placeholder, value in replacements.items():
@@ -202,25 +135,18 @@ def make_kernel_source(kernel_name, variant):
 
 
 KERNEL_SOURCES = {
-    name: make_kernel_source(f'triton_mask_perf_{name}', variant)
-    for name, variant in MASK_VARIANTS.items()
+    name: make_kernel_source(f'triton_mask_perf_{name}', variant) for name, variant in MASK_VARIANTS.items()
 }
 
-kernel_a_no_x2_mask = async_compile.triton(
-    'triton_mask_perf_a_no_x2_mask',
-    KERNEL_SOURCES['a_no_x2_mask'],
-    device_str='npu',
-)
-kernel_b_range_x2_mask = async_compile.triton(
-    'triton_mask_perf_b_range_x2_mask',
-    KERNEL_SOURCES['b_range_x2_mask'],
-    device_str='npu',
-)
-kernel_c_full_true_x2_mask = async_compile.triton(
-    'triton_mask_perf_c_full_true_x2_mask',
-    KERNEL_SOURCES['c_full_true_x2_mask'],
-    device_str='npu',
-)
+
+def compile_kernel(variant_name):
+    kernel_name = f'triton_mask_perf_{variant_name}'
+    return async_compile.triton(kernel_name, KERNEL_SOURCES[variant_name], device_str='npu')
+
+
+kernel_a_no_x2_mask = compile_kernel('a_no_x2_mask')
+kernel_b_range_x2_mask = compile_kernel('b_range_x2_mask')
+kernel_c_full_true_x2_mask = compile_kernel('c_full_true_x2_mask')
 
 async_compile.wait(globals())
 del async_compile
@@ -233,16 +159,7 @@ KERNELS = {
 
 
 def launch(kernel, in_ptr0, in_ptr1, out_ptr0, s0, stream):
-    kernel.run(
-        in_ptr0,
-        in_ptr1,
-        out_ptr0,
-        s0,
-        32,
-        s0,
-        200,
-        stream=stream,
-    )
+    kernel.run(in_ptr0, in_ptr1, out_ptr0, s0, 32, s0, 200, stream=stream)
 
 
 def benchmark(kernel, args, warmup, repeat):
@@ -272,12 +189,7 @@ def main():
     in_ptr0 = torch.randn((32, s0, 1160), device='npu', dtype=torch.float16)
     in_ptr1 = torch.randn((32, 1, 1160), device='npu', dtype=torch.float16)
     outputs = {
-        name: empty_strided(
-            (32, s0, 200),
-            (200 * s0, 200, 1),
-            device='npu',
-            dtype=torch.float16,
-        )
+        name: empty_strided((32, s0, 200), (200 * s0, 200, 1), device='npu', dtype=torch.float16)
         for name in KERNELS
     }
     stream = get_raw_stream(0)
