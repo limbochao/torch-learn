@@ -18,7 +18,9 @@ python scripts/repro/embedding_backward_cross_device.py --device npu --device-id
 ```
 
 脚本固定使用 AOT graph 的原始输入 shape，不提供 shape、dynamic 或 check 参数。
-`--warmup` 和 `--repeat` 仅控制 profiler 的预热和采集轮数。输出的
+`--warmup` 和 `--repeat` 仅控制 profiler 的预热和采集轮数。profile 结果默认保存到
+`prof_log/embedding_backward_cross_device/<timestamp>/{eager,inductor}/`，也可通过
+`--profile-dir` 指定根目录。输出的
 `*_device_us` 是每轮 device kernel duration 之和：CUDA 从 Chrome trace 的
 `kernel` event 读取，NPU 从 `kernel_details.csv` 读取；不使用主机 wall-clock 时间。
 通过 `--device` 和 `--device-id` 传入设备类型及物理卡 ID，脚本会自动设置
