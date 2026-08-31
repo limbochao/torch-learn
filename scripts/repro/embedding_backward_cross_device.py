@@ -60,7 +60,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def setup_device(device_name: str) -> torch.device:
+def visible_devices(device_name: str) -> tuple[str, ...]:
+    variable = "ASCEND_RT_VISIBLE_DEVICES" if device_name == "npu" else "CUDA_VISIBLE_DEVICES"
+    value = os.getenv(variable)
+    if value is None or not value.strip():
+        return ()
+    devices = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not devices or any(not item.isdigit() for item in devices):
+        raise ValueError(f"{variable} must be a comma-separated list of device ids, got {value!r}")
+    return devices
+
+
+def setup_device(device_name: str) -> tuple[torch.device, tuple[str, ...]]:
+    selected_devices = visible_devices(device_name)
     if device_name == "npu":
         try:
             import torch_npu
@@ -69,9 +81,13 @@ def setup_device(device_name: str) -> torch.device:
             raise RuntimeError("--device npu requires torch_npu") from error
         register_inductor_npu()
         torch.npu.set_device(0)
-    elif not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available")
-    return torch.device(f"{device_name}:0")
+    else:
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is not available")
+        torch.cuda.set_device(0)
+    # Visible-device environment variables remap the first visible card to index 0.
+    device = torch.device(f"{device_name}:0")
+    return device, selected_devices
 
 
 def synchronize(device: torch.device) -> None:
@@ -169,7 +185,7 @@ def main() -> None:
     if args.warmup < 0 or args.repeat <= 0:
         raise ValueError("warmup must be non-negative and repeat must be positive")
 
-    device = setup_device(args.device)
+    device, selected_devices = setup_device(args.device)
     inputs = make_inputs(device)
     compiled_forward = torch.compile(eager_forward, backend="inductor")
 
@@ -178,7 +194,8 @@ def main() -> None:
 
     eager_us = device_time_us(eager_forward, inputs, device, args.warmup, args.repeat)
     inductor_us = device_time_us(compiled_forward, inputs, device, args.warmup, args.repeat)
-    print(f"device={device} shape=({BATCH}, {SLOTS}, {EMBEDDING_DIM})")
+    visible_label = ",".join(selected_devices) if selected_devices else "all"
+    print(f"device={device} visible_devices={visible_label} shape=({BATCH}, {SLOTS}, {EMBEDDING_DIM})")
     print(f"warmup={args.warmup} repeat={args.repeat}")
     print(f"eager_device_us={eager_us:.3f}")
     print(f"inductor_device_us={inductor_us:.3f}")
