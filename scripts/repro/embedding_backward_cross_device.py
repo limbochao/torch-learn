@@ -15,8 +15,6 @@ import os
 import tempfile
 from pathlib import Path
 
-import torch
-
 
 BATCH = 4096
 SLOTS = 38
@@ -55,24 +53,20 @@ def eager_forward(where_4, ge_4, getitem_46, getitem_58, getitem_106, index_put_
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", choices=("cuda", "npu"), default="npu")
+    parser.add_argument("--device-id", type=int, default=0, help="physical device id exposed to the process")
     parser.add_argument("--warmup", type=int, default=int(os.getenv("WARMUP", "10")))
     parser.add_argument("--repeat", type=int, default=int(os.getenv("REPEAT", "50")))
     return parser.parse_args()
 
 
-def visible_devices(device_name: str) -> tuple[str, ...]:
+def setup_device(device_name: str, device_id: int):
+    global torch
+    if device_id < 0:
+        raise ValueError("--device-id must be non-negative")
     variable = "ASCEND_RT_VISIBLE_DEVICES" if device_name == "npu" else "CUDA_VISIBLE_DEVICES"
-    value = os.getenv(variable)
-    if value is None or not value.strip():
-        return ()
-    devices = tuple(item.strip() for item in value.split(",") if item.strip())
-    if not devices or any(not item.isdigit() for item in devices):
-        raise ValueError(f"{variable} must be a comma-separated list of device ids, got {value!r}")
-    return devices
+    os.environ[variable] = str(device_id)
+    import torch
 
-
-def setup_device(device_name: str) -> tuple[torch.device, tuple[str, ...]]:
-    selected_devices = visible_devices(device_name)
     if device_name == "npu":
         try:
             import torch_npu
@@ -85,9 +79,9 @@ def setup_device(device_name: str) -> tuple[torch.device, tuple[str, ...]]:
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available")
         torch.cuda.set_device(0)
-    # Visible-device environment variables remap the first visible card to index 0.
+    # The selected physical device is remapped to runtime index 0.
     device = torch.device(f"{device_name}:0")
-    return device, selected_devices
+    return device
 
 
 def synchronize(device: torch.device) -> None:
@@ -185,7 +179,8 @@ def main() -> None:
     if args.warmup < 0 or args.repeat <= 0:
         raise ValueError("warmup must be non-negative and repeat must be positive")
 
-    device, selected_devices = setup_device(args.device)
+    global torch
+    device = setup_device(args.device, args.device_id)
     inputs = make_inputs(device)
     compiled_forward = torch.compile(eager_forward, backend="inductor")
 
@@ -194,8 +189,7 @@ def main() -> None:
 
     eager_us = device_time_us(eager_forward, inputs, device, args.warmup, args.repeat)
     inductor_us = device_time_us(compiled_forward, inputs, device, args.warmup, args.repeat)
-    visible_label = ",".join(selected_devices) if selected_devices else "all"
-    print(f"device={device} visible_devices={visible_label} shape=({BATCH}, {SLOTS}, {EMBEDDING_DIM})")
+    print(f"device={device} device_id={args.device_id} shape=({BATCH}, {SLOTS}, {EMBEDDING_DIM})")
     print(f"warmup={args.warmup} repeat={args.repeat}")
     print(f"eager_device_us={eager_us:.3f}")
     print(f"inductor_device_us={inductor_us:.3f}")

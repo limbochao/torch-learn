@@ -11,16 +11,16 @@
 
 ```bash
 # GPU
-CUDA_VISIBLE_DEVICES=3 python scripts/repro/embedding_backward_cross_device.py --device cuda
+python scripts/repro/embedding_backward_cross_device.py --device cuda --device-id 3
 
 # NPU（需要 torch_npu 和 register_inductor_npu 环境）
-ASCEND_RT_VISIBLE_DEVICES=3 python scripts/repro/embedding_backward_cross_device.py --device npu
+python scripts/repro/embedding_backward_cross_device.py --device npu --device-id 3
 ```
 
 脚本固定使用 AOT graph 的原始输入 shape，不提供 shape、dynamic 或 check 参数。
 `--warmup` 和 `--repeat` 仅控制 profiler 的预热和采集轮数。输出的
 `*_device_us` 是每轮 device kernel duration 之和：CUDA 从 Chrome trace 的
 `kernel` event 读取，NPU 从 `kernel_details.csv` 读取；不使用主机 wall-clock 时间。
-设备通过 `CUDA_VISIBLE_DEVICES`（CUDA）或 `ASCEND_RT_VISIBLE_DEVICES`（NPU）选择。
-可见设备会映射为 runtime 的 `:0`；例如环境变量设为 `3` 时，脚本输出 `cuda:0`/`npu:0`，
-实际使用物理卡 3。传入多个 ID 时使用列表中的第一张可见卡。
+通过 `--device` 和 `--device-id` 传入设备类型及物理卡 ID，脚本会自动设置
+`CUDA_VISIBLE_DEVICES`（CUDA）或 `ASCEND_RT_VISIBLE_DEVICES`（NPU）。选中的物理卡会映射为
+runtime 的 `cuda:0`/`npu:0`；例如 `--device npu --device-id 3` 实际使用物理卡 3。
