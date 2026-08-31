@@ -1,9 +1,13 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(view_723, arg18_1):
+    sym_size_int_874 = view_723.shape[0]
+    logical_not = view_723
     logical_not_1 = torch.ops.aten.logical_not.default(logical_not)
     expand_default_20 = torch.ops.aten.expand.default(logical_not_1, [sym_size_int_874, 112])
     slice_743 = torch.ops.aten.slice.Tensor(arg18_1, 1, 22385, 22497)

@@ -1,9 +1,12 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(cat_197):
+    arg124_1 = cat_197.shape[0]
     view_690 = torch.ops.aten.reshape.default(cat_197, [4, arg124_1])
     sum_246 = torch.ops.aten.sum.dim_IntList(view_690, [0])
     convert_element_type_194 = torch.ops.prims.convert_element_type.default(sum_246, torch.float32)

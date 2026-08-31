@@ -1,9 +1,12 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(arg1643_1, cat_210, arg1647_1, arg1646_1):
+    arg124_1 = arg1643_1.shape[0]
     view_701 = torch.ops.aten.reshape.default(arg1643_1, [1, arg124_1, 8])
     squeeze_dims_13 = torch.ops.aten.squeeze.dims(view_701, [0])
     view_707 = torch.ops.aten.reshape.default(arg1646_1, [1, arg124_1, 8])

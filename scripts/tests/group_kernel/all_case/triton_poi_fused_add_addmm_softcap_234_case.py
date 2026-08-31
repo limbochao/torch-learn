@@ -1,4 +1,6 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
@@ -6,8 +8,8 @@ from torch._dynamo.testing import rand_strided
 def eager_forward(arg1460_1, mm_default_85, softcap_38):
     add_tensor_85 = torch.ops.aten.add.Tensor(arg1460_1, mm_default_85)
     add_13550 = torch.ops.aten.add.Tensor(add_tensor_85, softcap_38)
-    softcap_39 = torch.ops.qianchuan_triton.softcap.default(add_13550, 50.0)
-    return buf2649
+    softcap_39 = add_13550
+    return softcap_39
 
 
 SAMPLE_BINDINGS = [

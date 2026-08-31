@@ -1,11 +1,14 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
-def eager_forward(nonzero):
+def eager_forward(s0):
+    sym_size_int_352 = s0
     full_206 = torch.ops.aten.full.default([sym_size_int_352], False, dtype=torch.bool, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
-    return index_put_1
+    return full_206
 
 
 SAMPLE_BINDINGS = [
@@ -23,13 +26,8 @@ COMPILE_BINDINGS = [
 
 
 def make_inputs(binding, device):
-    nonzero = rand_strided(
-        (1,),
-        (1,),
-        device=device,
-        dtype=torch.int64,
-    )
-    return (nonzero,), {}
+    s0 = binding['s0']
+    return (s0,), {}
 
 
 DYNAMIC_DIMS = {}

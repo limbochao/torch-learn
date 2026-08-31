@@ -1,9 +1,12 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
-def eager_forward(buf302, nonzero):
+def eager_forward(buf302):
+    index_put_1 = buf302
     convert_element_type_48 = torch.ops.prims.convert_element_type.default(index_put_1, torch.int64)
     return convert_element_type_48
 
@@ -30,13 +33,7 @@ def make_inputs(binding, device):
         device=device,
         dtype=torch.bool,
     )
-    nonzero = rand_strided(
-        (1,),
-        (1,),
-        device=device,
-        dtype=torch.int64,
-    )
-    return (buf302, nonzero), {}
+    return (buf302,), {}
 
 
 DYNAMIC_DIMS = {'args[0]': (0,)}

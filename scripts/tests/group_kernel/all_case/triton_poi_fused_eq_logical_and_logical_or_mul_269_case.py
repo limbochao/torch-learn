@@ -1,9 +1,12 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(arg6_1, arg7_1, arg5_1, add_tensor_16_fused_relu, add_tensor_14_fused_relu):
+    arg4_1 = arg6_1.shape[0]
     eq_16 = torch.ops.aten.eq.Scalar(arg6_1, 96)
     eq_11 = torch.ops.aten.eq.Scalar(arg6_1, 412)
     eq_13 = torch.ops.aten.eq.Scalar(arg7_1, 102)

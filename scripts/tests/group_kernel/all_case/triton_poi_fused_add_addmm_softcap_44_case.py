@@ -1,13 +1,15 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
-def eager_forward(arg521_1, mm_default_288, getitem, nonzero):
+def eager_forward(arg521_1, mm_default_288, getitem):
     add_tensor_288 = torch.ops.aten.add.Tensor(arg521_1, mm_default_288)
     add_7870 = torch.ops.aten.add.Tensor(add_tensor_288, getitem)
-    softcap = torch.ops.qianchuan_triton.softcap.default(add_7870, 50.0)
-    return buf156
+    softcap = add_7870
+    return softcap
 
 
 SAMPLE_BINDINGS = [
@@ -44,13 +46,7 @@ def make_inputs(binding, device):
         device=device,
         dtype=torch.float16,
     )
-    nonzero = rand_strided(
-        (1,),
-        (1,),
-        device=device,
-        dtype=torch.int64,
-    )
-    return (arg521_1, mm_default_288, getitem, nonzero), {}
+    return (arg521_1, mm_default_288, getitem), {}
 
 
 DYNAMIC_DIMS = {'args[1]': (0,), 'args[2]': (0,)}

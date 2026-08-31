@@ -78,8 +78,14 @@ python scripts/tools/extract_triton_kernel.py \
 通过 `torch._dynamo.mark_dynamic(...)` 标记，再调用 `torch.compile(eager_forward, dynamic=None)`。生成的
 `eager_forward(...)` 和 `run_compiled_eager(...)` 可独立用于 eager 编译性能对比。
 
-Graph fragment 中没有 tensor metadata 的上游 placeholder 会被忽略；如果 fragment 仍引用未定义的节点，工具
-会直接报出缺失名称，而不会生成不可运行的 eager case。
+Graph fragment 中没有 tensor metadata 的上游 placeholder 会被忽略。对于常见的 metadata 缺失，工具会从
+动态 tensor 的首维恢复 shape 标量和 view/logical mask 别名；无 tensor 输入的 `full`/`zeros` 节点则从输出
+metadata 反推 shape 表达式，并把基础符号生成为整数形参。无法可靠恢复的节点仍会直接报出缺失名称，不会生成
+包含悬空变量的 eager case。生成文件同时补齐 `inf`、`nan`、`nanj` 常量导入。
+
+部分捕获图会把 kernel 之后执行的外部自定义算子一起列入 Graph fragment。例如当前 Qianchuan 用例中的
+`qianchuan_triton.softcap` 实际不在对应 Triton kernel 内，工具会把它作为 identity 边界处理，避免 eager case
+依赖运行环境中未注册的外部算子。
 
 ## Compile mode performance
 

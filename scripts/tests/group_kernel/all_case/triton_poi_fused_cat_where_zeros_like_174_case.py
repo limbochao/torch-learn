@@ -1,9 +1,12 @@
 import torch
+from math import inf, nan
+from cmath import nanj
 from torch._dynamo.testing import rand_strided
 
 
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(logical_or_12, cat_106, where_196):
+    arg4_1 = logical_or_12.shape[0]
     full_default_220 = torch.ops.aten.full.default([arg4_1, 128], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
     where_196 = torch.ops.aten.where.self(logical_or_12, full_default_220, cat_106)
     clone_49 = torch.ops.aten.clone.default(where_196)

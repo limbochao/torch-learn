@@ -17,7 +17,10 @@ GRAPH_FRAGMENT_MARKER = "# Graph fragment:"
 GRAPH_LINE_PREFIX = "#   "
 ARG_NAME = re.compile(r"arg\d+_\d+")
 SHAPE_VALUE_NAME = re.compile(r"(?:arg\d+_\d+|sym_size_int_\d+)")
-IDENTITY_ALIAS_NAME = re.compile(r"(?:index_put|view)_\d+(?:_\d+)?")
+IDENTITY_ALIAS_NAME = re.compile(
+    r"(?:(?:index_put|view)_\d+(?:_\d+)?|logical_not(?:_\d+)?)"
+)
+INFERRED_TENSOR_INPUT_NAME = re.compile(r"mm_default_\d+")
 BUFFER_NAME = re.compile(r"buf\d+")
 NODE_REFERENCE = re.compile(r"%([A-Za-z_]\w*)")
 PLACEHOLDER = re.compile(
@@ -57,6 +60,10 @@ SAFE_UNARY_OPERATORS = {
     ast.USub: operator.neg,
 }
 SAFE_DIMENSION_FUNCTIONS = {"max", "min"}
+# The captured graph lists this post-kernel external call in the kernel fragment.
+IDENTITY_CALL_TARGETS = {
+    "torch.ops.qianchuan_triton.softcap.default",
+}
 
 
 def parse_args():
@@ -537,6 +544,10 @@ def render_call(target, args, kwargs):
         if item
     ]
     arguments.extend(render_kwargs(kwargs))
+    if target in IDENTITY_CALL_TARGETS:
+        if not arguments:
+            raise ValueError(f"identity Graph fragment call has no arguments: {target}")
+        return arguments[0]
     return f"{target}({', '.join(arguments)})"
 
 
@@ -558,12 +569,36 @@ def tensor_metadata(line):
         if expression_symbols(expression):
             symbolic_dims.append(dim)
     return {
+        "kind": "tensor",
         "shape": shape,
         "stride": stride,
         "device": match.group("device"),
         "dtype": TORCH_DTYPES[dtype],
         "symbolic_dims": symbolic_dims,
     }
+
+
+def output_shape_references(line, args):
+    """Map missing size nodes in a factory shape to output metadata expressions."""
+    try:
+        metadata = tensor_metadata(line)
+    except ValueError:
+        return {}
+    if not args.startswith("(") or not args.endswith(")"):
+        return {}
+    positional = split_top_level(args[1:-1], ",")
+    if not positional:
+        return {}
+    shape = positional[0]
+    if not shape.startswith("[") or not shape.endswith("]"):
+        return {}
+    dimensions = split_top_level(shape[1:-1], ",")
+    result = {}
+    for index, dimension in enumerate(dimensions):
+        match = re.fullmatch(r"%([A-Za-z_]\w*)", dimension)
+        if match and index < len(metadata["shape"]):
+            result[match.group(1)] = metadata["shape"][index]
+    return result
 
 
 def expression_symbols(expression):
@@ -595,6 +630,8 @@ def render_eager_forward(lines, definition):
     return_expression = None
     return_references = set()
     incomplete_placeholders = []
+    inferred_shape_values = {}
+    inferred_tensor_inputs = {}
 
     for line in graph_fragment(lines, definition):
         placeholder = PLACEHOLDER.match(line)
@@ -624,6 +661,15 @@ def render_eager_forward(lines, definition):
                     set(NODE_REFERENCE.findall(args + kwargs)),
                 )
             )
+            inferred_shape_values.update(output_shape_references(line, args))
+            try:
+                output_metadata = tensor_metadata(line)
+            except ValueError:
+                output_metadata = None
+            if output_metadata is not None:
+                for reference in NODE_REFERENCE.findall(args + kwargs):
+                    if INFERRED_TENSOR_INPUT_NAME.fullmatch(reference):
+                        inferred_tensor_inputs.setdefault(reference, output_metadata)
             continue
 
         returned = RETURN.match(line)
@@ -660,13 +706,45 @@ def render_eager_forward(lines, definition):
                 synthesized.append(f"{name} = {shape_source}.shape[0]")
                 defined.add(name)
         missing = sorted(references - defined)
-    alias_source = inputs[0] if inputs else None
+    for name in missing:
+        expression = inferred_shape_values.get(name)
+        if expression is None:
+            continue
+        synthesized.append(f"{name} = {expression}")
+        defined.add(name)
+        for symbol in sorted(expression_symbols(expression)):
+            if symbol not in inputs:
+                inputs.append(symbol)
+                input_metadata[symbol] = {"kind": "scalar"}
+            defined.add(symbol)
+    missing = sorted(references - defined)
+    for name in missing:
+        metadata = inferred_tensor_inputs.get(name)
+        if metadata is None:
+            continue
+        inputs.append(name)
+        input_metadata[name] = metadata
+        defined.add(name)
+    missing = sorted(references - defined)
+    alias_source = next(
+        (
+            name
+            for name in inputs
+            if input_metadata[name]["kind"] == "tensor"
+        ),
+        None,
+    )
     if alias_source:
         for name in missing:
             if IDENTITY_ALIAS_NAME.fullmatch(name):
                 synthesized.append(f"{name} = {alias_source}")
                 defined.add(name)
         missing = sorted(references - defined)
+    if missing and all(IDENTITY_ALIAS_NAME.fullmatch(name) for name in missing):
+        call_names = [name for name, _, _ in statements]
+        if call_names and set(missing).issubset(return_references):
+            return_expression = call_names[-1]
+            missing = []
     if missing and all(BUFFER_NAME.fullmatch(name) for name in missing):
         call_names = [name for name, _, _ in statements]
         if call_names and set(missing).issubset(return_references):
@@ -697,6 +775,8 @@ def render_compiled_eager(inputs, input_metadata):
     signature = ", ".join(inputs)
     body = []
     for name in inputs:
+        if input_metadata[name]["kind"] != "tensor":
+            continue
         body.extend(
             f"torch._dynamo.mark_dynamic({name}, {dim})"
             for dim in input_metadata[name]["symbolic_dims"]
@@ -729,6 +809,9 @@ def render_eager_inputs(inputs, input_metadata):
         metadata = input_metadata[name]
         argument_name = f"eager_input_{index}"
         argument_names.append(argument_name)
+        if metadata["kind"] == "scalar":
+            statements.append(f"{argument_name} = 1")
+            continue
         statements.append(
             f"{argument_name} = rand_strided("
             f"{tuple_expression(metadata['shape'])}, "
@@ -855,7 +938,10 @@ def render_eager_case(
     symbol_values=None,
 ):
     symbols = set()
-    for metadata in input_metadata.values():
+    for name, metadata in input_metadata.items():
+        if metadata["kind"] == "scalar":
+            symbols.add(name)
+            continue
         for expression in metadata["shape"] + metadata["stride"]:
             symbols.update(expression_symbols(expression))
     baseline = resolve_symbol_values(tree, symbols, symbol_values)
@@ -864,6 +950,8 @@ def render_eager_case(
     setup = [f"{name} = binding[{name!r}]" for name in sorted(symbols)]
     for name in inputs:
         metadata = input_metadata[name]
+        if metadata["kind"] == "scalar":
+            continue
         setup.append(
             f"{name} = rand_strided(\n"
             f"    {tuple_expression(metadata['shape'])},\n"
@@ -877,10 +965,16 @@ def render_eager_case(
     dynamic_dims = {
         f"args[{index}]": tuple(input_metadata[name]["symbolic_dims"])
         for index, name in enumerate(inputs)
-        if input_metadata[name]["symbolic_dims"]
+        if input_metadata[name]["kind"] == "tensor"
+        and input_metadata[name]["symbolic_dims"]
     }
     sections = [
-        "import torch\nfrom torch._dynamo.testing import rand_strided",
+        (
+            "import torch\n"
+            "from math import inf, nan\n"
+            "from cmath import nanj\n"
+            "from torch._dynamo.testing import rand_strided"
+        ),
         eager_forward,
         render_binding_list("SAMPLE_BINDINGS", samples),
         render_binding_list("COMPILE_BINDINGS", [baseline]),
