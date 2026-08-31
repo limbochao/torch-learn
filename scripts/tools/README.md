@@ -109,6 +109,18 @@ python scripts/tools/compile_mode_perf.py \
 `run.json` 和终端失败清单，并继续执行后续 case。批量执行默认在首轮全部 case 结束后，对失败 case
 统一延迟重试 3 轮；不会在失败后立即打断当前批次。可通过 `--retries N` 修改重试轮数，传入 `0` 可关闭重试。
 
+也可以传入一个 case 清单文件，文件内容按一行一个路径填写。空行会被忽略；相对路径按启动命令时的当前
+目录解析，也支持绝对路径：
+
+```text
+scripts/tests/group_kernel/all_case/triton_poi_fused_add_213_case.py
+/data/benchmarks/triton_poi_fused_add_217_case.py
+```
+
+```bash
+python scripts/tools/compile_mode_perf.py cases.txt --device npu:0
+```
+
 ```bash
 python scripts/tools/compile_mode_perf.py \
   scripts/tests/group_kernel \

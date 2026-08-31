@@ -878,34 +878,62 @@ def run_one_worker(run_root: Path, control_root: Path, base_config, execution, i
 def expand_case_paths(case_inputs: list[Path]) -> list[Path]:
     case_paths = []
     seen = set()
-    for case_input in case_inputs:
-        pattern = str(case_input)
-        if glob.has_magic(pattern):
-            matched_paths = [Path(path) for path in sorted(glob.glob(pattern, recursive=True))]
-            if not matched_paths:
-                raise ValueError(f"case pattern matched no paths: {case_input}")
-        else:
-            matched_paths = [case_input]
-        for matched_path in matched_paths:
-            if matched_path.is_file():
-                candidates = [matched_path]
-            elif matched_path.is_dir():
-                candidates = sorted(
-                    path
-                    for path in matched_path.iterdir()
-                    if path.is_file() and path.name.endswith("_case.py")
-                )
-                if not candidates:
-                    raise ValueError(
-                        f"case directory contains no *_case.py files: {matched_path}"
-                    )
+    list_stack = set()
+
+    def expand_inputs(inputs: list[Path]) -> None:
+        for case_input in inputs:
+            pattern = str(case_input)
+            if glob.has_magic(pattern):
+                matched_paths = [
+                    Path(path) for path in sorted(glob.glob(pattern, recursive=True))
+                ]
+                if not matched_paths:
+                    raise ValueError(f"case pattern matched no paths: {case_input}")
             else:
-                raise ValueError(f"case path does not exist: {matched_path}")
-            for candidate in candidates:
-                resolved = candidate.resolve()
-                if resolved not in seen:
-                    seen.add(resolved)
-                    case_paths.append(resolved)
+                matched_paths = [case_input]
+            for matched_path in matched_paths:
+                if matched_path.is_file() and matched_path.suffix != ".py":
+                    list_path = matched_path.resolve()
+                    if list_path in list_stack:
+                        raise ValueError(f"case list includes itself or has a cycle: {matched_path}")
+                    try:
+                        lines = matched_path.read_text(encoding="utf-8-sig").splitlines()
+                    except OSError as error:
+                        raise ValueError(f"cannot read case list {matched_path}: {error}") from error
+                    listed_paths = [
+                        Path(line.strip())
+                        for line in lines
+                        if line.strip()
+                    ]
+                    if not listed_paths:
+                        raise ValueError(f"case list is empty: {matched_path}")
+                    list_stack.add(list_path)
+                    try:
+                        expand_inputs(listed_paths)
+                    finally:
+                        list_stack.remove(list_path)
+                    continue
+                if matched_path.is_file():
+                    candidates = [matched_path]
+                elif matched_path.is_dir():
+                    candidates = sorted(
+                        path
+                        for path in matched_path.iterdir()
+                        if path.is_file() and path.name.endswith("_case.py")
+                    )
+                    if not candidates:
+                        raise ValueError(
+                            f"case directory contains no *_case.py files: {matched_path}"
+                        )
+                else:
+                    raise ValueError(f"case path does not exist: {matched_path}")
+                for candidate in candidates:
+                    resolved = candidate.resolve()
+                    if resolved not in seen:
+                        seen.add(resolved)
+                        case_paths.append(resolved)
+
+    expand_inputs(case_inputs)
     if not case_paths:
         raise ValueError("at least one case file or directory is required")
     return case_paths
