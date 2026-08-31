@@ -106,7 +106,8 @@ python scripts/tools/compile_mode_perf.py \
 `summary.csv`、`comparison.csv` 和 `comparison.xlsx`；批量模式下每个 case 的 artifacts 放在
 `cases/<index>_<case>/` 下。每个 case 完成后会立即打印该 case 的 static/group 摘要，全部完成后再打印
 一张包含所有成功 case 的 batch 摘要。执行过程中会显示 `[当前序号/总数]` 进度；某个 case 失败时会记录到
-`run.json` 和终端失败清单，并继续执行后续 case。
+`run.json` 和终端失败清单，并继续执行后续 case。批量执行默认在首轮全部 case 结束后，对失败 case
+统一延迟重试 3 轮；不会在失败后立即打断当前批次。可通过 `--retries N` 修改重试轮数，传入 `0` 可关闭重试。
 
 ```bash
 python scripts/tools/compile_mode_perf.py \

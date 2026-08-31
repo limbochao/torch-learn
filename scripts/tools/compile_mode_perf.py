@@ -82,6 +82,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--active", type=int, default=20)
     parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument(
+        "--retries",
+        "--retry",
+        type=int,
+        default=3,
+        help="number of deferred retries for failed cases (default: 3)",
+    )
     parser.add_argument("--_action", choices=("discover", "worker"), help=argparse.SUPPRESS)
     parser.add_argument("--_config", type=Path, help=argparse.SUPPRESS)
     return parser.parse_args()
@@ -911,6 +918,8 @@ def validate_controller_args(args: argparse.Namespace) -> list[Path]:
     device_index(args.device)
     if args.warmup < 0 or args.active <= 0 or args.repeat <= 0:
         raise ValueError("warmup must be non-negative; active and repeat must be positive")
+    if args.retries < 0:
+        raise ValueError("retries must be non-negative")
     if args.run_id and re.fullmatch(r"[A-Za-z0-9._-]+", args.run_id) is None:
         raise ValueError("run-id may only contain letters, digits, '.', '_', and '-'")
     return case_paths
@@ -927,6 +936,7 @@ def run_case(
     args: argparse.Namespace,
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
     control_root = case_root / ".control"
+    shutil.rmtree(control_root, ignore_errors=True)
     control_root.mkdir(parents=True, exist_ok=True)
     discovery_result = control_root / "discovery.json"
     discovery_config = control_root / "discovery_config.json"
@@ -996,6 +1006,8 @@ def controller(args: argparse.Namespace) -> None:
         "warmup": args.warmup,
         "active": args.active,
         "repeat": args.repeat,
+        "retries": args.retries,
+        "retry_round": 0,
         "batch": batch,
         "total_cases": len(case_paths),
         "completed_cases": 0,
@@ -1007,59 +1019,90 @@ def controller(args: argparse.Namespace) -> None:
 
     records = []
     discovered_cases = []
-    failed_cases = []
+    pending_cases = list(enumerate(case_paths))
+    failed_by_index = {}
     try:
-        for case_index, case_path in enumerate(case_paths):
-            progress = f"[{case_index + 1}/{len(case_paths)}]"
-            print(f"{progress} starting case={case_path.name}", flush=True)
-            case_root = (
-                run_root / "cases" / safe_case_directory_name(case_index, case_path)
-                if batch
-                else run_root
-            )
-            case_root.mkdir(parents=True, exist_ok=True)
-            try:
-                discovered, case_records = run_case(case_path, case_root, args)
-                case_name = str(discovered["name"])
-                if any(item["name"] == case_name for item in discovered_cases):
-                    raise ValueError(f"duplicate CASE name in batch: {case_name}")
-            except Exception as error:
-                if not batch:
-                    raise
-                failure = {
-                    "name": case_path.stem,
-                    "case_path": str(case_path),
-                    "error": f"{type(error).__name__}: {error}",
-                }
-                failed_cases.append(failure)
-                manifest["failed_cases"] = failed_cases
-                manifest["completed_cases"] = case_index + 1
-                write_json(run_root / "run.json", manifest)
+        for retry_round in range(args.retries + 1):
+            if not pending_cases:
+                break
+            next_pending = []
+            manifest["retry_round"] = retry_round
+            retry_label = f"retry {retry_round}/{args.retries} " if retry_round else ""
+            for case_index, case_path in pending_cases:
+                progress = f"[{case_index + 1}/{len(case_paths)}]"
                 print(
-                    f"{progress} failed case={case_path.name}; skipping: "
-                    f"{failure['error']}",
+                    f"{progress} {retry_label}starting case={case_path.name}".strip(),
                     flush=True,
                 )
-                continue
-            discovered_cases.append(
-                {
-                    "name": case_name,
-                    "case_path": str(case_path),
-                    "sample_bindings": discovered["sample_bindings"],
-                    "compile_bindings": discovered["compile_bindings"],
-                }
-            )
-            records.extend(case_records)
-            write_raw_results(run_root / "raw_results.jsonl", records)
-            manifest["cases"] = discovered_cases
-            manifest["completed_cases"] = case_index + 1
+                case_root = (
+                    run_root / "cases" / safe_case_directory_name(case_index, case_path)
+                    if batch
+                    else run_root
+                )
+                case_root.mkdir(parents=True, exist_ok=True)
+                try:
+                    discovered, case_records = run_case(case_path, case_root, args)
+                    case_name = str(discovered["name"])
+                    if any(item["name"] == case_name for item in discovered_cases):
+                        raise ValueError(f"duplicate CASE name in batch: {case_name}")
+                except Exception as error:
+                    failure = {
+                        "name": case_path.stem,
+                        "case_path": str(case_path),
+                        "attempts": retry_round + 1,
+                        "retry_count": retry_round,
+                        "error": f"{type(error).__name__}: {error}",
+                    }
+                    failed_by_index[case_index] = failure
+                    next_pending.append((case_index, case_path))
+                    print(
+                        f"{progress} {retry_label}failed case={case_path.name}; "
+                        f"deferred: {failure['error']}",
+                        flush=True,
+                    )
+                    continue
+
+                discovered_cases.append(
+                    {
+                        "name": case_name,
+                        "case_path": str(case_path),
+                        "sample_bindings": discovered["sample_bindings"],
+                        "compile_bindings": discovered["compile_bindings"],
+                    }
+                )
+                failed_by_index.pop(case_index, None)
+                records.extend(case_records)
+                write_raw_results(run_root / "raw_results.jsonl", records)
+                manifest["cases"] = discovered_cases
+                manifest["completed_cases"] = len(discovered_cases)
+                manifest["failed_cases"] = [
+                    failed_by_index[index] for index in sorted(failed_by_index)
+                ]
+                write_json(run_root / "run.json", manifest)
+                print_static_group_summary(case_name, case_records)
+                print(
+                    f"{progress} {retry_label}completed case={case_name} "
+                    f"(success={len(discovered_cases)}, "
+                    f"pending={len(next_pending)})",
+                    flush=True,
+                )
+
+            pending_cases = next_pending
+            manifest["completed_cases"] = len(discovered_cases)
+            manifest["failed_cases"] = [
+                failed_by_index[index] for index in sorted(failed_by_index)
+            ]
             write_json(run_root / "run.json", manifest)
-            print_static_group_summary(case_name, case_records)
-            print(
-                f"{progress} completed case={case_name} "
-                f"(success={len(discovered_cases)}, failed={len(failed_cases)})",
-                flush=True,
-            )
+            if pending_cases and retry_round < args.retries:
+                print(
+                    f"deferred retry queue: {len(pending_cases)} case(s); "
+                    f"retrying after round {retry_round + 1} completes",
+                    flush=True,
+                )
+
+        failed_cases = [failed_by_index[index] for index in sorted(failed_by_index)]
+        if failed_cases and not batch:
+            raise RuntimeError(failed_cases[0]["error"])
 
         write_csv(run_root / "summary.csv", SUMMARY_COLUMNS, summary_rows(records))
         comparisons = comparison_rows(records)
