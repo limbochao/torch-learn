@@ -7,6 +7,10 @@
 - `active=False` 或 `indices == -1` 时贡献为零。
 - 负索引先加 `98166`，然后对 `[98166, 128]` 输出做累加。
 
+输入使用脚本内联的 Inductor `rand_strided` 等价实现，并保留原 AOT benchmark 的
+shape、stride 和 dtype。该构造对浮点输入使用 `randn`，对 `int64` 和 `bool` 输入使用全零 buffer，
+因此 `where_4` 和 `ge_4` 的数据分布也与 Inductor benchmark 一致。
+
 实现使用 `index_put_(accumulate=True)`，不导入、不调用 Triton，因此同一个脚本可以比较 NPU 或 CUDA 上的 eager 与 Inductor。
 
 ```bash

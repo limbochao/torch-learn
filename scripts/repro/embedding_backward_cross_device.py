@@ -97,14 +97,33 @@ def synchronize(device: torch.device) -> None:
         torch.cuda.synchronize(device)
 
 
+def rand_strided(size, stride, dtype, device):
+    """Mirror ``torch._dynamo.testing.rand_strided`` used by Inductor benchmarks."""
+
+    needed_size = 0
+    if all(dim > 0 for dim in size):
+        needed_size = sum((dim - 1) * step for dim, step in zip(size, stride)) + 1
+    if dtype.is_floating_point:
+        buffer = torch.randn(needed_size, dtype=dtype, device=device)
+    else:
+        buffer = torch.zeros(needed_size, dtype=dtype, device=device)
+    return torch.as_strided(buffer, size, stride)
+
+
 def make_inputs(device: torch.device):
     torch.manual_seed(0)
-    where_4 = torch.randint(-1, NUM_EMBEDDINGS, (BATCH, SLOTS), device=device, dtype=torch.int64)
-    ge_4 = torch.rand((BATCH, SLOTS), device=device) >= 0.25
-    getitem_46 = torch.randn((BATCH, SOURCE_WIDTH), device=device, dtype=torch.float32)
-    getitem_58 = torch.randn((BATCH, 1, EMBEDDING_DIM), device=device, dtype=torch.float32)
-    getitem_106 = torch.randn((BATCH, 1, EMBEDDING_DIM), device=device, dtype=torch.float32)
-    index_put_1 = torch.empty((NUM_EMBEDDINGS, EMBEDDING_DIM), device=device, dtype=torch.float32)
+    where_4 = rand_strided((BATCH, SLOTS), (SLOTS, 1), torch.int64, device)
+    ge_4 = rand_strided((BATCH, SLOTS), (SLOTS, 1), torch.bool, device)
+    getitem_46 = rand_strided((BATCH, SOURCE_WIDTH), (SOURCE_WIDTH, 1), torch.float32, device)
+    getitem_58 = rand_strided(
+        (BATCH, 1, EMBEDDING_DIM), (EMBEDDING_DIM, EMBEDDING_DIM, 1), torch.float32, device
+    )
+    getitem_106 = rand_strided(
+        (BATCH, 1, EMBEDDING_DIM), (EMBEDDING_DIM, EMBEDDING_DIM, 1), torch.float32, device
+    )
+    index_put_1 = rand_strided(
+        (NUM_EMBEDDINGS, EMBEDDING_DIM), (EMBEDDING_DIM, 1), torch.float32, device
+    )
     return where_4, ge_4, getitem_46, getitem_58, getitem_106, index_put_1
 
 
