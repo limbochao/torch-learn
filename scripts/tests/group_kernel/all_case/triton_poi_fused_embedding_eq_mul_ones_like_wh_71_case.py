@@ -7,14 +7,14 @@ from torch._dynamo.testing import rand_strided
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(where_7, arg141_1):
     arg4_1 = where_7.shape[0]
-    full_default_17 = torch.ops.aten.full.default([arg4_1, 1], 3, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
-    full_default_16 = torch.ops.aten.full.default([arg4_1, 1], 2, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
-    full_default_13 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
-    full_default_14 = torch.ops.aten.full.default([arg4_1, 1], 1, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_17 = torch.ops.aten.full.default([arg4_1, 1], 3, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
+    full_default_16 = torch.ops.aten.full.default([arg4_1, 1], 2, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
+    full_default_13 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
+    full_default_14 = torch.ops.aten.full.default([arg4_1, 1], 1, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
     eq_1885 = torch.ops.aten.eq.Scalar(where_7, 9999)
-    full_default_122 = torch.ops.aten.full.default([arg4_1, 1], 5, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_122 = torch.ops.aten.full.default([arg4_1, 1], 5, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
     eq_1878 = torch.ops.aten.eq.Scalar(where_7, 9998)
-    full_default_121 = torch.ops.aten.full.default([arg4_1, 1], 4, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_121 = torch.ops.aten.full.default([arg4_1, 1], 4, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
     eq_1871 = torch.ops.aten.eq.Scalar(where_7, 3)
     eq_1864 = torch.ops.aten.eq.Scalar(where_7, 2)
     eq_1858 = torch.ops.aten.eq.Scalar(where_7, 1)

@@ -5,11 +5,11 @@ from torch._dynamo.testing import rand_strided
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(arg13_1, arg1555_1, mm_default_62, neg, where_265):
     arg4_1 = arg13_1.shape[0]
-    full_default_13 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
-    full_default_14 = torch.ops.aten.full.default([arg4_1, 1], 1, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_13 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
+    full_default_14 = torch.ops.aten.full.default([arg4_1, 1], 1, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
     le = torch.ops.aten.le.Scalar(arg13_1, 0)
     where_8 = torch.ops.aten.where.self(le, full_default_13, full_default_14)
-    full_default_221 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_221 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     eq_8102 = torch.ops.aten.eq.Scalar(where_8, 1)
     add_tensor_62 = torch.ops.aten.add.Tensor(arg1555_1, mm_default_62)
     sub_4770 = torch.ops.aten.sub.Tensor(0.0, add_tensor_62)
@@ -19,7 +19,7 @@ def eager_forward(arg13_1, arg1555_1, mm_default_62, neg, where_265):
     neg = torch.ops.aten.neg.default(log)
     where_265 = torch.ops.aten.where.self(eq_8102, neg, full_default_221)
     squeeze_271 = torch.ops.aten.squeeze.dim(where_265, 1)
-    full_default_306 = torch.ops.aten.full.default([arg4_1], -11.0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_306 = torch.ops.aten.full.default([arg4_1], -11.0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     squeeze_272 = torch.ops.aten.squeeze.dim(neg, 1)
     isinf = torch.ops.aten.isinf.default(squeeze_272)
     eq_8463 = torch.ops.aten.eq.Tensor(squeeze_272, squeeze_271)

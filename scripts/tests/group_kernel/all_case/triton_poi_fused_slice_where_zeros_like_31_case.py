@@ -9,7 +9,7 @@ def eager_forward(view_723, arg18_1):
     arg4_1 = view_723.shape[0]
     view_137 = view_723
     view_139 = view_723
-    full_default_161 = torch.ops.aten.full.default([arg4_1, 64], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_161 = torch.ops.aten.full.default([arg4_1, 64], 0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     slice_415 = torch.ops.aten.slice.Tensor(arg18_1, 1, 23006, 23070)
     where_157 = torch.ops.aten.where.self(view_137, full_default_161, slice_415)
     slice_417 = torch.ops.aten.slice.Tensor(arg18_1, 1, 27243, 27307)

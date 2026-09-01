@@ -8,7 +8,7 @@ from torch._dynamo.testing import rand_strided
 def eager_forward(view_723, arg18_1):
     arg4_1 = view_723.shape[0]
     view_40 = view_723
-    full_default_46 = torch.ops.aten.full.default([arg4_1, 16], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_46 = torch.ops.aten.full.default([arg4_1, 16], 0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     slice_111 = torch.ops.aten.slice.Tensor(arg18_1, 1, 47098, 47114)
     where_38 = torch.ops.aten.where.self(view_40, full_default_46, slice_111)
     slice_112 = torch.ops.aten.slice.Tensor(arg18_1, 1, 49061, 49077)

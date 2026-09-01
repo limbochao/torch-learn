@@ -7,7 +7,7 @@ from torch._dynamo.testing import rand_strided
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(s0):
     sym_size_int_352 = s0
-    full_206 = torch.ops.aten.full.default([sym_size_int_352], False, dtype=torch.bool, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_206 = torch.ops.aten.full.default([sym_size_int_352], False, dtype=torch.bool, layout=torch.strided, device=torch.device(device), pin_memory=False)
     return full_206
 
 

@@ -34,7 +34,7 @@ def eager_forward(
         1,
         dtype=torch.float16,
         layout=torch.strided,
-        device=torch.device('npu:0'),
+        device=torch.device(device),
         pin_memory=False,
     )
     where_3 = torch.ops.aten.where.self(logical_or_1, arg9_1, full_default_11)
@@ -44,7 +44,7 @@ def eager_forward(
         0,
         dtype=torch.float16,
         layout=torch.strided,
-        device=torch.device('npu:0'),
+        device=torch.device(device),
         pin_memory=False,
     )
     where_2 = torch.ops.aten.where.self(logical_or_1, arg8_1, full_default_10)

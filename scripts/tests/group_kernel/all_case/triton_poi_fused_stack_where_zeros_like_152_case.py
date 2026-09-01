@@ -10,7 +10,7 @@ def eager_forward(view_87, arg944_1, arg945_1, arg946_1):
     sym_size_int_869 = view_87.shape[0]
     sym_size_int_870 = view_87.shape[0]
     sym_size_int_871 = view_87.shape[0]
-    full_default_46 = torch.ops.aten.full.default([arg4_1, 16], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_46 = torch.ops.aten.full.default([arg4_1, 16], 0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     expand_default_15 = torch.ops.aten.expand.default(logical_not_2, [sym_size_int_869, 16])
     view_468 = torch.ops.aten.reshape.default(arg944_1, [1, arg124_1, 16])
     squeeze_dims_42 = torch.ops.aten.squeeze.dims(view_468, [0])

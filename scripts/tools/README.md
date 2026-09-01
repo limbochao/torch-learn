@@ -89,14 +89,25 @@ metadata 反推 shape 表达式，并把基础符号生成为整数形参。无�
 
 ## Compile mode performance
 
-`compile_mode_perf.py` 接收 `--only-eager` 生成的 case，用一条命令顺序采集 NPU static、普通 dynamic 和
-symbolic group 三类编译模式，并自动生成长表、宽表和 XLSX：
+`compile_mode_perf.py` 接收 `--only-eager` 生成的 case，用一条命令顺序采集编译模式，并自动生成长表、宽表和
+XLSX。NPU 默认采集 static、普通 dynamic 和 symbolic group；CUDA 只采集 static 和普通 dynamic，不执行
+group，也不与 NPU 结果做对比：
 
 ```bash
 python scripts/tools/compile_mode_perf.py \
   /path/to/triton_poi_fused_add_0_case.py \
   --device npu:0 \
   --run-id add_relu_001 \
+  --output prof_log/compile_mode_perf
+```
+
+CUDA 用法：
+
+```bash
+python scripts/tools/compile_mode_perf.py \
+  /path/to/triton_poi_fused_add_0_case.py \
+  --device cuda:0 \
+  --run-id add_relu_cuda_001 \
   --output prof_log/compile_mode_perf
 ```
 
@@ -137,9 +148,10 @@ python scripts/tools/compile_mode_perf.py \
   --run-id pointwise_cases_001
 ```
 
-执行顺序固定为：一轮 static、按 `COMPILE_BINDINGS` 顺序执行的多轮 dynamic、最后一轮 group。所有 worker
-严格串行，前一个进程退出并清理 cache 后才启动下一个。group 只使用第一个 compile binding 编译一次，然后
-运行全部 `SAMPLE_BINDINGS`；汇总时将同一份 group 结果复用到各个 dynamic first shape。
+执行顺序固定为：一轮 static、按 `COMPILE_BINDINGS` 顺序执行的多轮 dynamic；NPU 最后再执行一轮 group，CUDA
+不会启动 group worker。所有 worker 严格串行，前一个进程退出并清理 cache 后才启动下一个。group 只使用第一个
+compile binding 编译一次，然后运行全部 `SAMPLE_BINDINGS`；汇总时将同一份 group 结果复用到各个 dynamic first
+shape。CUDA 的 comparison 仅填写 static、dynamic 和 `dynamic_static_ratio`，group 列保持为空。
 
 每个 worker 使用本次 run 目录下独立的临时 `TORCHINDUCTOR_CACHE_DIR`。kernel 定义会先复制到对应的
 `torch_compile_debug/` 产物目录，worker 退出后立即删除 cache；无论运行成功、失败或中断，控制进程最后都会

@@ -78,7 +78,11 @@ def parse_args() -> argparse.Namespace:
         help="output root",
     )
     parser.add_argument("--run-id", help="run directory name (default: timestamp)")
-    parser.add_argument("--device", default="npu:0", help="NPU device, for example npu:0")
+    parser.add_argument(
+        "--device",
+        default="npu:0",
+        help="device to test, for example npu:0 or cuda:0",
+    )
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--active", type=int, default=20)
     parser.add_argument("--repeat", type=int, default=1)
@@ -155,11 +159,39 @@ def discover(config: dict[str, object]) -> None:
     write_json(Path(str(config["result_path"])), payload)
 
 
-def device_index(device: str) -> int:
-    match = re.fullmatch(r"npu(?::(\d+))?", device)
+def parse_device(device: str) -> tuple[str, int]:
+    match = re.fullmatch(r"(npu|cuda)(?::(\d+))?", device)
     if match is None:
-        raise ValueError("--device must be 'npu' or 'npu:<index>'")
-    return int(match.group(1) or 0)
+        raise ValueError(
+            "--device must be 'npu', 'npu:<index>', 'cuda', or 'cuda:<index>'"
+        )
+    return match.group(1), int(match.group(2) or 0)
+
+
+def device_type(device: str) -> str:
+    return parse_device(device)[0]
+
+
+def initialize_device(torch: Any, device: str) -> str:
+    kind, index = parse_device(device)
+    if kind == "npu":
+        import torch_npu  # noqa: F401
+
+        torch.npu.set_device(index)
+    else:
+        if not torch.cuda.is_available():
+            raise RuntimeError(f"CUDA is not available for --device {device}")
+        torch.cuda.set_device(index)
+    return kind
+
+
+def synchronize(torch: Any, device: str) -> None:
+    getattr(torch, device_type(device)).synchronize()
+
+
+def bind_case_device(case: dict[str, object], device: str) -> None:
+    # Generated factory calls reference this module global so case edits stay device-only.
+    case["forward"].__globals__["device"] = device
 
 
 def tensor_shape_label(signature: list[dict[str, object]]) -> str:
@@ -251,7 +283,7 @@ def mark_dynamic_inputs(torch: Any, case: dict[str, object], args, kwargs) -> No
 
 def make_case_inputs(torch: Any, case: dict[str, object], binding, device: str):
     torch.manual_seed(0)
-    torch.npu.manual_seed_all(0)
+    getattr(torch, device_type(device)).manual_seed_all(0)
     result = case["make_inputs"](dict(binding), device)
     if not isinstance(result, tuple) or len(result) != 2:
         raise ValueError("make_inputs must return (args, kwargs)")
@@ -373,7 +405,42 @@ def profile_npu(torch: Any, fn, args, kwargs, profile_dir: Path, config):
     }
 
 
-def compile_forward(torch: Any, case, args, kwargs, dynamic: bool):
+def profile_cuda(torch: Any, fn, args, kwargs, profile_dir: Path, config):
+    from cuda_profiler import CudaProfileParser, TorchCudaProfiler, cuda_kernel_label
+
+    prepare_profile_dir(profile_dir)
+    profiler = TorchCudaProfiler(
+        profile_dir,
+        wait=0,
+        warmup=int(config["warmup"]),
+        active=int(config["active"]),
+        repeat=int(config["repeat"]),
+        with_stack=False,
+    )
+    profiler.run_steps(lambda: fn(*args, **kwargs))
+    records = [
+        record
+        for trace_path in profiler.trace_paths
+        for record in CudaProfileParser(trace_path).kernel_records()
+    ]
+    call_count = int(config["active"]) * int(config["repeat"])
+    if not records:
+        raise RuntimeError(f"no CUDA device kernels found in {profile_dir}")
+    return {
+        "mean_us": sum(record.duration for record in records) / call_count,
+        "samples": call_count,
+        "kernel_count": len(records),
+        "kernels": sorted({cuda_kernel_label(record.kernel_name) for record in records}),
+    }
+
+
+def profile_device(torch: Any, fn, args, kwargs, profile_dir: Path, config):
+    if device_type(str(config["device"])) == "npu":
+        return profile_npu(torch, fn, args, kwargs, profile_dir, config)
+    return profile_cuda(torch, fn, args, kwargs, profile_dir, config)
+
+
+def compile_forward(torch: Any, case, args, kwargs, dynamic: bool, device: str):
     torch._dynamo.reset()
     if dynamic:
         mark_dynamic_inputs(torch, case, args, kwargs)
@@ -383,7 +450,7 @@ def compile_forward(torch: Any, case, args, kwargs, dynamic: bool):
         dynamic=None if dynamic else False,
     )
     compiled(*args, **kwargs)
-    torch.npu.synchronize()
+    synchronize(torch, device)
     return compiled
 
 
@@ -454,7 +521,9 @@ def run_static(torch: Any, case, config, recorder):
         output_root = artifact_path(run_root, "static", sample_index, shape)
         recorder.start_capture()
         try:
-            compiled = compile_forward(torch, case, args, kwargs, dynamic=False)
+            compiled = compile_forward(
+                torch, case, args, kwargs, dynamic=False, device=device
+            )
         finally:
             tiling = recorder.stop_capture()
         debug_dir = output_root / "torch_compile_debug"
@@ -462,7 +531,7 @@ def run_static(torch: Any, case, config, recorder):
         manual_tiling_dir = archive_manual_tiling(
             debug_dir, output_root, tiling, binding, binding
         )
-        timing = profile_npu(
+        timing = profile_device(
             torch, compiled, args, kwargs, output_root / "profiles", config
         )
         records.append(
@@ -496,7 +565,12 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
     recorder.start_capture()
     try:
         compiled = compile_forward(
-            torch, case, compile_args, compile_kwargs, dynamic=True
+            torch,
+            case,
+            compile_args,
+            compile_kwargs,
+            dynamic=True,
+            device=device,
         )
     finally:
         compile_tiling = recorder.stop_capture()
@@ -526,13 +600,13 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
         if group:
             recorder.start_capture()
             try:
-                timing = profile_npu(
+                timing = profile_device(
                     torch, compiled, args, kwargs, output_root / "profiles", config
                 )
             finally:
                 tiling = recorder.stop_capture()
         else:
-            timing = profile_npu(
+            timing = profile_device(
                 torch, compiled, args, kwargs, output_root / "profiles", config
             )
             tiling = compile_tiling
@@ -563,14 +637,15 @@ def run_worker(config: dict[str, object]) -> None:
     debug_root.mkdir(parents=True, exist_ok=True)
 
     import torch
-    import torch_npu  # noqa: F401
 
     from autotune_tiling import BestTilingRecorder
 
     torch._dynamo.config.debug_dir_root = str(debug_root)
-    torch.npu.set_device(device_index(str(config["device"])))
+    device = str(config["device"])
+    kind = initialize_device(torch, device)
     case = load_case(Path(str(config["case_path"])))
-    recorder = BestTilingRecorder("npu")
+    bind_case_device(case, device)
+    recorder = BestTilingRecorder(kind)
     recorder.install()
     try:
         execution = str(config["execution"])
@@ -584,7 +659,7 @@ def run_worker(config: dict[str, object]) -> None:
             raise ValueError(f"unsupported execution: {execution}")
     finally:
         recorder.uninstall()
-        torch.npu.synchronize()
+        synchronize(torch, device)
     write_json(Path(str(config["result_path"])), records)
 
 
@@ -673,7 +748,10 @@ def group_buckets(tiling: object) -> list[dict[str, object]]:
     return buckets
 
 
-def comparison_rows(records: list[dict[str, object]]):
+def comparison_rows(
+    records: list[dict[str, object]],
+    require_group: bool = True,
+):
     records_by_case: dict[str, list[dict[str, object]]] = {}
     for record in records:
         records_by_case.setdefault(str(record["case"]), []).append(record)
@@ -702,26 +780,29 @@ def comparison_rows(records: list[dict[str, object]]):
                 try:
                     static_record = static[sample_index]
                     dynamic_record = dynamic[first_index, sample_index]
-                    group_record = group[sample_index]
                 except KeyError as error:
                     raise ValueError(
                         f"incomplete result matrix for case={case_name}, "
                         f"first={first_index}, sample={sample_index}"
                     ) from error
-                shapes = {
-                    static_record["shape"],
-                    dynamic_record["shape"],
-                    group_record["shape"],
-                }
+                group_record = group.get(sample_index)
+                if require_group and group_record is None:
+                    raise ValueError(
+                        f"incomplete group result matrix for case={case_name}, "
+                        f"sample={sample_index}"
+                    )
+                compared_records = [static_record, dynamic_record]
+                if group_record is not None:
+                    compared_records.append(group_record)
+                shapes = {record["shape"] for record in compared_records}
                 if len(shapes) != 1:
                     raise ValueError(
                         f"input shape mismatch for case={case_name}, "
                         f"sample={sample_index}: {sorted(shapes)}"
                     )
                 signatures = {
-                    compact_json(static_record["input_signature"]),
-                    compact_json(dynamic_record["input_signature"]),
-                    compact_json(group_record["input_signature"]),
+                    compact_json(record["input_signature"])
+                    for record in compared_records
                 }
                 if len(signatures) != 1:
                     raise ValueError(
@@ -730,8 +811,16 @@ def comparison_rows(records: list[dict[str, object]]):
                     )
                 static_us = float(static_record["mean_us"])
                 dynamic_us = float(dynamic_record["mean_us"])
-                group_us = float(group_record["mean_us"])
-                bucket_records = group_buckets(group_record["tiling"])
+                group_us = (
+                    float(group_record["mean_us"])
+                    if group_record is not None
+                    else None
+                )
+                bucket_records = (
+                    group_buckets(group_record["tiling"])
+                    if group_record is not None
+                    else []
+                )
                 rows.append(
                     {
                         "case": dynamic_record["case"],
@@ -746,13 +835,15 @@ def comparison_rows(records: list[dict[str, object]]):
                         "dynamic_tiling": compact_json(dynamic_record["tiling"])
                         if dynamic_record["tiling"]
                         else "",
-                        "group_us": f"{group_us:.3f}",
-                        "group_static_ratio": ratio(group_us, static_us),
+                        "group_us": f"{group_us:.3f}" if group_us is not None else "",
+                        "group_static_ratio": (
+                            ratio(group_us, static_us) if group_us is not None else ""
+                        ),
                         "group_buckets": compact_json(bucket_records)
                         if bucket_records
                         else "",
                         "group_tiling": compact_json(group_record["tiling"])
-                        if group_record["tiling"]
+                        if group_record is not None and group_record["tiling"]
                         else "",
                     }
                 )
@@ -833,6 +924,84 @@ def print_batch_static_group_summary(records: list[dict[str, object]]) -> None:
                 case_name.ljust(64)
                 + runtime.ljust(16)
                 + f"{static_us:12.3f}{group_us:12.3f}{group_ratio:>12}"
+            )
+
+
+def static_dynamic_summary_rows(
+    records: list[dict[str, object]],
+) -> list[tuple[str, str, float, float, str]]:
+    static = {
+        int(record["sample_index"]): record
+        for record in records
+        if record["mode"] == "static"
+    }
+    rows = []
+    for record in records:
+        if record["mode"] != "dynamic":
+            continue
+        static_record = static.get(int(record["sample_index"]))
+        if static_record is None:
+            continue
+        static_us = float(static_record["mean_us"])
+        dynamic_us = float(record["mean_us"])
+        rows.append(
+            (
+                str(record["first_shape"]),
+                runtime_binding_label(record.get("binding", {})),
+                static_us,
+                dynamic_us,
+                ratio(dynamic_us, static_us),
+            )
+        )
+    return rows
+
+
+def print_static_dynamic_summary(case_name: str, records: list[dict[str, object]]) -> None:
+    print()
+    print("=== static vs dynamic summary ===")
+    print(f"case={case_name}")
+    print()
+    print(
+        "first_shape".ljust(24)
+        + "runtime".ljust(16)
+        + "static_us".rjust(12)
+        + "dynamic_us".rjust(12)
+        + "d/static".rjust(12)
+    )
+    for first_shape, runtime, static_us, dynamic_us, dynamic_ratio in (
+        static_dynamic_summary_rows(records)
+    ):
+        print(
+            first_shape.ljust(24)
+            + runtime.ljust(16)
+            + f"{static_us:12.3f}{dynamic_us:12.3f}{dynamic_ratio:>12}"
+        )
+
+
+def print_batch_static_dynamic_summary(records: list[dict[str, object]]) -> None:
+    records_by_case: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        records_by_case.setdefault(str(record["case"]), []).append(record)
+
+    print()
+    print("=== batch static vs dynamic summary ===")
+    print(
+        "case".ljust(64)
+        + "first_shape".ljust(24)
+        + "runtime".ljust(16)
+        + "static_us".rjust(12)
+        + "dynamic_us".rjust(12)
+        + "d/static".rjust(12)
+    )
+    for case_name, case_records in records_by_case.items():
+        for first_shape, runtime, static_us, dynamic_us, dynamic_ratio in (
+            static_dynamic_summary_rows(case_records)
+        ):
+            print(
+                case_name.ljust(64)
+                + first_shape.ljust(24)
+                + runtime.ljust(16)
+                + f"{static_us:12.3f}{dynamic_us:12.3f}{dynamic_ratio:>12}"
             )
 
 
@@ -943,7 +1112,7 @@ def validate_controller_args(args: argparse.Namespace) -> list[Path]:
     if not args.case:
         raise ValueError("at least one case file or directory is required")
     case_paths = expand_case_paths(args.case)
-    device_index(args.device)
+    parse_device(args.device)
     if args.warmup < 0 or args.active <= 0 or args.repeat <= 0:
         raise ValueError("warmup must be non-negative; active and repeat must be positive")
     if args.retries < 0:
@@ -1000,15 +1169,16 @@ def run_case(
                     index,
                 )
             )
-        records.extend(
-            run_one_worker(
-                case_root,
-                control_root,
-                base_config,
-                "group",
-                0,
+        if device_type(args.device) == "npu":
+            records.extend(
+                run_one_worker(
+                    case_root,
+                    control_root,
+                    base_config,
+                    "group",
+                    0,
+                )
             )
-        )
         completed = True
         return discovered, records
     finally:
@@ -1020,6 +1190,7 @@ def run_case(
 
 def controller(args: argparse.Namespace) -> None:
     case_paths = validate_controller_args(args)
+    kind = device_type(args.device)
     batch = len(case_paths) > 1
     run_id = args.run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_root = (args.output / run_id).resolve()
@@ -1107,7 +1278,10 @@ def controller(args: argparse.Namespace) -> None:
                     failed_by_index[index] for index in sorted(failed_by_index)
                 ]
                 write_json(run_root / "run.json", manifest)
-                print_static_group_summary(case_name, case_records)
+                if kind == "npu":
+                    print_static_group_summary(case_name, case_records)
+                else:
+                    print_static_dynamic_summary(case_name, case_records)
                 print(
                     f"{progress} {retry_label}completed case={case_name} "
                     f"(success={len(discovered_cases)}, "
@@ -1133,7 +1307,7 @@ def controller(args: argparse.Namespace) -> None:
             raise RuntimeError(failed_cases[0]["error"])
 
         write_csv(run_root / "summary.csv", SUMMARY_COLUMNS, summary_rows(records))
-        comparisons = comparison_rows(records)
+        comparisons = comparison_rows(records, require_group=kind == "npu")
         write_csv(
             run_root / "comparison.csv",
             COMPARISON_COLUMNS,
@@ -1144,10 +1318,16 @@ def controller(args: argparse.Namespace) -> None:
         write_xlsx_report(comparisons, run_root / "comparison.xlsx")
         if batch:
             if records:
-                print_batch_static_group_summary(records)
+                if kind == "npu":
+                    print_batch_static_group_summary(records)
+                else:
+                    print_batch_static_dynamic_summary(records)
             else:
                 print()
-                print("=== batch static vs group summary ===")
+                if kind == "npu":
+                    print("=== batch static vs group summary ===")
+                else:
+                    print("=== batch static vs dynamic summary ===")
                 print("no successful cases")
         if failed_cases:
             print()

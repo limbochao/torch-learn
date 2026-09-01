@@ -8,7 +8,7 @@ from torch._dynamo.testing import rand_strided
 def eager_forward(view_723, arg95_1):
     arg4_1 = view_723.shape[0]
     view_83 = view_723
-    full_default_94 = torch.ops.aten.full.default([arg4_1, 4], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_94 = torch.ops.aten.full.default([arg4_1, 4], 0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     where_86 = torch.ops.aten.where.self(view_83, full_default_94, arg95_1)
     return where_86
 

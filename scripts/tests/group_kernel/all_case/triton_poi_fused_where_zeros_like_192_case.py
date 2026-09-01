@@ -6,7 +6,7 @@ from torch._dynamo.testing import rand_strided
 def eager_forward(view_723, arg903_1, arg904_1, arg905_1, arg906_1, arg907_1, arg908_1, arg909_1):
     arg4_1 = view_723.shape[0]
     view_456 = view_723
-    full_default_94 = torch.ops.aten.full.default([arg4_1, 4], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_94 = torch.ops.aten.full.default([arg4_1, 4], 0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     where_241 = torch.ops.aten.where.self(view_456, full_default_94, arg903_1)
     where_242 = torch.ops.aten.where.self(view_456, full_default_94, arg904_1)
     where_243 = torch.ops.aten.where.self(view_456, full_default_94, arg905_1)

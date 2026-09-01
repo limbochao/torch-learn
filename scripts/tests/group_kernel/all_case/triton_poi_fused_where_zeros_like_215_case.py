@@ -5,7 +5,7 @@ from torch._dynamo.testing import rand_strided
 # Eager reference reconstructed from Inductor Graph fragment metadata.
 def eager_forward(logical_or_12, cat_82, cat_109, cat_91):
     arg4_1 = logical_or_12.shape[0]
-    full_default_161 = torch.ops.aten.full.default([arg4_1, 64], 0, dtype=torch.float16, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_161 = torch.ops.aten.full.default([arg4_1, 64], 0, dtype=torch.float16, layout=torch.strided, device=torch.device(device), pin_memory=False)
     where_192 = torch.ops.aten.where.self(logical_or_12, full_default_161, cat_82)
     where_198 = torch.ops.aten.where.self(logical_or_12, full_default_161, cat_109)
     where_194 = torch.ops.aten.where.self(logical_or_12, full_default_161, cat_91)

@@ -12,9 +12,9 @@ def eager_forward(arg6_1, arg7_1, arg5_1, add_tensor_16_fused_relu, add_tensor_1
     eq_13 = torch.ops.aten.eq.Scalar(arg7_1, 102)
     logical_and = torch.ops.aten.logical_and.default(eq_11, eq_13)
     logical_or_2 = torch.ops.aten.logical_or.default(eq_16, logical_and)
-    full_default_7 = torch.ops.aten.full.default([arg4_1, 1], 9998, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_7 = torch.ops.aten.full.default([arg4_1, 1], 9998, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
     where = torch.ops.aten.where.self(logical_or_2, full_default_7, arg5_1)
-    full_default_13 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.int64, layout=torch.strided, device=torch.device('npu:0'), pin_memory=False)
+    full_default_13 = torch.ops.aten.full.default([arg4_1, 1], 0, dtype=torch.int64, layout=torch.strided, device=torch.device(device), pin_memory=False)
     eq_55 = torch.ops.aten.eq.Tensor(where, full_default_13)
     where_313 = torch.ops.aten.where.self(eq_55, add_tensor_16_fused_relu, add_tensor_14_fused_relu)
     return where_313
