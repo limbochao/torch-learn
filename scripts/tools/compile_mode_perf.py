@@ -454,6 +454,7 @@ class GroupCompileProfiler:
         self._lock = threading.Lock()
         self._thread_state = threading.local()
         self._patches: list[tuple[object, str, object]] = []
+        self._group_plans: dict[int, tuple[int, dict[str, object], str]] = {}
         self._group_plan_ids: set[int] = set()
         self.grouping_end_ns: int | None = None
         self.first_binary_start_ns: int | None = None
@@ -511,14 +512,14 @@ class GroupCompileProfiler:
             if is_binary_task:
                 profiler._thread_state.group_autotuner = instance
             if is_group_autotune:
-                profiler._record_autotune(time.perf_counter_ns(), entering=True)
+                profiler._record_autotune(instance, time.perf_counter_ns(), entering=True)
             try:
                 result = original(instance, *args, **kwargs)
             except BaseException:
                 raise
             else:
                 if is_group_autotune:
-                    profiler._record_autotune(time.perf_counter_ns(), entering=False)
+                    profiler._record_autotune(instance, time.perf_counter_ns(), entering=False)
                 return result
             finally:
                 if is_binary_task:
@@ -534,24 +535,45 @@ class GroupCompileProfiler:
         plan = inductor_meta.get("grouped_candidate_plan")
         if not isinstance(plan, dict):
             return
+        with self._lock:
+            self._group_plans[id(plan)] = (
+                time.perf_counter_ns(),
+                plan,
+                str(inductor_meta.get("kernel_name", "")),
+            )
+
+    def _register_grouped_plan(self, autotuner: object) -> None:
+        plan = getattr(autotuner, "candidate_plan", None)
+        if not isinstance(plan, dict):
+            return
         plan_id = id(plan)
+        if plan_id in self._group_plan_ids:
+            return
+        plan_info = self._group_plans.get(plan_id)
+        grouping_end_ns = plan_info[0] if plan_info is not None else time.perf_counter_ns()
+        kernel_name = (
+            plan_info[2]
+            if plan_info is not None and plan_info[2] != "Placeholder.DESCRIPTIVE_NAME"
+            else str(getattr(autotuner, "inductor_meta", {}).get("kernel_name", ""))
+        )
         with self._lock:
             if plan_id in self._group_plan_ids:
                 return
             self._group_plan_ids.add(plan_id)
             self.grouped_kernel_count += 1
-            self.grouping_end_ns = time.perf_counter_ns()
+            self.grouping_end_ns = (
+                grouping_end_ns
+                if self.grouping_end_ns is None
+                else min(self.grouping_end_ns, grouping_end_ns)
+            )
             self.candidate_count += sum(
-                len(candidates)
-                for candidates in plan.get("group_to_candidates", ())
+                len(candidates) for candidates in plan.get("group_to_candidates", ())
             )
             self.reachable_group_count += len(plan.get("reachable_group_ids", ()))
             self.variant_count += len(plan.get("variant_order", ()))
             group_to_candidates = plan.get("group_to_candidates", ())
             feature_specs = tuple(plan.get("group_features", ()))
-            benchmark_inputs = tuple(
-                plan.get("benchmark_feature_inputs_by_group", ())
-            )
+            benchmark_inputs = tuple(plan.get("benchmark_feature_inputs_by_group", ()))
             for group_id in plan.get("reachable_group_ids", ()):
                 remaining = int(group_id)
                 features = []
@@ -577,7 +599,7 @@ class GroupCompileProfiler:
                     )
                 self.group_tiers.append(
                     {
-                        "kernel_name": inductor_meta.get("kernel_name", ""),
+                        "kernel_name": kernel_name,
                         "group_id": group_id,
                         "candidate_count": (
                             len(group_to_candidates[group_id])
@@ -604,8 +626,9 @@ class GroupCompileProfiler:
         plan = getattr(autotuner, "candidate_plan", None)
         return isinstance(plan, dict) and bool(plan.get("group_to_candidates"))
 
-    def _record_autotune(self, timestamp: int, entering: bool) -> None:
+    def _record_autotune(self, autotuner: object, timestamp: int, entering: bool) -> None:
         if entering:
+            self._register_grouped_plan(autotuner)
             with self._lock:
                 if self.benchmark_start_ns is None:
                     self.benchmark_start_ns = timestamp
