@@ -192,11 +192,11 @@ dynamic_tiling,group_us,group_static_ratio,group_buckets,group_tiling
 `group_static_ratio` 大于 `1.15` 时标红，小于或等于该值不设置条件格式。
 
 如需单独测量 group 编译和首次 autotune 耗时，可使用 `--group-compile-time`。该模式只运行 group worker，
-从调用 `torch.compile(...)` 前开始计时，到首次 compiled 调用返回且 NPU 同步完成为止，直接在命令行打印
-`group_compile_ms=...`，不写入 comparison 表：
+从 grouped plan 生成结束开始观察并行 binary 编译窗口，以及随后所有 group benchmark 和最优 tiling 选择，
+直接在命令行打印阶段耗时和数量，不写入 comparison 表：
 
 编译产物会保留在本次运行目录的 `artifacts/g/torch_compile_debug/` 下。
-计时模式还会打印 `grouped_kernel_count`、`candidate_count`、`compiled_kernel_count`、
+计时模式会打印 `grouped_kernel_count`、`candidate_count`、`compiled_kernel_count`、
 `binary_compile_ms` 和 `group_benchmark_ms`。其中 `binary_compile_ms` 是并行 binary 编译窗口中从第一个
 binary 开始到最后一个 binary 完成的 wall-clock 时间，不是各 binary 耗时累加；`group_benchmark_ms` 是从最后
 一个 binary 完成到所有 group benchmark 完成并选出各组最优 tiling 的时间。
