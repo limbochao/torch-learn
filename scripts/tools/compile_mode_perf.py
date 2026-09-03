@@ -465,6 +465,7 @@ class GroupCompileProfiler:
         self.candidate_count = 0
         self.reachable_group_count = 0
         self.variant_count = 0
+        self.group_tiers: list[dict[str, object]] = []
 
     def install(self) -> None:
         import torch_npu._inductor.runtime.triton_heuristics as heuristics
@@ -546,6 +547,46 @@ class GroupCompileProfiler:
             )
             self.reachable_group_count += len(plan.get("reachable_group_ids", ()))
             self.variant_count += len(plan.get("variant_order", ()))
+            group_to_candidates = plan.get("group_to_candidates", ())
+            feature_specs = tuple(plan.get("group_features", ()))
+            benchmark_inputs = tuple(
+                plan.get("benchmark_feature_inputs_by_group", ())
+            )
+            for group_id in plan.get("reachable_group_ids", ()):
+                remaining = int(group_id)
+                features = []
+                for feature_index, feature_spec in enumerate(feature_specs):
+                    buckets = tuple(feature_spec.get("buckets", ()))
+                    radix = len(buckets) + 1
+                    bucket_index = remaining % radix
+                    remaining //= radix
+                    features.append(
+                        {
+                            "name": feature_spec.get("name", ""),
+                            "source": feature_spec.get("source", ""),
+                            "axis_names": list(feature_spec.get("axis_names", ())),
+                            "buckets": list(buckets),
+                            "bucket_index": bucket_index,
+                            "representative": (
+                                benchmark_inputs[group_id][feature_index]
+                                if group_id < len(benchmark_inputs)
+                                and feature_index < len(benchmark_inputs[group_id])
+                                else None
+                            ),
+                        }
+                    )
+                self.group_tiers.append(
+                    {
+                        "kernel_name": inductor_meta.get("kernel_name", ""),
+                        "group_id": group_id,
+                        "candidate_count": (
+                            len(group_to_candidates[group_id])
+                            if group_id < len(group_to_candidates)
+                            else 0
+                        ),
+                        "features": features,
+                    }
+                )
 
     def _record_binary_start(self, autotuner: object) -> None:
         with self._lock:
@@ -585,6 +626,7 @@ class GroupCompileProfiler:
             "candidate_count": self.candidate_count,
             "reachable_group_count": self.reachable_group_count,
             "variant_count": self.variant_count,
+            "group_tiers": self.group_tiers,
             "binary_compile_ms": binary_ms,
             "group_benchmark_ms": benchmark_ms,
         }
@@ -594,6 +636,9 @@ class GroupCompileProfiler:
 
     def print_summary(self) -> None:
         for name, value in self.summary().items():
+            if name == "group_tiers":
+                print(f"{name}={json.dumps(value, sort_keys=True)}", flush=True)
+                continue
             if isinstance(value, float):
                 print(f"{name}={value:.3f}", flush=True)
             else:

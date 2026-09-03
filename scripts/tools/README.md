@@ -197,7 +197,8 @@ dynamic_tiling,group_us,group_static_ratio,group_buckets,group_tiling
 
 编译产物会保留在本次运行目录的 `artifacts/g/torch_compile_debug/` 下。
 计时模式会打印 `grouped_kernel_count`、`candidate_count`、`compiled_kernel_count`、
-`binary_compile_ms` 和 `group_benchmark_ms`。其中 `binary_compile_ms` 是并行 binary 编译窗口中从第一个
+`group_tiers`、`binary_compile_ms` 和 `group_benchmark_ms`。`group_tiers` 给出每个 grouped kernel
+的 `group_id`、feature 名称、axis、bucket 边界、代表值和该组 candidate 数。其中 `binary_compile_ms` 是并行 binary 编译窗口中从第一个
 binary 开始到最后一个 binary 完成的 wall-clock 时间，不是各 binary 耗时累加；`group_benchmark_ms` 是从最后
 一个 binary 完成到所有 group benchmark 完成并选出各组最优 tiling 的时间。
 
