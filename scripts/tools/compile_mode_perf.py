@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -446,6 +447,159 @@ def profile_device(torch: Any, fn, args, kwargs, profile_dir: Path, config):
     return profile_cuda(torch, fn, args, kwargs, profile_dir, config)
 
 
+class GroupCompileProfiler:
+    """Measure grouped binary compilation and serial group autotuning phases."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._thread_state = threading.local()
+        self._patches: list[tuple[object, str, object]] = []
+        self._group_plan_ids: set[int] = set()
+        self.grouping_end_ns: int | None = None
+        self.first_binary_start_ns: int | None = None
+        self.last_binary_end_ns: int | None = None
+        self.benchmark_start_ns: int | None = None
+        self.autotune_end_ns: int | None = None
+        self.grouped_kernel_count = 0
+        self.compiled_kernel_count = 0
+        self.candidate_count = 0
+        self.reachable_group_count = 0
+        self.variant_count = 0
+
+    def install(self) -> None:
+        import torch_npu._inductor.runtime.triton_heuristics as heuristics
+
+        self._patch_function(heuristics, "_triton_config_npu_index_grouped")
+        self._patch_function(heuristics.triton, "compile", binary=True)
+        self._patch_method(heuristics.NPUCachingAutotuner, "_precompile_config")
+        self._patch_method(
+            heuristics.NPUSymbolicGroupedAutotuner,
+            "_autotune_all_groups",
+        )
+
+    def uninstall(self) -> None:
+        while self._patches:
+            owner, name, original = self._patches.pop()
+            setattr(owner, name, original)
+
+    def _patch_function(self, owner: object, name: str, binary: bool = False) -> None:
+        original = getattr(owner, name)
+        profiler = self
+
+        def wrapped(*args, **kwargs):
+            active_autotuner = getattr(self._thread_state, "group_autotuner", None)
+            if binary and active_autotuner is not None:
+                self._record_binary_start(active_autotuner)
+            result = original(*args, **kwargs)
+            if binary and active_autotuner is not None:
+                self._record_binary_end(active_autotuner)
+            if not binary:
+                profiler._record_grouped_plan(args, kwargs, result)
+            return result
+
+        setattr(owner, name, wrapped)
+        self._patches.append((owner, name, original))
+
+    def _patch_method(self, cls: type, name: str) -> None:
+        original = getattr(cls, name)
+        profiler = self
+
+        def wrapped(instance, *args, **kwargs):
+            is_group_autotune = cls.__name__ == "NPUSymbolicGroupedAutotuner"
+            is_binary_task = name == "_precompile_config" and profiler._is_grouped(instance)
+            if is_binary_task:
+                profiler._thread_state.group_autotuner = instance
+            if is_group_autotune:
+                profiler._record_autotune(time.perf_counter_ns(), entering=True)
+            try:
+                result = original(instance, *args, **kwargs)
+            except BaseException:
+                raise
+            else:
+                if is_group_autotune:
+                    profiler._record_autotune(time.perf_counter_ns(), entering=False)
+                return result
+            finally:
+                if is_binary_task:
+                    profiler._thread_state.group_autotuner = None
+
+        setattr(cls, name, wrapped)
+        self._patches.append((cls, name, original))
+
+    def _record_grouped_plan(self, args, kwargs, result) -> None:
+        inductor_meta = args[1] if len(args) > 1 else kwargs.get("inductor_meta")
+        if not isinstance(inductor_meta, dict):
+            return
+        plan = inductor_meta.get("grouped_candidate_plan")
+        if not isinstance(plan, dict):
+            return
+        plan_id = id(plan)
+        with self._lock:
+            if plan_id in self._group_plan_ids:
+                return
+            self._group_plan_ids.add(plan_id)
+            self.grouped_kernel_count += 1
+            self.grouping_end_ns = time.perf_counter_ns()
+            self.candidate_count += sum(
+                len(candidates)
+                for candidates in plan.get("group_to_candidates", ())
+            )
+            self.reachable_group_count += len(plan.get("reachable_group_ids", ()))
+            self.variant_count += len(plan.get("variant_order", ()))
+
+    def _record_binary_start(self, autotuner: object) -> None:
+        with self._lock:
+            timestamp = time.perf_counter_ns()
+            if self.first_binary_start_ns is None:
+                self.first_binary_start_ns = timestamp
+
+    def _record_binary_end(self, autotuner: object) -> None:
+        with self._lock:
+            self.compiled_kernel_count += 1
+            self.last_binary_end_ns = time.perf_counter_ns()
+
+    @staticmethod
+    def _is_grouped(autotuner: object) -> bool:
+        plan = getattr(autotuner, "candidate_plan", None)
+        return isinstance(plan, dict) and bool(plan.get("group_to_candidates"))
+
+    def _record_autotune(self, timestamp: int, entering: bool) -> None:
+        if entering:
+            with self._lock:
+                if self.benchmark_start_ns is None:
+                    self.benchmark_start_ns = timestamp
+        else:
+            with self._lock:
+                self.autotune_end_ns = timestamp
+
+    def summary(self) -> dict[str, object]:
+        binary_ms = None
+        if self.first_binary_start_ns is not None and self.last_binary_end_ns is not None:
+            binary_ms = (self.last_binary_end_ns - self.first_binary_start_ns) / 1e6
+        benchmark_ms = None
+        if self.last_binary_end_ns is not None and self.autotune_end_ns is not None:
+            benchmark_ms = (self.autotune_end_ns - self.last_binary_end_ns) / 1e6
+        result = {
+            "grouped_kernel_count": self.grouped_kernel_count,
+            "compiled_kernel_count": self.compiled_kernel_count,
+            "candidate_count": self.candidate_count,
+            "reachable_group_count": self.reachable_group_count,
+            "variant_count": self.variant_count,
+            "binary_compile_ms": binary_ms,
+            "group_benchmark_ms": benchmark_ms,
+        }
+        if binary_ms is not None and benchmark_ms is not None:
+            result["group_compile_total_ms"] = binary_ms + benchmark_ms
+        return result
+
+    def print_summary(self) -> None:
+        for name, value in self.summary().items():
+            if isinstance(value, float):
+                print(f"{name}={value:.3f}", flush=True)
+            else:
+                print(f"{name}={value}", flush=True)
+
+
 def compile_forward(torch: Any, case, args, kwargs, dynamic: bool, device: str):
     torch._dynamo.reset()
     if dynamic:
@@ -556,7 +710,7 @@ def run_static(torch: Any, case, config, recorder):
     return records
 
 
-def run_dynamic(torch: Any, case, config, recorder, group: bool):
+def run_dynamic(torch: Any, case, config, recorder, group: bool, group_profiler=None):
     run_root = Path(str(config["run_root"]))
     device = str(config["device"])
     first_index = int(config["compile_index"])
@@ -569,10 +723,6 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
     mode = "group" if group else "dynamic"
 
     recorder.start_capture()
-    measure_compile_time = bool(
-        group and config.get("measure_group_compile_time", False)
-    )
-    compile_start = time.perf_counter() if measure_compile_time else None
     try:
         compiled = compile_forward(
             torch,
@@ -589,13 +739,12 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
         mode,
         first_index=None if group else first_index,
     )
-    if measure_compile_time:
-        group_compile_ms = (time.perf_counter() - compile_start) * 1000.0
+    if group_profiler is not None:
         replace_tree(
             latest_compile_debug_dir(Path(str(config["debug_root"]))),
             compile_debug_root / "torch_compile_debug",
         )
-        print(f"group_compile_ms={group_compile_ms:.3f}", flush=True)
+        group_profiler.print_summary()
         return []
     replace_tree(
         latest_compile_debug_dir(Path(str(config["debug_root"]))),
@@ -665,6 +814,10 @@ def run_worker(config: dict[str, object]) -> None:
     bind_case_device(case, device)
     recorder = BestTilingRecorder(kind)
     recorder.install()
+    group_profiler = None
+    if config.get("measure_group_compile_time", False):
+        group_profiler = GroupCompileProfiler()
+        group_profiler.install()
     try:
         execution = str(config["execution"])
         if execution == "static":
@@ -672,10 +825,19 @@ def run_worker(config: dict[str, object]) -> None:
         elif execution == "dynamic":
             records = run_dynamic(torch, case, config, recorder, group=False)
         elif execution == "group":
-            records = run_dynamic(torch, case, config, recorder, group=True)
+            records = run_dynamic(
+                torch,
+                case,
+                config,
+                recorder,
+                group=True,
+                group_profiler=group_profiler,
+            )
         else:
             raise ValueError(f"unsupported execution: {execution}")
     finally:
+        if group_profiler is not None:
+            group_profiler.uninstall()
         recorder.uninstall()
         synchronize(torch, device)
     write_json(Path(str(config["result_path"])), records)
