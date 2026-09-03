@@ -191,6 +191,15 @@ dynamic_tiling,group_us,group_static_ratio,group_buckets,group_tiling
 `dynamic_static_ratio` 或
 `group_static_ratio` 大于 `1.15` 时标红，小于或等于该值不设置条件格式。
 
+如需单独测量 group 编译和首次 autotune 耗时，可使用 `--group-compile-time`。该模式只运行 group worker，
+从调用 `torch.compile(...)` 前开始计时，到首次 compiled 调用返回且 NPU 同步完成为止，直接在命令行打印
+`group_compile_ms=...`，不写入 comparison 表：
+
+```bash
+python scripts/tools/compile_mode_perf.py /path/to/case.py \
+  --device npu:0 --group-compile-time
+```
+
 ## CUDA profiler
 
 `cuda_profiler.py` 提供 `TorchCudaProfiler` 采集 PyTorch CUDA profiler Chrome Trace，并通过

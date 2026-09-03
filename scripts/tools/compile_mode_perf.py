@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -86,6 +87,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--active", type=int, default=20)
     parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument(
+        "--group-compile-time",
+        action="store_true",
+        help="only measure NPU group compile plus first-call autotune time",
+    )
     parser.add_argument(
         "--retries",
         "--retry",
@@ -563,6 +569,10 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
     mode = "group" if group else "dynamic"
 
     recorder.start_capture()
+    measure_compile_time = bool(
+        group and config.get("measure_group_compile_time", False)
+    )
+    compile_start = time.perf_counter() if measure_compile_time else None
     try:
         compiled = compile_forward(
             torch,
@@ -574,6 +584,10 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
         )
     finally:
         compile_tiling = recorder.stop_capture()
+    if measure_compile_time:
+        group_compile_ms = (time.perf_counter() - compile_start) * 1000.0
+        print(f"group_compile_ms={group_compile_ms:.3f}", flush=True)
+        return []
     compile_debug_root = artifact_mode_root(
         run_root,
         mode,
@@ -1154,22 +1168,14 @@ def run_case(
         "warmup": args.warmup,
         "active": args.active,
         "repeat": args.repeat,
+        "measure_group_compile_time": args.group_compile_time,
     }
     records = []
     completed = False
     try:
-        records.extend(run_one_worker(case_root, control_root, base_config, "static"))
-        for index in range(len(discovered["compile_bindings"])):
-            records.extend(
-                run_one_worker(
-                    case_root,
-                    control_root,
-                    base_config,
-                    "dynamic",
-                    index,
-                )
-            )
-        if device_type(args.device) == "npu":
+        if args.group_compile_time:
+            if device_type(args.device) != "npu":
+                raise ValueError("--group-compile-time requires an NPU device")
             records.extend(
                 run_one_worker(
                     case_root,
@@ -1179,6 +1185,28 @@ def run_case(
                     0,
                 )
             )
+        else:
+            records.extend(run_one_worker(case_root, control_root, base_config, "static"))
+            for index in range(len(discovered["compile_bindings"])):
+                records.extend(
+                    run_one_worker(
+                        case_root,
+                        control_root,
+                        base_config,
+                        "dynamic",
+                        index,
+                    )
+                )
+            if device_type(args.device) == "npu":
+                records.extend(
+                    run_one_worker(
+                        case_root,
+                        control_root,
+                        base_config,
+                        "group",
+                        0,
+                    )
+                )
         completed = True
         return discovered, records
     finally:
@@ -1278,7 +1306,13 @@ def controller(args: argparse.Namespace) -> None:
                     failed_by_index[index] for index in sorted(failed_by_index)
                 ]
                 write_json(run_root / "run.json", manifest)
-                if kind == "npu":
+                if args.group_compile_time:
+                    print(
+                        f"{progress} {retry_label}completed case={case_name} "
+                        f"(group compile timing only)",
+                        flush=True,
+                    )
+                elif kind == "npu":
                     print_static_group_summary(case_name, case_records)
                 else:
                     print_static_dynamic_summary(case_name, case_records)
@@ -1305,6 +1339,24 @@ def controller(args: argparse.Namespace) -> None:
         failed_cases = [failed_by_index[index] for index in sorted(failed_by_index)]
         if failed_cases and not batch:
             raise RuntimeError(failed_cases[0]["error"])
+
+        if args.group_compile_time:
+            if failed_cases:
+                print()
+                print(
+                    f"=== batch failures ({len(failed_cases)}/{len(case_paths)}) ==="
+                )
+                for failure in failed_cases:
+                    print(f"case={failure['name']} error={failure['error']}")
+            manifest["status"] = (
+                "completed_with_failures" if failed_cases else "completed"
+            )
+            manifest["result_count"] = 0
+            manifest["failed_cases"] = failed_cases
+            if not batch and discovered_cases:
+                manifest.update(discovered_cases[0])
+            write_json(run_root / "run.json", manifest)
+            return
 
         write_csv(run_root / "summary.csv", SUMMARY_COLUMNS, summary_rows(records))
         comparisons = comparison_rows(records, require_group=kind == "npu")
