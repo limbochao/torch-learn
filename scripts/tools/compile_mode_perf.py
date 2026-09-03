@@ -584,15 +584,19 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool):
         )
     finally:
         compile_tiling = recorder.stop_capture()
-    if measure_compile_time:
-        group_compile_ms = (time.perf_counter() - compile_start) * 1000.0
-        print(f"group_compile_ms={group_compile_ms:.3f}", flush=True)
-        return []
     compile_debug_root = artifact_mode_root(
         run_root,
         mode,
         first_index=None if group else first_index,
     )
+    if measure_compile_time:
+        group_compile_ms = (time.perf_counter() - compile_start) * 1000.0
+        replace_tree(
+            latest_compile_debug_dir(Path(str(config["debug_root"]))),
+            compile_debug_root / "torch_compile_debug",
+        )
+        print(f"group_compile_ms={group_compile_ms:.3f}", flush=True)
+        return []
     replace_tree(
         latest_compile_debug_dir(Path(str(config["debug_root"]))),
         compile_debug_root / "torch_compile_debug",

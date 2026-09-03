@@ -195,6 +195,8 @@ dynamic_tiling,group_us,group_static_ratio,group_buckets,group_tiling
 从调用 `torch.compile(...)` 前开始计时，到首次 compiled 调用返回且 NPU 同步完成为止，直接在命令行打印
 `group_compile_ms=...`，不写入 comparison 表：
 
+编译产物会保留在本次运行目录的 `artifacts/g/torch_compile_debug/` 下。
+
 ```bash
 python scripts/tools/compile_mode_perf.py /path/to/case.py \
   --device npu:0 --group-compile-time
