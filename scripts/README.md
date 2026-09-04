@@ -18,6 +18,8 @@ Skill 内部需要随安装包分发的 bundled scripts 保留在对应 `skills/
 - `repro/rms_norm_simd_multi_reduction_manual_tiling.py`: 使用手工 tiling 验证问题。
 - `tests/elementwise_dynamic_perf/`: 采集并浓缩 CUDA/NPU eager、static 与 dynamic elementwise kernel 的
   device-side 开销。
+- `tests/triton_parameter_perf/`: 扫描 Triton `num_warps` 与 `superblock_factor` 组合，并从 NPU profiler
+  的 `kernel_details.csv` 汇总 device kernel 耗时。
 - `tools/autotune_tiling.py`: 提供脚本调用的接口，获取 CUDA/NPU Inductor autotune 最终选中的 tiling config。
 - `tools/cuda_profiler.py`: 将 PyTorch CUDA profiler Chrome Trace JSON 中的 device kernel 记录转换为 CSV。
 - `tools/cuda_op_statistic.py`: 将 CUDA Chrome Trace 聚合为与 NPU `op_statistic.csv` 相同格式的统计表。
