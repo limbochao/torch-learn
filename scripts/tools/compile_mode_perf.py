@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare static, dynamic, and symbolic-group compilation performance."""
+"""Profile eager execution or compare compilation-mode performance."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from typing import Any
 
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
 ARTIFACT_MODE_COMPONENTS = {
+    "eager": "e",
     "static": "s",
     "dynamic": "d",
     "group": "g",
@@ -88,6 +89,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--active", type=int, default=20)
     parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument(
+        "--only-eager",
+        action="store_true",
+        help="only profile eager execution and write eager.xlsx",
+    )
     parser.add_argument(
         "--group-compile-time",
         action="store_true",
@@ -447,6 +453,155 @@ def profile_device(torch: Any, fn, args, kwargs, profile_dir: Path, config):
     return profile_cuda(torch, fn, args, kwargs, profile_dir, config)
 
 
+def _operator_record(name: str, duration: float) -> dict[str, object]:
+    return {"name": name, "duration": float(duration)}
+
+
+def _cuda_operator_records(trace_path: Path) -> tuple[list[dict[str, object]], float, int]:
+    from cuda_op_statistic import CudaOpStatisticParser
+
+    parser = CudaOpStatisticParser(
+        trace_path,
+        name_by="operator",
+        strip_aten_prefix=False,
+    )
+    summaries = parser.statistics()
+    records = [
+        _operator_record(summary.op_type, summary.total_us)
+        for summary in summaries
+    ]
+    return records, sum(record["duration"] for record in records), sum(
+        summary.count for summary in summaries
+    )
+
+
+def profile_eager_operators(torch: Any, fn, args, kwargs, profile_dir: Path, config):
+    """Profile one device kernel trace per eager forward execution."""
+
+    prepare_profile_dir(profile_dir)
+    call_count = int(config["active"]) * int(config["repeat"])
+    executions: list[list[dict[str, object]]] = []
+    totals: list[float] = []
+    kernel_count = 0
+    for _ in range(int(config["warmup"])):
+        fn(*args, **kwargs)
+        synchronize(torch, str(config["device"]))
+    if device_type(str(config["device"])) == "npu":
+        from npu_profiler import ProfileResultParser, TorchNpuProfiler
+
+        profiler = TorchNpuProfiler(
+            profile_dir,
+            wait=0,
+            warmup=0,
+            active=1,
+            repeat=call_count,
+            with_stack=False,
+        )
+        profiler.run_steps(lambda: fn(*args, **kwargs))
+        parser = ProfileResultParser(profile_dir)
+        operator_rows = parser.operator_rows()
+        rows_by_profile: dict[str, list[dict[str, str]]] = {}
+        for row in operator_rows or parser.kernel_rows():
+            profile_key = str(Path(row["__csv_path__"]).parent)
+            rows_by_profile.setdefault(profile_key, []).append(row)
+        for rows in rows_by_profile.values():
+            records = []
+            total_us = 0.0
+            record_count = 0
+            for row in rows:
+                if operator_rows:
+                    name = row.get("OP Type") or row.get("Op Type") or ""
+                    duration = row.get("Total Time(us)") or ""
+                    count = row.get("Count") or "1"
+                else:
+                    name = row.get("Op Name") or row.get("Name") or ""
+                    duration = parser._first_value(
+                        row,
+                        parser.KERNEL_DURATION_COLUMNS,
+                    )
+                    count = "1"
+                try:
+                    duration_us = float(duration)
+                    current_count = int(count)
+                except (TypeError, ValueError):
+                    continue
+                if duration_us < 0:
+                    continue
+                if not name:
+                    continue
+                records.append(_operator_record(str(name), duration_us))
+                total_us += duration_us
+                record_count += current_count
+            executions.append(records)
+            totals.append(total_us)
+            kernel_count += record_count
+    else:
+        from cuda_profiler import TorchCudaProfiler
+
+        profiler = TorchCudaProfiler(
+            profile_dir,
+            wait=0,
+            warmup=0,
+            active=1,
+            repeat=call_count,
+            with_stack=False,
+        )
+        profiler.run_steps(lambda: fn(*args, **kwargs))
+        for trace_path in profiler.trace_paths:
+            records, total_us, record_count = _cuda_operator_records(trace_path)
+            executions.append(records)
+            totals.append(total_us)
+            kernel_count += record_count
+    if not executions or not any(totals):
+        raise RuntimeError(f"no eager device kernels found in {profile_dir}")
+    if len(executions) != call_count:
+        raise RuntimeError(
+            f"expected {call_count} eager profile executions in {profile_dir}, "
+            f"found {len(executions)}"
+        )
+    return {
+        "mean_us": sum(totals) / call_count,
+        "samples": call_count,
+        "kernel_count": kernel_count,
+        "kernels": sorted(
+            {record["name"] for execution in executions for record in execution}
+        ),
+        "operator_durations": executions,
+        "forward_totals": totals,
+    }
+
+
+def run_eager(torch: Any, case, config):
+    run_root = Path(str(config["run_root"]))
+    device = str(config["device"])
+    records = []
+    for sample_index, binding in enumerate(case["sample_bindings"]):
+        args, kwargs = make_case_inputs(torch, case, binding, device)
+        signature = input_signature(torch, args, kwargs)
+        output_root = artifact_path(
+            run_root,
+            "eager",
+            sample_index,
+            tensor_shape_label(signature),
+        )
+        timing = profile_eager_operators(
+            torch, case["forward"], args, kwargs, output_root / "profiles", config
+        )
+        records.append(
+            result_record(
+                case,
+                "eager",
+                sample_index,
+                binding,
+                signature,
+                timing,
+                [],
+                output_root / "profiles",
+            )
+        )
+    return records
+
+
 class GroupCompileProfiler:
     """Measure grouped binary compilation and serial group autotuning phases."""
 
@@ -735,6 +890,8 @@ def result_record(
         "tiling": tiling,
         "manual_tiling_dir": manual_tiling_dir,
         "result_dir": str(profile_dir),
+        "operator_durations": timing.get("operator_durations", []),
+        "forward_totals": timing.get("forward_totals", []),
     }
 
 
@@ -873,22 +1030,26 @@ def run_worker(config: dict[str, object]) -> None:
 
     import torch
 
-    from autotune_tiling import BestTilingRecorder
-
     torch._dynamo.config.debug_dir_root = str(debug_root)
     device = str(config["device"])
     kind = initialize_device(torch, device)
     case = load_case(Path(str(config["case_path"])))
     bind_case_device(case, device)
-    recorder = BestTilingRecorder(kind)
-    recorder.install()
+    execution = str(config["execution"])
+    recorder = None
+    if execution != "eager":
+        from autotune_tiling import BestTilingRecorder
+
+        recorder = BestTilingRecorder(kind)
+        recorder.install()
     group_profiler = None
     if config.get("measure_group_compile_time", False):
         group_profiler = GroupCompileProfiler()
         group_profiler.install()
     try:
-        execution = str(config["execution"])
-        if execution == "static":
+        if execution == "eager":
+            records = run_eager(torch, case, config)
+        elif execution == "static":
             records = run_static(torch, case, config, recorder)
         elif execution == "dynamic":
             records = run_dynamic(torch, case, config, recorder, group=False)
@@ -906,7 +1067,8 @@ def run_worker(config: dict[str, object]) -> None:
     finally:
         if group_profiler is not None:
             group_profiler.uninstall()
-        recorder.uninstall()
+        if recorder is not None:
+            recorder.uninstall()
         synchronize(torch, device)
     write_json(Path(str(config["result_path"])), records)
 
@@ -1253,10 +1415,10 @@ def print_batch_static_dynamic_summary(records: list[dict[str, object]]) -> None
             )
 
 
-def worker_environment(cache_dir: Path, group: bool) -> dict[str, str]:
+def worker_environment(cache_dir: Path, execution: str) -> dict[str, str]:
     env = os.environ.copy()
-    env[GROUP_AUTOTUNE_ENV] = "1" if group else "0"
-    env["TORCH_COMPILE_DEBUG"] = "1"
+    env[GROUP_AUTOTUNE_ENV] = "1" if execution == "group" else "0"
+    env["TORCH_COMPILE_DEBUG"] = "0" if execution == "eager" else "1"
     env["TORCHINDUCTOR_CACHE_DIR"] = str(cache_dir)
     return env
 
@@ -1284,7 +1446,7 @@ def run_one_worker(run_root: Path, control_root: Path, base_config, execution, i
         run_internal(
             "worker",
             config_path,
-            worker_environment(cache_dir, group=execution == "group"),
+            worker_environment(cache_dir, execution),
         )
         return read_json(result_path)
     finally:
@@ -1365,6 +1527,8 @@ def validate_controller_args(args: argparse.Namespace) -> list[Path]:
         raise ValueError("warmup must be non-negative; active and repeat must be positive")
     if args.retries < 0:
         raise ValueError("retries must be non-negative")
+    if args.only_eager and args.group_compile_time:
+        raise ValueError("--only-eager cannot be combined with --group-compile-time")
     if args.run_id and re.fullmatch(r"[A-Za-z0-9._-]+", args.run_id) is None:
         raise ValueError("run-id may only contain letters, digits, '.', '_', and '-'")
     return case_paths
@@ -1407,7 +1571,9 @@ def run_case(
     records = []
     completed = False
     try:
-        if args.group_compile_time:
+        if args.only_eager:
+            records.extend(run_one_worker(case_root, control_root, base_config, "eager"))
+        elif args.group_compile_time:
             if device_type(args.device) != "npu":
                 raise ValueError("--group-compile-time requires an NPU device")
             records.extend(
@@ -1467,6 +1633,7 @@ def controller(args: argparse.Namespace) -> None:
         "warmup": args.warmup,
         "active": args.active,
         "repeat": args.repeat,
+        "only_eager": args.only_eager,
         "retries": args.retries,
         "retry_round": 0,
         "batch": batch,
@@ -1482,6 +1649,7 @@ def controller(args: argparse.Namespace) -> None:
     discovered_cases = []
     pending_cases = list(enumerate(case_paths))
     failed_by_index = {}
+    eager_reports = []
     try:
         for retry_round in range(args.retries + 1):
             if not pending_cases:
@@ -1533,6 +1701,15 @@ def controller(args: argparse.Namespace) -> None:
                 )
                 failed_by_index.pop(case_index, None)
                 records.extend(case_records)
+                if args.only_eager:
+                    for record in case_records:
+                        eager_reports.append(
+                            (
+                                f"{case_name}_s{int(record['sample_index']):03d}",
+                                record.get("operator_durations", []),
+                                record.get("forward_totals", []),
+                            )
+                        )
                 write_raw_results(run_root / "raw_results.jsonl", records)
                 manifest["cases"] = discovered_cases
                 manifest["completed_cases"] = len(discovered_cases)
@@ -1540,7 +1717,13 @@ def controller(args: argparse.Namespace) -> None:
                     failed_by_index[index] for index in sorted(failed_by_index)
                 ]
                 write_json(run_root / "run.json", manifest)
-                if args.group_compile_time:
+                if args.only_eager:
+                    print(
+                        f"{progress} {retry_label}completed case={case_name} "
+                        "(eager profiling only)",
+                        flush=True,
+                    )
+                elif args.group_compile_time:
                     print(
                         f"{progress} {retry_label}completed case={case_name} "
                         f"(group compile timing only)",
@@ -1574,6 +1757,22 @@ def controller(args: argparse.Namespace) -> None:
         if failed_cases and not batch:
             raise RuntimeError(failed_cases[0]["error"])
 
+        if args.only_eager:
+            if not records:
+                raise RuntimeError(
+                    "all batch cases failed; no eager results generated"
+                )
+            write_csv(run_root / "summary.csv", SUMMARY_COLUMNS, summary_rows(records))
+            from compile_mode_perf_xlsx import write_eager_xlsx_report
+
+            write_eager_xlsx_report(eager_reports, run_root / "eager.xlsx")
+            manifest["status"] = "completed_with_failures" if failed_cases else "completed"
+            manifest["result_count"] = len(records)
+            manifest["failed_cases"] = failed_cases
+            if not batch and discovered_cases:
+                manifest.update(discovered_cases[0])
+            write_json(run_root / "run.json", manifest)
+            return
         if args.group_compile_time:
             if failed_cases:
                 print()

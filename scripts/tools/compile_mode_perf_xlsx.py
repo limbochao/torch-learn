@@ -343,7 +343,10 @@ WORKBOOK_RELS_XML = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 """
 STYLES_XML = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <numFmts count="1"><numFmt numFmtId="164" formatCode="0.000"/></numFmts>
+  <numFmts count="2">
+    <numFmt numFmtId="164" formatCode="0.000"/>
+    <numFmt numFmtId="165" formatCode="0.00%"/>
+  </numFmts>
   <fonts count="2">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font>
@@ -361,7 +364,7 @@ STYLES_XML = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <borders count="2"><border/><border><left style="thin"/><right style="thin"/>
     <top style="thin"/><bottom style="thin"/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="8">
+  <cellXfs count="9">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1">
       <alignment horizontal="center" vertical="center" wrapText="1"/></xf>
@@ -373,6 +376,7 @@ STYLES_XML = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <xf numFmtId="164" fontId="0" fillId="6" borderId="1" xfId="0" applyNumberFormat="1"/>
     <xf numFmtId="164" fontId="0" fillId="6" borderId="1" xfId="0" applyNumberFormat="1"/>
     <xf numFmtId="164" fontId="0" fillId="7" borderId="1" xfId="0" applyNumberFormat="1"/>
+    <xf numFmtId="165" fontId="0" fillId="4" borderId="1" xfId="0" applyNumberFormat="1"/>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
   <dxfs count="1"><dxf><font><color rgb="FFE53935"/></font></dxf></dxfs>
@@ -389,3 +393,229 @@ def write_xlsx_report(rows: list[dict[str, str]], output_path: Path) -> None:
         workbook.writestr("xl/_rels/workbook.xml.rels", WORKBOOK_RELS_XML)
         workbook.writestr("xl/styles.xml", STYLES_XML)
         workbook.writestr("xl/worksheets/sheet1.xml", worksheet_xml(rows))
+
+
+def _eager_columns(executions: list[list[dict[str, object]]]) -> list[str]:
+    count = len(executions)
+    return [
+        "name",
+        *(f"duration_{index}" for index in range(1, count + 1)),
+        "min",
+        "max",
+        "diff_abs",
+        "diff_ratio",
+    ]
+
+
+def _eager_rows(
+    executions: list[list[dict[str, object]]],
+    totals: list[float],
+) -> tuple[list[str], list[dict[str, str]]]:
+    columns = _eager_columns(executions)
+    durations_by_name: dict[str, list[float]] = {}
+    for execution_index, execution in enumerate(executions):
+        per_name: dict[str, float] = {}
+        for record in execution:
+            name = str(record["name"])
+            per_name[name] = per_name.get(name, 0.0) + float(record["duration"])
+        for name in per_name:
+            durations_by_name.setdefault(name, [0.0] * len(executions))
+        for name in durations_by_name:
+            durations_by_name[name][execution_index] = per_name.get(name, 0.0)
+
+    durations_by_name["total"] = [float(value) for value in totals]
+    rows = []
+    for name, durations in durations_by_name.items():
+        minimum = min(durations) if durations else 0.0
+        maximum = max(durations) if durations else 0.0
+        ratio = (maximum / minimum - 1.0) if minimum > 0 else None
+        row = {"name": name}
+        row.update({
+            f"duration_{index}": f"{value:.6f}"
+            for index, value in enumerate(durations, start=1)
+        })
+        row.update(
+            {
+                "min": f"{minimum:.6f}",
+                "max": f"{maximum:.6f}",
+                "diff_abs": f"{maximum - minimum:.6f}",
+                "diff_ratio": f"{ratio:.6f}" if ratio is not None else "",
+            }
+        )
+        rows.append(row)
+    return columns, rows
+
+
+def _eager_worksheet_xml(columns: list[str], rows: list[dict[str, str]]) -> bytes:
+    worksheet = ET.Element(tag("worksheet"))
+    views = ET.SubElement(worksheet, tag("sheetViews"))
+    view = ET.SubElement(views, tag("sheetView"), {"workbookViewId": "0"})
+    ET.SubElement(
+        view,
+        tag("pane"),
+        {
+            "ySplit": "1",
+            "topLeftCell": "A2",
+            "activePane": "bottomLeft",
+            "state": "frozen",
+        },
+    )
+    ET.SubElement(worksheet, tag("sheetFormatPr"), {"defaultRowHeight": "25"})
+    widths = ET.SubElement(worksheet, tag("cols"))
+    for index, column in enumerate(columns, start=1):
+        width = 24 if column == "name" else 14
+        ET.SubElement(
+            widths,
+            tag("col"),
+            {
+                "min": str(index),
+                "max": str(index),
+                "width": str(width),
+                "customWidth": "1",
+            },
+        )
+    data = ET.SubElement(worksheet, tag("sheetData"))
+    header = ET.SubElement(
+        data,
+        tag("row"),
+        {"r": "1", "ht": "30", "customHeight": "1"},
+    )
+    for index, column in enumerate(columns, start=1):
+        append_cell(header, 1, index, column, 1)
+    numeric = {
+        column
+        for column in columns
+        if column.startswith("duration_")
+        or column in {"min", "max", "diff_abs", "diff_ratio"}
+    }
+    for row_number, values in enumerate(rows, start=2):
+        row = ET.SubElement(
+            data,
+            tag("row"),
+            {"r": str(row_number), "ht": "25", "customHeight": "1"},
+        )
+        for index, column in enumerate(columns, start=1):
+            style = 8 if column == "diff_ratio" else 3 if column in numeric else 2
+            append_cell(
+                row,
+                row_number,
+                index,
+                values.get(column, ""),
+                style,
+                numeric=column in numeric,
+            )
+    last_cell = f"{column_name(len(columns))}{max(len(rows) + 1, 1)}"
+    ET.SubElement(worksheet, tag("autoFilter"), {"ref": f"A1:{last_cell}"})
+    ET.SubElement(
+        worksheet,
+        tag("pageMargins"),
+        {
+            "left": "0.25",
+            "right": "0.25",
+            "top": "0.5",
+            "bottom": "0.5",
+            "header": "0.2",
+            "footer": "0.2",
+        },
+    )
+    return ET.tostring(worksheet, encoding="utf-8", xml_declaration=True)
+
+
+def write_eager_xlsx_report(
+    reports: list[tuple[str, list[list[dict[str, object]]], list[float]]],
+    output_path: Path,
+) -> None:
+    """Write one eager duration worksheet per case/sample."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet_names = []
+    for case_name, _, _ in reports:
+        base = case_name[:31]
+        name = base
+        suffix = 1
+        while name in sheet_names:
+            suffix += 1
+            name = f"{base[:27]}_{suffix}"[:31]
+        sheet_names.append(name)
+    content_types = ET.fromstring(CONTENT_TYPES_XML)
+    package_content_ns = (
+        "http://schemas.openxmlformats.org/package/2006/content-types"
+    )
+    for child in list(content_types):
+        if child.get("PartName", "").startswith("/xl/worksheets/"):
+            content_types.remove(child)
+    for index in range(1, len(sheet_names) + 1):
+        ET.SubElement(
+            content_types,
+            f"{{{package_content_ns}}}Override",
+            {
+                "PartName": f"/xl/worksheets/sheet{index}.xml",
+                "ContentType": (
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.worksheet+xml"
+                ),
+            },
+        )
+    workbook = ET.fromstring(WORKBOOK_XML)
+    sheets = workbook.find(tag("sheets"))
+    for child in list(sheets):
+        sheets.remove(child)
+    rels = ET.fromstring(WORKBOOK_RELS_XML)
+    for child in list(rels):
+        rels.remove(child)
+    package_rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    office_rel_ns = (
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    )
+    sheet_index = 0
+    for _, executions, totals in reports:
+        columns, rows = _eager_rows(executions, totals)
+        sheet_index += 1
+        ET.SubElement(
+            sheets,
+            tag("sheet"),
+            {
+                "name": sheet_names[sheet_index - 1],
+                "sheetId": str(sheet_index),
+                f"{{{office_rel_ns}}}id": f"rId{sheet_index}",
+            },
+        )
+        ET.SubElement(
+            rels,
+            f"{{{package_rel_ns}}}Relationship",
+            {
+                "Id": f"rId{sheet_index}",
+                "Type": f"{office_rel_ns}/worksheet",
+                "Target": f"worksheets/sheet{sheet_index}.xml",
+            },
+        )
+    ET.SubElement(
+        rels,
+        f"{{{package_rel_ns}}}Relationship",
+        {
+            "Id": f"rId{sheet_index + 1}",
+            "Type": f"{office_rel_ns}/styles",
+            "Target": "styles.xml",
+        },
+    )
+    workbook_xml = ET.tostring(workbook, encoding="utf-8", xml_declaration=True)
+    rels_xml = ET.tostring(rels, encoding="utf-8", xml_declaration=True)
+    content_types_xml = ET.tostring(
+        content_types,
+        encoding="utf-8",
+        xml_declaration=True,
+    )
+    with ZipFile(output_path, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", content_types_xml)
+        archive.writestr("_rels/.rels", ROOT_RELS_XML)
+        archive.writestr("xl/workbook.xml", workbook_xml)
+        archive.writestr("xl/_rels/workbook.xml.rels", rels_xml)
+        archive.writestr("xl/styles.xml", STYLES_XML)
+        sheet_index = 0
+        for _, executions, totals in reports:
+            sheet_index += 1
+            columns, rows = _eager_rows(executions, totals)
+            archive.writestr(
+                f"xl/worksheets/sheet{sheet_index}.xml",
+                _eager_worksheet_xml(columns, rows),
+            )

@@ -111,6 +111,37 @@ python scripts/tools/compile_mode_perf.py \
   --output prof_log/compile_mode_perf
 ```
 
+如只采集 eager 执行，可使用 `--only-eager`。该模式不会调用 `torch.compile`，也不会运行 static、dynamic
+或 group，而是为每个 `SAMPLE_BINDINGS` 独立采集 eager profile：
+
+```bash
+python scripts/tools/compile_mode_perf.py \
+  /path/to/triton_poi_fused_add_0_case.py \
+  --device npu:0 \
+  --only-eager \
+  --warmup 5 \
+  --active 20 \
+  --repeat 1 \
+  --run-id add_relu_eager_001
+```
+
+`--only-eager` 将每次有效 forward 保存成独立 profiler cycle，因此 `duration_1` 到 `duration_n` 分别表示
+第 1 到第 n 次执行中的 device-side 算子耗时，其中 `n = active * repeat`，warmup 不进入结果。同一次
+forward 内同名算子对应的多个 device kernel 会合并求和。NPU 优先使用 profiler 生成的
+`op_statistic.csv`；缺失时回退到 `kernel_details.csv`。CUDA 通过 trace 中的 `External id` 将 device kernel
+关联到 CPU operator。
+
+结果写入 `eager.xlsx`，每个 case 的每个 sample 使用独立 worksheet，列为：
+
+```text
+name,duration_1,duration_2,...,duration_n,min,max,diff_abs,diff_ratio
+```
+
+其中 `diff_abs = max - min`，`diff_ratio = max / min - 1`，在 XLSX 中显示为百分比。`total` 行表示每次
+forward 中所有 device 算子耗时之和。未在某次 forward 中出现的算子对应 duration 填 `0`。该模式还保留
+`raw_results.jsonl`、`summary.csv` 和 `artifacts/e/sNNN/profiles/`，但不生成 `comparison.csv` 或
+`comparison.xlsx`。
+
 也可以在同一次运行中传入多个 case 文件、case 目录或 glob 通配符。传入目录时会按字典序收集目录下的
 `*_case.py` 文件；glob 支持 `*`、`?`、`[]` 和递归匹配 `**`，结果同样按字典序收集并去重。各 case 仍按顺序
 独立执行，最终合并写入同一个
@@ -166,13 +197,14 @@ summary.csv
 comparison.csv
 comparison.xlsx
 artifacts/
+  e/sNNN/
   s/sNNN/
   d/fNNN/sNNN/
   g/sNNN/
 ```
 
-为避免 Windows 下载或解压时触发路径长度限制，artifact 使用紧凑目录名：`s`、`d`、`g` 分别表示 static、
-dynamic、group，`fNNN` 表示首次编译 binding 序号，`sNNN` 表示运行样本序号。完整 shape 仍保存在
+为避免 Windows 下载或解压时触发路径长度限制，artifact 使用紧凑目录名：`e`、`s`、`d`、`g` 分别表示 eager、
+static、dynamic、group，`fNNN` 表示首次编译 binding 序号，`sNNN` 表示运行样本序号。完整 shape 仍保存在
 `raw_results.jsonl`、`summary.csv` 和 `comparison.*` 中，不再重复写入目录名。
 
 `raw_results.jsonl` 保留 binding 和每个 tensor 的 shape、stride、dtype、device；`summary.csv` 是按执行模式
