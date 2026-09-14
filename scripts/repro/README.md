@@ -17,6 +17,6 @@
 - `rms_norm_simd_multi_reduction_pass_case.py`：同一表达式的可通过 case，默认使用 `BATCH=2 SEQ=128 HEADS=8 HEAD_DIM=128 CHECK=1`。
 - `rms_norm_simd_multi_reduction_manual_tiling.py`：同一表达式的手动 tiling case，默认使用 `R2BLOCK_SUB=7`，覆盖非整除 reduction tile。
 - `embedding_backward_cross_device.py`：从 NPU AOT graph 原样还原输入 shape 和 `eager_forward` 算子顺序的标准 PyTorch 片段，支持 CUDA/NPU 的 eager 与 Inductor 性能对比，不依赖 Triton。
-- `dlrm_embedding_select_perf.py`：复现 DLRM 26 个 `[128,16]` `embedding_select` lookup，比较 eager 与 Inductor。
+- `dlrm_embedding_select_perf.py`：从 DLRM 整网还原一个 `[128,16]` `select + embedding` ATen 片段，支持 CUDA/NPU 的 eager 与 Inductor 对比，不依赖 Triton。
 - `dlrm_embedding_dense_backward_perf.py`：复现 DLRM `add + slice + embedding_dense_backward`，拆分报告完整 eager、split eager 和 Inductor split。
 - `symbolic_mask_perf/`：对比无 `x2` mask、`x2 < 200` 和显式 full-shape 恒真 mask 的三份 SIMT kernel。
