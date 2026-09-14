@@ -42,6 +42,18 @@ SIMT 切分及后续 concat lowering 的差异。
 
 <article class="tl-feature tl-card-accent-amber" markdown="1">
 <div class="tl-meta">
+  <span class="tl-badge">Performance</span>
+  <span class="tl-badge">DLRM</span>
+  <span class="tl-badge">NPU</span>
+</div>
+
+### [DLRM embedding kernel 性能复现与收益口径](dynamic-shape/dlrm-embedding-kernel-performance-repro.html)
+
+提供 `embedding_select` 与 `embedding_dense_backward` 前处理的最小 repro，区分 ATen fallback 本体和 fused 小 kernel 的性能影响。
+</article>
+
+<article class="tl-feature tl-card-accent-amber" markdown="1">
+<div class="tl-meta">
   <span class="tl-badge">Symbolic Group</span>
   <span class="tl-badge">Performance</span>
   <span class="tl-badge">Observation</span>
