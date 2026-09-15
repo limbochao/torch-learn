@@ -19,4 +19,8 @@
 - `embedding_backward_cross_device.py`：从 NPU AOT graph 原样还原输入 shape 和 `eager_forward` 算子顺序的标准 PyTorch 片段，支持 CUDA/NPU 的 eager 与 Inductor 性能对比，不依赖 Triton。
 - `dlrm_embedding_select_perf.py`：从 DLRM 整网还原一个 `[128,16]` `select + embedding` ATen 片段，支持 CUDA/NPU 的 eager 与 Inductor 对比，不依赖 Triton。
 - `dlrm_embedding_dense_backward_perf.py`：复现 DLRM `add + slice + embedding_dense_backward`，拆分报告完整 eager、split eager 和 Inductor split。
+- `dlrm_embedding_dense_phases_cross_device.py`：从 0914 DLRM graph 抽取真实 `full` 和融合 atomic scatter
+  phase，分别对比 CUDA/NPU 的 Eager 与 Inductor，不依赖 Triton 源码。
+- `dlrm_embedding_dense_full_26_cross_device.py`：从 0914 DLRM graph 抽取 26 个真实 full kernel 的
+  `[rows, 16]` ATen `full` case，支持按单个 kernel 或全部 26 个 case 对比 CUDA/NPU Eager 与 Inductor。
 - `symbolic_mask_perf/`：对比无 `x2` mask、`x2 < 200` 和显式 full-shape 恒真 mask 的三份 SIMT kernel。
