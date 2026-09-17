@@ -23,6 +23,7 @@ from typing import Any
 
 
 GROUP_AUTOTUNE_ENV = "INDUCTOR_ASCEND_SYMBOLIC_GROUP_AUTOTUNE"
+DYNAMIC_UB_TILING_ENV = "TORCHNPU_DISABLE_DYNAMIC_UB_TILING"
 ARTIFACT_MODE_COMPONENTS = {
     "eager": "e",
     "static": "s",
@@ -98,6 +99,31 @@ def parse_args() -> argparse.Namespace:
         "--group-compile-time",
         action="store_true",
         help="only measure NPU group compile plus first-call autotune time",
+    )
+    ub_tiling_group = parser.add_mutually_exclusive_group()
+    ub_tiling_group.add_argument(
+        "--dynamic-ub-tiling",
+        choices=("default", "on", "off"),
+        dest="dynamic_ub_tiling",
+        default="default",
+        help=(
+            "dynamic UB tiling policy: default keeps the inherited environment, "
+            "on enables it, off disables it"
+        ),
+    )
+    ub_tiling_group.add_argument(
+        "--enable-dynamic-ub-tiling",
+        dest="dynamic_ub_tiling",
+        action="store_const",
+        const="on",
+        help="enable dynamic UB tiling in compile workers",
+    )
+    ub_tiling_group.add_argument(
+        "--disable-dynamic-ub-tiling",
+        dest="dynamic_ub_tiling",
+        action="store_const",
+        const="off",
+        help="disable dynamic UB tiling and use the legacy path",
     )
     parser.add_argument(
         "--retries",
@@ -1415,11 +1441,19 @@ def print_batch_static_dynamic_summary(records: list[dict[str, object]]) -> None
             )
 
 
-def worker_environment(cache_dir: Path, execution: str) -> dict[str, str]:
+def worker_environment(
+    cache_dir: Path,
+    execution: str,
+    dynamic_ub_tiling: str = "default",
+) -> dict[str, str]:
     env = os.environ.copy()
     env[GROUP_AUTOTUNE_ENV] = "1" if execution == "group" else "0"
     env["TORCH_COMPILE_DEBUG"] = "0" if execution == "eager" else "1"
     env["TORCHINDUCTOR_CACHE_DIR"] = str(cache_dir)
+    if dynamic_ub_tiling == "on":
+        env[DYNAMIC_UB_TILING_ENV] = "0"
+    elif dynamic_ub_tiling == "off":
+        env[DYNAMIC_UB_TILING_ENV] = "1"
     return env
 
 
@@ -1446,7 +1480,11 @@ def run_one_worker(run_root: Path, control_root: Path, base_config, execution, i
         run_internal(
             "worker",
             config_path,
-            worker_environment(cache_dir, execution),
+            worker_environment(
+                cache_dir,
+                execution,
+                str(base_config.get("dynamic_ub_tiling", "default")),
+            ),
         )
         return read_json(result_path)
     finally:
@@ -1567,6 +1605,7 @@ def run_case(
         "active": args.active,
         "repeat": args.repeat,
         "measure_group_compile_time": args.group_compile_time,
+        "dynamic_ub_tiling": args.dynamic_ub_tiling,
     }
     records = []
     completed = False
@@ -1633,6 +1672,7 @@ def controller(args: argparse.Namespace) -> None:
         "warmup": args.warmup,
         "active": args.active,
         "repeat": args.repeat,
+        "dynamic_ub_tiling": args.dynamic_ub_tiling,
         "only_eager": args.only_eager,
         "retries": args.retries,
         "retry_round": 0,

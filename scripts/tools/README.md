@@ -101,6 +101,31 @@ python scripts/tools/compile_mode_perf.py \
   --output prof_log/compile_mode_perf
 ```
 
+动态 UB tiling 性能测试可通过开关显式控制。`on` 会在每个编译 worker 中设置
+`TORCHNPU_DISABLE_DYNAMIC_UB_TILING=0`，`off` 设置为 `1`，`default` 保留当前环境变量：
+
+```bash
+python scripts/tools/compile_mode_perf.py \
+  scripts/tests/dynamic_ub_tiling \
+  --device npu:0 \
+  --dynamic-ub-tiling on \
+  --run-id dynamic_ub_on_001 \
+  --output prof_log/compile_mode_perf
+```
+
+也可以使用简写开关：
+
+```bash
+python scripts/tools/compile_mode_perf.py \
+  scripts/tests/dynamic_ub_tiling \
+  --device npu:0 \
+  --enable-dynamic-ub-tiling
+```
+
+使用 `--disable-dynamic-ub-tiling` 或 `--dynamic-ub-tiling off` 可运行同一批 case 的
+Legacy 对照组。建议使用不同的 `--run-id` 和输出目录，比较生成的 `comparison.csv`
+和 `comparison.xlsx`。
+
 CUDA 用法：
 
 ```bash
