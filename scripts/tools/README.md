@@ -101,30 +101,30 @@ python scripts/tools/compile_mode_perf.py \
   --output prof_log/compile_mode_perf
 ```
 
-动态 UB tiling 性能测试可通过开关显式控制。`on` 会在每个编译 worker 中设置
-`TORCHNPU_DISABLE_DYNAMIC_UB_TILING=0`，`off` 设置为 `1`，`default` 保留当前环境变量：
+动态 UB tiling 性能测试只使用一个可选参数 `--dynamic-ub`：
 
 ```bash
+# 开启动态 UB tiling，默认水位 0.95
 python scripts/tools/compile_mode_perf.py \
   scripts/tests/dynamic_ub_tiling \
   --device npu:0 \
-  --dynamic-ub-tiling on \
-  --run-id dynamic_ub_on_001 \
+  --dynamic-ub \
+  --run-id dynamic_ub_095_001 \
+  --output prof_log/compile_mode_perf
+
+# 开启动态 UB tiling，使用水位 0.8
+python scripts/tools/compile_mode_perf.py \
+  scripts/tests/dynamic_ub_tiling \
+  --device npu:0 \
+  --dynamic-ub 0.8 \
+  --run-id dynamic_ub_080_001 \
   --output prof_log/compile_mode_perf
 ```
 
-也可以使用简写开关：
-
-```bash
-python scripts/tools/compile_mode_perf.py \
-  scripts/tests/dynamic_ub_tiling \
-  --device npu:0 \
-  --enable-dynamic-ub-tiling
-```
-
-使用 `--disable-dynamic-ub-tiling` 或 `--dynamic-ub-tiling off` 可运行同一批 case 的
-Legacy 对照组。建议使用不同的 `--run-id` 和输出目录，比较生成的 `comparison.csv`
-和 `comparison.xlsx`。
+不传 `--dynamic-ub` 时，工具只运行关闭动态 UB tiling 的普通 dynamic，使用 Legacy 路径；UB
+相关列保持为空。传入 `--dynamic-ub` 时，工具会在同一次运行中同时执行普通 dynamic 和 dynamic UB
+两套 worker，`comparison.csv` 和 `comparison.xlsx` 会并列保留两套结果，便于直接比较耗时、tiling 和
+性能比例。
 
 CUDA 用法：
 
@@ -204,10 +204,13 @@ python scripts/tools/compile_mode_perf.py \
   --run-id pointwise_cases_001
 ```
 
-执行顺序固定为：一轮 static、按 `COMPILE_BINDINGS` 顺序执行的多轮 dynamic；NPU 最后再执行一轮 group，CUDA
-不会启动 group worker。所有 worker 严格串行，前一个进程退出并清理 cache 后才启动下一个。group 只使用第一个
-compile binding 编译一次，然后运行全部 `SAMPLE_BINDINGS`；汇总时将同一份 group 结果复用到各个 dynamic first
-shape。CUDA 的 comparison 仅填写 static、dynamic 和 `dynamic_static_ratio`，group 列保持为空。
+执行顺序固定为：一轮 static、按 `COMPILE_BINDINGS` 顺序执行的多轮普通 dynamic；指定 `--dynamic-ub` 时，
+再按相同顺序执行多轮 `dynamic_ub`；NPU 最后再执行一轮 group，CUDA 不会启动 group worker。所有 worker
+严格串行，前一个进程退出并清理 cache 后才启动下一个。普通 dynamic 始终关闭动态 UB tiling，
+`dynamic_ub` 始终启用动态 UB tiling 并使用命令行水位。group 只使用第一个 compile binding 编译一次，
+然后运行全部 `SAMPLE_BINDINGS`；汇总时将同一份 group 结果复用到各个 dynamic first shape。CUDA 的
+comparison 仅填写 static、dynamic 和 `dynamic_static_ratio`，group 列保持为空；不传 `--dynamic-ub` 时
+UB 列为空。
 
 每个 worker 使用本次 run 目录下独立的临时 `TORCHINDUCTOR_CACHE_DIR`。kernel 定义会先复制到对应的
 `torch_compile_debug/` 产物目录，worker 退出后立即删除 cache；无论运行成功、失败或中断，控制进程最后都会
@@ -225,24 +228,30 @@ artifacts/
   e/sNNN/
   s/sNNN/
   d/fNNN/sNNN/
+  ub/fNNN/sNNN/
   g/sNNN/
 ```
 
-为避免 Windows 下载或解压时触发路径长度限制，artifact 使用紧凑目录名：`e`、`s`、`d`、`g` 分别表示 eager、
-static、dynamic、group，`fNNN` 表示首次编译 binding 序号，`sNNN` 表示运行样本序号。完整 shape 仍保存在
+为避免 Windows 下载或解压时触发路径长度限制，artifact 使用紧凑目录名：`e`、`s`、`d`、`ub`、`g` 分别表示
+`eager`、`static`、普通 `dynamic`、`dynamic UB`、`group`，`fNNN` 表示首次编译 binding 序号，`sNNN` 表示运行样本序号。
+完整 shape 仍保存在
 `raw_results.jsonl`、`summary.csv` 和 `comparison.*` 中，不再重复写入目录名。
 
 `raw_results.jsonl` 保留 binding 和每个 tensor 的 shape、stride、dtype、device；`summary.csv` 是按执行模式
 展开的长表。`comparison.csv` 和 `comparison.xlsx` 使用以下固定列顺序：
 
 ```text
-case,first_shape,shape,static_us,static_tiling,dynamic_us,dynamic_static_ratio,
-dynamic_tiling,group_us,group_static_ratio,group_buckets,group_tiling
+case,first_shape,shape,static_us,static_tiling,dynamic_us,dynamic_static_ratio,dynamic_tiling,
+dynamic_ub_us,dynamic_ub_static_ratio,dynamic_ub_dynamic_ratio,dynamic_ub_watermark,dynamic_ub_tiling,
+group_us,group_static_ratio,group_buckets,group_tiling
 ```
 
-`first_shape` 和 `shape` 来自 `make_inputs(...)` 构造出的实际 tensor；多输入使用
-`args[0]=...;args[1]=...;kwargs.name=...` 展示。XLSX 合并 `case`、`first_shape`、`dynamic_tiling` 和
-`group_buckets`、`group_tiling`，冻结首行、启用筛选并 pretty-print JSON；除表头外的数据行固定为 40 行高。
+其中 `dynamic_ub_static_ratio = dynamic_ub_us / static_us`，`dynamic_ub_dynamic_ratio =
+`dynamic_ub_us / dynamic_us`；未传 `--dynamic-ub` 时 `dynamic_ub_*` 列为空。`first_shape` 和 `shape` 来自
+`make_inputs(...)` 构造出的实际 tensor；多输入使用
+`args[0]=...;args[1]=...;kwargs.name=...` 展示。XLSX 合并 `case`、`first_shape`、`dynamic_tiling`、
+`dynamic_ub_tiling` 和 `group_buckets`、`group_tiling`，冻结首行、启用筛选并 pretty-print JSON；除表头外的
+数据行固定为 40 行高。
 `group_buckets` 按 kernel 记录 symbolic group feature 的名称、来源、轴、bucket 边界和
 `bucket_factor`，用于结合 `group_tiling` 中的 `feature_inputs` 与 `group_id` 分析当前运行 shape 的分档。
 `dynamic_static_ratio` 或

@@ -28,6 +28,7 @@ ARTIFACT_MODE_COMPONENTS = {
     "eager": "e",
     "static": "s",
     "dynamic": "d",
+    "dynamic_ub": "ub",
     "group": "g",
 }
 SUMMARY_COLUMNS = (
@@ -52,6 +53,11 @@ COMPARISON_COLUMNS = (
     "dynamic_us",
     "dynamic_static_ratio",
     "dynamic_tiling",
+    "dynamic_ub_us",
+    "dynamic_ub_static_ratio",
+    "dynamic_ub_dynamic_ratio",
+    "dynamic_ub_watermark",
+    "dynamic_ub_tiling",
     "group_us",
     "group_static_ratio",
     "group_buckets",
@@ -100,30 +106,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="only measure NPU group compile plus first-call autotune time",
     )
-    ub_tiling_group = parser.add_mutually_exclusive_group()
-    ub_tiling_group.add_argument(
-        "--dynamic-ub-tiling",
-        choices=("default", "on", "off"),
-        dest="dynamic_ub_tiling",
-        default="default",
+    parser.add_argument(
+        "--dynamic-ub",
+        nargs="?",
+        type=float,
+        const=0.95,
+        default=None,
+        metavar="WATERMARK",
         help=(
-            "dynamic UB tiling policy: default keeps the inherited environment, "
-            "on enables it, off disables it"
+            "enable dynamic UB tiling with the given UB watermark "
+            "(default when present: 0.95)"
         ),
-    )
-    ub_tiling_group.add_argument(
-        "--enable-dynamic-ub-tiling",
-        dest="dynamic_ub_tiling",
-        action="store_const",
-        const="on",
-        help="enable dynamic UB tiling in compile workers",
-    )
-    ub_tiling_group.add_argument(
-        "--disable-dynamic-ub-tiling",
-        dest="dynamic_ub_tiling",
-        action="store_const",
-        const="off",
-        help="disable dynamic UB tiling and use the legacy path",
     )
     parser.add_argument(
         "--retries",
@@ -897,10 +890,12 @@ def result_record(
     first_binding=None,
     first_signature=None,
     manual_tiling_dir="",
+    dynamic_ub_watermark=None,
 ):
     return {
         "case": str(case["name"]),
         "mode": mode,
+        "dynamic_ub_watermark": dynamic_ub_watermark,
         "first_index": first_index,
         "sample_index": sample_index,
         "first_binding": first_binding,
@@ -971,7 +966,9 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool, group_profiler=
     )
     first_signature = input_signature(torch, compile_args, compile_kwargs)
     first_shape = tensor_shape_label(first_signature)
-    mode = "group" if group else "dynamic"
+    mode = "group" if group else str(config["execution"])
+    if mode not in ("dynamic", "dynamic_ub", "group"):
+        raise ValueError(f"unsupported dynamic execution: {mode}")
 
     recorder.start_capture()
     try:
@@ -1045,6 +1042,11 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool, group_profiler=
                 first_binding=first_binding,
                 first_signature=first_signature,
                 manual_tiling_dir=manual_tiling_dir,
+                dynamic_ub_watermark=(
+                    config.get("dynamic_ub_watermark")
+                    if mode == "dynamic_ub"
+                    else None
+                ),
             )
         )
     return records
@@ -1077,7 +1079,7 @@ def run_worker(config: dict[str, object]) -> None:
             records = run_eager(torch, case, config)
         elif execution == "static":
             records = run_static(torch, case, config, recorder)
-        elif execution == "dynamic":
+        elif execution in ("dynamic", "dynamic_ub"):
             records = run_dynamic(torch, case, config, recorder, group=False)
         elif execution == "group":
             records = run_dynamic(
@@ -1204,6 +1206,11 @@ def comparison_rows(
             for record in case_records
             if record["mode"] == "dynamic"
         }
+        dynamic_ub = {
+            (int(record["first_index"]), int(record["sample_index"])): record
+            for record in case_records
+            if record["mode"] == "dynamic_ub"
+        }
         group = {
             int(record["sample_index"]): record
             for record in case_records
@@ -1221,6 +1228,12 @@ def comparison_rows(
                         f"incomplete result matrix for case={case_name}, "
                         f"first={first_index}, sample={sample_index}"
                     ) from error
+                dynamic_ub_record = dynamic_ub.get((first_index, sample_index))
+                if dynamic_ub and dynamic_ub_record is None:
+                    raise ValueError(
+                        f"incomplete dynamic UB result matrix for case={case_name}, "
+                        f"first={first_index}, sample={sample_index}"
+                    )
                 group_record = group.get(sample_index)
                 if require_group and group_record is None:
                     raise ValueError(
@@ -1228,6 +1241,8 @@ def comparison_rows(
                         f"sample={sample_index}"
                     )
                 compared_records = [static_record, dynamic_record]
+                if dynamic_ub_record is not None:
+                    compared_records.append(dynamic_ub_record)
                 if group_record is not None:
                     compared_records.append(group_record)
                 shapes = {record["shape"] for record in compared_records}
@@ -1252,6 +1267,11 @@ def comparison_rows(
                     if group_record is not None
                     else None
                 )
+                dynamic_ub_us = (
+                    float(dynamic_ub_record["mean_us"])
+                    if dynamic_ub_record is not None
+                    else None
+                )
                 bucket_records = (
                     group_buckets(group_record["tiling"])
                     if group_record is not None
@@ -1271,6 +1291,32 @@ def comparison_rows(
                         "dynamic_tiling": compact_json(dynamic_record["tiling"])
                         if dynamic_record["tiling"]
                         else "",
+                        "dynamic_ub_us": (
+                            f"{dynamic_ub_us:.3f}"
+                            if dynamic_ub_us is not None
+                            else ""
+                        ),
+                        "dynamic_ub_static_ratio": (
+                            ratio(dynamic_ub_us, static_us)
+                            if dynamic_ub_us is not None
+                            else ""
+                        ),
+                        "dynamic_ub_dynamic_ratio": (
+                            ratio(dynamic_ub_us, dynamic_us)
+                            if dynamic_ub_us is not None
+                            else ""
+                        ),
+                        "dynamic_ub_watermark": (
+                            f"{float(dynamic_ub_record['dynamic_ub_watermark']):.3f}"
+                            if dynamic_ub_record is not None
+                            and dynamic_ub_record.get("dynamic_ub_watermark") is not None
+                            else ""
+                        ),
+                        "dynamic_ub_tiling": (
+                            compact_json(dynamic_ub_record["tiling"])
+                            if dynamic_ub_record is not None and dynamic_ub_record["tiling"]
+                            else ""
+                        ),
                         "group_us": f"{group_us:.3f}" if group_us is not None else "",
                         "group_static_ratio": (
                             ratio(group_us, static_us) if group_us is not None else ""
@@ -1444,16 +1490,22 @@ def print_batch_static_dynamic_summary(records: list[dict[str, object]]) -> None
 def worker_environment(
     cache_dir: Path,
     execution: str,
-    dynamic_ub_tiling: str = "default",
+    dynamic_ub_watermark: float | None = None,
 ) -> dict[str, str]:
     env = os.environ.copy()
     env[GROUP_AUTOTUNE_ENV] = "1" if execution == "group" else "0"
     env["TORCH_COMPILE_DEBUG"] = "0" if execution == "eager" else "1"
     env["TORCHINDUCTOR_CACHE_DIR"] = str(cache_dir)
-    if dynamic_ub_tiling == "on":
+    if execution == "dynamic_ub":
+        if dynamic_ub_watermark is None:
+            raise ValueError("dynamic_ub execution requires a watermark")
         env[DYNAMIC_UB_TILING_ENV] = "0"
-    elif dynamic_ub_tiling == "off":
+        env["TORCHNPU_DYNAMIC_UB_TILING_WATERMARK"] = str(
+            dynamic_ub_watermark
+        )
+    else:
         env[DYNAMIC_UB_TILING_ENV] = "1"
+        env.pop("TORCHNPU_DYNAMIC_UB_TILING_WATERMARK", None)
     return env
 
 
@@ -1483,7 +1535,7 @@ def run_one_worker(run_root: Path, control_root: Path, base_config, execution, i
             worker_environment(
                 cache_dir,
                 execution,
-                str(base_config.get("dynamic_ub_tiling", "default")),
+                base_config.get("dynamic_ub_watermark"),
             ),
         )
         return read_json(result_path)
@@ -1605,7 +1657,7 @@ def run_case(
         "active": args.active,
         "repeat": args.repeat,
         "measure_group_compile_time": args.group_compile_time,
-        "dynamic_ub_tiling": args.dynamic_ub_tiling,
+        "dynamic_ub_watermark": args.dynamic_ub,
     }
     records = []
     completed = False
@@ -1636,6 +1688,17 @@ def run_case(
                         index,
                     )
                 )
+            if args.dynamic_ub is not None:
+                for index in range(len(discovered["compile_bindings"])):
+                    records.extend(
+                        run_one_worker(
+                            case_root,
+                            control_root,
+                            base_config,
+                            "dynamic_ub",
+                            index,
+                        )
+                    )
             if device_type(args.device) == "npu":
                 records.extend(
                     run_one_worker(
@@ -1672,7 +1735,7 @@ def controller(args: argparse.Namespace) -> None:
         "warmup": args.warmup,
         "active": args.active,
         "repeat": args.repeat,
-        "dynamic_ub_tiling": args.dynamic_ub_tiling,
+        "dynamic_ub_watermark": args.dynamic_ub,
         "only_eager": args.only_eager,
         "retries": args.retries,
         "retry_round": 0,

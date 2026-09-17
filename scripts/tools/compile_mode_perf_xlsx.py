@@ -19,6 +19,11 @@ COLUMNS = (
     "dynamic_us",
     "dynamic_static_ratio",
     "dynamic_tiling",
+    "dynamic_ub_us",
+    "dynamic_ub_static_ratio",
+    "dynamic_ub_dynamic_ratio",
+    "dynamic_ub_watermark",
+    "dynamic_ub_tiling",
     "group_us",
     "group_static_ratio",
     "group_buckets",
@@ -28,6 +33,10 @@ NUMERIC_COLUMNS = {
     "static_us",
     "dynamic_us",
     "dynamic_static_ratio",
+    "dynamic_ub_us",
+    "dynamic_ub_static_ratio",
+    "dynamic_ub_dynamic_ratio",
+    "dynamic_ub_watermark",
     "group_us",
     "group_static_ratio",
 }
@@ -104,6 +113,17 @@ def merge_ranges(rows):
     ranges.extend(
         contiguous_ranges(
             rows,
+            "dynamic_ub_tiling",
+            lambda row: (
+                row.get("case", ""),
+                row.get("first_shape", ""),
+                row.get("dynamic_ub_tiling", ""),
+            ),
+        )
+    )
+    ranges.extend(
+        contiguous_ranges(
+            rows,
             "group_buckets",
             lambda row: (
                 row.get("case", ""),
@@ -131,6 +151,7 @@ def display_value(column: str, value: str) -> str:
         "group_buckets",
         "static_tiling",
         "dynamic_tiling",
+        "dynamic_ub_tiling",
         "group_tiling",
     )
     if not value or column not in json_columns:
@@ -271,7 +292,13 @@ def worksheet_xml(rows) -> bytes:
             )
 
     for priority, column in enumerate(
-        ("dynamic_static_ratio", "group_static_ratio"), start=1
+        (
+            "dynamic_static_ratio",
+            "dynamic_ub_static_ratio",
+            "dynamic_ub_dynamic_ratio",
+            "group_static_ratio",
+        ),
+        start=1,
     ):
         column_letter = column_name(COLUMNS.index(column) + 1)
         conditional = ET.SubElement(
