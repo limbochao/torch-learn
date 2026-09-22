@@ -34,6 +34,7 @@ ARTIFACT_MODE_COMPONENTS = {
 SUMMARY_COLUMNS = (
     "case",
     "mode",
+    "dynamic_ub_watermark",
     "first_shape",
     "shape",
     "mean_us",
@@ -44,7 +45,7 @@ SUMMARY_COLUMNS = (
     "manual_tiling_dir",
     "result_dir",
 )
-COMPARISON_COLUMNS = (
+COMPARISON_BASE_COLUMNS = (
     "case",
     "first_shape",
     "shape",
@@ -53,11 +54,6 @@ COMPARISON_COLUMNS = (
     "dynamic_us",
     "dynamic_static_ratio",
     "dynamic_tiling",
-    "dynamic_ub_us",
-    "dynamic_ub_static_ratio",
-    "dynamic_ub_dynamic_ratio",
-    "dynamic_ub_watermark",
-    "dynamic_ub_tiling",
     "group_us",
     "group_static_ratio",
     "group_buckets",
@@ -71,6 +67,60 @@ CASE_KEYS = (
     "compile_bindings",
     "dynamic_dims",
 )
+
+
+def watermark_token(watermark: float) -> str:
+    """Return a stable, filesystem- and column-name-friendly watermark token."""
+    text = f"{watermark:.6f}".rstrip("0").rstrip(".")
+    return text.replace("-", "m").replace(".", "_")
+
+
+def normalize_watermarks(watermarks: object) -> list[float]:
+    if watermarks is None:
+        return []
+    if isinstance(watermarks, (int, float)):
+        watermarks = [watermarks]
+    if not isinstance(watermarks, (list, tuple)):
+        raise ValueError("dynamic UB watermarks must be a list of numbers")
+    normalized = []
+    seen = set()
+    for value in watermarks:
+        watermark = float(value)
+        if not (0.0 < watermark <= 1.0):
+            raise ValueError(
+                f"dynamic UB watermark must be in (0, 1], got {watermark}"
+            )
+        token = watermark_token(watermark)
+        if token not in seen:
+            seen.add(token)
+            normalized.append(watermark)
+    return normalized
+
+
+def comparison_columns(watermarks: object) -> tuple[str, ...]:
+    normalized = normalize_watermarks(watermarks)
+    if len(normalized) <= 1:
+        ub_columns = (
+            "dynamic_ub_us",
+            "dynamic_ub_static_ratio",
+            "dynamic_ub_dynamic_ratio",
+            "dynamic_ub_watermark",
+            "dynamic_ub_tiling",
+        )
+    else:
+        ub_columns = tuple(
+            column
+            for watermark in normalized
+            for column in (
+                f"dynamic_ub_{watermark_token(watermark)}_us",
+                f"dynamic_ub_{watermark_token(watermark)}_static_ratio",
+                f"dynamic_ub_{watermark_token(watermark)}_dynamic_ratio",
+                f"dynamic_ub_{watermark_token(watermark)}_tiling",
+            )
+        )
+    base = COMPARISON_BASE_COLUMNS
+    group_index = base.index("group_us")
+    return base[:group_index] + ub_columns + base[group_index:]
 
 
 def parse_args() -> argparse.Namespace:
@@ -108,15 +158,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--dynamic-ub",
-        nargs="?",
+        nargs="*",
         type=float,
-        const=0.95,
         default=None,
         metavar="WATERMARK",
-        help=(
-            "enable dynamic UB tiling with the given UB watermark "
-            "(default when present: 0.95)"
-        ),
+        help="enable dynamic UB tiling for one or more UB watermarks (default: 0.95)",
     )
     parser.add_argument(
         "--retries",
@@ -127,7 +173,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--_action", choices=("discover", "worker"), help=argparse.SUPPRESS)
     parser.add_argument("--_config", type=Path, help=argparse.SUPPRESS)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.dynamic_ub == []:
+        args.dynamic_ub = [0.95]
+    return args
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -856,12 +905,21 @@ def compile_forward(torch: Any, case, args, kwargs, dynamic: bool, device: str):
     return compiled
 
 
-def artifact_mode_root(run_root: Path, mode: str, first_index=None) -> Path:
+def artifact_mode_root(
+    run_root: Path,
+    mode: str,
+    first_index=None,
+    dynamic_ub_watermark: float | None = None,
+) -> Path:
     try:
         component = ARTIFACT_MODE_COMPONENTS[mode]
     except KeyError as error:
         raise ValueError(f"unsupported artifact mode: {mode}") from error
     root = run_root / "artifacts" / component
+    if mode == "dynamic_ub":
+        if dynamic_ub_watermark is None:
+            raise ValueError("dynamic_ub artifacts require a watermark")
+        root = root / f"w{watermark_token(dynamic_ub_watermark)}"
     if first_index is not None:
         root = root / f"f{first_index:03d}"
     return root
@@ -873,8 +931,14 @@ def artifact_path(
     sample_index: int,
     _shape: str,
     first_index=None,
+    dynamic_ub_watermark: float | None = None,
 ) -> Path:
-    return artifact_mode_root(run_root, mode, first_index) / f"s{sample_index:03d}"
+    return artifact_mode_root(
+        run_root,
+        mode,
+        first_index,
+        dynamic_ub_watermark,
+    ) / f"s{sample_index:03d}"
 
 
 def result_record(
@@ -986,6 +1050,11 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool, group_profiler=
         run_root,
         mode,
         first_index=None if group else first_index,
+        dynamic_ub_watermark=(
+            float(config["dynamic_ub_watermark"])
+            if mode == "dynamic_ub"
+            else None
+        ),
     )
     if group_profiler is not None:
         replace_tree(
@@ -1011,6 +1080,11 @@ def run_dynamic(torch: Any, case, config, recorder, group: bool, group_profiler=
             sample_index,
             shape,
             first_index=None if group else first_index,
+            dynamic_ub_watermark=(
+                float(config["dynamic_ub_watermark"])
+                if mode == "dynamic_ub"
+                else None
+            ),
         )
         if group:
             recorder.start_capture()
@@ -1149,6 +1223,11 @@ def summary_rows(records: list[dict[str, object]]):
             {
                 "case": record["case"],
                 "mode": record["mode"],
+                "dynamic_ub_watermark": (
+                    f"{float(record['dynamic_ub_watermark']):.6f}"
+                    if record.get("dynamic_ub_watermark") is not None
+                    else ""
+                ),
                 "first_shape": record["first_shape"],
                 "shape": record["shape"],
                 "mean_us": f"{float(record['mean_us']):.6f}",
@@ -1189,7 +1268,18 @@ def group_buckets(tiling: object) -> list[dict[str, object]]:
 def comparison_rows(
     records: list[dict[str, object]],
     require_group: bool = True,
+    dynamic_ub_watermarks: object = None,
 ):
+    if dynamic_ub_watermarks is None:
+        dynamic_ub_watermarks = sorted(
+            {
+                float(record["dynamic_ub_watermark"])
+                for record in records
+                if record["mode"] == "dynamic_ub"
+                and record.get("dynamic_ub_watermark") is not None
+            }
+        )
+    watermarks = normalize_watermarks(dynamic_ub_watermarks)
     records_by_case: dict[str, list[dict[str, object]]] = {}
     for record in records:
         records_by_case.setdefault(str(record["case"]), []).append(record)
@@ -1207,7 +1297,11 @@ def comparison_rows(
             if record["mode"] == "dynamic"
         }
         dynamic_ub = {
-            (int(record["first_index"]), int(record["sample_index"])): record
+            (
+                float(record["dynamic_ub_watermark"]),
+                int(record["first_index"]),
+                int(record["sample_index"]),
+            ): record
             for record in case_records
             if record["mode"] == "dynamic_ub"
         }
@@ -1228,12 +1322,17 @@ def comparison_rows(
                         f"incomplete result matrix for case={case_name}, "
                         f"first={first_index}, sample={sample_index}"
                     ) from error
-                dynamic_ub_record = dynamic_ub.get((first_index, sample_index))
-                if dynamic_ub and dynamic_ub_record is None:
-                    raise ValueError(
-                        f"incomplete dynamic UB result matrix for case={case_name}, "
-                        f"first={first_index}, sample={sample_index}"
+                dynamic_ub_records = []
+                for watermark in watermarks:
+                    dynamic_ub_record = dynamic_ub.get(
+                        (watermark, first_index, sample_index)
                     )
+                    if dynamic_ub_record is None:
+                        raise ValueError(
+                            f"incomplete dynamic UB result matrix for case={case_name}, "
+                            f"watermark={watermark}, first={first_index}, sample={sample_index}"
+                        )
+                    dynamic_ub_records.append(dynamic_ub_record)
                 group_record = group.get(sample_index)
                 if require_group and group_record is None:
                     raise ValueError(
@@ -1241,8 +1340,7 @@ def comparison_rows(
                         f"sample={sample_index}"
                     )
                 compared_records = [static_record, dynamic_record]
-                if dynamic_ub_record is not None:
-                    compared_records.append(dynamic_ub_record)
+                compared_records.extend(dynamic_ub_records)
                 if group_record is not None:
                     compared_records.append(group_record)
                 shapes = {record["shape"] for record in compared_records}
@@ -1267,68 +1365,60 @@ def comparison_rows(
                     if group_record is not None
                     else None
                 )
-                dynamic_ub_us = (
-                    float(dynamic_ub_record["mean_us"])
-                    if dynamic_ub_record is not None
-                    else None
-                )
                 bucket_records = (
                     group_buckets(group_record["tiling"])
                     if group_record is not None
                     else []
                 )
-                rows.append(
-                    {
-                        "case": dynamic_record["case"],
-                        "first_shape": dynamic_record["first_shape"],
-                        "shape": dynamic_record["shape"],
-                        "static_us": f"{static_us:.3f}",
-                        "static_tiling": compact_json(static_record["tiling"])
-                        if static_record["tiling"]
-                        else "",
-                        "dynamic_us": f"{dynamic_us:.3f}",
-                        "dynamic_static_ratio": ratio(dynamic_us, static_us),
-                        "dynamic_tiling": compact_json(dynamic_record["tiling"])
-                        if dynamic_record["tiling"]
-                        else "",
-                        "dynamic_ub_us": (
-                            f"{dynamic_ub_us:.3f}"
-                            if dynamic_ub_us is not None
-                            else ""
-                        ),
-                        "dynamic_ub_static_ratio": (
-                            ratio(dynamic_ub_us, static_us)
-                            if dynamic_ub_us is not None
-                            else ""
-                        ),
-                        "dynamic_ub_dynamic_ratio": (
-                            ratio(dynamic_ub_us, dynamic_us)
-                            if dynamic_ub_us is not None
-                            else ""
-                        ),
-                        "dynamic_ub_watermark": (
-                            f"{float(dynamic_ub_record['dynamic_ub_watermark']):.3f}"
-                            if dynamic_ub_record is not None
-                            and dynamic_ub_record.get("dynamic_ub_watermark") is not None
-                            else ""
-                        ),
-                        "dynamic_ub_tiling": (
-                            compact_json(dynamic_ub_record["tiling"])
-                            if dynamic_ub_record is not None and dynamic_ub_record["tiling"]
-                            else ""
-                        ),
-                        "group_us": f"{group_us:.3f}" if group_us is not None else "",
-                        "group_static_ratio": (
-                            ratio(group_us, static_us) if group_us is not None else ""
-                        ),
-                        "group_buckets": compact_json(bucket_records)
-                        if bucket_records
-                        else "",
-                        "group_tiling": compact_json(group_record["tiling"])
-                        if group_record is not None and group_record["tiling"]
-                        else "",
-                    }
-                )
+                row = {
+                    "case": dynamic_record["case"],
+                    "first_shape": dynamic_record["first_shape"],
+                    "shape": dynamic_record["shape"],
+                    "static_us": f"{static_us:.3f}",
+                    "static_tiling": compact_json(static_record["tiling"])
+                    if static_record["tiling"]
+                    else "",
+                    "dynamic_us": f"{dynamic_us:.3f}",
+                    "dynamic_static_ratio": ratio(dynamic_us, static_us),
+                    "dynamic_tiling": compact_json(dynamic_record["tiling"])
+                    if dynamic_record["tiling"]
+                    else "",
+                    "group_us": f"{group_us:.3f}" if group_us is not None else "",
+                    "group_static_ratio": (
+                        ratio(group_us, static_us) if group_us is not None else ""
+                    ),
+                    "group_buckets": compact_json(bucket_records)
+                    if bucket_records
+                    else "",
+                    "group_tiling": compact_json(group_record["tiling"])
+                    if group_record is not None and group_record["tiling"]
+                    else "",
+                }
+                for watermark in watermarks:
+                    token = watermark_token(watermark)
+                    record = dynamic_ub.get((watermark, first_index, sample_index))
+                    prefix = f"dynamic_ub_{token}"
+                    ub_us = float(record["mean_us"]) if record is not None else None
+                    if len(watermarks) == 1:
+                        prefix = "dynamic_ub"
+                        row["dynamic_ub_watermark"] = (
+                            f"{watermark:.3f}" if record is not None else ""
+                        )
+                    row[f"{prefix}_us"] = (
+                        f"{ub_us:.3f}" if ub_us is not None else ""
+                    )
+                    row[f"{prefix}_static_ratio"] = (
+                        ratio(ub_us, static_us) if ub_us is not None else ""
+                    )
+                    row[f"{prefix}_dynamic_ratio"] = (
+                        ratio(ub_us, dynamic_us) if ub_us is not None else ""
+                    )
+                    row[f"{prefix}_tiling"] = (
+                        compact_json(record["tiling"])
+                        if record is not None and record["tiling"]
+                        else ""
+                    )
+                rows.append(row)
     return rows
 
 
@@ -1510,11 +1600,16 @@ def worker_environment(
 
 
 def run_one_worker(run_root: Path, control_root: Path, base_config, execution, index=None):
+    dynamic_ub_watermark = base_config.get("dynamic_ub_watermark")
     suffix = (
         execution
         if index is None or execution == "group"
         else f"{execution}_{index:03d}"
     )
+    if execution == "dynamic_ub":
+        if dynamic_ub_watermark is None:
+            raise ValueError("dynamic_ub execution requires a watermark")
+        suffix += f"_w{watermark_token(float(dynamic_ub_watermark))}"
     cache_dir = run_root / ".cache" / suffix
     debug_root = run_root / ".debug" / suffix
     result_path = control_root / f"{suffix}.json"
@@ -1535,7 +1630,7 @@ def run_one_worker(run_root: Path, control_root: Path, base_config, execution, i
             worker_environment(
                 cache_dir,
                 execution,
-                base_config.get("dynamic_ub_watermark"),
+                dynamic_ub_watermark,
             ),
         )
         return read_json(result_path)
@@ -1617,6 +1712,7 @@ def validate_controller_args(args: argparse.Namespace) -> list[Path]:
         raise ValueError("warmup must be non-negative; active and repeat must be positive")
     if args.retries < 0:
         raise ValueError("retries must be non-negative")
+    normalize_watermarks(args.dynamic_ub)
     if args.only_eager and args.group_compile_time:
         raise ValueError("--only-eager cannot be combined with --group-compile-time")
     if args.run_id and re.fullmatch(r"[A-Za-z0-9._-]+", args.run_id) is None:
@@ -1657,7 +1753,7 @@ def run_case(
         "active": args.active,
         "repeat": args.repeat,
         "measure_group_compile_time": args.group_compile_time,
-        "dynamic_ub_watermark": args.dynamic_ub,
+        "dynamic_ub_watermarks": args.dynamic_ub,
     }
     records = []
     completed = False
@@ -1688,13 +1784,17 @@ def run_case(
                         index,
                     )
                 )
-            if args.dynamic_ub is not None:
+            for watermark in normalize_watermarks(args.dynamic_ub):
+                ub_config = {
+                    **base_config,
+                    "dynamic_ub_watermark": watermark,
+                }
                 for index in range(len(discovered["compile_bindings"])):
                     records.extend(
                         run_one_worker(
                             case_root,
                             control_root,
-                            base_config,
+                            ub_config,
                             "dynamic_ub",
                             index,
                         )
@@ -1735,7 +1835,7 @@ def controller(args: argparse.Namespace) -> None:
         "warmup": args.warmup,
         "active": args.active,
         "repeat": args.repeat,
-        "dynamic_ub_watermark": args.dynamic_ub,
+        "dynamic_ub_watermarks": normalize_watermarks(args.dynamic_ub),
         "only_eager": args.only_eager,
         "retries": args.retries,
         "retry_round": 0,
@@ -1895,15 +1995,20 @@ def controller(args: argparse.Namespace) -> None:
             return
 
         write_csv(run_root / "summary.csv", SUMMARY_COLUMNS, summary_rows(records))
-        comparisons = comparison_rows(records, require_group=kind == "npu")
+        comparisons = comparison_rows(
+            records,
+            require_group=kind == "npu",
+            dynamic_ub_watermarks=args.dynamic_ub,
+        )
+        report_columns = comparison_columns(args.dynamic_ub)
         write_csv(
             run_root / "comparison.csv",
-            COMPARISON_COLUMNS,
+            report_columns,
             comparisons,
         )
         from compile_mode_perf_xlsx import write_xlsx_report
 
-        write_xlsx_report(comparisons, run_root / "comparison.xlsx")
+        write_xlsx_report(comparisons, run_root / "comparison.xlsx", report_columns)
         if batch:
             if records:
                 if kind == "npu":

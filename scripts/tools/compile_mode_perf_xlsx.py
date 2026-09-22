@@ -110,17 +110,20 @@ def merge_ranges(rows):
             ),
         )
     )
-    ranges.extend(
-        contiguous_ranges(
-            rows,
-            "dynamic_ub_tiling",
-            lambda row: (
-                row.get("case", ""),
-                row.get("first_shape", ""),
-                row.get("dynamic_ub_tiling", ""),
-            ),
+    for column in COLUMNS:
+        if not column.startswith("dynamic_ub") or not column.endswith("_tiling"):
+            continue
+        ranges.extend(
+            contiguous_ranges(
+                rows,
+                column,
+                lambda row, column=column: (
+                    row.get("case", ""),
+                    row.get("first_shape", ""),
+                    row.get(column, ""),
+                ),
+            )
         )
-    )
     ranges.extend(
         contiguous_ranges(
             rows,
@@ -147,14 +150,9 @@ def merge_ranges(rows):
 
 
 def display_value(column: str, value: str) -> str:
-    json_columns = (
-        "group_buckets",
-        "static_tiling",
-        "dynamic_tiling",
-        "dynamic_ub_tiling",
-        "group_tiling",
-    )
-    if not value or column not in json_columns:
+    if not value or not (
+        column == "group_buckets" or column.endswith("_tiling")
+    ):
         return value
     try:
         return json.dumps(json.loads(value), indent=2, sort_keys=True)
@@ -176,6 +174,14 @@ def cell_style(column: str) -> int:
     if column.startswith("group_"):
         return 7
     return 2
+
+
+def is_numeric_column(column: str) -> bool:
+    if column in NUMERIC_COLUMNS:
+        return True
+    return column.startswith("dynamic_ub_") and (
+        column.endswith("_us") or column.endswith("_ratio")
+    )
 
 
 def column_width(rows, column: str) -> int:
@@ -272,7 +278,7 @@ def worksheet_xml(rows) -> bytes:
                 column_index,
                 display_value(column, values.get(column, "")),
                 cell_style(column),
-                numeric=column in NUMERIC_COLUMNS,
+                numeric=is_numeric_column(column),
             )
 
     last_cell = f"{column_name(len(COLUMNS))}{max(len(rows) + 1, 1)}"
@@ -291,15 +297,13 @@ def worksheet_xml(rows) -> bytes:
                 {"ref": f"{column}{start}:{column}{end}"},
             )
 
-    for priority, column in enumerate(
-        (
-            "dynamic_static_ratio",
-            "dynamic_ub_static_ratio",
-            "dynamic_ub_dynamic_ratio",
-            "group_static_ratio",
-        ),
-        start=1,
-    ):
+    ratio_columns = ["dynamic_static_ratio", "group_static_ratio"]
+    ratio_columns.extend(
+        column
+        for column in COLUMNS
+        if column.startswith("dynamic_ub_") and column.endswith("_ratio")
+    )
+    for priority, column in enumerate(ratio_columns, start=1):
         column_letter = column_name(COLUMNS.index(column) + 1)
         conditional = ET.SubElement(
             worksheet,
@@ -411,7 +415,14 @@ STYLES_XML = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 """
 
 
-def write_xlsx_report(rows: list[dict[str, str]], output_path: Path) -> None:
+def write_xlsx_report(
+    rows: list[dict[str, str]],
+    output_path: Path,
+    columns=None,
+) -> None:
+    global COLUMNS
+    if columns is not None:
+        COLUMNS = tuple(columns)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(output_path, "w", ZIP_DEFLATED) as workbook:
         workbook.writestr("[Content_Types].xml", CONTENT_TYPES_XML)
