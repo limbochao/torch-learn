@@ -25,12 +25,18 @@ class Results:
         reports = self.data["reports"]
         results = {}
         for key, nodeids in self.data["selected"].items():
-            calls = [
+            node_reports = [
                 report for report in reports
-                if report["nodeid"] in nodeids and report["when"] == "call"
+                if report["nodeid"] in nodeids
             ]
+            calls = [report for report in node_reports if report["when"] == "call"]
             outcomes = [report["outcome"] for report in calls]
-            if not calls:
+            all_outcomes = [report["outcome"] for report in node_reports]
+            if "failed" in all_outcomes:
+                status = "failed"
+            elif not calls and "skipped" in all_outcomes:
+                status = "skipped"
+            elif not calls:
                 status = "no_call"
             elif "failed" in outcomes:
                 status = "failed"
