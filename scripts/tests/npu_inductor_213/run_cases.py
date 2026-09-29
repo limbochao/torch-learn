@@ -1,6 +1,7 @@
 """Run the requested upstream Inductor cases through transfer_to_npu."""
 
 import argparse
+from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -11,7 +12,43 @@ class Results:
     def __init__(self, cases, output):
         self.cases = cases
         self.output = output
-        self.data = {"selected": {}, "reports": [], "missing": []}
+        self.data = {
+            "selected": {},
+            "reports": [],
+            "missing": [],
+            "case_results": {},
+            "summary": {},
+        }
+
+    def finalize(self):
+        """Classify each manifest case from its selected NPU call reports."""
+        reports = self.data["reports"]
+        results = {}
+        for key, nodeids in self.data["selected"].items():
+            calls = [
+                report for report in reports
+                if report["nodeid"] in nodeids and report["when"] == "call"
+            ]
+            outcomes = [report["outcome"] for report in calls]
+            if not calls:
+                status = "no_call"
+            elif "failed" in outcomes:
+                status = "failed"
+            elif "skipped" in outcomes:
+                status = "skipped"
+            elif all(outcome == "passed" for outcome in outcomes):
+                status = "passed"
+            else:
+                status = "unknown"
+            results[key] = {
+                "status": status,
+                "nodeids": nodeids,
+                "call_outcomes": outcomes,
+            }
+        for key in self.data["missing"]:
+            results[key] = {"status": "missing", "nodeids": [], "call_outcomes": []}
+        self.data["case_results"] = results
+        self.data["summary"] = dict(Counter(result["status"] for result in results.values()))
 
     def save(self):
         self.output.write_text(json.dumps(self.data, indent=2, ensure_ascii=False))
@@ -88,6 +125,7 @@ def main():
         options.append("--collect-only")
     code = pytest.main(options, plugins=[recorder])
     recorder.data["exitcode"] = int(code)
+    recorder.finalize()
     recorder.save()
     return int(code)
 
