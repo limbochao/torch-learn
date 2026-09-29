@@ -1,0 +1,171 @@
+{
+  "description": "归因所用函数/注册片段。行号和 sha256 对应只读采集时的文件；复跑结果以 failure-evidence.json 为准。",
+  "sources": [
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch/_inductor/runtime/benchmarking.py",
+      "sha256": "cb02da7bba0d8af9f864f5501f53d0b722ba4b4b5909fbdbe4ee89b018eb1031",
+      "symbol": "_get_default_gpu_device_type",
+      "start_line": 32,
+      "excerpt": "def _get_default_gpu_device_type() -> str:\n    avail_gpus = [\n        device_type\n        for device_type in GPU_BENCHMARK_DEVICE_TYPES\n        if getattr(torch, device_type).is_available()\n    ]\n    assert len(avail_gpus) <= 1\n    return \"cuda\" if len(avail_gpus) == 0 else avail_gpus.pop()"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch/_inductor/runtime/benchmarking.py",
+      "sha256": "cb02da7bba0d8af9f864f5501f53d0b722ba4b4b5909fbdbe4ee89b018eb1031",
+      "symbol": "_normalize_gpu_device_type",
+      "start_line": 42,
+      "excerpt": "def _normalize_gpu_device_type(device_type: str | torch.device | None) -> str:\n    if device_type is None:\n        return _get_default_gpu_device_type()\n    if isinstance(device_type, torch.device):\n        return device_type.type\n    return torch.device(device_type).type"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch/_inductor/cudagraph_utils.py",
+      "sha256": "4489f3f87c67080fc814bbdd3dca5b86c937507d4cb13f67e5446db03129fb18",
+      "symbol": "check_caching_allocator_for_cudagraphs",
+      "start_line": 350,
+      "excerpt": "def check_caching_allocator_for_cudagraphs() -> str | None:\n    \"\"\"Skip cudagraphs when the CUDA/HIP caching allocator is disabled\n    (via ``torch.cuda.caching_allocator_enable(False)`` or the env-var\n    bypass ``PYTORCH_NO_(CUDA|HIP)_MEMORY_CACHING``). Cudagraph capture\n    pools allocations through the caching allocator; with it bypassed,\n    capture appears to succeed but pool tracking diverges (see\n    check_memory_pool in cudagraph_trees.py), surfacing as 'storage data\n    ptrs not allocated in pool ...' at replay time.\"\"\"\n    if (\n        torch.cuda.is_available()\n        # pyrefly: ignore [missing-attribute]\n        and not torch._C._cuda_cudaCachingAllocator_is_enabled()\n    ):\n        return format_default_skip_message(\n            \"cudagraph capture requires the caching allocator; \"\n            \"current allocator is uncached\"\n        )\n    return None"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch/_inductor/codegen/triton_combo_kernel.py",
+      "sha256": "586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae",
+      "symbol": "horizontal_partition",
+      "start_line": 260,
+      "excerpt": "    def horizontal_partition(\n        nodes: list[BaseSchedulerNode],\n        triton_scheduling: SIMDScheduling,\n        node_info_map: dict[BaseSchedulerNode, NodeInfo],\n        custom_algorithm: bool = False,\n    ) -> list[list[BaseSchedulerNode]]:\n        \"\"\"Generates a list of lists of node info tuples which consist of (fused_nodes, tiling, numel, rnum)\n        for each subkernel node where each sublist forms a ComboKernel. It horizontally partitions nodes into\n        sublists in the following way:\n            1) call _custom_combo_kernel_horizontal_partition_algorithm() if custom_algorithm is True\n            2) then, call _base_horizontal_partition() to partition nodes into sublists, each sublist is\n               guaranteed to not exceed CUDA limits for number of args (read/writes) and to have the same\n               2D or 1D blocking strategy.\n        \"\"\"\n        if custom_algorithm:\n            raw_partitions = _custom_combo_kernel_horizontal_partition_algorithm(\n                nodes, triton_scheduling, node_info_map\n            )\n        else:\n            raw_partitions = [nodes]\n\n        \"\"\"Generates a list of lists of node info tuples which consist of (fused_nodes, tiling, numel, rnumel)\n        for each subkernel node where each sublist is guaranteed to not exceed CUDA limits for number of args\n        (read/writes) and to have the same 2D or 1D blocking strategy.\"\"\"\n        all_partitions = []\n        for raw_partition in raw_partitions:\n            all_partitions.extend(\n                ComboKernel._base_horizontal_partition(\n                    raw_partition, triton_scheduling, node_info_map, custom_algorithm\n                )\n            )\n        return all_partitions"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch/_subclasses/fake_impls.py",
+      "sha256": "8306f5956aebba956718903ab1710015216f37b5d45ed01ce417896ff620f702",
+      "symbol": "nonzero",
+      "start_line": 1250,
+      "excerpt": "def nonzero(fake_mode: FakeTensorMode, func: OpOverload, arg: FakeTensor) -> FakeTensor:\n    if (\n        fake_mode.shape_env is None\n        or not fake_mode.shape_env.allow_dynamic_output_shape_ops\n    ):\n        # Without symints/symfloats, cannot handle this\n        raise DynamicOutputShapeException(func)\n\n    if (nnz := arg.nonzero_memo) is None:\n        # Avoid importing sympy at a module level\n        from torch.fx.experimental.symbolic_shapes import (\n            _constrain_range_for_size,\n            has_free_symbols,\n        )\n        from torch.utils._sympy.numbers import IntInfinity\n        from torch.utils._sympy.value_ranges import bound_sympy\n\n        if not has_free_symbols(arg.numel()) and arg.numel() == 0:\n            # If numel is zero, then the output size must be zero.\n            # In this case, we must not allocate an unbacked SymInt,\n            # because if we do, it will immediately get refined to\n            # zero, but this will be inconsistent with size oblivious\n            # tests (which will continue to claim that the unbacked\n            # symint cannot equal zero).  We could also unconditionally\n            # allocate an unbacked SymInt and not refine its range,\n            # but this seems more precise.\n            nnz = 0\n        else:\n            nnz = fake_mode.shape_env.create_unbacked_symint()\n\n            maxval = sys.maxsize - 1\n\n            if not has_free_symbols(arg.numel()):\n                maxval = int(arg.numel())\n            else:\n                prod_node = math.prod(arg.shape).node  # type: ignore[union-attr]\n                prod_range = bound_sympy(\n                    prod_node.expr, prod_node.shape_env.var_to_range\n                )\n                if isinstance(prod_range.upper, IntInfinity):\n                    maxval = sys.maxsize - 1\n                else:\n                    maxval = prod_range.upper\n\n            _constrain_range_for_size(nnz, max=maxval)\n\n        arg.nonzero_memo = nnz  # pyrefly: ignore[bad-assignment]\n    return arg.new_empty_strided((nnz, arg.dim()), (1, nnz), dtype=torch.int64)  # type: ignore[return]"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch/_inductor/utils.py",
+      "sha256": "c1aedd001340ec0410c251a3bb7176d96085b04fbd25f58d740bd642c73d4537",
+      "symbol": "run_and_get_code",
+      "start_line": 2867,
+      "excerpt": "def run_and_get_code(\n    fn: Callable[P, _T],\n    *args: P.args,\n    **kwargs: P.kwargs,\n) -> tuple[_T, list[str]]:\n    from .graph import GraphLowering\n\n    source_codes: OrderedSet[str] = OrderedSet()\n\n    def save_output_code(code: str) -> None:\n        source_codes.add(code)\n\n    with mock.patch.object(GraphLowering, \"save_output_code\", save_output_code):\n        torch._dynamo.reset()\n        result = fn(*args, **kwargs)\n    return result, list(source_codes)"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/contrib/transfer_to_npu.py",
+      "sha256": "1a1da0bca8fabe3ec32a90efd8259615502b1993ff559d355f07536cbfda1f35",
+      "symbol": "_wrapper_cuda",
+      "start_line": 177,
+      "excerpt": "def _wrapper_cuda(fn):\n    @wraps(fn)\n    def decorated(*args, **kwargs):\n        replace_int = fn.__name__ in ['to', 'to_empty']\n        if args:\n            args_new = list(args)\n            args = _replace_cuda_to_npu_in_list(args_new, replace_int)\n        if kwargs:\n            for device_arg in device_kwargs_list:\n                device = kwargs.get(device_arg, None)\n                if device is not None:\n                    _replace_cuda_to_npu_in_kwargs(kwargs, device_arg, device)\n            device_ids = kwargs.get('device_ids', None)\n            if isinstance(device_ids, list):\n                kwargs[\"device_ids\"] = _replace_cuda_to_npu_in_list(device_ids, replace_int)\n            elif isinstance(device_ids, tuple):\n                kwargs[\"device_ids\"] = tuple(_replace_cuda_to_npu_in_list(list(device_ids), replace_int))\n        return fn(*args, **kwargs)\n\n    return decorated"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/contrib/transfer_to_npu.py",
+      "sha256": "1a1da0bca8fabe3ec32a90efd8259615502b1993ff559d355f07536cbfda1f35",
+      "symbol": "_device_wrapper",
+      "start_line": 265,
+      "excerpt": "def _device_wrapper(enter_fn, white_list):\n    for fn_name in white_list:\n        fn = getattr(enter_fn, fn_name, None)\n        if fn:\n            setattr(enter_fn, fn_name, _wrapper_cuda(fn))"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/contrib/transfer_to_npu.py",
+      "sha256": "1a1da0bca8fabe3ec32a90efd8259615502b1993ff559d355f07536cbfda1f35",
+      "symbol": "_patch_cuda",
+      "start_line": 399,
+      "excerpt": "def _patch_cuda():\n    patches = [\n        ['cuda', torch_npu.npu], ['cuda.amp', torch_npu.npu.amp],\n        ['cuda.random', torch_npu.npu.random],\n        ['cuda.amp.autocast_mode', torch_npu.npu.amp.autocast_mode],\n        ['cuda.amp.common', torch_npu.npu.amp.common],\n        ['cuda.amp.grad_scaler', torch_npu.npu.amp.grad_scaler]\n    ]\n\n    from torch_npu._init.patches.monkey_patches import _apply_patches\n    _apply_patches(patches)"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/_inductor/codegen/triton.py",
+      "sha256": "dc7ff8c142f979645111c13ad56f3a8bfff38d418d4428989ba4100f84b51674",
+      "symbol": "_print_Float",
+      "start_line": 265,
+      "excerpt": "    def _print_Float(self, expr: sympy.Expr) -> str:\n        return super()._print_Float(expr).replace(\"tl.float64\", \"tl.float32\")"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/_inductor/codegen/triton.py",
+      "sha256": "dc7ff8c142f979645111c13ad56f3a8bfff38d418d4428989ba4100f84b51674",
+      "symbol": "_print_ToFloat",
+      "start_line": 268,
+      "excerpt": "    def _print_ToFloat(self, expr: sympy.Expr) -> str:\n        return super()._print_ToFloat(expr).replace(\"tl.float64\", \"tl.float32\")"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/_inductor/codegen/triton.py",
+      "sha256": "dc7ff8c142f979645111c13ad56f3a8bfff38d418d4428989ba4100f84b51674",
+      "symbol": "should_use_persistent_reduction",
+      "start_line": 1110,
+      "excerpt": "    def should_use_persistent_reduction(self) -> bool:\n        \"\"\"\n        Heuristic to decide if a persistent reduction should be used.\n        \"\"\"\n        if not self.inside_reduction:\n            return False\n        if not config.triton.persistent_reductions:\n            return False\n        reduction_node = self.find_reduction_node()\n        reduction_numel = self.features.reduction_numel\n        if isinstance(reduction_numel, NumelList):\n            reduction_numel = reduction_numel.numels()\n        if (\n            npu_config.is_ascend950\n            and npu_config.enable_welford\n            and getattr(reduction_node, \"reduction_type\", None) == \"welford_reduce\"\n            and V.graph.sizevars.statically_known_leq(reduction_numel, 8192)\n        ):\n            # A5 Welford SIMD consumes a static reduction tile. Its compiler\n            # UB checks still reject individual oversized tile configurations.\n            return True\n        if npu_config.is_ascend950:\n            threshold = {ReductionHint.INNER: 4096, ReductionHint.DEFAULT: 4096}.get(\n                self.features.get_reduction_hint(), 64\n            )\n        else:\n            threshold = {ReductionHint.INNER: 1024, ReductionHint.DEFAULT: 1024}.get(\n                self.features.get_reduction_hint(), 64\n            )\n        if self.cooperative_reduction:\n            # The RSPLIT of cooperative reductions means each thread block is operating on fewer elements\n            try:\n                threshold *= 32 // min(\n                    V.graph.sizevars.optimization_hint(self.features.numel), 32\n                )\n            except ValueError:\n                pass  # unbacked symint\n\n        if config.triton.multi_kernel:\n            threshold *= 16\n        return V.graph.sizevars.statically_known_leq(\n            self.features.reduction_numel, threshold\n        )  # type: ignore[arg-types]"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "triton/language/extra/cann/libdevice.py",
+      "sha256": "a1759d1b537be1465fd615339e0917e8abc612cc8851978682a21d19e2d7419c",
+      "symbol": "pow",
+      "start_line": 396,
+      "excerpt": "def pow(arg0, arg1, _semantic=None):\n    \"\"\"\n    Power function, computes x raised to the power of y.\n\n    :param arg0: ``x``. Supported dtype(s): ``float32``.\n    :type arg0: scalar or tl.tensor\n    :param arg1: ``y``. Supported dtype(s): ``float32``.\n    :type arg1: scalar or tl.tensor\n    :return: x raised to the power of y.\n    :rtype: ``float32``\n    \"\"\"\n    arg0 = _semantic.to_tensor(arg0)\n    arg1 = _semantic.to_tensor(arg1)\n    if arg1.dtype == core.dtype(\"int32\"):\n        arg1 = _semantic.cast(arg1, arg0.dtype)\n\n    if arg0.dtype == core.dtype(\"fp32\") and _is_a5_target(_semantic):\n        return core.extern_elementwise(\n            \"\", \"\", [arg0, arg1], {\n                (core.dtype(\"fp32\"), core.dtype(\"fp32\")): (\"__hmf_pow_fp32\", core.dtype(\"fp32\")),\n                (core.dtype(\"fp32\"), core.dtype(\"int32\")): (\"__hmf_powi_fp32\", core.dtype(\"fp32\")),\n            }, is_pure=True, _semantic=_semantic)\n    return core.extern_elementwise(\n        \"\", \"\", [arg0, arg1], {\n            (core.dtype(\"fp32\"), core.dtype(\"fp32\")): (\"__hmf_powf\", core.dtype(\"fp32\")),\n            (core.dtype(\"fp16\"), core.dtype(\"fp16\")): (\"__hmf_powDh\", core.dtype(\"fp16\")),\n            (core.dtype(\"bf16\"), core.dtype(\"bf16\")): (\"__hmf_powDb\", core.dtype(\"bf16\")),\n        }, is_pure=True, _semantic=_semantic)"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/_inductor/codegen/scheduling.py",
+      "sha256": "221ddea6fa2776078c9759197a3c3456ad236e69691548a434ba0f0eb37fd35e",
+      "symbol": "generate_combo_kernel_code",
+      "start_line": 474,
+      "excerpt": "    def generate_combo_kernel_code(\n        self,\n        subkernel_nodes: list[BaseSchedulerNode],\n        custom_part_algorithm: bool,\n        enable_autotune: bool,\n        mixed_sizes: bool,\n        only_gen_src_code: bool = False,\n        per_subkernel_blocks: bool = False,\n    ) -> list[tuple[str, Any, Any]]:\n\n        fused_node_lists = [node.get_nodes() for node in subkernel_nodes]\n        subkernel_map, node_schedule_map = {}, {}\n        for pn, nodes in zip(subkernel_nodes, fused_node_lists):\n            _, (numel, rnumel) = max(nodes, key=lambda x: int(x.is_reduction())).group\n            if npu_config.enable_welford:\n                numel = _canonical_group_size(numel)\n                rnumel = _canonical_group_size(rnumel)\n            node_schedule = self.generate_node_schedule(nodes, numel, rnumel)\n            tiling = self.select_tiling(node_schedule, numel, rnumel)\n            node_schedule_map[pn] = node_schedule, tiling, numel, rnumel\n            subkernel_map[pn] = NPUComboKernel.create_triton_kernel(\n                tiling,\n                features=NPUKernelFeatures(node_schedule, numel, rnumel),\n                optimize_mask=not mixed_sizes,\n            )\n\n        partitions = NPUComboKernel.horizontal_partition(\n            nodes=subkernel_nodes,\n            triton_scheduling=self,\n            custom_algorithm=custom_part_algorithm,\n            kernel_map=subkernel_map,\n            node_info_map=node_schedule_map,\n        )\n        log.debug(\n            \"ComboKernels: %d nodes partitioned into %s groups\",\n            len(subkernel_nodes),\n            [len(p) for p in partitions],\n        )\n        kernel_code_list = []\n        for node_group in partitions:\n            fused_node_lists = [node.get_nodes() for node in node_group]\n            kernel = NPUComboKernel(\n                triton_kernel_cls=self.kernel_type,\n                enable_autotune=enable_autotune,\n                mixed_sizes=mixed_sizes,\n                per_subkernel_blocks=per_subkernel_blocks,\n            )\n\n            for pn, nodes in zip(node_group, fused_node_lists):\n                self.codegen_node_schedule_with_kernel(\n                    node_schedule_map[pn][0],\n                    kernel.create_sub_kernel(subkernel_map[pn]),\n                )\n                subkernel = subkernel_map[pn]\n                node_schedule = node_schedule_map[pn][0]\n                if not only_gen_src_code:\n                    with V.set_kernel_handler(subkernel):  # type: ignore[call-arg]\n                        for node in NodeScheduleMarker.only_nodes(node_schedule):\n                            node.mark_run()\n                V.graph.removed_buffers |= subkernel.removed_buffers\n                V.graph.inplaced_to_remove |= subkernel.inplaced_to_remove\n\n            src_code = kernel.codegen_kernel()\n            kernel_code_list.append((src_code, kernel, node_group))\n        return kernel_code_list"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch/_inductor/runtime/benchmarking.py",
+      "sha256": "cb02da7bba0d8af9f864f5501f53d0b722ba4b4b5909fbdbe4ee89b018eb1031",
+      "symbol": "GPU_BENCHMARK_DEVICE_TYPES =",
+      "start_line": 22,
+      "excerpt": "GPU_BENCHMARK_DEVICE_TYPES = (\"cuda\", \"xpu\", \"mtia\")"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/_inductor/__init__.py",
+      "sha256": "5e2768049a9342972228ed44ad355a5328f19dc2c1ef62a3398288eaebdd9762",
+      "symbol": "GPU_BENCHMARK_DEVICE_TYPES =",
+      "start_line": 135,
+      "excerpt": "    _apply_common_patches()\n    import torch\n    torch._inductor.runtime.benchmarking.GPU_BENCHMARK_DEVICE_TYPES = (\"cuda\", \"xpu\", \"mtia\", \"npu\")\n    has_triton = torch.utils._triton.has_triton()\n    if not has_triton:"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/_inductor/lowering_fallback_list.py",
+      "sha256": "02ab50494fcc05043e1531945830c5c48e71abcf3ffc4d233b498bd9707e93cb",
+      "symbol": "aten.sort.stable",
+      "start_line": 757,
+      "excerpt": "    aten.sort.default,\n    aten.sort.float,\n    aten.sort.int,\n    aten.sort.stable,\n    aten.sort.str,\n    aten.sort.values,\n    aten.sort.values_stable,"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/contrib/transfer_to_npu.py",
+      "sha256": "1a1da0bca8fabe3ec32a90efd8259615502b1993ff559d355f07536cbfda1f35",
+      "symbol": "torch_fn_white_list =",
+      "start_line": 22,
+      "excerpt": "except ImportError:\n    from distutils.version import LooseVersion as Version\n\n_device_constructors()\n\nwarnings.filterwarnings(action='once')\n\n__all__ = []\ntorch_fn_white_list = ['logspace', 'randint', 'hann_window', 'rand', 'full_like', 'ones_like', 'rand_like', 'randperm',\n                       'arange', 'frombuffer', 'normal', '_empty_per_channel_affine_quantized', 'empty_strided',\n                       'empty_like', 'scalar_tensor', 'tril_indices', 'bartlett_window', 'ones', 'sparse_coo_tensor',\n                       'randn', 'kaiser_window', 'tensor', 'triu_indices', 'as_tensor', 'zeros', 'randint_like', 'full',\n                       'eye', '_sparse_csr_tensor_unsafe', 'empty', '_sparse_coo_tensor_unsafe', 'blackman_window',\n                       'zeros_like', 'range', 'sparse_csr_tensor', 'randn_like', 'from_file',\n                       '_cudnn_init_dropout_state', '_empty_affine_quantized', 'linspace', 'hamming_window',\n                       'empty_quantized', '_pin_memory', 'load', 'set_default_device',\n                       'get_device_module', 'sparse_compressed_tensor']"
+    },
+    {
+      "origin": "目标环境 pta_213 安装源码（只读采集）",
+      "path": "torch_npu/contrib/transfer_to_npu.py",
+      "sha256": "1a1da0bca8fabe3ec32a90efd8259615502b1993ff559d355f07536cbfda1f35",
+      "symbol": "_device_wrapper(torch, torch_fn_white_list)",
+      "start_line": 548,
+      "excerpt": "    _device_wrapper(torch, torch_fn_white_list)"
+    },
+    {
+      "origin": "本地工作区源码；用于机制对照，不代表远端二进制版本",
+      "path": "torch_npu/csrc/aten/VariableFallbackKernel.cpp",
+      "sha256": "daa296432cbb037959664654f995da3ccec3af3c85b354d811faa1327e6efb81",
+      "start_line": 223,
+      "excerpt": "\nvoid npu_cpu_fallback(const c10::OperatorHandle& op, torch::jit::Stack* stack) {\n  const auto op_name = c10::toString(op.schema().operator_name());\n  at_npu::native::CheckCpuFallbackAllowed(\n      op_name, at_npu::native::CpuFallbackKind::Dispatcher, \"no kernel is registered for the NPU PrivateUse1 backend\");\n\n  if (!has_op_name_warned(op_name)) {\n    TORCH_NPU_WARN(\n        \"CAUTION: The operator '\",\n        op.schema().operator_name(),\n        \"' is not currently supported \",\n        \"on the NPU backend and will fall back to run on the CPU.\",\n        \" This may have performance implications.\");\n  }\n  at::native::cpu_fallback(op, stack);\n}\n\nTORCH_LIBRARY_IMPL(_, PrivateUse1, m) {\n  m.fallback(torch::CppFunction::makeFromBoxedFunction<&npu_cpu_fallback>());\n}"
+    },
+    {
+      "origin": "本地工作区源码；用于机制对照，不代表远端二进制版本",
+      "path": "op_plugin/ops/opapi/NonzeroKernelNpuOpApi.cpp",
+      "sha256": "2730d7dcac42920b3379305a7005f247db53a636dbba81bd1a8d703e5143d730",
+      "start_line": 46,
+      "excerpt": "at::Tensor& nonzero_out(const at::Tensor& self, at::Tensor& result)\n{\n    DO_COMPATIBILITY(aclnnNonzero, acl_op::nonzero_out(self, result));\n    auto out_size = op_infer::nonzero_npu_max_output_size(self);\n    at_npu::native::OpPreparation::check_tensor({self}, result, at::ScalarType::Long, out_size);\n    auto out = result.is_contiguous() ? result : result.contiguous();\n    auto output = exec_aclnn_non_zero(self, out);\n    if (!result.is_contiguous()) {\n        result.copy_(output);\n    }\n    return result;\n}\n\nat::Tensor nonzero(const at::Tensor& self)\n{\n    DO_COMPATIBILITY(aclnnNonzero, acl_op::nonzero(self));\n    auto out_size = op_infer::nonzero_npu_max_output_size(self);\n    at::Tensor out =\n        at_npu::native::OpPreparation::apply_tensor_without_format(out_size, self.options().dtype(at::kLong));\n    return exec_aclnn_non_zero(self, out);\n}"
+    }
+  ]
+}
