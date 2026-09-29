@@ -2,7 +2,9 @@
 
 验证日期：2026-09-29。目标环境为 NPU_A5、conda `pta_213`、Ascend950PR；用例目录已泛化为 `<workspace>/pytorch/test/inductor`。通过 `transfer_to_npu` 后将 `GPU_TYPE` 和 Triton backend 设置为 NPU，并用独立进程运行每个文件。
 
-结果统计：75 通过，3 跳过，20 失败；其中 41 项因本次 driver 修复从失败变为通过。参数化测试按原始 case 名称折叠。
+结果统计（2026-09-29 修正代码全量复跑）：75 通过，3 跳过，20 失败；其中 41 项因本次 driver 修复从失败变为通过。全量执行了 115 个 NPU 参数化实例，按清单折叠为 98 个逻辑 case。
+
+复核结论：执行器只把对应 NPU 参数化实例的 `call=passed` 计为通过；skip、无 call、setup/teardown 失败均不会计入通过。98 个逻辑 case 全部成功收集，75 个通过项均有 `_npu` nodeid 且所有 call 阶段通过。`test_unbacked_symints.py::test_expand` 实际 nodeid 为 `TestUnbackedSymintsPRIVATEUSE1::test_expand_npu`，`call=passed`，不是 skip；相邻的 `test_expand_ok_with_runtime_assert_npu` 为失败。3 个跳过项为 `test_arithmetic_constant_folding`、`test_float_item_return` 和 `test_sub_constant_folding`，均为测试自身的 CPU/FBCODE 条件。
 
 本次本地修复：
 
@@ -112,4 +114,4 @@
 | `test_torchinductor_dynamic_shapes.py` | `test_coalescing_analysis_sympy_is_constant` | 失败 | 否 | 缺少 npu.npu_fusion_attention.default lowering。 |
 | `test_torchinductor_dynamic_shapes.py` | `test_sympy_infinity_bounds_in_persistent_reduction` | 通过 | 是 | transfer_to_npu 的 NPU Triton driver 选择修复后通过。 |
 
-验证证据保存在本地临时目录 `tmp/npu-a5-213-validation`，包含 final JSON 和日志；该目录不纳入归档。
+验证证据保存在本地临时目录 `tmp/npu-a5-213-validation`，本次修正代码的文件为 `final_corrected.json` 和 `final_corrected.log`；该目录不纳入归档。
