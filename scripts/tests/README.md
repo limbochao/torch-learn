@@ -12,6 +12,7 @@
 
 ## 当前脚本
 
+- [pta_case/](pta_case/README.md)：triu 与 quantile 系列 NPU 回归用例，按 PyTorch 版本选择预期 FX 图。
 - `elementwise_dynamic_perf/`: 配套提供 elementwise 性能采集和宽表 CSV 对比脚本；支持 CUDA/NPU，按
   `EXECUTION=eager|static|dynamic|group` 分进程采集，再将相同场景的 execution 和设备结果横向合并；
   `group` 为启用 Ascend symbolic group autotune 的 dynamic 编译路径。
