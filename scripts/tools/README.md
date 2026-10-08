@@ -2,6 +2,8 @@
 
 本目录存放可被测试、复现和分析脚本复用的辅助工具。
 
+TorchBench 配套软件安装使用 [torchbench_setup.py](../torchbench.md)，直接执行即可。
+
 ## torch_npu 分支日构建包
 
 `download_torch_npu_daily.py` 通过公开的华为云 OBS 对象列表查询指定 torch_npu 分支的 PyTorch

@@ -13,6 +13,7 @@ Skill 内部需要随安装包分发的 bundled scripts 保留在对应 `skills/
 
 ## 当前内容
 
+- [TorchBench 2.13](torchbench.md)：配套软件安装，以及自动准备数据的 Inductor + Triton 模型精度测试。
 - `repro/rms_norm_simd_multi_reduction_repro.py`: 复现 RMSNorm weight grad SIMD 多 reduction 精度问题。
 - `repro/rms_norm_simd_multi_reduction_pass_case.py`: 提供缩小 shape 后的正确性对照。
 - `repro/rms_norm_simd_multi_reduction_manual_tiling.py`: 使用手工 tiling 验证问题。

@@ -36,6 +36,10 @@ title: 学习笔记
       <a href="compiler/debugging/npu-fx-graph-runnable-adaptation.html">NPU FX Graph Runnable 通用适配</a>
       <p>说明输入符号化、自定义算子占位、static/dynamic/group 模式和产物收集的通用边界。</p>
     </div>
+    <div>
+      <a href="compiler/debugging/torchbench-213-setup-and-test.html">TorchBench 2.13 环境准备与模型测试</a>
+      <p>直接安装配套软件，测试时自动准备模型数据，默认使用 Inductor + Triton 检查精度。</p>
+    </div>
   </li>
 </ul>
 
