@@ -1,0 +1,154 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_inplace_padding.py::test_skip_pad_due_to_fusion",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 49,
+      "end_line": 63,
+      "excerpt": "    def test_skip_pad_due_to_fusion(self):\n        \"\"\"\n        If the padding can be fused with downstream op, there would\n        be little benefit to do inplace padding.\n        \"\"\"\n\n        def f(x):\n            x = aten.constant_pad_nd(x, (0, 8, 0, 0), 12345.0)\n            return x.sum(dim=-1)\n\n        M, N = 2048, 2048\n        x = rand_strided((M, N), (N + 10, 1), device=GPU_TYPE)\n        check_model(self, f, (x,), atol=1e-3, rtol=1e-3)\n\n        self.assertEqual(num_inplace_padding(), 0)",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_skip_pad_input",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 65,
+      "end_line": 81,
+      "excerpt": "    def test_skip_pad_input(self):\n        \"\"\"\n        Don't apply the padding to graph input since Inductor does not\n        allocatae the input and can not guarantee enough trailing space\n        for padding.\n        \"\"\"\n\n        def f(x, y):\n            x = aten.constant_pad_nd(x, (0, 8, 0, 0), 12345.0)\n            return x @ y\n\n        M, N = 2048, 2048\n        x = rand_strided((M, N), (N + 10, 1), device=GPU_TYPE)\n        y = torch.randn(N + 8, M, device=GPU_TYPE)\n        check_model(self, f, (x, y), atol=1e-2, rtol=1e-2)\n\n        self.assertEqual(num_inplace_padding(), 0)",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_pad_non_zero",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 83,
+      "end_line": 112,
+      "excerpt": "    def test_pad_non_zero(self):\n        def f(x):\n            x = x + 1\n            x = aten.constant_pad_nd(x, (0, 1, 0, 0), 12345.0)\n\n            return x @ x\n\n        # 'odd' shape on purpose to pad intermediate buffer's strides\n        x = torch.randn(2048, 2047, device=GPU_TYPE)\n\n        ref = f(x)\n        act, (code,) = run_and_get_code(torch.compile(f), x)\n\n        # When we allocate the 2048x2047 tensor for the output of 'x + 1'\n        # Instead of doing\n        #   empty_strided_cuda((2048, 2047), (2048, 1), torch.float32)\n        # (note the stride is already padded)\n        # We do\n        #   empty_strided_cuda((2048, 2048), (2048, 1), torch.float32).\n        #     as_strided((2048, 2047), (2048, 1))\n        # . This will allocate an extra item for the last row so that\n        # inplace padding would be safe without accessing out of bound\n        # memory.\n        FileCheck().check_regex(\n            r\"empty_strided.*\\(\\(2048, 2048\\), \\(2048, 1\\), torch.float32\\).\"\n            r\"as_strided\\(\\(2048, 2047\\), \\(2048, 1\\)\\)\"\n        ).run(code)\n\n        self.assertTrue(torch.allclose(ref, act, atol=1e-2, rtol=1e-2))\n        self.assertEqual(num_inplace_padding(), 1)",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_pad_non_zero_cpp_wrapper",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 114,
+      "end_line": 159,
+      "excerpt": "    @inductor_config.patch(cpp_wrapper=True)\n    @inductor_config.patch(\"triton.autotune_at_compile_time\", True)\n    def test_pad_non_zero_cpp_wrapper(self):\n        def f(x):\n            x = x + 1\n            x = aten.constant_pad_nd(x, (0, 1, 0, 0), 12345.0)\n\n            return x @ x\n\n        # 'odd' shape on purpose to pad intermediate buffer's strides\n        x = torch.randn(2048, 2047, device=GPU_TYPE)\n\n        ref = f(x)\n        from torch._inductor.codegen.cpp_wrapper_gpu import CppWrapperGpu\n\n        orig_generate_and_run_autotune_block = (\n            CppWrapperGpu.generate_and_run_autotune_block\n        )\n        compile_time_autotune_called = False\n\n        def mock_generate_and_run_autotune_block(wrapper):\n            nonlocal compile_time_autotune_called\n            compile_time_autotune_called = True\n            out = orig_generate_and_run_autotune_block(wrapper)\n            call_code = wrapper.kernel_autotune_calls.getvalue()\n            FileCheck().check(\n                f\"buf0 = generate_example_value((2048, 2047), (2048, 1), '{GPU_TYPE}:0', torch.float32, 0, (2048, 2048))\"\n            ).run(call_code)\n            return out\n\n        with unittest.mock.patch.object(\n            CppWrapperGpu,\n            \"generate_and_run_autotune_block\",\n            mock_generate_and_run_autotune_block,\n        ):\n            act, (code,) = run_and_get_code(torch.compile(f), x)\n\n        # Buf0 should be over-allocated and then strided.\n        FileCheck().check_regex(\n            r\"aoti_torch_as_strided\\(buf0_handle, .*, &buf0_handle_restrided\\)\"\n        ).run(code)\n\n        self.assertTrue(torch.allclose(ref, act, atol=1e-2, rtol=1e-2))\n\n        self.assertEqual(num_inplace_padding(), 1)\n        self.assertTrue(compile_time_autotune_called)",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_pad_too_large",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 161,
+      "end_line": 171,
+      "excerpt": "    def test_pad_too_large(self):\n        def f(x, y):\n            x = aten.constant_pad_nd(x, (0, 8, 0, 0), 12345.0)\n            return x @ y\n\n        M, N = 2048, 2048\n        x = rand_strided((M, N), (N + 5, 1), device=GPU_TYPE)\n        y = torch.randn(N + 8, M, device=GPU_TYPE)\n        check_model(self, f, (x, y), atol=1e-2, rtol=1e-2)\n\n        self.assertEqual(num_inplace_padding(), 0)",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_mutating_padding_input",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 173,
+      "end_line": 192,
+      "excerpt": "    @inductor_config.patch(can_inplace_pad_graph_input=True)\n    def test_mutating_padding_input(self):\n        \"\"\"\n        Even if `aten.constant_pad_nd` input get inplace updated,\n        doing inplace-padding still generates the correct result.\n        \"\"\"\n\n        def f(x, y):\n            x2 = aten.constant_pad_nd(x, (0, 8, 0, 0), 12345.0)\n            x.add_(5)\n            return x2 @ y\n\n        M, N = 2048, 2048\n        x = rand_strided((M, N + 10), (N + 10, 1), device=GPU_TYPE).as_strided(\n            (M, N), (N + 10, 1)\n        )\n        y = torch.randn(N + 8, M, device=GPU_TYPE)\n        check_model(self, f, (x, y), atol=1e-2, rtol=1e-2)\n\n        self.assertEqual(num_inplace_padding(), 1)",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_mutating_padding_output",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 194,
+      "end_line": 212,
+      "excerpt": "    def test_mutating_padding_output(self):\n        \"\"\"\n        Inplace padding does not take effect since the `aten.add_` op\n        cause the user of the padding output to be not matmul. We skip\n        inplace-padding in this case.\n        \"\"\"\n\n        def f(x, y):\n            x = aten.constant_pad_nd(x, (0, 8, 0, 0), 12345.0)\n            x.add_(1)\n            return x @ y\n\n        M, N = 2048, 2048\n        x = rand_strided((M, N), (N + 10, 1), device=GPU_TYPE)\n        y = torch.randn(N + 8, M, device=GPU_TYPE)\n        # 1e-3 tolerance may fail on CI A10G GPU.\n        check_model(self, f, (x, y), atol=1e-2, rtol=1e-2)\n\n        self.assertEqual(num_inplace_padding(), 0)",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_linear_and_cel",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 214,
+      "end_line": 255,
+      "excerpt": "    @requires_gpu_with_enough_memory(2e10)\n    @inductor_config.patch(force_shape_pad=True)\n    @serialTest()\n    def test_linear_and_cel(self):\n        # Use nan for torch.empty\n        torch.use_deterministic_algorithms(True)\n        torch.utils.deterministic.fill_uninitialized_empty = True\n        os.environ[\"CUBLAS_WORKSPACE_CONFIG\"] = \":4096:8\"\n\n        B, T, C, V = 32, 1024, 768, 50257\n\n        linear = nn.Linear(C, V).bfloat16().to(device=GPU_TYPE)\n        ce = torch.nn.CrossEntropyLoss()\n\n        def f(x, y):\n            x.grad = None\n            linear.weight.grad = None\n            linear.bias.grad = None\n\n            loss = ce(linear(x), y)\n            loss.backward()\n            return loss\n\n        x = torch.randn(B * T, C, requires_grad=True).to(GPU_TYPE).bfloat16()\n        x.retain_grad()\n        y = torch.randint(0, V, (B * T,)).to(GPU_TYPE)\n\n        opt_f = torch.compile(f)\n\n        expect = (f(x, y), x.grad, linear.weight.grad, linear.bias.grad)\n        actual = (opt_f(x, y), x.grad, linear.weight.grad, linear.bias.grad)\n        if not same(expect, actual, tol=1e-2):\n            raise AssertionError(f\"ref:\\n{expect}\\nact:\\n{actual}\")\n\n        # We may disable inplace_padding via env-var to test perf.\n        self.assertEqual(num_inplace_padding(), int(inductor_config.inplace_padding))\n\n        if DO_PERF_TEST:\n            from triton.testing import do_bench\n\n            ms = do_bench(lambda: opt_f(x, y))\n            print(f\"{inductor_config.inplace_padding=} {ms=:.3f}\")",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_inplace_padding.py::test_linear_and_cel_max_autotune",
+      "class": "InplacePaddingTest",
+      "path": "test/inductor/test_inplace_padding.py",
+      "file_sha256": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873",
+      "start_line": 259,
+      "end_line": 263,
+      "excerpt": "    @requires_gpu_with_enough_memory(2e10)\n    @inductor_config.patch(max_autotune=True)\n    @serialTest()\n    def test_linear_and_cel_max_autotune(self):\n        self.test_linear_and_cel()",
+      "class_header": "@inductor_config.patch(inplace_padding=enable_inplace_padding)\nclass InplacePaddingTest(TestCase):"
+    },
+    {
+      "id": "test_triton_extension_backend.py::test_open_device_registration",
+      "class": "TritonExtensionBackendTests",
+      "path": "test/inductor/test_triton_extension_backend.py",
+      "file_sha256": "71b8306957643f17f1415e904afae9955bab6773112925bd858035e667bd9cd2",
+      "start_line": 115,
+      "end_line": 152,
+      "excerpt": "    def test_open_device_registration(self):\n        torch._register_device_module(\"privateuseone\", self.module)\n        register_backend_for_device(\n            \"privateuseone\", ExtensionScheduling, ExtensionWrapperCodegen\n        )\n        register_device_op_overrides(\"privateuseone\", CPUDeviceOpOverrides())\n        device_interface.register_interface_for_device(\"privateuseone\", DeviceInterface)\n\n        self.assertEqual(\n            get_scheduling_for_device(\"privateuseone\"), ExtensionScheduling\n        )\n        self.assertEqual(\n            get_wrapper_codegen_for_device(\"privateuseone\"), ExtensionWrapperCodegen\n        )\n        self.assertEqual(\n            device_interface.get_interface_for_device(\"privateuseone\"), DeviceInterface\n        )\n\n        device = torch.device(\"privateuseone\")\n        x = torch.empty(2, 16).fill_(1).to(device)\n\n        def foo(x):\n            return torch.sin(x) + x.min()\n\n        metrics.reset()\n        opt_fn = torch.compile(foo)\n\n        # Since we don't have a triton backend, we need to mock the triton_hash_with_backend\n        # function\n        with unittest.mock.patch(\n            \"torch.utils._triton.triton_hash_with_backend\",\n            new=mock_triton_hash_with_backend,\n        ):\n            code = get_triton_code(opt_fn, x)\n\n        FileCheck().check(\"import triton\").check(\"@triton.jit\").check(\n            \"tl_math.sin\"\n        ).check(\"device_str='privateuseone'\").run(code)",
+      "class_header": "@unittest.skipIf(IS_FBCODE, \"cpp_extension doesn't work in fbcode right now\")\nclass TritonExtensionBackendTests(BaseExtensionBackendTests):"
+    },
+    {
+      "id": "test_triton_extension_backend.py::test_codegen_with_custom_heuristics_module",
+      "class": "TritonExtensionBackendTests",
+      "path": "test/inductor/test_triton_extension_backend.py",
+      "file_sha256": "71b8306957643f17f1415e904afae9955bab6773112925bd858035e667bd9cd2",
+      "start_line": 214,
+      "end_line": 228,
+      "excerpt": "    @requires_triton_backend\n    def test_codegen_with_custom_heuristics_module(self):\n        self._register_custom_backend_with_heuristics(TRITON_DEVICE_TYPE)\n\n        def add(x, y):\n            return x + y\n\n        x = torch.zeros((32,), device=GPU_TYPE)\n        y = x\n        compiled_add = torch.compile(add)\n\n        code = run_and_get_triton_code(compiled_add, x, y)\n        FileCheck().check(\"import extension_triton_heuristics\").check(\n            f\"{EXTENSION_TRITON_META_FIELD}\"\n        ).check(\"@triton.jit\").run(code)",
+      "class_header": "@unittest.skipIf(IS_FBCODE, \"cpp_extension doesn't work in fbcode right now\")\nclass TritonExtensionBackendTests(BaseExtensionBackendTests):"
+    },
+    {
+      "id": "test_triton_extension_backend.py::test_codegen_with_custom_heuristics_module_udtk",
+      "class": "TritonExtensionBackendTests",
+      "path": "test/inductor/test_triton_extension_backend.py",
+      "file_sha256": "71b8306957643f17f1415e904afae9955bab6773112925bd858035e667bd9cd2",
+      "start_line": 230,
+      "end_line": 266,
+      "excerpt": "    @requires_triton_backend\n    def test_codegen_with_custom_heuristics_module_udtk(self):\n        self._register_custom_backend_with_heuristics(TRITON_DEVICE_TYPE)\n\n        @triton.jit\n        def add_kernel(\n            in_ptr0,\n            in_ptr1,\n            out_ptr,\n            n_elements,\n            BLOCK_SIZE: tl.constexpr,\n        ):\n            pid = tl.program_id(axis=0)\n            block_start = pid * BLOCK_SIZE\n            offsets = block_start + tl.arange(0, BLOCK_SIZE)\n            mask = offsets < n_elements\n            x = tl.load(in_ptr0 + offsets, mask=mask)\n            y = tl.load(in_ptr1 + offsets, mask=mask)\n            output = x + y\n            tl.store(out_ptr + offsets, output, mask=mask)\n\n        def add(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:\n            output = torch.empty_like(x)\n            n_elements = output.numel()\n\n            def grid(meta):\n                return (triton.cdiv(n_elements, meta[\"BLOCK_SIZE\"]),)\n\n            add_kernel[grid](x, y, output, n_elements, BLOCK_SIZE=16)\n            return output\n\n        args = [torch.randn(32, device=GPU_TYPE) for _ in range(2)]\n        code = run_and_get_triton_code(torch.compile(add), *args)\n\n        FileCheck().check(\"import extension_triton_heuristics\").check(\n            \"@triton.jit\"\n        ).run(code)",
+      "class_header": "@unittest.skipIf(IS_FBCODE, \"cpp_extension doesn't work in fbcode right now\")\nclass TritonExtensionBackendTests(BaseExtensionBackendTests):"
+    },
+    {
+      "id": "test_compile_subprocess.py::test_progressive",
+      "class": "TestSubprocess",
+      "path": "test/inductor/test_compile_subprocess.py",
+      "file_sha256": "1b740c0c16db63504d9e5c67579606b694c33bda8762641f4ae29973fc459954",
+      "start_line": 119,
+      "end_line": 202,
+      "excerpt": "    @skipIfRocm(msg=\"https://github.com/pytorch/pytorch/issues/157788\")\n    @skipIfRocm(msg=\"https://github.com/pytorch/pytorch/issues/157724\")\n    @requires_gpu()\n    @requires_triton()\n    @unittest.skipIf(\n        not IS_BIG_GPU, \"Skipping triton backend only since not big GPU (not enough SM)\"\n    )\n    def test_progressive(self):\n        from triton.testing import do_bench\n\n        from torch._inductor.compile_fx_async import _ProgressiveFxCompile\n\n        torch._inductor.compile_fx.fx_compile_progressive = True\n\n        x = torch.randn(1152, 4096, device=GPU_TYPE, dtype=torch.bfloat16)\n        y = torch.randn(4096, 4096, device=GPU_TYPE, dtype=torch.bfloat16)\n\n        @torch.compile(fullgraph=True, backend=\"inductor\")\n        def optimized(x, y):\n            return (x @ y).relu()\n\n        _ProgressiveFxCompile._reset_stats()\n\n        source_codes: list[str] = []\n\n        def save_output_code(code: str) -> None:\n            source_codes.append(code)\n\n        with contextlib.ExitStack() as stack:\n            # When this bug is fixed, remove the cache disabling below\n            if not torch._inductor.compile_fx_async.BUG_CACHES_DONT_WORK_WITH_ASYNC:\n                raise AssertionError\n            stack.enter_context(\n                torch._inductor.config.patch(\n                    autotune_local_cache=False, fx_graph_cache=False\n                )\n            )\n            stack.enter_context(\n                mock.patch.object(GraphLowering, \"save_output_code\", save_output_code)\n            )\n            stack.enter_context(\n                torch._functorch.config.patch(enable_autograd_cache=False)\n            )\n\n            # How long to wait (in seconds) before giving up.\n            TIMEOUT = 300\n            # If non-None then how often (in seconds) to print a TICK message.\n            TICK_REPORT = None\n\n            start = time.time()\n            last_report = start\n            while _ProgressiveFxCompile._stat_optimized_runs < 4:\n                time.sleep(0.25)\n\n                optimized(x, y)\n\n                now = time.time()\n                if TICK_REPORT is not None and (now - last_report > TICK_REPORT):\n                    print(f\"*** TICK {int(now - start)}\")\n                    last_report = now\n\n                if now - start > TIMEOUT:\n                    raise RuntimeError(\n                        \"Test timed out before producing a progressively optimized compiled artifact.\"\n                    )\n\n            self.assertEqual(_ProgressiveFxCompile._stat_optimized_runs, 4)\n            self.assertGreater(_ProgressiveFxCompile._stat_fast_runs, 0)\n            self.assertGreaterEqual(_ProgressiveFxCompile._stat_bg_started, 1)\n            self.assertGreaterEqual(_ProgressiveFxCompile._stat_bg_finished, 1)\n\n        torch._inductor.compile_fx.fx_compile_progressive = False\n\n        @torch.compile(fullgraph=True, backend=\"inductor\")\n        def baseline(x, y):\n            return (x @ y).relu()\n\n        # Warmup\n        baseline(x, y)\n\n        self.assertGreater(\n            do_bench(lambda: baseline(x, y)), do_bench(lambda: optimized(x, y))\n        )\n        self.assertTrue(\"'max_autotune': True\" in source_codes[-1])",
+      "class_header": "class TestSubprocess(TestCase):"
+    },
+    {
+      "id": "test_compile_subprocess.py::test_async",
+      "class": "TestSubprocess",
+      "path": "test/inductor/test_compile_subprocess.py",
+      "file_sha256": "1b740c0c16db63504d9e5c67579606b694c33bda8762641f4ae29973fc459954",
+      "start_line": 204,
+      "end_line": 271,
+      "excerpt": "    @patch(\"torch._inductor.compile_fx.fx_compile_async\", True)\n    def test_async(self):\n        # Test that async+subprocess works.\n        from torch._inductor.compile_fx_async import _AsyncFxCompile\n\n        @torch.compile(fullgraph=True, backend=\"inductor\")\n        def model_add(x, y):\n            out = x\n            for _ in range(500):\n                out = torch.add(out, y)\n            return out\n\n        _AsyncFxCompile._reset_stats()\n\n        with contextlib.ExitStack() as stack:\n            if not torch._inductor.compile_fx_async.BUG_CACHES_DONT_WORK_WITH_ASYNC:\n                raise AssertionError\n            stack.enter_context(\n                torch._inductor.config.patch(\n                    autotune_local_cache=False, fx_graph_cache=False\n                )\n            )\n            stack.enter_context(\n                torch._functorch.config.patch(enable_autograd_cache=False)\n            )\n\n            # How long to wait (in seconds) before giving up.\n            TIMEOUT = 300\n            # If non-None then how often (in seconds) to print a TICK message.\n            TICK_REPORT = None\n\n            start = time.time()\n            last_report = start\n            while True:\n                start_stat_compiled_runs = _AsyncFxCompile._stat_compiled_runs\n                # Sleep a bit so we don't drive the CPU unnecessarily.\n                time.sleep(0.25)\n\n                x = torch.randn(100, 100, requires_grad=True)\n                y = torch.randn(100, 100, requires_grad=True)\n\n                # Forward pass\n                output = model_add(x, y)\n\n                # Backward pass\n                output.sum().backward()\n\n                if _AsyncFxCompile._stat_compiled_runs - start_stat_compiled_runs == 2:\n                    break\n\n                # DEBUGGING: Print a periodic message so we know we're still\n                # running...\n                now = time.time()\n                if TICK_REPORT is not None and (now - last_report > TICK_REPORT):\n                    print(f\"*** TICK {int(now - start)}\")\n                    last_report = now\n\n                if now - start > TIMEOUT:\n                    raise RuntimeError(\n                        \"Test timed out before producing a compiled artifact.\"\n                    )\n\n            self.assertGreater(_AsyncFxCompile._stat_compiled_runs, 1)\n            # Make sure we ran eager at least once. Normally this will be\n            # something like 80.\n            self.assertGreater(_AsyncFxCompile._stat_eager_runs, 0)\n            self.assertEqual(_AsyncFxCompile._stat_bg_started, 2)\n            self.assertEqual(_AsyncFxCompile._stat_bg_finished, 2)",
+      "class_header": "class TestSubprocess(TestCase):"
+    },
+    {
+      "id": "test_extension_backend.py::tearDown",
+      "path": "test/inductor/test_extension_backend.py",
+      "file_sha256": "f13a08e96c83b85984a860e7e9c9f0a878641a94d2dd354551d3475c4d849f3f",
+      "start_line": 103,
+      "end_line": 113,
+      "excerpt": "    def tearDown(self):\n        super().tearDown()\n        torch._dynamo.reset()\n\n        backend_name = torch._C._get_privateuse1_backend_name()\n        if hasattr(torch, backend_name):\n            delattr(torch, backend_name)\n        if f\"torch.{backend_name}\" in sys.modules:\n            del sys.modules[f\"torch.{backend_name}\"]\n\n        os.chdir(self.old_working_dir)"
+    }
+  ]
+}

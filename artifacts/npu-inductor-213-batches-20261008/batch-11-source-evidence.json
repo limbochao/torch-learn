@@ -1,0 +1,206 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_torchinductor.py::test_scalar_input",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4881,
+      "end_line": 4886,
+      "excerpt": "    def test_scalar_input(self):\n        def fn(x, y):\n            a = torch.div(x, y, rounding_mode=\"floor\")\n            return a\n\n        self.common(fn, [torch.randint(5, (1, 8)), 5400])",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_scalar_output",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4888,
+      "end_line": 4900,
+      "excerpt": "    @torch._dynamo.config.patch(dynamic_shapes=True)\n    @torch._dynamo.config.patch(assume_static_by_default=False)\n    def test_scalar_output(self):\n        def fn(arg0_1, arg2_1):\n            arg1_1 = arg2_1.size(1)\n            view = torch.ops.aten.view.default(arg2_1, [-1, arg1_1])\n            embedding = torch.ops.aten.embedding.default(arg0_1, view)\n            full = torch.ops.aten.full.default([1, arg1_1], 1, dtype=torch.float32)\n            return (full, arg1_1, embedding)\n\n        arg0_1 = rand_strided((32128, 768), (768, 1), device=\"cpu\", dtype=torch.float32)\n        arg2_1 = rand_strided((1, 22), (22, 1), device=\"cpu\", dtype=torch.int64)\n        self.common(fn, [arg0_1, arg2_1])",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_shape_prop_torch_ones",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4902,
+      "end_line": 4917,
+      "excerpt": "    def test_shape_prop_torch_ones(self):\n        class Model(torch.nn.Module):\n            def forward(self, attention_scores):\n                extended_attention_mask = torch.ones(\n                    8, 1, 1, 512, device=attention_scores.device\n                )\n                attention_scores = attention_scores + extended_attention_mask\n\n                return attention_scores\n\n        mod = Model().eval()\n        with torch.no_grad():\n            self.common(\n                mod,\n                (torch.randn(8, 12, 512, 512),),\n            )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_conv_bn_fuse",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4919,
+      "end_line": 4979,
+      "excerpt": "    @slowTest\n    @expectedFailureCodegenDynamic\n    @config.patch({\"freezing\": True})\n    def test_conv_bn_fuse(self):\n        # For gpu path, there is an accuracy issue\n        if self.device == GPU_TYPE:\n            raise unittest.SkipTest(\"only support cpu conv bn test\")\n\n        # fails dynamic check which bn is fused, and there will not have loops vars.\n        input_shapes = {1: (112,), 2: (112, 112), 3: (55, 55, 55)}\n        conv_modules = {1: torch.nn.Conv1d, 2: torch.nn.Conv2d, 3: torch.nn.Conv3d}\n        bn_modules = {\n            1: torch.nn.BatchNorm1d,\n            2: torch.nn.BatchNorm2d,\n            3: torch.nn.BatchNorm3d,\n        }\n        options = itertools.product(\n            [1, 2, 3],\n            [True, False],\n            [1, 3],\n            [1, 2],\n            [1, 4],\n        )\n\n        for (\n            dim,\n            bias,\n            kernel_size,\n            dilation,\n            groups,\n        ) in options:\n            oC = 32 * groups\n            iC = 3 * groups\n            x_shape = (1, iC) + input_shapes[dim]\n            mod = torch.nn.Sequential(\n                conv_modules[dim](\n                    iC,\n                    oC,\n                    kernel_size=kernel_size,\n                    dilation=dilation,\n                    groups=groups,\n                    bias=bias,\n                ),\n                bn_modules[dim](oC),\n            ).eval()\n            test_memory_format = [torch.contiguous_format]\n            # TODO: GPU path doesn't support channels_last now.\n            if not HAS_GPU and dim > 1:\n                channels_last = (\n                    torch.channels_last if dim == 2 else torch.channels_last_3d\n                )\n                test_memory_format.append(channels_last)\n            for memory_format in test_memory_format:\n                v = torch.randn(x_shape, dtype=torch.float32).to(\n                    memory_format=memory_format\n                )\n                with torch.no_grad():\n                    self.common(\n                        mod,\n                        (v,),\n                    )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_conv_functional_bn_fuse",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4981,
+      "end_line": 5067,
+      "excerpt": "    def test_conv_functional_bn_fuse(self):\n        # For gpu path, there is an accuracy issue\n        if self.device == GPU_TYPE:\n            raise unittest.SkipTest(\"only support cpu conv bn test\")\n\n        # Define a BatchNorm using functional BN.\n        class BatchNorm(torch.nn.BatchNorm2d):\n            def __init__(\n                self,\n                num_features,\n                eps=1e-5,\n                momentum=0.1,\n                affine=True,\n                track_running_stats=True,\n                device=None,\n                dtype=None,\n            ):\n                factory_kwargs = {\"device\": device, \"dtype\": dtype}\n                super().__init__(\n                    num_features,\n                    eps=eps,\n                    momentum=momentum,\n                    affine=affine,\n                    track_running_stats=track_running_stats,\n                    **factory_kwargs,\n                )\n\n            def forward(self, x):\n                if self.momentum is None:\n                    exponential_average_factor = 0.0\n                else:\n                    exponential_average_factor = self.momentum\n\n                if self.training and self.track_running_stats:\n                    # TODO: if statement only here to tell the jit to skip emitting this when it is None\n                    if self.num_batches_tracked is not None:  # type: ignore[has-type]\n                        self.num_batches_tracked = self.num_batches_tracked + 1  # type: ignore[has-type]\n                        if self.momentum is None:  # use cumulative moving average\n                            exponential_average_factor = 1.0 / float(\n                                self.num_batches_tracked\n                            )\n                        else:  # use exponential moving average\n                            exponential_average_factor = self.momentum\n                if self.training:\n                    bn_training = True\n                else:\n                    bn_training = (self.running_mean is None) and (\n                        self.running_var is None\n                    )\n                x = F.batch_norm(\n                    x,\n                    # If buffers are not to be tracked, ensure that they won't be updated\n                    (\n                        self.running_mean\n                        if not self.training or self.track_running_stats\n                        else None\n                    ),\n                    (\n                        self.running_var\n                        if not self.training or self.track_running_stats\n                        else None\n                    ),\n                    self.weight,\n                    self.bias,\n                    bn_training,\n                    exponential_average_factor,\n                    self.eps,\n                )\n                return x\n\n        v = torch.randn(1, 3, 556, 56, dtype=torch.float32)\n        mod = torch.nn.Sequential(\n            torch.nn.Conv2d(\n                3,\n                64,\n                kernel_size=3,\n                dilation=1,\n                groups=1,\n                bias=True,\n            ),\n            BatchNorm(64),\n        ).eval()\n        with torch.no_grad():\n            self.common(\n                mod,\n                (v,),\n            )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_conv_inference_heuristics",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5069,
+      "end_line": 5123,
+      "excerpt": "    @xfail_if_mps  # Expected to find .run(\n    def test_conv_inference_heuristics(self):\n        if self.device != GPU_TYPE:\n            raise unittest.SkipTest(f\"{GPU_TYPE} only test\")\n\n        in_channels = 6\n        out_channels = 6\n        kernel_size = 3\n        groups = 3\n\n        grouped_conv = nn.Conv2d(\n            in_channels, out_channels, kernel_size, groups=groups\n        ).to(self.device)\n\n        input_tensor = torch.randn(1, in_channels, 10, 10).to(self.device)\n\n        # Perform the forward pass\n        @torch.compile()\n        def foo(m, inp):\n            return m(inp)\n\n        if self.device != \"xpu\":\n            with torch.no_grad():\n                _, code = run_and_get_code(foo, grouped_conv, input_tensor)\n                # no to channels last permuting before kernel\n                if config.cpp_wrapper:\n                    FileCheck().check_not(\"  call_triton\").check(\"_convolution(\").run(\n                        code[0]\n                    )\n                else:\n                    FileCheck().check_not(\".run(\").check(\".convolution(\").run(code[0])\n\n        # in out should do channels last in inference\n        in_channels = 8\n        out_channels = 4\n        kernel_size = 3\n\n        # Create the convolution layer\n        conv_layer = nn.Conv2d(in_channels, out_channels, kernel_size).to(self.device)\n\n        input_tensor = torch.randn(1, in_channels, 10, 10).to(self.device)\n\n        with torch.no_grad():\n            _, code = run_and_get_code(foo, conv_layer, input_tensor)\n            # should be channels last permuting before kernel\n            if is_halide_backend(self.device):\n                FileCheck().check(\"halide_kernel_0(\").check(\".convolution(\").run(\n                    code[0]\n                )\n            else:\n                if config.cpp_wrapper:\n                    FileCheck().check(\"call_triton\").check(\"convolution(\").run(code[0])\n                else:\n                    # without cpp_wrapper, the pattern is .convolution( and then .run(\n                    FileCheck().check(\"convolution(\").check(\".run(\").run(code[0])",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_upsample_cat_conv",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5125,
+      "end_line": 5159,
+      "excerpt": "    def test_upsample_cat_conv(self):\n        if self.device == GPU_TYPE:\n            raise unittest.SkipTest(\"only support cpu upsample_cat_conv test\")\n\n        class M(torch.nn.Module):\n            def __init__(\n                self,\n                **kwargs,\n            ):\n                super().__init__()\n                self.upsample = torch.nn.UpsamplingNearest2d(scale_factor=2)\n                self.conv = torch.nn.Conv2d(\n                    8,\n                    5,\n                    kernel_size=1,\n                    padding=0,\n                    stride=1,\n                    dilation=1,\n                    **kwargs,\n                )\n\n            def forward(self, x, y):\n                x = self.upsample(x)\n                z = torch.cat([x, y], dim=1)\n                z = self.conv(z)\n                return z\n\n        v1 = torch.randn([8, 2, 12, 26])\n        v2 = torch.randn([8, 6, 24, 52])\n\n        with torch.no_grad():\n            self.common(\n                M().eval(),\n                (v1, v2),\n            )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_aliased_buffer_reuse",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5161,
+      "end_line": 5170,
+      "excerpt": "    def test_aliased_buffer_reuse(self):\n        def fn(x, y):\n            x = 2 * x\n            y = 2 * y\n            c = torch.cat([x, y], dim=-1)\n            d = 1 + c\n            m = torch.mm(d, d)\n            return m[:, :2] + x\n\n        self.common(fn, (torch.randn(4, 2), torch.randn(4, 2)), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_slice_view_with_graph_break",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5172,
+      "end_line": 5186,
+      "excerpt": "    def test_slice_view_with_graph_break(self):\n        def fn():\n            a = torch.tensor([1], device=self.device)\n            a = a[0:1]\n            b = a.squeeze()\n            a[0] = 0\n            if a[0] < 1e5:\n                pass\n            a[0] = 2\n            return b\n\n        expect = fn()\n        opt_fn = torch.compile(fn)\n        actual = opt_fn()\n        self.assertEqual(expect, actual)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_view_detach",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5188,
+      "end_line": 5195,
+      "excerpt": "    def test_view_detach(self):\n        def fn(a):\n            return a[0].detach()\n\n        self.common(\n            fn,\n            (torch.randn([4, 4], requires_grad=True),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_gather1",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5197,
+      "end_line": 5210,
+      "excerpt": "    def test_gather1(self):\n        def fn(a, b):\n            return (\n                torch.gather(a.expand([4, 5, 10, 6]), 3, b + 1),\n                torch.gather(a.expand([4, 5, 10, 6]), -1, b + 1),\n            )\n\n        self.common(\n            fn,\n            (\n                torch.randn([1, 1, 10, 6]),\n                torch.randint(5, [4, 5, 10, 1], dtype=torch.int64),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_gather3",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5221,
+      "end_line": 5231,
+      "excerpt": "    def test_gather3(self):\n        def fn(a, b):\n            return torch.gather(a, 1, b, sparse_grad=True)\n\n        self.common(\n            fn,\n            (\n                torch.randn([4, 5, 10, 6], requires_grad=True),\n                torch.randint(5, [4, 5, 10, 1], dtype=torch.int64),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_device_assert",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5233,
+      "end_line": 5244,
+      "excerpt": "    def test_device_assert(self):\n        def fn(x, y):\n            x = torch.sum(x.view(int(x.shape[0] / 6), 6), dim=1)\n            return torch.gather(x, 0, torch.trunc(y).to(torch.int64))\n\n        x1 = torch.randn(30, device=self.device)\n        x2 = torch.randn(36, device=self.device)\n        dtype = highest_precision_float(self.device)\n        y = torch.ones(1, dtype=dtype, device=self.device)\n\n        self.assertEqual(torch.compile(fn)(x1, y), fn(x1, y))\n        self.assertEqual(torch.compile(fn)(x2, y), fn(x2, y))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_slice1",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5246,
+      "end_line": 5258,
+      "excerpt": "    def test_slice1(self):\n        def fn(a):\n            return (\n                a[:, :10, 0] + a[:, 10:, 0],\n                (a + 1)[:, :10, 0] + (a + 1)[:, 10:, 0],\n                a[:, -30:, 0],  # negative index out of range\n                a[:, :-30, 0],  # negative index out of range\n            )\n\n        self.common(\n            fn,\n            (torch.randn([2, 20, 2]),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_slice2",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5260,
+      "end_line": 5270,
+      "excerpt": "    def test_slice2(self):\n        def fn(a):\n            return (\n                a[:-1, ::2, -1] + a[-1:, 1::2, -2],\n                (a + 1)[:-1, ::2, -1] + (a + 2)[-1:, 1::2, -2],\n            )\n\n        self.common(\n            fn,\n            (torch.randn([2, 20, 2]),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_slice3",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5273,
+      "end_line": 5279,
+      "excerpt": "    @expectedFailureCodegenDynamic\n    def test_slice3(self):\n        def fn(a, b):\n            return torch.ops.aten.slice.Tensor(a, 0, 0, -b)\n\n        x = torch.rand(48, 3, 512, 512)\n        self.common(fn, (x, 2))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_slice4",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5281,
+      "end_line": 5293,
+      "excerpt": "    @expectedFailureCodegenDynamic\n    def test_slice4(self):\n        # empty slices that require clamping the start or end\n        def fn(a):\n            return (\n                aten.slice.Tensor(a, 0, 2, 0, 1),\n                aten.slice.Tensor(a, 0, a.shape[0], a.shape[0] + 10, 1),\n                aten.slice.Tensor(a, 0, -20, 0, 1),\n                aten.slice.Tensor(a, 0, -20, -16, 1),\n            )\n\n        x = torch.rand(10)\n        self.common(fn, (x,))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_split_with_list",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5295,
+      "end_line": 5301,
+      "excerpt": "    def test_split_with_list(self):\n        def fn(a, sizes):\n            return [t + 1.0 for t in torch.split(a * 2.0, sizes, -1)]\n\n        self.common(fn, (torch.randn(2, 2, 10), [3, 3, 4]))\n        self.common(fn, (torch.randn(2, 2, 10), [4, 3, 3]))\n        self.common(fn, (torch.randn(2, 2, 10), [1, 2, 3, 4]))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_split_overload_packet_lowering",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5327,
+      "end_line": 5338,
+      "excerpt": "    def test_split_overload_packet_lowering(self):\n        graph = torch.fx.Graph()\n        x_node = graph.placeholder(\"x\")\n        split_node = graph.call_function(torch.ops.aten.split, (x_node, [1, 1], 0))\n        first = graph.call_function(operator.getitem, (split_node, 0))\n        second = graph.call_function(operator.getitem, (split_node, 1))\n        graph.output((first, second))\n        gm = torch.fx.GraphModule(torch.nn.Module(), graph)\n\n        x = torch.ones((2,), device=self.device)\n        actual = compile_fx(gm, [x])(x)\n        self.assertEqual(actual, (x[:1], x[1:]))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_unsafe_split_empty_tensor_zero_size",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5340,
+      "end_line": 5348,
+      "excerpt": "    def test_unsafe_split_empty_tensor_zero_size(self):\n        def fn(x, split_size, dim):\n            return torch.unsafe_split(x, split_size=split_size, dim=dim)\n\n        x = torch.ones((0,), device=self.device)\n        for split_size in (0, 2):\n            torch._dynamo.reset()\n            actual = torch.compile(fn, fullgraph=True)(x, split_size, -1)\n            self.assertEqual(actual, fn(x, split_size, -1))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    }
+  ]
+}

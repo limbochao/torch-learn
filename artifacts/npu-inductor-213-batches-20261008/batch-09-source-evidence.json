@@ -1,0 +1,206 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_torchinductor.py::test_floordiv_float_accuracy",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4064,
+      "end_line": 4090,
+      "excerpt": "    def test_floordiv_float_accuracy(self):\n        # Triton uses an approximate reciprocal for fp32 division, so a naive\n        # floor(a / b) can be off by one when the true quotient is very close\n        # to an integer.  Verify the corrected lowering matches eager.\n        def fn(a, b):\n            return torch.floor_divide(a, b)\n\n        # The original repro: fp16 values whose exact quotient is 4.0, but\n        # Triton's approximate fp32 division yields 3.9999997…\n        a = torch.full((8,), 84.3125, dtype=torch.float16, device=self.device)\n        b = torch.full((8,), 21.078125, dtype=torch.float16, device=self.device)\n        self.common(fn, (a, b))\n\n        # Negative operands / mixed signs\n        for dtype in [torch.float16, torch.float32]:\n            for a_val, b_val in [\n                (7.0, 2.0),\n                (7.0, -2.0),\n                (-7.0, 2.0),\n                (-7.0, -2.0),\n                (6.0, 3.0),\n                (0.0, 5.0),\n                (0.0, -5.0),\n            ]:\n                a = torch.full((8,), a_val, dtype=dtype, device=self.device)\n                b = torch.full((8,), b_val, dtype=dtype, device=self.device)\n                self.common(fn, (a, b))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div_precision",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4092,
+      "end_line": 4162,
+      "excerpt": "    def test_div_precision(self):\n        # Reproducer for https://github.com/pytorch/pytorch/issues/101039\n\n        def forward(x, y):\n            z = x.div(y)\n            return F.softmax(z, dim=-1)\n\n        query = torch.randn(1, 10, 40)\n        key = torch.randn(1, 2, 40)\n        x = torch.matmul(query, key.transpose(-2, -1))\n        self.common(forward, (x, 1e-6))\n\n        x = torch.tensor(\n            [\n                [\n                    [\n                        [-16.1649, 5.6846, -5.1022, -9.1134],\n                        [-11.5552, -2.2615, -12.8913, 10.6538],\n                        [-7.1666, -5.3333, 2.0776, -9.7984],\n                        [7.4469, -2.3948, 2.7371, 0.9201],\n                    ],\n                    [\n                        [-8.0361, -16.3771, 22.7741, 4.4685],\n                        [20.8047, -0.7771, -2.4355, -2.2299],\n                        [3.8343, -2.0914, -2.4077, 2.2740],\n                        [-15.8663, -2.7015, -12.5241, -3.0040],\n                    ],\n                    [\n                        [-2.5139, 14.4393, -3.7186, 1.2255],\n                        [5.6742, 14.1842, -8.5976, 16.8366],\n                        [-9.7358, -3.0279, 11.8164, -4.0787],\n                        [-9.0621, 8.2580, 29.9486, -2.4107],\n                    ],\n                    [\n                        [7.3622, 12.5640, -20.5592, 13.6237],\n                        [-11.5640, 0.8832, 16.7275, -2.5009],\n                        [-2.0953, -12.2276, -26.2633, 4.5268],\n                        [15.3329, -11.7492, 6.5650, -9.2483],\n                    ],\n                ],\n                [\n                    [\n                        [7.9980, -4.9369, 3.1508, 5.2994],\n                        [3.8052, 3.9514, 8.4987, -10.5045],\n                        [-2.6827, -4.0010, -4.0611, 6.4091],\n                        [-19.0318, 6.4073, 2.8923, 8.0250],\n                    ],\n                    [\n                        [7.1650, -3.4585, 5.7720, -5.0305],\n                        [-0.9765, -3.0086, 11.7114, 8.0555],\n                        [-3.1027, -3.5514, 9.6182, -8.8526],\n                        [-9.2348, -6.0239, 6.2528, -6.7221],\n                    ],\n                    [\n                        [11.5936, 22.4139, -0.4089, -4.9889],\n                        [14.8217, -2.3426, -17.6189, 3.7427],\n                        [1.9546, -13.0902, 8.6293, -7.2457],\n                        [-7.6900, -4.5796, 9.6332, -10.2631],\n                    ],\n                    [\n                        [0.8027, -1.0955, 14.8404, -0.2673],\n                        [3.2143, -1.8640, -2.9678, 6.5165],\n                        [-3.9865, 6.5230, 6.3019, -0.4247],\n                        [8.3185, -13.5076, 27.0986, -1.6792],\n                    ],\n                ],\n            ]\n        )\n        x = torch.matmul(x, x)\n        y = torch.tensor([[[0.6331]], [[1.6358]], [[-0.3459]], [[1.0196]]])\n        self.common(forward, (x, y))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div_presicion_accuracy",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4177,
+      "end_line": 4184,
+      "excerpt": "    def test_div_presicion_accuracy(self):\n        # fix https://github.com/pytorch/pytorch/issues/157959\n        def forward(x, y):\n            return (x / y).sum()\n\n        x = torch.rand((5, 5))\n        y = 101\n        self.common(forward, (x, y))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div_by_zero",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4199,
+      "end_line": 4217,
+      "excerpt": "    def test_div_by_zero(self):\n        def fn(x, runtime_zero, runtime_neg_zero):\n            zero = torch.zeros_like(x)\n            return (\n                x / 0.0,\n                x / -0.0,\n                zero / 0.0,\n                x / zero,\n                x / -zero,\n                zero / zero,\n                x / runtime_zero,\n                x / runtime_neg_zero,\n                runtime_zero / runtime_neg_zero,\n            )\n\n        a = torch.randn(10)\n        zero = torch.zeros(10)\n        neg_zero = -zero\n        self.common(fn, (a, zero, neg_zero))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_sum_keepdims",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4232,
+      "end_line": 4236,
+      "excerpt": "    def test_sum_keepdims(self):\n        def fn(a, b):\n            return (torch.sum(a + b, -1, keepdim=True),)\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_large_tensor_reduction",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4238,
+      "end_line": 4253,
+      "excerpt": "    @skip_if_cpu\n    @skip_if_halide  # only 32-bit indexing\n    @largeTensorTest(\"4GB\", inductor=True)\n    def test_large_tensor_reduction(self):\n        # Test 64-bit indexing works correctly\n        def fn(a):\n            return torch.max(a)\n\n        t = torch.ones(2**32, dtype=torch.int8, device=self.device)\n        t[-1] = 2\n\n        # self.common OOMs here because it copies inputs to check for mutations\n        compiled_fn = torch.compile(fn)\n        actual = compiled_fn(t)\n        expect = torch.tensor(2, dtype=torch.int8, device=self.device)\n        self.assertEqual(actual, expect)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_large_broadcast_reduction",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4255,
+      "end_line": 4273,
+      "excerpt": "    @skip_if_cpu\n    @skip_if_gpu_halide  # only 32-bit indexing\n    def test_large_broadcast_reduction(self):\n        # Test 64-bit indexing works correctly when inputs are less than 32-bit\n        # but intermediate tensors require 64-bit indexing\n        def fn(a, b):\n            return torch.max(a + b)\n\n        t1 = torch.ones(1, 2**16, dtype=torch.int8, device=self.device)\n        t2 = torch.ones(2**16, 1, dtype=torch.int8, device=self.device)\n\n        t1[-1, -1] = 2\n        t2[-1, -1] = 2\n\n        # self.common OOMs here because it copies inputs to check for mutations\n        compiled_fn = torch.compile(fn)\n        actual = compiled_fn(t1, t2)\n        expect = torch.tensor(4, dtype=torch.int8, device=self.device)\n        self.assertEqual(actual, expect)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_large_pointwise",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4275,
+      "end_line": 4296,
+      "excerpt": "    @skip_if_halide  # only 32-bit indexing\n    @skip_if_pallas  # only 32-bit indexing\n    @largeTensorTest(\"4GB\", inductor=True)\n    def test_large_pointwise(self):\n        def fn(a):\n            return a + 1\n\n        t = torch.ones(2**31 + 1, dtype=torch.int8, device=self.device)\n        compiled_fn = torch.compile(fn)\n        actual = compiled_fn(t)\n\n        # Can't use assertEqual as it expands broadcasted inputs\n        del t\n        if torch.device(self.device).type == GPU_TYPE:\n            getattr(torch, GPU_TYPE).empty_cache()\n\n        # MPS routes eager eq/all through MPSGraph, which rejects tensor\n        # dims > INT_MAX\n        # TODO remove this once MPSGraph is gone from eq/all\n        if torch.device(self.device).type == \"mps\":\n            actual = actual.cpu()\n        self.assertTrue((actual == 2).all())",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_large_offset_pointwise",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4298,
+      "end_line": 4312,
+      "excerpt": "    @skip_if_halide  # only 32-bit indexing\n    @skip_if_pallas  # only 32-bit indexing\n    @largeTensorTest(\"3GB\", inductor=True)\n    def test_large_offset_pointwise(self):\n        # Test 64-bit indexing is used when input views a tensor that can be\n        # indexed with 32-bit strides but the storage offset pushes it over\n        # INT_MAX\n        def fn(a):\n            return a + 4\n\n        t = torch.ones(2**31 + 1, dtype=torch.int8, device=self.device)\n        t[2**30 :] = 0\n        compiled_fn = torch.compile(fn)\n        actual = compiled_fn(t[2**30 :])\n        self.assertTrue((actual == 4).all())",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_large_strided_reduction",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4314,
+      "end_line": 4329,
+      "excerpt": "    @skip_if_halide  # only 32-bit indexing\n    @largeTensorTest(\"2GB\", inductor=True)\n    def test_large_strided_reduction(self):\n        # Test 64-bit indexing is used when input numel is less than INT_MAX\n        # but stride calculations go above INT_MAX\n        def fn(a):\n            return torch.max(a)\n\n        storage = torch.ones(2**31 + 1, dtype=torch.int8, device=self.device)\n        view = storage[::32]\n        view[-1] = 2\n\n        compiled_fn = torch.compile(fn)\n        actual = compiled_fn(view)\n        expect = torch.tensor(2, dtype=torch.int8, device=self.device)\n        self.assertEqual(actual, expect)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_softmax",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4331,
+      "end_line": 4335,
+      "excerpt": "    def test_softmax(self):\n        def fn(a, b):\n            return (torch.softmax(a + b, -1), torch.softmax(a, 0), torch.softmax(b, 1))\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_softmax_reused_expensive_pointwise_cpu",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4337,
+      "end_line": 4392,
+      "excerpt": "    def test_softmax_reused_expensive_pointwise_cpu(self):\n        if not is_cpp_backend(self.device):\n            raise unittest.SkipTest(\"C++ CPU codegen regression test\")\n\n        def fn(scores, table):\n            n = scores.shape[-1]\n            context_position = torch.arange(n, device=scores.device)[:, None]\n            memory_position = torch.arange(n, device=scores.device)[None, :]\n            relative_position = memory_position - context_position\n\n            num_buckets = 32\n            max_distance = 128\n            relative_buckets = (relative_position > 0).to(torch.long) * (\n                num_buckets // 2\n            )\n            relative_position = torch.abs(relative_position)\n            max_exact = num_buckets // 4\n            is_small = relative_position < max_exact\n            relative_position_if_large = max_exact + (\n                torch.log(\n                    torch.clamp(relative_position, min=max_exact).float() / max_exact\n                )\n                / math.log(max_distance / max_exact)\n                * (num_buckets // 2 - max_exact)\n            ).to(torch.long)\n            relative_position_if_large = torch.minimum(\n                relative_position_if_large,\n                torch.full_like(relative_position_if_large, num_buckets // 2 - 1),\n            )\n            relative_buckets += torch.where(\n                is_small, relative_position, relative_position_if_large\n            )\n            values = F.embedding(relative_buckets, table)\n            values = values.permute(2, 0, 1).unsqueeze(0)\n\n            scores += values\n            return torch.softmax(scores.float(), dim=-1)\n\n        scores = torch.randn(2, 4, 16, 16)\n        table = torch.randn(32, 4)\n        expected_scores = scores.clone()\n\n        actual, code = run_and_get_cpp_code(\n            torch.compile(fn, fullgraph=True), scores, table\n        )\n        expected = fn(expected_scores, table)\n\n        self.assertEqual(actual, expected)\n        self.assertEqual(scores, expected_scores)\n        log_count = code.count(\"std::log(\") + code.count(\".log()\")\n        if torch._dynamo.config.assume_static_by_default:\n            self.assertEqual(log_count, 1)\n        else:\n            # Dynamic-shape clones can emit both vector and scalar tail code\n            # paths for the single realized log kernel.\n            self.assertIn(log_count, (1, 2))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_log_softmax",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4394,
+      "end_line": 4398,
+      "excerpt": "    def test_log_softmax(self):\n        def fn(a, b):\n            return (F.log_softmax(a + b, -1), F.log_softmax(a, 0), F.log_softmax(b, 1))\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_transpose",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4400,
+      "end_line": 4407,
+      "excerpt": "    def test_transpose(self):\n        def fn(a, b):\n            return (\n                torch.t(a) + b,\n                torch.transpose(b * 2, 0, 1) + 10,\n            )\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_permute1",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4409,
+      "end_line": 4416,
+      "excerpt": "    def test_permute1(self):\n        def fn(a):\n            return (\n                torch.permute(a + 1, [2, 1, 4, 0, 3]) + 2,\n                torch.permute(a, [2, 1, 4, 0, 3]) + 2,\n            )\n\n        self.common(fn, (torch.randn(2, 2, 2, 2, 2),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_permute_unbacked_slice",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4425,
+      "end_line": 4436,
+      "excerpt": "    @torch._dynamo.config.patch(capture_scalar_outputs=True)\n    def test_permute_unbacked_slice(self):\n        def eager(a, end_t):\n            b = a + 1\n            c = torch.permute(b, [0, 2, 1])\n            end = end_t.item()\n            return c[:, :end, :]\n\n        compiled = torch.compile(eager, backend=\"inductor\")\n        a = torch.randn(4, 16, 8, device=self.device)\n        end_t = torch.tensor([5])\n        self.assertEqual(compiled(a, end_t), eager(a, end_t))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_expand",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4438,
+      "end_line": 4445,
+      "excerpt": "    def test_expand(self):\n        def fn(a):\n            return (\n                (a + 1).expand(3, 4, 2, 3, 2) + 2,\n                a.expand(2, 1, 2, 3, 2) + 2,\n            ), a.expand(2, -1, 5, -1)\n\n        self.common(fn, (torch.randn(2, 1, 2),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_squeeze1",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4447,
+      "end_line": 4451,
+      "excerpt": "    def test_squeeze1(self):\n        def fn(a):\n            return ((a + 1).squeeze() + 2, a.squeeze() + 2)\n\n        self.common(fn, (torch.randn(1, 2, 1, 2, 2, 1, 1),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_squeeze2",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4453,
+      "end_line": 4457,
+      "excerpt": "    def test_squeeze2(self):\n        def fn(a):\n            return ((a + 1).squeeze(-1).squeeze(2) + 2, a.squeeze(0) + 2)\n\n        self.common(fn, (torch.randn(1, 2, 1, 2, 2, 2, 1),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_squeeze_varargs",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4459,
+      "end_line": 4464,
+      "excerpt": "    def test_squeeze_varargs(self):\n        def fn(x):\n            return x.squeeze(1, 2).clone()\n\n        a = torch.randn(1024, 1, 1)\n        self.common(fn, (a,))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    }
+  ]
+}

@@ -1,0 +1,226 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_lookup_table.py::test_lookup_mismatch",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 176,
+      "end_line": 191,
+      "excerpt": "    def test_lookup_mismatch(self):\n        \"\"\"Test mismatch scenario in lookup table\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        lookup_table_data = {\n            self.create_lookup_key(\"mm\", kernel_inputs): [self.create_config(\"triton\")]\n        }\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = LookupTableChoices()\n            # looking for addmm but created the entry with mm - should mismatch the key and return\n            # an empty result\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"addmm\", [\"triton\"]\n            )\n            self.assertEqual(result, {})",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_successful_lookup_with_template_filtering",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 193,
+      "end_line": 236,
+      "excerpt": "    def test_successful_lookup_with_template_filtering(self):\n        \"\"\"Test successful lookup that filters configs by template_id\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        config_list = [\n            self.create_config(\"triton\", BLOCK_M=128, BLOCK_N=128),\n            self.create_config(\"triton\", BLOCK_M=64, BLOCK_N=64),\n            self.create_config(\"tma\", BLOCK_M=256, BLOCK_N=128),\n            self.create_config(\"decompose_k\", k_split=4),\n        ]\n\n        lookup_table_data = {self.create_lookup_key(\"mm\", kernel_inputs): config_list}\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = LookupTableChoices()\n\n            # Test triton template filtering\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"]\n            )\n            if result is None:\n                raise AssertionError(\"Result should not be None\")\n            self.assertEqual(len(result[\"triton\"]), 2)\n            for config in result[\"triton\"]:\n                self.assertNotIn(\"template_id\", config)\n                self.assertIn(\"BLOCK_M\", config)\n\n            # Test tma template filtering\n            result = test_choices.lookup_template_configs(kernel_inputs, \"mm\", [\"tma\"])\n            if result is None:\n                raise AssertionError(\"Result should not be None\")\n            self.assertEqual(len(result[\"tma\"]), 1)\n            self.assertNotIn(\"template_id\", result[\"tma\"][0])\n            self.assertEqual(result[\"tma\"][0][\"BLOCK_M\"], 256)\n\n            # Test decompose_k template filtering\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"decompose_k\"]\n            )\n            if result is None:\n                raise AssertionError(\"Result should not be None\")\n            self.assertEqual(len(result[\"decompose_k\"]), 1)\n            self.assertNotIn(\"template_id\", result[\"decompose_k\"][0])\n            self.assertEqual(result[\"decompose_k\"][0][\"k_split\"], 4)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_empty_table",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 238,
+      "end_line": 247,
+      "excerpt": "    def test_empty_table(self):\n        \"\"\"Test when template lookup table is empty\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        with patch.object(inductor_config.lookup_table, \"table\", {}):\n            test_choices = LookupTableChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"]\n            )\n            self.assertEqual(result, {})",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_validation_error",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 249,
+      "end_line": 262,
+      "excerpt": "    def test_validation_error(self):\n        \"\"\"Test validation error for invalid config\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n        invalid_config = {\"BLOCK_M\": 128}  # missing template_id\n\n        lookup_table_data = {\n            self.create_lookup_key(\"mm\", kernel_inputs): [invalid_config]\n        }\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = LookupTableChoices()\n            with self.assertRaises(ValueError) as cm:\n                test_choices.lookup_template_configs(kernel_inputs, \"mm\", [\"triton\"])\n            self.assertIn(\"missing required 'template_id' field\", str(cm.exception))",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_cpu_input_returns_empty",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 264,
+      "end_line": 278,
+      "excerpt": "    def test_cpu_input_returns_empty(self):\n        \"\"\"Test that CPU tensor input returns empty dict\"\"\"\n        # Create kernel inputs with CPU tensors\n        kernel_inputs = self.create_mock_mm_kernel_inputs(device=torch.device(\"cpu\"))\n\n        lookup_table_data = {\n            self.create_lookup_key(\"mm\", kernel_inputs): [self.create_config(\"triton\")]\n        }\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = LookupTableChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"]\n            )\n            self.assertEqual(result, {})  # Should return empty dict for CPU",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_multiple_calls_work",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 280,
+      "end_line": 316,
+      "excerpt": "    def test_multiple_calls_work(self):\n        \"\"\"Test that calling lookup functions multiple times works correctly\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        config_list = [\n            self.create_config(\"triton\", BLOCK_M=128),\n            self.create_config(\"tma\", BLOCK_M=256),\n        ]\n\n        lookup_table_data = {self.create_lookup_key(\"mm\", kernel_inputs): config_list}\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = LookupTableChoices()\n\n            # First calls\n            result1 = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"]\n            )\n            result2 = test_choices.lookup_template_configs(kernel_inputs, \"mm\", [\"tma\"])\n            if result1 is None:\n                raise AssertionError(\"Result1 should not be None\")\n            if result2 is None:\n                raise AssertionError(\"Result2 should not be None\")\n            self.assertEqual(len(result1[\"triton\"]), 1)\n            self.assertEqual(len(result2[\"tma\"]), 1)\n\n            # Second calls should work the same\n            result3 = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"]\n            )\n            result4 = test_choices.lookup_template_configs(kernel_inputs, \"mm\", [\"tma\"])\n            if result3 is None:\n                raise AssertionError(\"Result3 should not be None\")\n            if result4 is None:\n                raise AssertionError(\"Result4 should not be None\")\n            self.assertEqual(len(result3[\"triton\"]), 1)\n            self.assertEqual(len(result4[\"tma\"]), 1)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_batch_lookup_mixed_entries",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 318,
+      "end_line": 348,
+      "excerpt": "    def test_batch_lookup_mixed_entries(self):\n        \"\"\"Test batch lookup where some templates have entries and others don't\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        config_list = [\n            self.create_config(\"triton\", BLOCK_M=128),\n            self.create_config(\"tma\", BLOCK_M=256),\n            # No decompose_k config in lookup table\n        ]\n\n        lookup_table_data = {self.create_lookup_key(\"mm\", kernel_inputs): config_list}\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = LookupTableChoices()\n\n            # Test batch lookup with mixed results\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\", \"tma\", \"decompose_k\"]\n            )\n            if result is None:\n                raise AssertionError(\"Result should not be None\")\n\n            # Should have entries for triton and tma, but not decompose_k\n            self.assertIn(\"triton\", result)\n            self.assertIn(\"tma\", result)\n            self.assertNotIn(\"decompose_k\", result)\n\n            self.assertEqual(len(result[\"triton\"]), 1)\n            self.assertEqual(len(result[\"tma\"]), 1)\n            self.assertEqual(result[\"triton\"][0][\"BLOCK_M\"], 128)\n            self.assertEqual(result[\"tma\"][0][\"BLOCK_M\"], 256)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_template_hash_checking",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 350,
+      "end_line": 397,
+      "excerpt": "    @parametrize(\n        \"config_hash,template_hash,expected_kept\",\n        [\n            # Hash matching (config kept)\n            (\"hash123\", \"hash123\", True),\n            # Hash mismatch (config filtered)\n            (\"hash123\", \"hash456\", False),\n            # Config without hash (config kept)\n            (None, \"hash123\", True),\n            # Template without hash (config kept)\n            (\"hash123\", None, True),\n            # Both None (config kept)\n            (None, None, True),\n        ],\n    )\n    def test_template_hash_checking(self, config_hash, template_hash, expected_kept):\n        \"\"\"Test template hash validation behavior\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        config = self.create_config(\"triton\", BLOCK_M=128, BLOCK_N=64)\n        if config_hash is not None:\n            config[\"template_hash\"] = config_hash\n\n        template_hash_map = (\n            {\"triton\": template_hash} if template_hash is not None else {}\n        )\n\n        lookup_table_data = {self.create_lookup_key(\"mm\", kernel_inputs): [config]}\n\n        with (\n            patch.object(inductor_config.lookup_table, \"table\", lookup_table_data),\n            patch.object(inductor_config.lookup_table, \"check_src_hash\", True),\n        ):\n            test_choices = LookupTableChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"], template_hash_map\n            )\n\n            if expected_kept:\n                if result is None:\n                    raise AssertionError(\"Result should not be None\")\n                self.assertIn(\"triton\", result)\n                self.assertEqual(len(result[\"triton\"]), 1)\n                # template_hash should be removed from returned config\n                self.assertNotIn(\"template_hash\", result[\"triton\"][0])\n            else:\n                # Config was filtered out due to hash mismatch\n                self.assertEqual(result, {})",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_template_hash_checking_disabled",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 399,
+      "end_line": 430,
+      "excerpt": "    def test_template_hash_checking_disabled(self):\n        \"\"\"Test that hash checking is skipped when config flag is disabled\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        # Create config with mismatching hash\n        config = self.create_config(\"triton\", BLOCK_M=128, template_hash=\"hash123\")\n\n        # Provide different template hash that would normally cause filtering\n        template_hash_map = {\"triton\": \"hash456\"}\n\n        lookup_table_data = {self.create_lookup_key(\"mm\", kernel_inputs): [config]}\n\n        with (\n            patch.object(inductor_config.lookup_table, \"table\", lookup_table_data),\n            patch.object(\n                inductor_config.lookup_table,\n                \"check_src_hash\",\n                False,\n            ),\n        ):\n            test_choices = LookupTableChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"], template_hash_map\n            )\n\n            # Should keep config even with mismatching hash since checking is disabled\n            if result is None:\n                raise AssertionError(\"Result should not be None\")\n            self.assertIn(\"triton\", result)\n            self.assertEqual(len(result[\"triton\"]), 1)\n            # template_hash should still be removed from returned config\n            self.assertNotIn(\"template_hash\", result[\"triton\"][0])",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_template_hash_mixed_scenarios",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 432,
+      "end_line": 475,
+      "excerpt": "    def test_template_hash_mixed_scenarios(self):\n        \"\"\"Test mixed hash scenarios with multiple configs\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        config_list = [\n            self.create_config(\n                \"triton\", BLOCK_M=128, template_hash=\"correct_hash\"\n            ),  # Should be kept\n            self.create_config(\n                \"triton\", BLOCK_M=64, template_hash=\"wrong_hash\"\n            ),  # Should be filtered\n            self.create_config(\"triton\", BLOCK_M=32),  # No hash, should be kept\n        ]\n\n        template_hash_map = {\"triton\": \"correct_hash\"}\n\n        lookup_table_data = {self.create_lookup_key(\"mm\", kernel_inputs): config_list}\n\n        with (\n            patch.object(inductor_config.lookup_table, \"table\", lookup_table_data),\n            patch.object(inductor_config.lookup_table, \"check_src_hash\", True),\n        ):\n            test_choices = LookupTableChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"], template_hash_map\n            )\n\n            if result is None:\n                raise AssertionError(\"Result should not be None\")\n            self.assertIn(\"triton\", result)\n            # Should keep 2 configs: the one with correct hash and the one without hash\n            self.assertEqual(len(result[\"triton\"]), 2)\n\n            # Check that kept configs have expected BLOCK_M values\n            kept_block_ms = [config[\"BLOCK_M\"] for config in result[\"triton\"]]\n            self.assertIn(128, kept_block_ms)  # Config with correct hash\n            self.assertIn(32, kept_block_ms)  # Config without hash\n            self.assertNotIn(\n                64, kept_block_ms\n            )  # Config with wrong hash should be filtered\n\n            # template_hash should be removed from returned configs\n            for config in result[\"triton\"]:\n                self.assertNotIn(\"template_hash\", config)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_hash_checking_disabled_edge_cases",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 477,
+      "end_line": 530,
+      "excerpt": "    @parametrize(\n        \"config_hash,description\",\n        [\n            (\"definitely_malformed_hash_!@#$%\", \"malformed hash\"),\n            (12345, \"non-string hash\"),\n            (\"\", \"empty string hash\"),\n            (None, \"missing hash field\"),\n        ],\n    )\n    def test_hash_checking_disabled_edge_cases(self, config_hash, description):\n        \"\"\"Test that configs are kept when hash checking is disabled, regardless of hash validity\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        # Create config with potentially problematic hash\n        config = self.create_config(\"triton\", BLOCK_M=128)\n        if config_hash is not None:\n            config[\"template_hash\"] = config_hash\n        # If config_hash is None, don't add template_hash field at all\n\n        # Provide a valid template hash that would normally be used for comparison\n        template_hash_map = {\"triton\": \"valid_template_hash_abc123\"}\n\n        lookup_table_data = {self.create_lookup_key(\"mm\", kernel_inputs): [config]}\n\n        with (\n            patch.object(inductor_config.lookup_table, \"table\", lookup_table_data),\n            patch.object(inductor_config.lookup_table, \"check_src_hash\", False),\n        ):\n            test_choices = LookupTableChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"], template_hash_map\n            )\n\n            # Should keep config regardless of hash validity since checking is disabled\n            if result is None:\n                raise AssertionError(f\"Result should not be None for {description}\")\n            self.assertIn(\n                \"triton\", result, f\"Should have triton result for {description}\"\n            )\n            self.assertEqual(\n                len(result[\"triton\"]), 1, f\"Should have 1 config for {description}\"\n            )\n            # template_hash should be removed from returned config\n            self.assertNotIn(\n                \"template_hash\",\n                result[\"triton\"][0],\n                f\"template_hash should be removed from result for {description}\",\n            )\n            # Other config fields should be preserved\n            self.assertEqual(\n                result[\"triton\"][0][\"BLOCK_M\"],\n                128,\n                f\"BLOCK_M should be preserved for {description}\",\n            )",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_device_key_lookup_scenarios",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 532,
+      "end_line": 617,
+      "excerpt": "    @parametrize(\n        \"table_has_device_key,lookup_device_matches,expected_found\",\n        [\n            # Device-specific key in table, same device -> found\n            (True, True, True),\n            # Device-specific key in table, different device -> not found\n            (True, False, False),\n            # Device-agnostic key in table, same device -> found\n            (False, True, True),\n            # Device-agnostic key in table, different device -> found (device-agnostic)\n            (False, False, True),\n        ],\n    )\n    def test_device_key_lookup_scenarios(\n        self, table_has_device_key, lookup_device_matches, expected_found\n    ):\n        \"\"\"Test lookup behavior with device-specific vs device-agnostic keys\"\"\"\n        # Create kernel inputs for \"device_1\" (our reference device)\n        kernel_inputs_device1 = self.create_mock_mm_kernel_inputs()\n\n        # Create config\n        config = self.create_config(\"triton\", BLOCK_M=128)\n\n        # Create a test choices class for generating the table key\n        class TableKeyChoices(LookupTableChoices):\n            @staticmethod\n            def _get_device_key(device):\n                if device.type != \"cuda\":\n                    return None\n                return \"device_1\"  # Always device_1 for table key generation\n\n        table_key_choices = TableKeyChoices()\n\n        # Generate table key based on whether it should include device\n        if table_has_device_key:\n            table_key = table_key_choices.make_lookup_key(\n                kernel_inputs_device1, \"mm\", include_device=True\n            )\n        else:\n            table_key = table_key_choices.make_lookup_key(\n                kernel_inputs_device1, \"mm\", include_device=False\n            )\n\n        lookup_table_data = {table_key: [config]}\n\n        # Create test choices class for the actual lookup with different device behavior\n        if lookup_device_matches:\n\n            class TestChoices(LookupTableChoices):\n                @staticmethod\n                def _get_device_key(device):\n                    if device.type != \"cuda\":\n                        return None\n                    return \"device_1\"\n\n        else:\n\n            class TestChoices(LookupTableChoices):\n                @staticmethod\n                def _get_device_key(device):\n                    if device.type != \"cuda\":\n                        return None\n                    return \"device_2\"\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = TestChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs_device1, \"mm\", [\"triton\"]\n            )\n\n        if expected_found:\n            if result is None:\n                raise AssertionError(\n                    f\"Result should not be None when expected_found={expected_found}\"\n                )\n            self.assertIn(\"triton\", result, \"Should have triton result when found\")\n            self.assertEqual(len(result[\"triton\"]), 1, \"Should have exactly 1 config\")\n            self.assertEqual(\n                result[\"triton\"][0][\"BLOCK_M\"], 128, \"Config should be preserved\"\n            )\n        else:\n            self.assertEqual(\n                result,\n                {},\n                f\"Should return empty dict when expected_found={expected_found}\",\n            )",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_device_key_priority",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 619,
+      "end_line": 661,
+      "excerpt": "    def test_device_key_priority(self):\n        \"\"\"Test that device-specific keys take priority over device-agnostic keys\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        # Create two different configs\n        device_specific_config = self.create_config(\n            \"triton\", BLOCK_M=256\n        )  # Different BLOCK_M\n        device_agnostic_config = self.create_config(\"triton\", BLOCK_M=128)\n\n        # Create a test choices instance to generate keys\n        key_choices = LookupTableChoices()\n\n        # Create both key types for the same inputs\n        device_key = key_choices.make_lookup_key(\n            kernel_inputs, \"mm\", include_device=True\n        )\n        device_agnostic_key = key_choices.make_lookup_key(\n            kernel_inputs, \"mm\", include_device=False\n        )\n\n        # Put both in the table\n        lookup_table_data = {\n            device_key: [device_specific_config],\n            device_agnostic_key: [device_agnostic_config],\n        }\n\n        with patch.object(inductor_config.lookup_table, \"table\", lookup_table_data):\n            test_choices = LookupTableChoices()\n            result = test_choices.lookup_template_configs(\n                kernel_inputs, \"mm\", [\"triton\"]\n            )\n\n            # Should get device-specific config (BLOCK_M=256), not device-agnostic (BLOCK_M=128)\n            if result is None:\n                raise AssertionError(\"Result should not be None\")\n            self.assertIn(\"triton\", result)\n            self.assertEqual(len(result[\"triton\"]), 1)\n            self.assertEqual(\n                result[\"triton\"][0][\"BLOCK_M\"],\n                256,\n                \"Should use device-specific config when both exist\",\n            )",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_make_lookup_key_variants",
+      "class": "TestLookupTable",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 663,
+      "end_line": 680,
+      "excerpt": "    def test_make_lookup_key_variants(self):\n        \"\"\"Test the make_lookup_key_variants helper function\"\"\"\n        kernel_inputs = self.create_mock_mm_kernel_inputs()\n\n        test_choices = LookupTableChoices()\n        device_key, device_agnostic_key = test_choices.make_lookup_key_variants(\n            kernel_inputs, \"mm\"\n        )\n\n        # Both should be strings\n        self.assertIsInstance(device_key, str)\n        self.assertIsInstance(device_agnostic_key, str)\n\n        # Device key should be longer (contains device info)\n        self.assertGreater(len(device_key), len(device_agnostic_key))\n\n        # Device-agnostic key should be contained in device key (as a substring after device part)\n        self.assertIn(device_agnostic_key.split(\"+mm\")[0], device_key)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTable(BaseLookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_no_lookup_table_entry_autotune_modes",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 862,
+      "end_line": 905,
+      "excerpt": "    @parametrize(\"max_autotune\", [True, False])\n    @fresh_cache()\n    def test_no_lookup_table_entry_autotune_modes(self, max_autotune):\n        \"\"\"Test when there's no lookup table entry with different autotune modes\"\"\"\n        tensors = self.create_tensors(\"mm\")\n\n        # Setup lookup table with different key to force no match\n        self.setup_lookup_table(\n            \"mm\",\n            [\n                torch.randn(64, 64, device=self.device),\n                torch.randn(64, 64, device=self.device),\n            ],\n            [],\n        )\n\n        # Inline validation function\n        def validate_choices(choices):\n            if max_autotune:\n                if len(choices) <= 2:\n                    raise AssertionError(\n                        f\"Max-autotune should have >2 choices, got {len(choices)}\"\n                    )\n                if not any(isinstance(c, ExternKernelCaller) for c in choices):\n                    raise AssertionError(\"Should have ExternKernelCaller\")\n                if not any(isinstance(c, TritonTemplateCaller) for c in choices):\n                    raise AssertionError(\"Should have TritonTemplateCaller\")\n            else:\n                if len(choices) != 1:\n                    raise AssertionError(\n                        f\"No max-autotune should have 1 choice, got {len(choices)}\"\n                    )\n                if not isinstance(choices[0], ExternKernelCaller):\n                    raise AssertionError(\n                        f\"Should be ExternKernelCaller, got {type(choices[0])}\"\n                    )\n            return choices\n\n        add_preprocessing_fn(validate_choices)\n        self.run_model(\n            \"mm\",\n            tensors,\n            {\"max_autotune_gemm\": max_autotune, \"max_autotune\": max_autotune},\n        )",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_valid_lookup_table_entry",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 907,
+      "end_line": 941,
+      "excerpt": "    @skipIfRocm(msg=\"https://github.com/pytorch/pytorch/issues/180234\")\n    @parametrize(\"operation\", [\"mm\", \"addmm\", \"bmm\", \"mm_plus_mm\"])\n    @fresh_cache()\n    def test_valid_lookup_table_entry(self, operation):\n        \"\"\"Test when there's a valid entry for the operation\"\"\"\n        if operation == \"addmm\" and torch.version.hip:\n            self.skipTest(\n                \"skipping on ROCm since https://github.com/pytorch/pytorch/issues/179955 didn't skip as expected\"\n            )\n        k = 256 if operation == \"mm_plus_mm\" else 64\n        tensors = self.create_tensors(operation, k=k)\n\n        # Map operation to actual template UID\n        template_mapping = {\n            \"mm\": torch._inductor.kernel.mm.mm_template.uid,\n            \"addmm\": torch._inductor.kernel.mm.mm_template.uid,\n            \"bmm\": torch._inductor.kernel.bmm.bmm_template.uid,\n            \"mm_plus_mm\": torch._inductor.kernel.mm_plus_mm.mm_plus_mm_template.uid,\n        }\n        template_id = template_mapping[operation]\n        config = self.create_basic_config(template_id)\n\n        self.setup_lookup_table(operation, tensors, [config])\n\n        # TODO (paulzhan): Update LookupTableChoices to return empty\n        #  (not fallback) when key matches\n        if operation == \"addmm\":\n            add_preprocessing_fn(\n                partial(verify_choice_names, pattern=\"triton_|addmm\", expected_count=2)\n            )\n        else:\n            add_preprocessing_fn(\n                partial(verify_choice_names, pattern=\"triton_\", expected_count=1)\n            )\n        self.run_model(operation, tensors)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_tma_lookup_table_entry",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 943,
+      "end_line": 972,
+      "excerpt": "    @unittest.skipIf(not has_triton_tma_device(), \"Need TMA support\")\n    @parametrize(\"operation\", [\"mm\", \"addmm\"])\n    @fresh_cache()\n    def test_tma_lookup_table_entry(self, operation):\n        \"\"\"Test TMA template entry\"\"\"\n        tensors = self.create_tensors(operation)\n        config = self.create_basic_config(\n            torch._inductor.kernel.mm.persistent_tma_mm_template.uid\n        )\n\n        self.setup_lookup_table(operation, tensors, [config])\n        if operation == \"addmm\":\n            add_preprocessing_fn(\n                partial(\n                    verify_choice_names,\n                    pattern=\"triton_mm_persistent_tma_|addmm\",\n                    expected_count=2,\n                )\n            )\n        else:\n            add_preprocessing_fn(\n                partial(\n                    verify_choice_names,\n                    pattern=\"triton_mm_persistent_tma_\",\n                    expected_count=1,\n                )\n            )\n        self.run_model(\n            operation, tensors, {\"triton.enable_persistent_tma_matmul\": True}\n        )",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_decompose_k_lookup_table_entry",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 975,
+      "end_line": 993,
+      "excerpt": "    @fresh_cache()\n    def test_decompose_k_lookup_table_entry(self):\n        \"\"\"Test decompose_k template entry\"\"\"\n        with inductor_config.patch(_DECOMPOSE_K_PATCH_ROCM):\n            tensors = self.create_tensors(\"mm\", m=32, n=32, k=32 * 32)\n            config = self.create_basic_config(\n                torch._inductor.kernel.mm.decompose_k_subgraph_template.uid\n            )\n\n            self.setup_lookup_table(\"mm\", tensors, [config])\n            add_preprocessing_fn(\n                partial(\n                    verify_choice_names,\n                    pattern=\"decompose_k|bmm_dtype\",\n                    expected_count=1,\n                )\n            )\n\n            self.run_model(\"mm\", tensors)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_bias_addmm_lookup_table_entry",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 995,
+      "end_line": 1026,
+      "excerpt": "    @skipIfRocm(msg=\"https://github.com/pytorch/pytorch/issues/180233\")\n    @fresh_cache()\n    def test_bias_addmm_lookup_table_entry(self):\n        \"\"\"Test bias_addmm template entry\"\"\"\n        # Create bias with stride[0] == 0 for bias_addmm eligibility\n        bias_unexpanded = torch.randn(64, device=self.device, dtype=torch.float16)\n        expanded_bias = bias_unexpanded.expand(64, 64)\n        tensors = [\n            expanded_bias,\n            torch.randn(64, 32, device=self.device, dtype=torch.float16),\n            torch.randn(32, 64, device=self.device, dtype=torch.float16),\n        ]\n\n        config = self.create_basic_config(torch._inductor.kernel.mm.aten_bias_addmm.uid)\n        self.setup_lookup_table(\"addmm\", tensors, [config])\n        # NOTE: This test passes bias_unexpanded (1D) to the model but sets up\n        # lookup key with expanded_bias (2D). The shapes differ so lookup will miss.\n        # We skip choice count verification here - just verify the model runs.\n\n        # Run with expanded bias (stride[0] == 0) so the inductor sees\n        # bias_addmm-eligible inputs and the lookup key matches.\n        # Limit backends to ATEN so only the lookup table entry is selected.\n        with inductor_config.patch(\n            {\n                \"max_autotune_gemm\": True,\n                \"triton.autotune_cublasLt\": True,\n                \"max_autotune_gemm_backends\": \"ATEN\",\n            }\n        ):\n            model = UnifiedModel(\"addmm\")\n            compiled_model = torch.compile(model.to(self.device), mode=\"max-autotune\")\n            compiled_model(expanded_bias, tensors[1], tensors[2])",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_multiple_configs_same_template",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 1028,
+      "end_line": 1052,
+      "excerpt": "    @unittest.skipIf(not has_triton_tma_device(), \"Need TMA support\")\n    @fresh_cache()\n    def test_multiple_configs_same_template(self):\n        \"\"\"Test multiple configurations for same template\"\"\"\n        tensors = self.create_tensors(\"mm\")\n\n        config1 = self.create_basic_config(\n            torch._inductor.kernel.mm.persistent_tma_mm_template.uid\n        )\n        config1.update({\"BLOCK_M\": 128, \"BLOCK_N\": 128, \"num_warps\": 8})\n\n        config2 = self.create_basic_config(\n            torch._inductor.kernel.mm.persistent_tma_mm_template.uid\n        )\n        config2.update({\"BLOCK_M\": 64, \"BLOCK_N\": 64, \"num_warps\": 4})\n\n        self.setup_lookup_table(\"mm\", tensors, [config1, config2])\n        add_preprocessing_fn(\n            partial(\n                verify_choice_names,\n                pattern=\"triton_mm_persistent_tma_\",\n                expected_count=2,\n            )\n        )\n        self.run_model(\"mm\", tensors, {\"triton.enable_persistent_tma_matmul\": True})",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_mixed_template_configs",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 1054,
+      "end_line": 1074,
+      "excerpt": "    @unittest.skipIf(not has_triton_tma_device(), \"Need TMA support\")\n    @fresh_cache()\n    def test_mixed_template_configs(self):\n        \"\"\"Test mixing different template types\"\"\"\n        tensors = self.create_tensors(\"mm\")\n\n        triton_config = self.create_basic_config(\n            torch._inductor.kernel.mm.mm_template.uid\n        )\n        triton_config.update({\"BLOCK_M\": 128, \"num_warps\": 8})\n\n        tma_config = self.create_basic_config(\n            torch._inductor.kernel.mm.persistent_tma_mm_template.uid\n        )\n        tma_config.update({\"BLOCK_M\": 256, \"num_warps\": 4})\n\n        self.setup_lookup_table(\"mm\", tensors, [triton_config, tma_config])\n        add_preprocessing_fn(\n            partial(verify_choice_names, pattern=\"triton_\", expected_count=2)\n        )\n        self.run_model(\"mm\", tensors, {\"triton.enable_persistent_tma_matmul\": True})",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    },
+    {
+      "id": "test_lookup_table.py::test_template_hash_filtering_e2e",
+      "class": "TestLookupTableE2E",
+      "path": "test/inductor/test_lookup_table.py",
+      "file_sha256": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3",
+      "start_line": 1076,
+      "end_line": 1111,
+      "excerpt": "    @fresh_cache()\n    def test_template_hash_filtering_e2e(self):\n        \"\"\"Test end-to-end template hash filtering in real MM operation\"\"\"\n        tensors = self.create_tensors(\"mm\")\n\n        # Get the actual src_hash from the template\n        actual_hash = torch._inductor.kernel.mm.mm_template.src_hash\n\n        # Create configs - one with correct hash, one with wrong hash\n        correct_config = self.create_basic_config(\n            torch._inductor.kernel.mm.mm_template.uid\n        )\n        correct_config.update(\n            {\"BLOCK_M\": 128, \"template_hash\": actual_hash}  # Use actual hash\n        )\n\n        wrong_config = self.create_basic_config(\n            torch._inductor.kernel.mm.mm_template.uid\n        )\n        wrong_config.update(\n            {\n                \"BLOCK_M\": 64,\n                \"template_hash\": \"definitely_wrong_hash_12345\",  # Wrong hash\n            }\n        )\n\n        self.setup_lookup_table(\"mm\", tensors, [correct_config, wrong_config])\n\n        # Should only get 1 choice since the wrong hash config gets filtered\n        add_preprocessing_fn(\n            partial(verify_choice_names, pattern=\"triton_\", expected_count=1)\n        )\n\n        # Ensure hash checking is enabled\n        with patch.object(inductor_config.lookup_table, \"check_src_hash\", True):\n            self.run_model(\"mm\", tensors)",
+      "class_header": "@unittest.skipIf(not HAS_CUDA_AND_TRITON, \"CUDA not available\")\n@instantiate_parametrized_tests\nclass TestLookupTableE2E(BaseE2ELookupTableTest):"
+    }
+  ]
+}

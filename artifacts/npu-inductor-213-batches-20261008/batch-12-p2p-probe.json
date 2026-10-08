@@ -1,0 +1,36 @@
+{
+  "transfer_to_npu": "0",
+  "torch": "2.13.0+cpu",
+  "torch_npu": "2.13.0+git5fd5ddf",
+  "default_device": 0,
+  "device_count": 8,
+  "memory_before": {
+    "0": {
+      "free_bytes": 131506200576,
+      "total_bytes": 132096634880
+    },
+    "1": {
+      "free_bytes": 130956800000,
+      "total_bytes": 132096634880
+    }
+  },
+  "peer_capability": {
+    "0->1": true,
+    "1->0": true
+  },
+  "sources": [
+    {
+      "id": "torch_npu/csrc/core/npu/NPUPeerToPeerAccess.cpp",
+      "repo_commit": "5fd5ddf8d2f571ed52897124574159e234651ee2",
+      "sha256": "faccc97761098189663cc2e936e6358d9d2919eb3e507147fe5449038f1bd61a",
+      "origin": "目标环境源码 checkout；是否对应安装二进制需结合版本判断",
+      "excerpt": "#include <vector>\n#include <c10/util/Exception.h>\n#include <c10/util/irange.h>\n#include <acl/acl_rt.h>\n#include \"torch_npu/csrc/core/npu/NpuVariables.h\"\n#include \"torch_npu/csrc/core/npu/NPUPeerToPeerAccess.h\"\n#include \"torch_npu/csrc/core/npu/NPUGuard.h\"\n\nnamespace at_npu {\nnamespace native {\n\nNpuP2pCtrl::NpuP2pCtrl() {\n  num_devices_ = c10_npu::device_count();\n\n  device_enabled_count_.clear();\n  device_enabled_count_.resize(num_devices_, 0);\n\n  p2p_access_enabled_cache_.clear();\n  p2p_access_enabled_cache_.resize(num_devices_ * num_devices_, P2pStatus::UNKNOWN);\n\n  for (const auto i : c10::irange(num_devices_)) {\n    // device self-connections are not counted\n    p2p_access_enabled_cache_[i * num_devices_ + i] = P2pStatus::COPY_ALLOWED;\n  }\n}\n\n// Get NpuSysCtrl singleton instance\nNpuP2pCtrl& NpuP2pCtrl::get_instance() {\n  static NpuP2pCtrl instance;\n  return instance;\n}\n\nvoid NpuP2pCtrl::enable_peer_access(int32_t source_dev, int32_t dest_dev) {\n  uint32_t enable_flag_value = 0;\n  c10_npu::NPUGuard guard(source_dev);\n  NPU_CHECK_ERROR(aclrtDeviceEnablePeerAccess(dest_dev, enable_flag_value));\n  return;\n}\n\n// Check whether the two devices are enabled by p2p and tensor can be copied\nbool NpuP2pCtrl::get_p2p_access(int32_t source_dev, int32_t dest_dev, bool& flag) {\n  TORCH_INTERNAL_ASSERT(num_devices_ >= 0, \"p2p access cache not initialized\");\n  TORCH_CHECK(source_dev >= 0 && source_dev < num_devices_, source_dev, \" is not a device\", PTA_ERROR(ErrCode::VALUE));\n  TORCH_CHECK(dest_dev >= 0 && dest_dev < num_devices_, dest_dev, \" is not a device\", PTA_ERROR(ErrCode::VALUE));\n\n  // get access source_dev -> dest_dev\n  auto& cache_s2d = p2p_access_enabled_cache_[source_dev * num_devices_ + dest_dev];\n  auto& cache_d2s = p2p_access_enabled_cache_[dest_dev * num_devices_ + source_dev];\n\n  if (cache_s2d != P2pStatus::UNKNOWN) {\n    return static_cast<bool>(cache_s2d);\n  }\n\n  // update: this limitation no longer exists in the A3 and later soc version\n  if (c10_npu::GetSocVersion() < c10_npu::SocVersion::Ascend910_9391) {\n    int32_t limited_device = -1;\n    // check whether the connection limit of the source or destination device\n    // has been reached.\n    if (device_enabled_count_[source_dev] >= C10_P2P_ACCESS_MAX_NPUS) {\n      limited_device = source_dev;\n    } else if (device_enabled_count_[dest_dev] >= C10_P2P_ACCESS_MAX_NPUS) {\n      limited_device = dest_dev;\n    }\n\n    if (limited_device != -1) {\n      cache_s2d = P2pStatus::COPY_NOT_ALLOWED;\n      cache_d2s = P2pStatus::COPY_NOT_ALLOWED;\n\n      std::string warning_str{};\n      for (auto i = 0; i < num_devices_; i++) {\n        if (i == limited_device) {\n          continue;\n        }\n        if (p2p_access_enabled_cache_[limited_device * num_devices_ + i] == P2pStatus::COPY_ALLOWED) {\n          warning_str += std::to_string(i);\n          warning_str += \", \";\n        }\n      }\n      ASCEND_LOGE(\n          \"Device %d has reached P2P connection limit %d. Current connections: [%s]. \"\n          \"Cannot enable P2P between devices (%d and %d). \",\n          limited_device,\n          C10_P2P_ACCESS_MAX_NPUS,\n          warning_str.c_str(),\n          source_dev,\n          dest_dev);\n      return static_cast<bool>(cache_s2d);\n    }\n  }\n\n  ASCEND_LOGW(\"The NPU device is %d, and try to copy and enable p2p with %d. \", source_dev, dest_dev);\n\n  // The aclrtEnablePeerAccess capability is not equal to cuda,\n  // And both sides need to be enabled to activate the p2p capability\n  int32_t result_s2d = -1;\n  int32_t result_d2s = -1;\n  NPU_CHECK_ERROR(aclrtDeviceCanAccessPeer(&result_s2d, source_dev, dest_dev));\n  NPU_CHECK_ERROR(aclrtDeviceCanAccessPeer(&result_d2s, dest_dev, source_dev));\n  // A two-way enable is required\n  if (!result_s2d || !result_d2s) {\n    cache_s2d = P2pStatus::COPY_NOT_ALLOWED;\n    cache_d2s = P2pStatus::COPY_NOT_ALLOWED;\n    flag = true;\n    return static_cast<bool>(cache_s2d);\n  }\n\n  enable_peer_access(source_dev, dest_dev);\n  enable_peer_access(dest_dev, source_dev);\n  // A two-way enable is required\n  cache_s2d = P2pStatus::COPY_ALLOWED;\n  cache_d2s = P2pStatus::COPY_ALLOWED;\n  // Update p2p enable count\n  device_enabled_count_[source_dev]++;\n  device_enabled_count_[dest_dev]++;\n\n  return static_cast<bool>(cache_s2d);\n}\n\n} // namespace native\n} // namespace at_npu\n"
+    }
+  ],
+  "copy": {
+    "outcome": "failed",
+    "error_type": "OutOfMemoryError",
+    "traceback": "Traceback (most recent call last):\n  File \"<stdin>\", line 29, in <module>\ntorch.OutOfMemoryError: enable_peer_access:torch_npu/csrc/core/npu/NPUPeerToPeerAccess.cpp:36 NPU function error: aclrtDeviceEnablePeerAccess(dest_dev, enable_flag_value), error code is 207001\n[ERROR] 2026-10-08-12:40:50 (PID:<redacted>, Device:1, RankID:-1) ERR00100 PTA call acl api failed\n[Error]: Failed to apply for memory.\n        Check the remaining storage space in the hardware environment.\n[PID:<redacted>] 2026-10-08-12:40:50.929.920 Memory_Allocation_Failure(EL0004): Failed to allocate memory requested by UNKNOWN module.\n        Possible Cause: Available memory is insufficient.\n        Solution: Close applications not in use.\nTraceBack (most recent call last):\n        rtEnableP2P execution failed, reason=driver error:out of memory[FUNC:FuncErrorReason][FILE:error_message_manage.cc][LINE:69]\n\n"
+  },
+  "scope": "全部主测试和 round 补测结束后，独立进程，TORCH_TRANSFER_TO_NPU=0，无 torch.compile，仅 4 个 float32 元素从 NPU:0 复制到 NPU:1。"
+}

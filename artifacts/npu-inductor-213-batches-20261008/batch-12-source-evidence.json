@@ -1,0 +1,206 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_torchinductor.py::test_split_empty_dim",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5350,
+      "end_line": 5360,
+      "excerpt": "    def test_split_empty_dim(self):\n        def fn(x, split_size):\n            return (\n                torch.split(x, split_size, dim=1),\n                torch.unsafe_split(x, split_size=split_size, dim=1),\n                x.new_ones((x.shape[0],)),\n            )\n\n        x = torch.ones((3, 0, 5), device=self.device)\n        self.common(fn, (x, 0))\n        self.common(fn, (x, 2))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_split_size_greater_than_dim",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5396,
+      "end_line": 5404,
+      "excerpt": "    def test_split_size_greater_than_dim(self):\n        def fn(x):\n            return (\n                torch.split(x, 5, -1),\n                torch.unsafe_split(x, split_size=5, dim=-1),\n                x + 1,\n            )\n\n        self.common(fn, (torch.randn((2,), device=self.device),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_split",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5425,
+      "end_line": 5441,
+      "excerpt": "    def test_split(self):\n        def fn(a):\n            t = torch.split(a, 3, -1)\n            return (t[0], t[1], t[2], t[3])\n\n        def fn2(a):\n            return fn(a + 1)\n\n        self.common(\n            fn,\n            (torch.randn([2, 2, 10]),),\n        )\n\n        self.common(\n            fn2,\n            (torch.randn([2, 2, 10]),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_unsafe_chunk_empty_tensor",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5443,
+      "end_line": 5455,
+      "excerpt": "    def test_unsafe_chunk_empty_tensor(self):\n        def fn(x, chunks):\n            return torch.unsafe_chunk(x, chunks=chunks, dim=0)\n\n        x = torch.zeros(0)\n        result = torch.compile(fn)(x, 4)\n        self.assertEqual(len(result), 4)\n        for chunk in result:\n            self.assertEqual(chunk.shape, torch.Size([0]))\n\n        self.common(fn, (torch.zeros(0), 4))\n        self.common(fn, (torch.zeros(0), 2))\n        self.common(fn, (torch.zeros(0, dtype=torch.float32), 3))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_low_memory_max_pool",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5457,
+      "end_line": 5491,
+      "excerpt": "    @parametrize(\"dilation\", (1, 2))\n    @parametrize(\"dim\", (subtest(2), subtest(3)))\n    @parametrize(\n        \"use_block_ptr\",\n        [subtest(False), subtest(True, decorators=[skip_if_not_triton])],\n    )\n    def test_low_memory_max_pool(self, dilation: int, dim: int, use_block_ptr: bool):\n        prims = torch.ops.prims\n\n        def fn(x):\n            kernel_size = [3, 3] if dim == 2 else [3, 3, 2]\n            stride = [2] * dim\n            padding = [1] * dim\n            ceil_mode = False\n\n            vals, offsets = prims._low_memory_max_pool_with_offsets(\n                x,\n                kernel_size,\n                stride,\n                padding,\n                [dilation] * dim,\n                ceil_mode,\n            )\n            indices = prims._low_memory_max_pool_offsets_to_indices(\n                offsets,\n                kernel_size,\n                x.shape[-dim:],\n                stride,\n                padding,\n                dilation=[dilation] * dim,\n            )\n            return vals, indices, offsets\n\n        with config.patch({\"triton.use_block_ptr\": use_block_ptr}):\n            self.common(fn, (torch.randn(1, 3, *[10] * dim),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_max_unpool_empty_output",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5493,
+      "end_line": 5525,
+      "excerpt": "    def test_max_unpool_empty_output(self):\n        class Unpool1d(nn.Module):\n            def __init__(self):\n                super().__init__()\n                self.unpool = nn.MaxUnpool1d(kernel_size=2, stride=2, padding=1)\n\n            def forward(self, x, indices):\n                return self.unpool(x, indices)\n\n        x1d = torch.randn(1, 1, 1, device=self.device)\n        self.common(Unpool1d().to(self.device), (x1d, x1d.long()))\n\n        class Unpool2d(nn.Module):\n            def __init__(self):\n                super().__init__()\n                self.unpool = nn.MaxUnpool2d(kernel_size=2, stride=2, padding=1)\n\n            def forward(self, x, indices):\n                return self.unpool(x, indices)\n\n        x2d = torch.randn(1, 1, 1, 1, device=self.device)\n        self.common(Unpool2d().to(self.device), (x2d, x2d.long()))\n\n        class Unpool3d(nn.Module):\n            def __init__(self):\n                super().__init__()\n                self.unpool = nn.MaxUnpool3d(kernel_size=2, stride=2, padding=1)\n\n            def forward(self, x, indices):\n                return self.unpool(x, indices)\n\n        x3d = torch.randn(1, 1, 1, 1, 1, device=self.device)\n        self.common(Unpool3d().to(self.device), (x3d, x3d.long()))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_to_dtype",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5527,
+      "end_line": 5544,
+      "excerpt": "    def test_to_dtype(self):\n        new_dtype = torch.float64 if self.device != \"mps\" else torch.bfloat16\n\n        def fn(a, b):\n            return (\n                aten._to_copy(a, dtype=6),\n                aten._to_copy(b + 1, dtype=6),\n                aten.to(b, new_dtype),\n                aten.to(b, torch.bool),\n            )\n\n        self.common(\n            fn,\n            (\n                torch.randn([2, 2, 10]),\n                torch.randn([2, 2, 10], dtype=new_dtype),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_to_device",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5546,
+      "end_line": 5559,
+      "excerpt": "    @requires_gpu()\n    def test_to_device(self):\n        def fn(a):\n            if a.device.type == \"cpu\":\n                return aten._to_copy(\n                    a, device=torch.device(GPU_TYPE), dtype=6, layout=0\n                )\n            else:\n                return aten._to_copy(a, device=torch.device(\"cpu\"), dtype=6, layout=0)\n\n        self.common(\n            fn,\n            (torch.randn([2, 2, 10]),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_to_memory_format",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5561,
+      "end_line": 5575,
+      "excerpt": "    def test_to_memory_format(self):\n        def fn(a, memory_format):\n            return a.to(memory_format=memory_format)\n\n        self.common(\n            fn,\n            (torch.randn([2, 2, 10, 10]), torch.channels_last),\n        )\n        self.common(\n            fn,\n            (\n                torch.randn([2, 2, 10, 10]).to(memory_format=torch.channels_last),\n                torch.contiguous_format,\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_to_device_constant",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5577,
+      "end_line": 5596,
+      "excerpt": "    @requires_gpu()\n    def test_to_device_constant(self):\n        def fn(a):\n            d1 = a.device.type\n            if d1 == \"cpu\":\n                d2 = GPU_TYPE\n            else:\n                d2 = \"cpu\"\n\n            const1 = torch.as_tensor(list(range(64)), device=d2)\n            return (\n                torch.arange(10, device=d2).to(d1) + a,\n                const1.to(d1),\n                (const1 + 1).to(d1),\n            )\n\n        self.common(\n            fn,\n            (torch.randn([10]),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_to_copy_fp64_to_no_fp64_device",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5598,
+      "end_line": 5614,
+      "excerpt": "    @requires_gpu()\n    def test_to_copy_fp64_to_no_fp64_device(self):\n        # See https://github.com/pytorch/pytorch/issues/180664\n        # When the target device does not support fp64, _to_copy should\n        # convert dtype on CPU before the device transfer so that no fp64\n        # buffer is allocated on the target device.\n        def fn(x):\n            return x.to(dtype=torch.float32, device=GPU_TYPE)\n\n        x = torch.randn(4, 4, dtype=torch.float64, device=\"cpu\")\n        with patch(\"torch._inductor.utils.device_supports_fp64\", return_value=False):\n            _, code = run_and_get_code(torch.compile(fn), x)\n\n        # The Triton kernel should not have any fp64 pointer arguments.\n        # Without the fix, the kernel signature would contain '*fp64'.\n        code = \"\\n\".join(code)\n        self.assertNotIn(\"'*fp64'\", code)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_multi_device",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5616,
+      "end_line": 5640,
+      "excerpt": "    @requires_gpu()\n    @xfail_if_triton_cpu\n    def test_multi_device(self):\n        def fn(x):\n            x = x + 1\n            x = x + 2\n            x = x.to(device=GPU_TYPE)\n            x = x + 3\n            x = x + 4\n            x = x.cpu()\n            x = x + 5\n            x = x + 6\n            x = x.to(device=GPU_TYPE)\n            x = x + 7\n            x = x + 8\n            x = x.cpu()\n            x = x + 9\n            x = x + 10\n            return x\n\n        self.common(\n            fn,\n            (torch.randn([2, 2, 10]),),\n            check_lowp=False,  # cpu doesn't understand fp16, and there are explicit .cpu() calls\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_multi_gpu_device",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5642,
+      "end_line": 5652,
+      "excerpt": "    @requires_multigpu()\n    def test_multi_gpu_device(self):\n        # TODO: https://github.com/pytorch/pytorch/issues/92627\n        x = torch.rand([4], device=GPU_TYPE)\n\n        def fn(x, y):\n            r = torch.ops.aten.div(x, y)\n            r = r.to(f\"{GPU_TYPE}:1\")\n            return 2 * r\n\n        self.common(fn, (torch.randn(4), torch.randn(4)), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_multi_gpu_recompile_on_index",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5654,
+      "end_line": 5682,
+      "excerpt": "    @requires_multigpu()\n    def test_multi_gpu_recompile_on_index(self):\n        torch.set_float32_matmul_precision(\"high\")\n\n        def gemm(x, y):\n            return x @ y\n\n        failed_guard = None\n\n        def fail(guard):\n            nonlocal failed_guard\n            failed_guard = guard\n\n        gemm_opt = torch._dynamo.optimize(\"inductor\", guard_fail_fn=fail)(gemm)\n\n        x0 = torch.randn(1024, 1024, device=f\"{GPU_TYPE}:0\")\n        y0 = torch.randn(1024, 1024, device=f\"{GPU_TYPE}:0\")\n\n        gemm_opt(x0, y0)\n\n        x1 = torch.randn(1024, 1024, device=f\"{GPU_TYPE}:1\")\n        y1 = torch.randn(1024, 1024, device=f\"{GPU_TYPE}:1\")\n\n        gemm_opt(x1, y1)\n        self.assertTrue(failed_guard is not None)\n        self.assertTrue(\n            \"tensor 'x' Tensor device index mismatch. Expected device index to be\"\n            in failed_guard.reason\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_unbind",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5684,
+      "end_line": 5691,
+      "excerpt": "    def test_unbind(self):\n        def fn(a):\n            return torch.unbind(a), torch.unbind(a, -1)\n\n        self.common(\n            fn,\n            (torch.randn([4, 4, 4]),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_conv1d_with_permute",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5693,
+      "end_line": 5704,
+      "excerpt": "    def test_conv1d_with_permute(self):\n        # fix https://github.com/pytorch/pytorch/issues/159462\n        class ConvModel(nn.Module):\n            def __init__(self):\n                super().__init__()\n                self.conv = nn.Conv1d(1, 64, kernel_size=3, padding=1)\n\n            def forward(self, x):\n                x = x.permute(0, 2, 1)\n                return self.conv(x)\n\n        self.common(ConvModel(), (torch.randn([32, 100, 1]),), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_conv1d_depthwise",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5706,
+      "end_line": 5726,
+      "excerpt": "    def test_conv1d_depthwise(self):\n        class ConvModel(nn.Module):\n            def __init__(self):\n                super().__init__()\n                self.conv = nn.Conv1d(\n                    768,\n                    768,\n                    kernel_size=(9,),\n                    stride=(1,),\n                    padding=(4,),\n                    groups=768,\n                    bias=False,\n                )\n\n            def forward(self, x):\n                return self.conv(x)\n\n        input_tensor = torch.randn([1, 768, 512]).as_strided(\n            (1, 768, 512), (393216, 1, 768)\n        )\n        self.common(ConvModel(), (input_tensor,), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_convolution1",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5728,
+      "end_line": 5747,
+      "excerpt": "    def test_convolution1(self):\n        m = torch.nn.Sequential(\n            torch.nn.Conv2d(5, 6, [3, 3]),\n            torch.nn.ReLU(),\n            ToTuple(),\n        )\n\n        self.common(\n            m,\n            (torch.randn([2, 5, 16, 16]),),\n            # Mismatched elements: 10 / 2352 (0.4%)\n            # Greatest absolute difference: 5.7220458984375e-05 at index (0, 3, 12, 12) (up to 1e-05 allowed)\n            # Greatest relative difference: 0.06512477175897748 at index (0, 4, 11, 9) (up to 0.001 allowed)\n            atol=6e-5,\n            rtol=0.001,\n            # Make sure we compute also with fp16 in the reference. Otherwise,\n            # the reference will compute with fp32 and cast back to fp16, which\n            # causes numeric differences beyond tolerance.\n            reference_in_float=not torch.version.hip,\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_convolution2",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5749,
+      "end_line": 5762,
+      "excerpt": "    def test_convolution2(self):\n        def fn(x, w, b):\n            # transposed conv\n            return (aten.convolution(x, w, b, [4], [0], [1], True, [0], 1),)\n\n        self.common(\n            fn,\n            (\n                torch.randn([2, 32, 90]),\n                torch.randn([32, 16, 8]),\n                torch.randn([16]),\n            ),\n            check_lowp=False,\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_convolution3",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5764,
+      "end_line": 5781,
+      "excerpt": "    def test_convolution3(self):\n        # Test stride or padding or dilation is 1 element list.\n        m = torch.nn.Sequential(\n            torch.nn.Conv2d(5, 6, [3, 3], stride=[1], padding=[0], dilation=[1]),\n            torch.nn.ReLU(),\n            ToTuple(),\n        )\n\n        self.common(\n            m,\n            (torch.randn([2, 5, 16, 16]),),\n            atol=6e-5,\n            rtol=0.001,\n            # Make sure we compute also with fp16 in the reference. Otherwise,\n            # the reference will compute with fp32 and cast back to fp16, which\n            # causes numeric differences beyond tolerance.\n            reference_in_float=not torch.version.hip,\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_alignment.py::test_unaligned_input",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 36,
+      "end_line": 47,
+      "excerpt": "    def test_unaligned_input(self):\n        def fn(x):\n            return torch.nn.functional.relu(x)\n\n        x = torch.randn(1024 + 16, device=self.device)[1:-15]\n        # TODO (malfet): Investigate failures on MacOS-14\n        with (\n            contextlib.nullcontext()\n            if self.device != \"mps\" or MACOS_VERSION >= 15.0\n            else self.assertRaises(AssertionError)\n        ):\n            self.common(fn, (x,), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_unaligned_input_2d",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 49,
+      "end_line": 54,
+      "excerpt": "    def test_unaligned_input_2d(self):\n        def fn(x):\n            return torch.nn.functional.relu(x)\n\n        x = torch.randn(1024, 1024 + 16, device=self.device)[:, 1:-15]\n        self.common(fn, (x,), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_alignment_without_custom_op",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 56,
+      "end_line": 64,
+      "excerpt": "    def test_alignment_without_custom_op(self):\n        def fn(x):\n            a = torch.nn.functional.relu(x)\n            b = (3 * a)[1:-15]\n            c = torch.cos(b)\n            return c\n\n        x = torch.randn(1024 + 16, device=self.device)\n        self.common(fn, (x,), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_no_align_for_custom_op",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 66,
+      "end_line": 83,
+      "excerpt": "    @config.patch(implicit_fallbacks=True)\n    def test_no_align_for_custom_op(self):\n        def slice1d(x):\n            return (3 * x)[1:-15]\n\n        def slice1d_meta(x):\n            return torch.empty_like(x)[1:-15]\n\n        define_custom_op_for_test(\"slice1d\", slice1d, slice1d_meta)\n\n        def fn(x):\n            a = torch.nn.functional.relu(x)\n            b = torch.ops.test.slice1d(a)\n            c = torch.cos(b)\n            return c\n\n        x = torch.randn(1024 + 16, device=self.device)\n        self.common(fn, (x,), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_no_align_for_custom_op_2d",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 85,
+      "end_line": 102,
+      "excerpt": "    @config.patch(implicit_fallbacks=True)\n    def test_no_align_for_custom_op_2d(self):\n        def slice2d(x):\n            return (3 * x)[..., 1:-15]\n\n        def slice2d_meta(x):\n            return torch.empty_like(x)[..., 1:-15]\n\n        define_custom_op_for_test(\"slice2d\", slice2d, slice2d_meta)\n\n        def fn(x):\n            a = torch.nn.functional.relu(x)\n            b = torch.ops.test.slice2d(a)\n            c = torch.cos(b)\n            return c\n\n        x = torch.randn(1024, 1024 + 16, device=self.device)\n        self.common(fn, (x,), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_incorrect_meta_for_custom_op_2d",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 104,
+      "end_line": 127,
+      "excerpt": "    @config.patch(implicit_fallbacks=True, alignment_asserts=True)\n    @skip_if_cpp_wrapper(\n        \"Inductor does not generate alignment assertion for cpp_wrapper right now\"\n    )\n    def test_incorrect_meta_for_custom_op_2d(self):\n        def slice2d(x):\n            return (3 * x)[..., 1:-15]\n\n        def slice2d_meta(x):\n            return torch.empty_like(x)[..., 0:-16]\n\n        define_custom_op_for_test(\"slice2d_incorrect_meta\", slice2d, slice2d_meta)\n\n        def fn(x):\n            a = torch.nn.functional.relu(x)\n            b = torch.ops.test.slice2d_incorrect_meta(a)\n            c = torch.cos(b)\n            return c\n\n        x = torch.randn(1024, 1024 + 16, device=self.device)\n\n        expected_error = \"Expect the tensor to be 16 bytes aligned. Fail due to storage_offset=1 itemsize=4\"\n        with self.assertRaisesRegex(AssertionError, expected_error):\n            self.common(fn, (x,), check_lowp=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_slice",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 129,
+      "end_line": 134,
+      "excerpt": "    def test_slice(self):\n        def f(x):\n            return x[1:] + 1\n\n        x = torch.randn(1025, device=self.device)\n        self.common(f, (x,))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_view_dtype_slice",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 136,
+      "end_line": 141,
+      "excerpt": "    def test_view_dtype_slice(self):\n        def f(x):\n            return x.view(dtype=torch.float32)[1:] + 1\n\n        x = torch.randn(1025 * 2, dtype=torch.bfloat16, device=self.device)\n        self.common(f, (x,), reference_in_float=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_slice_view_dtype",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 143,
+      "end_line": 167,
+      "excerpt": "    @parametrize(\n        \"size\",\n        (\n            # wrapper for size = 128: https://gist.github.com/shunting314/88f1e72957b9fc5e9826aaa346a0e652\n            # ptx: https://gist.github.com/shunting314/eb657ee8821eef9f0685b7b91e2ad5c2\n            # the ptx file uses ld.global.b32 to load input buffer\n            128,\n            # wrapper for size = 1024: https://gist.github.com/shunting314/d7f64e1f52f6b1e2ec25e1a51052ce43\n            # ptx: https://gist.github.com/shunting314/a24ff7563bb6b04523d11b119ab0f2b2\n            # the ptx file uses ld.global.v2.b32 to load input buffer\n            1024,\n            # wrapper for size = 1024 * 1024: https://gist.github.com/shunting314/016b95cf0b6e9a75c25f5c9d5ed0a2ba\n            # ptx: https://gist.github.com/shunting314/360112a4893c759b114c12fc99958297\n            # the ptx file uses ld.global.v4.b32 to load input buffer\n            1024 * 1024,\n        ),\n    )\n    def test_slice_view_dtype(self, size):\n        offset = 1\n\n        def f(x):\n            return x[2:].view(dtype=torch.float32) + 1\n\n        x = torch.randn((size + offset) * 2, dtype=torch.bfloat16, device=self.device)\n        self.common(f, (x,), reference_in_float=False)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_alignment.py::test_Q4_K_dequantization",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_alignment.py",
+      "file_sha256": "0152c268d357d07ce80c57b1685676151b60134ce19090b073415e38418f9007",
+      "start_line": 169,
+      "end_line": 225,
+      "excerpt": "    def test_Q4_K_dequantization(self):\n        \"\"\"\n        Test the alignment issue for Q4_K dequantization.\n        \"\"\"\n\n        QK_K = 256\n        K_SCALE_SIZE = 12\n\n        def get_scale_min(scales):\n            n_blocks = scales.shape[0]\n            scales = scales.view(torch.uint8)\n            scales = scales.reshape((n_blocks, 3, 4))\n\n            d, m, m_d = torch.split(scales, scales.shape[-2] // 3, dim=-2)\n\n            sc = torch.cat([d & 0x3F, (m_d & 0x0F) | ((d >> 2) & 0x30)], dim=-1)\n            min = torch.cat([m & 0x3F, (m_d >> 4) | ((m >> 2) & 0x30)], dim=-1)\n\n            return (sc.reshape((n_blocks, 8)), min.reshape((n_blocks, 8)))\n\n        def split_block_dims(blocks, *args):\n            n_max = blocks.shape[1]\n            dims = list(args) + [n_max - sum(args)]\n            return torch.split(blocks, dims, dim=1)\n\n        def dequantize_blocks_Q4_K(blocks, block_size, type_size):\n            n_blocks = blocks.shape[0]\n\n            d, dmin, scales, qs = split_block_dims(blocks, 2, 2, K_SCALE_SIZE)\n            d = d.view(torch.float16)\n            dmin = dmin.view(torch.float16)\n\n            sc, m = get_scale_min(scales)\n\n            d = (d * sc).reshape((n_blocks, -1, 1))\n            dm = (dmin * m).reshape((n_blocks, -1, 1))\n\n            qs = qs.reshape((n_blocks, -1, 1, 32)) >> torch.tensor(\n                [0, 4], device=d.device, dtype=torch.uint8\n            ).reshape((1, 1, 2, 1))\n            qs = (qs & 0x0F).reshape((n_blocks, -1, 32))\n\n            return (d * qs - dm).reshape((n_blocks, QK_K))\n\n        data = torch.randint(\n            0, 16, (18432, 1728), device=self.device, dtype=torch.uint8\n        )\n\n        def dequantize(data):\n            block_size, type_size = 256, 144\n            rows = data.reshape((-1, data.shape[-1])).view(torch.uint8)\n            n_blocks = rows.numel() // type_size\n            blocks = rows.reshape((n_blocks, type_size))\n            blocks = dequantize_blocks_Q4_K(blocks, block_size, type_size)\n            return blocks.reshape(18432, 3072)\n\n        self.common(dequantize, (data,), check_lowp=False, atol=1e-3, rtol=1e-3)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_smoke.py::test_mlp",
+      "class": "SmokeTest",
+      "path": "test/inductor/test_smoke.py",
+      "file_sha256": "34276fbdc90e34224fdea320a2c7777e0e67011434cde78227a4cde389827379",
+      "start_line": 33,
+      "end_line": 44,
+      "excerpt": "    @unittest.skipIf(not HAS_GPU, \"Triton is not available\")\n    def test_mlp(self):\n        torch._logging.set_logs(\n            dynamo=logging.DEBUG, inductor=logging.DEBUG, aot=logging.DEBUG\n        )\n\n        mlp = torch.compile(MLP().to(GPU_TYPE))\n        for _ in range(3):\n            mlp(torch.randn(1, device=GPU_TYPE))\n\n        # set back to defaults\n        torch._logging.set_logs()",
+      "class_header": "class SmokeTest(TestCase):"
+    },
+    {
+      "id": "test_smoke.py::test_compile_decorator",
+      "class": "SmokeTest",
+      "path": "test/inductor/test_smoke.py",
+      "file_sha256": "34276fbdc90e34224fdea320a2c7777e0e67011434cde78227a4cde389827379",
+      "start_line": 46,
+      "end_line": 58,
+      "excerpt": "    @unittest.skipIf(not HAS_GPU, \"Triton is not available\")\n    def test_compile_decorator(self):\n        @torch.compile\n        def foo(x):\n            return torch.sin(x) + x.min()\n\n        @torch.compile(mode=\"reduce-overhead\")\n        def bar(x):\n            return x * x\n\n        for _ in range(3):\n            foo(torch.full((3, 4), 0.7, device=GPU_TYPE))\n            bar(torch.rand((2, 2), device=GPU_TYPE))",
+      "class_header": "class SmokeTest(TestCase):"
+    },
+    {
+      "id": "test_benchmarking.py::test_benchmark_smoke",
+      "class": "TestBenchmarker",
+      "path": "test/inductor/test_benchmarking.py",
+      "file_sha256": "2996acf57d1838dfe7e9b350d48f8915f845196488cdbaf1697d4ea39292af80",
+      "start_line": 52,
+      "end_line": 71,
+      "excerpt": "    @unittest.skipIf(not HAS_CPU or not HAS_GPU, \"requires CPU and GPU\")\n    @decorateIf(\n        unittest.expectedFailure,\n        lambda params: params[\"benchmarker_cls\"] is Benchmarker\n        and params[\"device\"] == GPU_TYPE,\n    )\n    @parametrize(\"benchmarker_cls\", ALL_BENCHMARKER_CLASSES)\n    @parametrize(\"device\", (GPU_TYPE, \"cpu\"))\n    def test_benchmark_smoke(self, benchmarker_cls, device):\n        benchmarker = benchmarker_cls()\n        (fn, fn_args, fn_kwargs), _ = self.make_params(device)\n        timing = benchmarker.benchmark(fn, fn_args, fn_kwargs)\n        self.assertGreater(timing, 0)\n        self.assertEqual(self.get_counter_value(benchmarker_cls, \"benchmark\"), 1)\n        self.assertEqual(\n            self.get_counter_value(\n                benchmarker_cls, \"benchmark_cpu\" if device == \"cpu\" else \"benchmark_gpu\"\n            ),\n            1,\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass TestBenchmarker(TestCase):"
+    },
+    {
+      "id": "test_benchmarking.py::test_benchmark_gpu_smoke",
+      "class": "TestBenchmarker",
+      "path": "test/inductor/test_benchmarking.py",
+      "file_sha256": "2996acf57d1838dfe7e9b350d48f8915f845196488cdbaf1697d4ea39292af80",
+      "start_line": 82,
+      "end_line": 93,
+      "excerpt": "    @unittest.skipIf(not HAS_GPU, \"requires GPU\")\n    @decorateIf(\n        unittest.expectedFailure,\n        lambda params: params[\"benchmarker_cls\"] is Benchmarker,\n    )\n    @parametrize(\"benchmarker_cls\", ALL_BENCHMARKER_CLASSES)\n    def test_benchmark_gpu_smoke(self, benchmarker_cls, device=GPU_TYPE):\n        benchmarker = benchmarker_cls()\n        _, _callable = self.make_params(device)\n        timing = benchmarker.benchmark_gpu(_callable)\n        self.assertGreater(timing, 0)\n        self.assertEqual(self.get_counter_value(benchmarker_cls, \"benchmark_gpu\"), 1)",
+      "class_header": "@instantiate_parametrized_tests\nclass TestBenchmarker(TestCase):"
+    },
+    {
+      "id": "test_benchmarking.py::test_benchmark_safely_infers_device_no_devices",
+      "class": "TestBenchmarker",
+      "path": "test/inductor/test_benchmarking.py",
+      "file_sha256": "2996acf57d1838dfe7e9b350d48f8915f845196488cdbaf1697d4ea39292af80",
+      "start_line": 95,
+      "end_line": 103,
+      "excerpt": "    @unittest.skipIf(not HAS_CPU and not HAS_GPU, \"requires CPU or GPU\")\n    @unittest.expectedFailure\n    @parametrize(\"benchmarker_cls\", ALL_BENCHMARKER_CLASSES)\n    def test_benchmark_safely_infers_device_no_devices(\n        self, benchmarker_cls, device=\"cpu\" if HAS_CPU else GPU_TYPE\n    ):\n        benchmarker = benchmarker_cls()\n        (fn, _, _), _ = self.make_params(device)\n        benchmarker.benchmark(fn, (), {})",
+      "class_header": "@instantiate_parametrized_tests\nclass TestBenchmarker(TestCase):"
+    },
+    {
+      "id": "test_benchmarking.py::test_benchmark_safely_infers_device_many_devices",
+      "class": "TestBenchmarker",
+      "path": "test/inductor/test_benchmarking.py",
+      "file_sha256": "2996acf57d1838dfe7e9b350d48f8915f845196488cdbaf1697d4ea39292af80",
+      "start_line": 105,
+      "end_line": 115,
+      "excerpt": "    @unittest.skipIf(not HAS_CPU or not HAS_GPU, \"requires CPU and GPU\")\n    @unittest.expectedFailure\n    @parametrize(\"benchmarker_cls\", ALL_BENCHMARKER_CLASSES)\n    def test_benchmark_safely_infers_device_many_devices(self, benchmarker_cls):\n        benchmarker = benchmarker_cls()\n        (fn, cpu_args, cpu_kwargs), _ = self.make_sum(\"cpu\")\n        (_, gpu_args, gpu_kwargs), _ = self.make_sum(GPU_TYPE)\n        many_devices_args = cpu_args + gpu_args\n        many_devices_kwargs = cpu_kwargs\n        many_devices_kwargs.update(gpu_kwargs)\n        benchmarker.benchmark(fn, many_devices_args, many_devices_kwargs)",
+      "class_header": "@instantiate_parametrized_tests\nclass TestBenchmarker(TestCase):"
+    },
+    {
+      "id": "test_benchmarking.py::test_benchmark_warmup_and_rep_defaults",
+      "class": "TestBenchmarker",
+      "path": "test/inductor/test_benchmarking.py",
+      "file_sha256": "2996acf57d1838dfe7e9b350d48f8915f845196488cdbaf1697d4ea39292af80",
+      "start_line": 117,
+      "end_line": 133,
+      "excerpt": "    @unittest.skipIf(not HAS_GPU, \"requires GPU\")\n    def test_benchmark_warmup_and_rep_defaults(self):\n        \"\"\"Test that benchmark_gpu receives default warmup and rep values when not specified.\"\"\"\n        captured_kwargs = {}\n\n        def capture_benchmark_gpu(self, _callable, **kwargs):\n            captured_kwargs.update(kwargs)\n            return 1.0  # Return a dummy timing\n\n        benchmarker = TritonBenchmarker()\n        (fn, fn_args, fn_kwargs), _ = self.make_params(GPU_TYPE)\n\n        with patch.object(TritonBenchmarker, \"benchmark_gpu\", capture_benchmark_gpu):\n            benchmarker.benchmark(fn, fn_args, fn_kwargs)\n\n        self.assertEqual(captured_kwargs[\"warmup\"], inductor_default_autotune_warmup)\n        self.assertEqual(captured_kwargs[\"rep\"], inductor_default_autotune_rep)",
+      "class_header": "@instantiate_parametrized_tests\nclass TestBenchmarker(TestCase):"
+    },
+    {
+      "id": "test_benchmarking.py::test_benchmark_warmup_and_rep_custom_values",
+      "class": "TestBenchmarker",
+      "path": "test/inductor/test_benchmarking.py",
+      "file_sha256": "2996acf57d1838dfe7e9b350d48f8915f845196488cdbaf1697d4ea39292af80",
+      "start_line": 135,
+      "end_line": 156,
+      "excerpt": "    @unittest.skipIf(not HAS_GPU, \"requires GPU\")\n    def test_benchmark_warmup_and_rep_custom_values(self):\n        \"\"\"Test that benchmark_gpu receives custom warmup and rep values when specified.\"\"\"\n        captured_kwargs = {}\n\n        def capture_benchmark_gpu(self, _callable, **kwargs):\n            captured_kwargs.update(kwargs)\n            return 1.0  # Return a dummy timing\n\n        benchmarker = TritonBenchmarker()\n        (fn, fn_args, fn_kwargs), _ = self.make_params(GPU_TYPE)\n\n        custom_warmup = 50\n        custom_rep = 200\n\n        with patch.object(TritonBenchmarker, \"benchmark_gpu\", capture_benchmark_gpu):\n            benchmarker.benchmark(\n                fn, fn_args, fn_kwargs, warmup=custom_warmup, rep=custom_rep\n            )\n\n        self.assertEqual(captured_kwargs[\"warmup\"], custom_warmup)\n        self.assertEqual(captured_kwargs[\"rep\"], custom_rep)",
+      "class_header": "@instantiate_parametrized_tests\nclass TestBenchmarker(TestCase):"
+    },
+    {
+      "id": "test_benchmarking.py::test_torch_profiler_benchmarker_reuses_inductor_helpers",
+      "class": "TestBenchmarker",
+      "path": "test/inductor/test_benchmarking.py",
+      "file_sha256": "2996acf57d1838dfe7e9b350d48f8915f845196488cdbaf1697d4ea39292af80",
+      "start_line": 487,
+      "end_line": 529,
+      "excerpt": "    @unittest.skipIf(not HAS_GPU, \"requires GPU\")\n    @parametrize(\n        \"hip_value, expected_buffer_size_bytes\",\n        ((None, 1024), (\"mock-hip\", 256 * 1024 * 1024)),\n    )\n    def test_torch_profiler_benchmarker_reuses_inductor_helpers(\n        self, hip_value, expected_buffer_size_bytes, device=GPU_TYPE\n    ):\n        benchmarker = TorchProfilerBenchmarker()\n        benchmarker.__dict__[\"L2_cache_size\"] = 1024\n        _, _callable = self.make_params(device, size=16)\n\n        captured_buffer_lengths = []\n        captured_buffer_devices = []\n        original_empty = torch.empty\n\n        def empty_spy(*args, **kwargs):\n            captured_buffer_lengths.append(args[0])\n            captured_buffer_devices.append(kwargs[\"device\"])\n            return original_empty(*args, **kwargs)\n\n        with patch.object(\n            benchmarker,\n            \"get_event_pairs\",\n            wraps=benchmarker.get_event_pairs,\n        ) as mock_get_event_pairs:\n            with patch.object(torch.version, \"hip\", hip_value):\n                with patch(\n                    \"torch._inductor.runtime.benchmarking.torch.empty\",\n                    side_effect=empty_spy,\n                ):\n                    timing = benchmarker.benchmark_gpu(\n                        _callable,\n                        rep=1,\n                        estimation_iters=1,\n                        memory_warmup_iters=0,\n                    )\n\n        self.assertGreater(timing, 0)\n        mock_get_event_pairs.assert_called_once_with(1, device_type=device)\n        self.assertGreater(len(captured_buffer_lengths), 0)\n        self.assertEqual(captured_buffer_lengths[0], expected_buffer_size_bytes // 4)\n        self.assertEqual(captured_buffer_devices[0], device)",
+      "class_header": "@instantiate_parametrized_tests\nclass TestBenchmarker(TestCase):"
+    },
+    {
+      "id": "test_efficient_conv_bn_eval.py::test_conv_bn_eval",
+      "class": "",
+      "path": "test/inductor/test_efficient_conv_bn_eval.py",
+      "file_sha256": "29661e120bb3039921e1a578ed03f590c4cbf41cfba02186ec39bbfceb468b1c",
+      "start_line": 165,
+      "end_line": 236,
+      "excerpt": "        def test_conv_bn_eval(\n            test_class, use_bias, module, sync_bn, decompose_nn_module\n        ):\n            from functorch import make_fx\n            from torch._dispatch.python import enable_python_dispatcher\n\n            kwargs = {\"kernel_size\": 3, \"stride\": 2} if module[0] != nn.Linear else {}\n            mod_eager = test_class(\n                module[0],\n                module[1],\n                use_bias,\n                3,\n                32,\n                self.device,\n                **kwargs,\n            ).eval()\n            # Copy module to test backward\n            mod_optimized = copy.deepcopy(mod_eager)\n            if sync_bn:\n                mod_eager = nn.SyncBatchNorm.convert_sync_batchnorm(mod_eager).eval()\n                mod_optimized = nn.SyncBatchNorm.convert_sync_batchnorm(\n                    mod_optimized\n                ).eval()\n            torch._dynamo.reset()\n\n            inps = [4, 3]\n            # Conv shape goes from big to small, and ConvTranspose shape goes from small to big\n            spatial_d = (\n                4 if issubclass(module[0], nn.modules.conv._ConvTransposeNd) else 96\n            )\n            if module[0] is nn.Conv1d or module[0] is nn.ConvTranspose1d:\n                inps += [spatial_d] * 1\n            if module[0] is nn.Conv2d or module[0] is nn.ConvTranspose2d:\n                inps += [spatial_d] * 2\n            if module[0] is nn.Conv3d or module[0] is nn.ConvTranspose3d:\n                inps += [spatial_d] * 3\n            inp = torch.rand(inps).to(self.device)\n\n            if decompose_nn_module:\n                with enable_python_dispatcher():\n                    mod_optimized = make_fx(mod_optimized, pre_dispatch=True)(inp)\n            mod_optimized = torch.compile(mod_optimized)\n\n            original_value = counters[\"inductor\"][\"efficient_conv_bn_eval\"]\n\n            optim_eager = torch.optim.SGD(mod_eager.parameters(), lr=1e-3)\n            optim_optimized = torch.optim.SGD(mod_optimized.parameters(), lr=1e-3)\n\n            optim_eager.zero_grad()\n            optim_optimized.zero_grad()\n\n            # test forward\n            out_eager = mod_eager(inp)\n            out_optimized = mod_optimized(inp)\n\n            self.assertEqual(out_optimized, out_eager)\n\n            out_eager.mean().backward()\n            out_optimized.mean().backward()\n\n            optim_eager.step()\n            optim_optimized.step()\n            # test forward (by testing forward again after one training iteration)\n            inp_bw = torch.rand_like(inp)\n            out_eager_bw = mod_eager(inp_bw)\n            out_optimized_bw = mod_optimized(inp_bw)\n\n            self.assertEqual(out_eager_bw, out_optimized_bw)\n            current_value = counters[\"inductor\"][\"efficient_conv_bn_eval\"]\n            self.assertEqual(\n                current_value - original_value, test_class.expected_optimization_count\n            )"
+    },
+    {
+      "id": "test_efficient_conv_bn_eval.py::test_basic",
+      "path": "test/inductor/test_efficient_conv_bn_eval.py",
+      "start_line": 161,
+      "end_line": 266,
+      "file_sha256": "29661e120bb3039921e1a578ed03f590c4cbf41cfba02186ec39bbfceb468b1c",
+      "excerpt": "    @tf32_on_and_off(0.003)\n    @inductor_config.patch({\"efficient_conv_bn_eval_fx_passes\": True})\n    @functorch_config.patch({\"enable_autograd_cache\": False})\n    def test_basic(self):\n        def test_conv_bn_eval(\n            test_class, use_bias, module, sync_bn, decompose_nn_module\n        ):\n            from functorch import make_fx\n            from torch._dispatch.python import enable_python_dispatcher\n\n            kwargs = {\"kernel_size\": 3, \"stride\": 2} if module[0] != nn.Linear else {}\n            mod_eager = test_class(\n                module[0],\n                module[1],\n                use_bias,\n                3,\n                32,\n                self.device,\n                **kwargs,\n            ).eval()\n            # Copy module to test backward\n            mod_optimized = copy.deepcopy(mod_eager)\n            if sync_bn:\n                mod_eager = nn.SyncBatchNorm.convert_sync_batchnorm(mod_eager).eval()\n                mod_optimized = nn.SyncBatchNorm.convert_sync_batchnorm(\n                    mod_optimized\n                ).eval()\n            torch._dynamo.reset()\n\n            inps = [4, 3]\n            # Conv shape goes from big to small, and ConvTranspose shape goes from small to big\n            spatial_d = (\n                4 if issubclass(module[0], nn.modules.conv._ConvTransposeNd) else 96\n            )\n            if module[0] is nn.Conv1d or module[0] is nn.ConvTranspose1d:\n                inps += [spatial_d] * 1\n            if module[0] is nn.Conv2d or module[0] is nn.ConvTranspose2d:\n                inps += [spatial_d] * 2\n            if module[0] is nn.Conv3d or module[0] is nn.ConvTranspose3d:\n                inps += [spatial_d] * 3\n            inp = torch.rand(inps).to(self.device)\n\n            if decompose_nn_module:\n                with enable_python_dispatcher():\n                    mod_optimized = make_fx(mod_optimized, pre_dispatch=True)(inp)\n            mod_optimized = torch.compile(mod_optimized)\n\n            original_value = counters[\"inductor\"][\"efficient_conv_bn_eval\"]\n\n            optim_eager = torch.optim.SGD(mod_eager.parameters(), lr=1e-3)\n            optim_optimized = torch.optim.SGD(mod_optimized.parameters(), lr=1e-3)\n\n            optim_eager.zero_grad()\n            optim_optimized.zero_grad()\n\n            # test forward\n            out_eager = mod_eager(inp)\n            out_optimized = mod_optimized(inp)\n\n            self.assertEqual(out_optimized, out_eager)\n\n            out_eager.mean().backward()\n            out_optimized.mean().backward()\n\n            optim_eager.step()\n            optim_optimized.step()\n            # test forward (by testing forward again after one training iteration)\n            inp_bw = torch.rand_like(inp)\n            out_eager_bw = mod_eager(inp_bw)\n            out_optimized_bw = mod_optimized(inp_bw)\n\n            self.assertEqual(out_eager_bw, out_optimized_bw)\n            current_value = counters[\"inductor\"][\"efficient_conv_bn_eval\"]\n            self.assertEqual(\n                current_value - original_value, test_class.expected_optimization_count\n            )\n\n        conv_bias = [True, False]\n        modules = [\n            (nn.Linear, nn.BatchNorm1d),\n            (nn.Conv1d, nn.BatchNorm1d),\n            (nn.Conv2d, nn.BatchNorm2d),\n            (nn.Conv3d, nn.BatchNorm3d),\n            (nn.ConvTranspose1d, nn.BatchNorm1d),\n            (nn.ConvTranspose2d, nn.BatchNorm2d),\n            (nn.ConvTranspose3d, nn.BatchNorm3d),\n        ]\n        test_classes = [ConvOp, MultiUserConvOp]\n        sync_bns = [False, True]\n        decompose_nn_modules = [False, True]\n        for (\n            test_class,\n            use_bias,\n            module,\n            sync_bn,\n            decompose_nn_module,\n        ) in itertools.product(\n            test_classes,\n            conv_bias,\n            modules,\n            sync_bns,\n            decompose_nn_modules,\n        ):\n            test_conv_bn_eval(\n                test_class, use_bias, module, sync_bn, decompose_nn_module\n            )"
+    }
+  ]
+}

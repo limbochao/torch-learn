@@ -1,0 +1,540 @@
+{
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "TestStaticTritonLauncher.setUp",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 106,
+      "end_line": 110,
+      "excerpt": "    def setUp(self):\n        super().setUp()\n        self.tmp_files = []\n        if HAS_XPU_AND_TRITON:\n            JITFunction.__getitem__ = _patched_getitem"
+    },
+    {
+      "id": "TestStaticTritonLauncher.tearDown",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 112,
+      "end_line": 121,
+      "excerpt": "    def tearDown(self):\n        super().tearDown()\n        for tmp_file in self.tmp_files:\n            try:\n                os.remove(tmp_file.name)\n            except OSError:\n                pass\n\n        if HAS_XPU_AND_TRITON:\n            JITFunction.__getitem__ = _orig_getitem"
+    },
+    {
+      "id": "TestStaticTritonLauncher.write_cubin_to_tmp",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 123,
+      "end_line": 140,
+      "excerpt": "    def write_cubin_to_tmp(self, kernel: CompiledKernel) -> str:\n        \"\"\"\n        Only used for tests where we don't have a cubin path.\n        \"\"\"\n        if hasattr(kernel, \"_cubin_path\"):\n            return\n        # Just used by tests for now.\n        # TODO: derive cubin_path from wherever triton stores the cubin file on disk.\n        binary_key = \"\"\n        with tempfile.NamedTemporaryFile(mode=\"wb\", delete=False) as tmp_file:\n            if GPU_TYPE == \"xpu\":\n                binary_key = \"zebin\"\n            else:\n                binary_key = \"hsaco\" if torch.version.hip else \"cubin\"\n\n            tmp_file.write(kernel.asm[binary_key])\n            self.tmp_files.append(tmp_file)\n            return tmp_file.name"
+    },
+    {
+      "id": "TestStaticTritonLauncher._make_launcher",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 142,
+      "end_line": 161,
+      "excerpt": "    def _make_launcher(\n        self,\n        compiled_kernel: CompiledKernel,\n    ) -> StaticallyLaunchedCudaKernel | StaticallyLaunchedXpuKernel:\n        \"\"\"\n        Compiles a Triton kernel with the provided *args,\n        writes its cubin to the temporary file, and returns the file path.\n        \"\"\"\n        cubin_file = self.write_cubin_to_tmp(compiled_kernel)\n        compiled_kernel._cubin_path = cubin_file\n        result = statically_launched_kernel_by_device(compiled_kernel, GPU_TYPE)\n        # Test reload cubin from raw here\n        old_cubin_path = result.cubin_path\n        if old_cubin_path is None:\n            raise AssertionError\n        result.cubin_path = None\n        result.reload_cubin_from_raw(old_cubin_path)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        result.load_kernel(device_interface.current_device())\n        return result"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_basic",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 163,
+      "end_line": 188,
+      "excerpt": "    def test_basic(self):\n        \"\"\"Verify _FastCudaLauncher correctly launches a kernel with tensor + scalar args.\n\n        Compiles a simple kernel, wraps it in _FastCudaLauncher, then invokes\n        via vectorcall and checks the output tensor has the expected value.\n        \"\"\"\n\n        @triton.jit\n        def simple_kernel(arg0, arg1):\n            x = tl.load(arg0)\n            y = arg1\n            tl.store(arg0, x + y)\n\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        arg1 = 5\n        args = (arg0, arg1)\n        compiled_kernel = simple_kernel[(1,)](*args)\n        launcher = self._make_launcher(compiled_kernel)\n        self.assertEqual(arg0, torch.tensor([5], dtype=torch.int32, device=GPU_TYPE))\n        self.assertEqual(launcher.arg_tys, \"Oi\")\n        new_arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n\n        launcher.run(1, 1, 1, stream, new_arg0, arg1)\n        self.assertEqual(new_arg0, arg0)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_unsigned_integers",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 195,
+      "end_line": 216,
+      "excerpt": "    def test_unsigned_integers(self):\n        @triton.jit\n        def unsigned_integers(\n            arg0, arg1: tl.uint8, arg2: tl.uint16, arg3: tl.uint32, arg4: tl.uint64\n        ):\n            x = tl.load(arg0)\n            y = arg1 + arg2 + arg3 + arg4\n            tl.store(arg0, x + y)\n\n        arg0 = torch.zeros(1, dtype=torch.uint64, device=GPU_TYPE)\n        # Using small numbers creates a Literal type which triton treats as a constant\n        args = (arg0, 50, 50, 50, 50)\n\n        compiled_kernel = unsigned_integers[1,](*args)\n        launcher = self._make_launcher(compiled_kernel)\n        self.assertEqual(arg0, torch.tensor([200], dtype=torch.uint64, device=GPU_TYPE))\n        self.assertEqual(launcher.arg_tys, \"OBHIK\")\n        new_arg0 = torch.zeros(1, dtype=torch.uint64, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        launcher.run(1, 1, 1, stream, new_arg0, 50, 50, 50, 50)\n        self.assertEqual(new_arg0, arg0)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_signed_integers",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 218,
+      "end_line": 239,
+      "excerpt": "    def test_signed_integers(self):\n        @triton.jit\n        def signed_integers(\n            arg0, arg1: tl.int8, arg2: tl.int16, arg3: tl.int32, arg4: tl.int64\n        ):\n            x = tl.load(arg0)\n            y = arg1 + arg2 + arg3 + arg4\n            tl.store(arg0, x + y)\n\n        arg0 = torch.zeros(1, dtype=torch.int64, device=GPU_TYPE)\n        # Using small numbers creates a Literal type which triton treats as a constant\n        args = (arg0, 50, 50, 50, 50)\n\n        compiled_kernel = signed_integers[1,](*args)\n        launcher = self._make_launcher(compiled_kernel)\n        self.assertEqual(arg0, torch.tensor([200], dtype=torch.int64, device=GPU_TYPE))\n        self.assertEqual(launcher.arg_tys, \"Obhil\")\n        new_arg0 = torch.zeros(1, dtype=torch.int64, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        launcher.run(1, 1, 1, stream, new_arg0, 50, 50, 50, 50)\n        self.assertEqual(new_arg0, arg0)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_basic_1arg",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 241,
+      "end_line": 263,
+      "excerpt": "    def test_basic_1arg(self):\n        @triton.jit\n        def simple_kernel_1_arg(arg0):\n            x = tl.load(arg0)\n            tl.store(arg0, x + 1)\n\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        compiled_kernel = simple_kernel_1_arg[1,](arg0)\n        launcher = self._make_launcher(compiled_kernel)\n        self.assertEqual(arg0, torch.tensor([1], dtype=torch.int32, device=GPU_TYPE))\n        self.assertEqual(launcher.arg_tys, \"O\")\n        new_arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n\n        launcher.run(\n            1,\n            1,\n            1,\n            stream,\n            new_arg0,\n        )\n        self.assertEqual(new_arg0, arg0)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_constexpr",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 265,
+      "end_line": 291,
+      "excerpt": "    def test_constexpr(self):\n        # Constexprs are compiled directly into the cubin file,\n        # so we never need to pass it to StaticCudaLauncher.\n\n        @triton.jit\n        def kernel_constexpr(arg0, CONSTANT: tl.constexpr):\n            x = tl.load(arg0)\n            tl.store(arg0, x + CONSTANT)\n\n        # Can't use make_launcher because constexpr needs to be constant\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        compiled_kernel = kernel_constexpr[(1,)](arg0, CONSTANT=5)\n        launcher = self._make_launcher(compiled_kernel)\n\n        self.assertEqual(arg0, torch.tensor([5], dtype=torch.int32, device=GPU_TYPE))\n        self.assertEqual(launcher.arg_tys, \"O\")\n        new_arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        launcher.run(\n            1,\n            1,\n            1,\n            stream,\n            new_arg0,\n        )\n        self.assertEqual(new_arg0, arg0)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_implied_constant",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 293,
+      "end_line": 343,
+      "excerpt": "    def test_implied_constant(self):\n        \"\"\"xnumel is unused in this kernel, but isn't explicitly marked as a constexpr\"\"\"\n\n        # This kernel was generated by inductor so it has a bunch of unused arguments. We don't change it\n        @triton.jit\n        def triton_red_fused_any_isinf_0(\n            in_ptr0,\n            out_ptr0,\n            xnumel,\n            r0_numel,\n            XBLOCK: tl.constexpr,\n            R0_BLOCK: tl.constexpr,\n        ):\n            xnumel = 1  # noqa: F841\n            rnumel = r0_numel  # noqa: F841\n            RBLOCK: tl.constexpr = R0_BLOCK  # noqa: F841\n            xoffset = tl.program_id(0) * XBLOCK\n            xindex = xoffset + tl.arange(0, XBLOCK)[:, None]  # noqa: F841\n            xmask = tl.full([XBLOCK, R0_BLOCK], True, tl.int1)  # noqa: F841\n            r0_base = tl.arange(0, R0_BLOCK)[None, :]\n            rbase = r0_base  # noqa: F841\n            _tmp3 = tl.full([XBLOCK, R0_BLOCK], False, tl.int1)\n            for r0_offset in range(0, r0_numel, R0_BLOCK):\n                r0_index = r0_offset + r0_base\n                r0_mask = r0_index < r0_numel\n                roffset = r0_offset  # noqa: F841\n                rindex = r0_index  # noqa: F841\n                r0_0 = r0_index\n                tmp0 = tl.load(\n                    in_ptr0 + (r0_0), r0_mask, eviction_policy=\"evict_first\", other=0.0\n                )\n                tmp1 = libdevice.isinf(tmp0).to(tl.int1)\n                tmp2 = tl.broadcast_to(tmp1, [XBLOCK, R0_BLOCK])\n                tmp4 = _tmp3 | tmp2\n                _tmp3 = tl.where(r0_mask, tmp4, _tmp3)\n            tmp3 = triton_helpers.any(_tmp3.to(tl.int8), 1)[:, None].to(tl.int1)\n            tl.store(out_ptr0 + (tl.full([XBLOCK, 1], 0, tl.int32)), tmp3, None)\n\n        arg0 = torch.tensor([0.0, 0.5, float(\"inf\"), 5], device=GPU_TYPE)\n        arg1 = torch.tensor([False], device=GPU_TYPE)\n        arg2 = torch.tensor([False], device=GPU_TYPE)\n        compiled_kernel = triton_red_fused_any_isinf_0[1,](\n            arg0, arg1, 1, 128, XBLOCK=1, R0_BLOCK=1\n        )\n        launcher = self._make_launcher(compiled_kernel)\n\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        # Don't pass in xnumel, as it is a constant\n        launcher.run(1, 1, 1, stream, arg0, arg2, 128)\n        self.assertEqual(arg1, arg2)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_kernel_no_args",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 345,
+      "end_line": 355,
+      "excerpt": "    def test_kernel_no_args(self):\n        # Just an easy way to test incompatible number of arguments\n        @triton.jit\n        def kernel_no_op():\n            pass\n\n        compiled_kernel = kernel_no_op[(1,)]()\n        launcher = self._make_launcher(compiled_kernel)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        launcher.run(1, 1, 1, stream)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_high_shared_mem",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 357,
+      "end_line": 378,
+      "excerpt": "    def test_high_shared_mem(self):\n        @triton.jit\n        def simple_kernel(arg0, arg1):\n            x = tl.load(arg0)\n            y = arg1\n            tl.store(arg0, x + y)\n\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        arg1 = 5\n        args = (arg0, arg1)\n        compiled_kernel = simple_kernel[(1,)](*args)\n        # Allocate 50 KB of memory\n        compiled_kernel.shared = 50000\n        launcher = self._make_launcher(compiled_kernel)\n        self.assertEqual(arg0, torch.tensor([5], dtype=torch.int32, device=GPU_TYPE))\n        self.assertEqual(launcher.arg_tys, \"Oi\")\n        new_arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        launcher.slow_launch_kernel = True\n        launcher.run(1, 1, 1, stream, new_arg0, arg1)\n        self.assertEqual(new_arg0, arg0)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_too_high_shared_mem",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 380,
+      "end_line": 398,
+      "excerpt": "    @skipIfXpu(msg=\"Only testing CUDA OOM behavior\")\n    def test_too_high_shared_mem(self):\n        @triton.jit\n        def simple_kernel(arg0, arg1):\n            x = tl.load(arg0)\n            y = arg1\n            tl.store(arg0, x + y)\n\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        arg1 = 5\n        args = (arg0, arg1)\n        compiled_kernel = simple_kernel[(1,)](*args)\n        # Allocate too much shared memory\n        compiled_kernel.shared = 99999999\n        self.assertRaisesRegex(\n            RuntimeError,\n            \"out of resource: simple_kernel\",\n            lambda: self._make_launcher(compiled_kernel),\n        )"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_kernel_empty_tensor",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 400,
+      "end_line": 458,
+      "excerpt": "    def test_kernel_empty_tensor(self):\n        # Triton kernel generated by torch.compile of the following:\n        # @torch.compile()\n        # def foo(x, y):\n        #   return torch.cat(((x * 4), y + 10))\n\n        # Running with example input:\n        # torch._dynamo.decorators.mark_unbacked(t, 0)\n        # x = torch.rand(0, device=GPU_TYPE)\n        # y = torch.rand(20, device=GPU_TYPE)\n\n        @triton.jit\n        def triton_poi_fused_cat_0(\n            in_ptr0, in_ptr1, out_ptr0, ks0, xnumel, XBLOCK: tl.constexpr\n        ):\n            xoffset = tl.program_id(0).to(tl.int64) * XBLOCK\n            xindex = xoffset + tl.arange(0, XBLOCK)[:].to(tl.int64)\n            xmask = xindex < xnumel\n            x0 = xindex\n            tmp0 = x0\n            tmp3 = ks0\n            tmp4 = tmp0 < tmp3\n            tmp5 = tl.load(\n                in_ptr0 + (x0), xmask & tmp4, eviction_policy=\"evict_last\", other=0.0\n            )\n            tmp6 = 4.0\n            tmp7 = tmp5 * tmp6\n            tmp8 = tl.full(tmp7.shape, 0.0, tmp7.dtype)\n            tmp9 = tl.where(tmp4, tmp7, tmp8)\n            tmp10 = tmp0 >= tmp3\n            tmp13 = tl.load(\n                in_ptr1 + (x0 + ((-1) * ks0)),\n                xmask & tmp10,\n                eviction_policy=\"evict_last\",\n                other=0.0,\n            )\n            tmp14 = 10.0\n            tmp15 = tmp13 + tmp14\n            tmp16 = tl.full(tmp15.shape, 0.0, tmp15.dtype)\n            tmp17 = tl.where(tmp10, tmp15, tmp16)\n            tmp18 = tl.where(tmp4, tmp9, tmp17)\n            tl.store(out_ptr0 + (x0), tmp18, xmask)\n\n        arg0 = 0\n        arg1 = torch.randn(0, device=GPU_TYPE)\n        arg2 = torch.randn(20, device=GPU_TYPE)\n        buf0 = torch.empty(20, device=GPU_TYPE)\n        buf1 = torch.empty(20, device=GPU_TYPE)\n        xnumel = 20 + arg0\n        compiled_kernel = triton_poi_fused_cat_0[(1,)](\n            arg1, arg2, buf0, arg0, xnumel, XBLOCK=32\n        )\n        launcher = self._make_launcher(compiled_kernel)\n\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n\n        launcher.run(1, 1, 1, stream, arg1, arg2, buf1, arg0, xnumel)\n        self.assertEqual(buf0, buf1)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_kernel_many_args",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 460,
+      "end_line": 488,
+      "excerpt": "    def test_kernel_many_args(self):\n        N = 200\n        # Make 200 arguments\n        args = [f\"arg_{i}\" for i in range(N)]\n        decl = \", \".join(args)\n        sums = [f\"    total += arg_{i}\" for i in range(N)]\n        sums_str = \"\\n\".join(sums)\n\n        template = f\"\"\"\nfrom torch._inductor.runtime.triton_compat import tl, triton\n@triton.jit\ndef kernel_many_args(out_tensor, {decl}):\n    out = tl.load(out_tensor)\n    total = out\n{sums_str}\n    tl.store(out_tensor, total)\n        \"\"\"\n\n        result = PyCodeCache.load(template.lstrip())\n\n        kernel_args = tuple(random.random() for _ in range(N))\n        buf0 = torch.zeros(1, device=GPU_TYPE)\n        compiled_kernel = result.kernel_many_args[1,](buf0, *kernel_args)\n        launcher = self._make_launcher(compiled_kernel)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        buf1 = torch.zeros(1, device=GPU_TYPE)\n        launcher.run(1, 1, 1, stream, buf1, *kernel_args)\n        self.assertEqual(buf0, buf1)"
+    },
+    {
+      "id": "TestStaticTritonLauncher.test_launcher_keeps_module_owner_alive_until_release",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 490,
+      "end_line": 538,
+      "excerpt": "    def test_launcher_keeps_module_owner_alive_until_release(self):\n        \"\"\"\n        Generated launchers capture ``runner=self.kernel.run``.  That closure\n        must keep the static kernel owner alive, otherwise its module could be\n        unloaded while the launcher can still be called.\n        \"\"\"\n        unloaded_modules = []\n\n        class FakeImpl:\n            @staticmethod\n            def _unload_kernel(mod):\n                unloaded_modules.append(mod)\n\n        class FakeKernelOwner:\n            __del__ = StaticallyLaunchedCudaKernel.__del__\n\n            def __init__(self):\n                self.name = \"fake_kernel\"\n                self.module = 0xC0FFEE\n                self.function = 0xF00D\n                self.C_impl = FakeImpl\n\n            def close(self):\n                return StaticallyLaunchedCudaKernel.close(self)\n\n            def run(self, *_args, **_kwargs):\n                return None\n\n        owner = FakeKernelOwner()\n        owner_ref = weakref.ref(owner)\n\n        class FakeLauncher:\n            def __init__(self, runner):\n                self.runner = runner\n\n            def __call__(self, stream):\n                return self.runner(1, 1, 1, stream)\n\n        launcher = FakeLauncher(owner.run)\n\n        del owner\n        gc.collect()\n        self.assertIsNotNone(owner_ref())\n        self.assertEqual(unloaded_modules, [])\n\n        del launcher\n        gc.collect()\n        self.assertIsNone(owner_ref())\n        self.assertEqual(unloaded_modules, [0xC0FFEE])"
+    },
+    {
+      "id": "TestStaticTritonCompileResult.test_basic_compile",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 550,
+      "end_line": 557,
+      "excerpt": "    def test_basic_compile(self):\n        @torch.compile\n        def foo(x, y):\n            return x + y\n\n        x = torch.randn(10, device=GPU_TYPE)\n        y = torch.randn(10, device=GPU_TYPE)\n        self.assertEqual(foo(x, y), x + y)"
+    },
+    {
+      "id": "TestStaticTritonCompileResult.test_incompatible_code",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 560,
+      "end_line": 579,
+      "excerpt": "    @torch._inductor.config.patch(\"compile_threads\", 1)\n    def test_incompatible_code(self):\n        # User defined triton kernel\n        @triton.jit\n        def custom_kernel(arg_0, arg_1):\n            x = tl.load(arg_0)\n            y = arg_1\n            tl.store(arg_0, x + y)\n\n        @torch.compile\n        def foo(x):\n            custom_kernel[1,](x, 5)\n            return x\n\n        x = torch.randn(1, device=GPU_TYPE)\n        self.assertRaisesRegex(\n            torch._inductor.exc.InductorError,\n            \"CannotStaticallyLaunchKernel: User defined triton kernel\",\n            lambda: foo(x),\n        )"
+    },
+    {
+      "id": "TestStaticTritonCompileResult.test_static_launch_user_defined_triton_kernels",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 582,
+      "end_line": 600,
+      "excerpt": "    @torch._inductor.config.patch(\n        {\"compile_threads\": 1, \"static_launch_user_defined_triton_kernels\": True}\n    )\n    def test_static_launch_user_defined_triton_kernels(self):\n        # User defined triton kernel\n        @triton.jit\n        def custom_kernel(arg_0, arg_1):\n            x = tl.load(arg_0)\n            y = arg_1\n            tl.store(arg_0, x + y)\n\n        @torch.compile\n        def foo(x):\n            custom_kernel[1,](x, 5)\n            return x\n\n        x = torch.randn(1, device=GPU_TYPE)\n        x2 = x.clone().detach_()\n        self.assertEqual(foo(x), x2 + 5)"
+    },
+    {
+      "id": "TestStaticTritonCompileResult.test_empty_tensor",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 602,
+      "end_line": 611,
+      "excerpt": "    def test_empty_tensor(self):\n        @torch.compile()\n        def foo(x, y):\n            return torch.cat(((x * 4), y + 10))\n\n        x = torch.rand(0, device=GPU_TYPE)\n        torch._dynamo.decorators.mark_unbacked(x, 0)\n        y = torch.rand(20, device=GPU_TYPE)\n        result = foo(x, y)\n        self.assertEqual(result, torch.cat(((x * 4), y + 10)))"
+    },
+    {
+      "id": "TestStaticTritonCompileResult.test_any",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 613,
+      "end_line": 630,
+      "excerpt": "    def test_any(self):\n        def fn(x):\n            return (\n                x.any(-1),\n                x.isinf().any(),\n                torch.all(x.isinf(), dim=0),\n                torch.all(torch.logical_not(x.isinf())),\n            )\n\n        compiled_fn = torch.compile(fn)\n        arg = -torch.rand(64, device=GPU_TYPE, dtype=torch.float64)\n        eager_result = fn(arg)\n        compiled_result = compiled_fn(arg)\n        self.assertEqual(eager_result, compiled_result)\n        arg[1] = float(\"inf\")\n        eager_result = fn(arg)\n        compiled_result = compiled_fn(arg)\n        self.assertEqual(eager_result, compiled_result)"
+    },
+    {
+      "id": "TestStaticTritonCompileResult.test_disable_static_triton_launcher",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 632,
+      "end_line": 647,
+      "excerpt": "    def test_disable_static_triton_launcher(self):\n        @torch.compile\n        def fn(x, y):\n            return torch.cat(((x * 4), y + 10))\n\n        # Test that static cuda launcher is in fact disabled\n        with torch._inductor.config.patch(\"use_static_triton_launcher\", False):\n            x = torch.rand(20, device=GPU_TYPE)\n            y = torch.rand(20, device=GPU_TYPE)\n            with mock.patch(\n                \"torch._inductor.runtime.triton_heuristics.StaticTritonCompileResult.make_launcher\"\n            ) as mocked:\n                result = fn(x, y)\n                mocked.assert_not_called()\n\n            self.assertEqual(result, torch.cat(((x * 4), y + 10)))"
+    },
+    {
+      "id": "TestFastCudaLauncher.setUp",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 657,
+      "end_line": 659,
+      "excerpt": "    def setUp(self):\n        super().setUp()\n        self.tmp_files = []"
+    },
+    {
+      "id": "TestFastCudaLauncher.tearDown",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 661,
+      "end_line": 667,
+      "excerpt": "    def tearDown(self):\n        super().tearDown()\n        for tmp_file in self.tmp_files:\n            try:\n                os.remove(tmp_file.name)\n            except OSError:\n                pass"
+    },
+    {
+      "id": "TestFastCudaLauncher.write_cubin_to_tmp",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 669,
+      "end_line": 676,
+      "excerpt": "    def write_cubin_to_tmp(self, kernel: CompiledKernel) -> str:\n        if hasattr(kernel, \"_cubin_path\"):\n            return\n        binary_key = \"hsaco\" if torch.version.hip else \"cubin\"\n        with tempfile.NamedTemporaryFile(mode=\"wb\", delete=False) as tmp_file:\n            tmp_file.write(kernel.asm[binary_key])\n            self.tmp_files.append(tmp_file)\n            return tmp_file.name"
+    },
+    {
+      "id": "TestFastCudaLauncher._make_launcher",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 678,
+      "end_line": 692,
+      "excerpt": "    def _make_launcher(\n        self,\n        compiled_kernel: CompiledKernel,\n    ) -> StaticallyLaunchedCudaKernel:\n        cubin_file = self.write_cubin_to_tmp(compiled_kernel)\n        compiled_kernel._cubin_path = cubin_file\n        result = statically_launched_kernel_by_device(compiled_kernel, GPU_TYPE)\n        old_cubin_path = result.cubin_path\n        if old_cubin_path is None:\n            raise AssertionError\n        result.cubin_path = None\n        result.reload_cubin_from_raw(old_cubin_path)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        result.load_kernel(device_interface.current_device())\n        return result"
+    },
+    {
+      "id": "TestFastCudaLauncher._make_fast_launcher",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 694,
+      "end_line": 704,
+      "excerpt": "    def _make_fast_launcher(self, kernel):\n        from torch._C import _FastCudaLauncher\n\n        n_scratch = 0\n        if getattr(kernel, \"has_global_scratch\", False):\n            n_scratch += 1\n        if getattr(kernel, \"has_profile_scratch\", False):\n            n_scratch += 1\n        return _FastCudaLauncher(\n            kernel.function, kernel.num_warps, kernel.shared, kernel.arg_tys, n_scratch\n        )"
+    },
+    {
+      "id": "TestFastCudaLauncher.test_basic",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 706,
+      "end_line": 724,
+      "excerpt": "    def test_basic(self):\n        @triton.jit\n        def simple_kernel(arg0, arg1):\n            x = tl.load(arg0)\n            y = arg1\n            tl.store(arg0, x + y)\n\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        compiled_kernel = simple_kernel[(1,)](arg0, 5)\n        launcher = self._make_launcher(compiled_kernel)\n        fast = self._make_fast_launcher(launcher)\n\n        new_arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        fast(1, 1, 1, stream, new_arg0, 5)\n        self.assertEqual(\n            new_arg0, torch.tensor([5], dtype=torch.int32, device=GPU_TYPE)\n        )"
+    },
+    {
+      "id": "TestFastCudaLauncher.test_multiple_tensor_args",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 726,
+      "end_line": 746,
+      "excerpt": "    def test_multiple_tensor_args(self):\n        \"\"\"Verify _FastCudaLauncher handles multiple tensor pointer args correctly.\"\"\"\n\n        @triton.jit\n        def add_kernel(a, b, out):\n            x = tl.load(a)\n            y = tl.load(b)\n            tl.store(out, x + y)\n\n        a = torch.tensor([3], dtype=torch.int32, device=GPU_TYPE)\n        b = torch.tensor([7], dtype=torch.int32, device=GPU_TYPE)\n        out = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        compiled_kernel = add_kernel[(1,)](a, b, out)\n        launcher = self._make_launcher(compiled_kernel)\n        fast = self._make_fast_launcher(launcher)\n\n        out2 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        fast(1, 1, 1, stream, a, b, out2)\n        self.assertEqual(out2, torch.tensor([10], dtype=torch.int32, device=GPU_TYPE))"
+    },
+    {
+      "id": "TestFastCudaLauncher.test_zero_grid",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 748,
+      "end_line": 765,
+      "excerpt": "    def test_zero_grid(self):\n        \"\"\"Verify zero-grid launch is a no-op (kernel does not execute).\"\"\"\n\n        @triton.jit\n        def simple_kernel(arg0, arg1):\n            x = tl.load(arg0)\n            tl.store(arg0, x + arg1)\n\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        compiled_kernel = simple_kernel[(1,)](arg0, 5)\n        launcher = self._make_launcher(compiled_kernel)\n        fast = self._make_fast_launcher(launcher)\n\n        target = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        fast(0, 1, 1, stream, target, 99)\n        self.assertEqual(target, torch.tensor([0], dtype=torch.int32, device=GPU_TYPE))"
+    },
+    {
+      "id": "TestFastCudaLauncher.test_wrong_arg_count",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 767,
+      "end_line": 783,
+      "excerpt": "    def test_wrong_arg_count(self):\n        \"\"\"Verify _FastCudaLauncher raises RuntimeError on argument count mismatch.\"\"\"\n\n        @triton.jit\n        def simple_kernel(arg0, arg1):\n            x = tl.load(arg0)\n            tl.store(arg0, x + arg1)\n\n        arg0 = torch.zeros(1, dtype=torch.int32, device=GPU_TYPE)\n        compiled_kernel = simple_kernel[(1,)](arg0, 5)\n        launcher = self._make_launcher(compiled_kernel)\n        fast = self._make_fast_launcher(launcher)\n\n        device_interface = get_interface_for_device(GPU_TYPE)\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n        with self.assertRaises(RuntimeError):\n            fast(1, 1, 1, stream, arg0)  # missing arg1"
+    },
+    {
+      "id": "TestFastCudaLauncher.test_too_many_args_raises_value_error",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 785,
+      "end_line": 793,
+      "excerpt": "    def test_too_many_args_raises_value_error(self):\n        \"\"\"Verify _FastCudaLauncher raises ValueError when nArgs > MAX_ARGS (121).\"\"\"\n        from torch._C import _FastCudaLauncher\n\n        # Use a dummy CUfunction (0) — construction should fail before launch.\n        # 'O' is the pointer type code; 130 of them exceeds MAX_ARGS=121.\n        arg_tys = \"O\" * 130\n        with self.assertRaises(ValueError):\n            _FastCudaLauncher(0, 1, 0, arg_tys, 0)"
+    },
+    {
+      "id": "TestFastCudaLauncherCompileResult._patch_build_fast_launcher",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 814,
+      "end_line": 832,
+      "excerpt": "    def _patch_build_fast_launcher(self):\n        \"\"\"Context manager that tracks _build_fast_launcher calls.\n\n        Returns a list that accumulates True/False for each call,\n        indicating whether a _FastCudaLauncher was successfully built.\n        \"\"\"\n        from torch._inductor.runtime.triton_heuristics import CachingAutotuner\n\n        results = []\n        original = CachingAutotuner._build_fast_launcher\n\n        def tracking_build(autotuner_self, launcher):\n            result = original(autotuner_self, launcher)\n            results.append(result is not None)\n            return result\n\n        return mock.patch.object(\n            CachingAutotuner, \"_build_fast_launcher\", tracking_build\n        ), results"
+    },
+    {
+      "id": "TestFastCudaLauncherCompileResult.test_basic_compile",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 834,
+      "end_line": 856,
+      "excerpt": "    @skipIfXpu(msg=\"https://github.com/pytorch/pytorch/issues/181491\")\n    def test_basic_compile(self):\n        \"\"\"Verify torch.compile uses _FastCudaLauncher and produces correct output.\"\"\"\n        patcher, results = self._patch_build_fast_launcher()\n        with patcher:\n\n            @torch.compile\n            def foo(x, y):\n                return x + y\n\n            x = torch.randn(10, device=GPU_TYPE)\n            y = torch.randn(10, device=GPU_TYPE)\n            self.assertEqual(foo(x, y), x + y)\n            if GPU_TYPE == \"xpu\":\n                self.assertTrue(results, \"_build_fast_launcher was not reached on XPU\")\n                self.assertFalse(\n                    any(results), \"_FastCudaLauncher should not be built on XPU\"\n                )\n            else:\n                self.assertTrue(\n                    any(results),\n                    \"_FastCudaLauncher was not built by any CachingAutotuner\",\n                )"
+    },
+    {
+      "id": "TestFastCudaLauncherCompileResult.test_disable_fast_launcher",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 858,
+      "end_line": 874,
+      "excerpt": "    def test_disable_fast_launcher(self):\n        \"\"\"Verify disabling the config falls back to the regular launcher.\"\"\"\n        patcher, results = self._patch_build_fast_launcher()\n        with patcher, torch._inductor.config.patch(\"use_fast_triton_launcher\", False):\n\n            @torch.compile\n            def foo(x, y):\n                return x + y\n\n            x = torch.randn(10, device=GPU_TYPE)\n            y = torch.randn(10, device=GPU_TYPE)\n            result = foo(x, y)\n            self.assertEqual(result, x + y)\n            self.assertFalse(\n                any(results),\n                \"_FastCudaLauncher should not be built when config is disabled\",\n            )"
+    },
+    {
+      "id": "torch/_inductor/runtime/static_triton_launcher.py::statically_launched_kernel_by_device",
+      "path": "torch/_inductor/runtime/static_triton_launcher.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "0510a7862f64f8fdab710cc03b4109490b1597b7c4548a79a0a025fc31179421",
+      "start_line": 379,
+      "end_line": 389,
+      "excerpt": "def statically_launched_kernel_by_device(\n    kernel: CompiledKernel, device_type: str = \"cuda\"\n) -> StaticallyLaunchedTritonKernel:\n    if device_type in (\"cuda\", \"hip\"):\n        return StaticallyLaunchedCudaKernel(kernel)\n    elif device_type == \"xpu\":\n        return StaticallyLaunchedXpuKernel(kernel)\n    else:\n        raise NotImplementedError(\n            f\"Device type {device_type} is not supported for static launcher\"\n        )"
+    },
+    {
+      "id": "torch/_inductor/runtime/static_triton_launcher.py::StaticallyLaunchedCudaKernel",
+      "path": "torch/_inductor/runtime/static_triton_launcher.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "0510a7862f64f8fdab710cc03b4109490b1597b7c4548a79a0a025fc31179421",
+      "start_line": 322,
+      "end_line": 343,
+      "excerpt": "class StaticallyLaunchedCudaKernel(StaticallyLaunchedTritonKernel):\n    @cached_property\n    def C_impl(self):\n        from torch._C import _StaticCudaLauncher\n\n        return _StaticCudaLauncher\n\n    def __init__(self, kernel: CompiledKernel) -> None:\n        # pyrefly: ignore [missing-attribute]\n        if \"hsaco\" in kernel.asm:\n            # pyrefly: ignore [missing-attribute]\n            self.cubin_raw = kernel.asm[\"hsaco\"]\n\n        # pyrefly: ignore [missing-attribute]\n        elif \"cubin\" in kernel.asm:\n            # pyrefly: ignore [missing-attribute]\n            self.cubin_raw = kernel.asm[\"cubin\"]\n        else:\n            raise RuntimeError(\n                \"Expected either 'hsaco' (ROCm) or 'cubin' (CUDA) in kernel.asm\"\n            )\n        super().__init__(kernel)"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_heuristics.py::_build_fast_launcher",
+      "path": "torch/_inductor/runtime/triton_heuristics.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923",
+      "start_line": 2217,
+      "end_line": 2304,
+      "excerpt": "    def _build_fast_launcher(self, launcher: LauncherType) -> LauncherType | None:\n        \"\"\"Try to build a _FastCudaLauncher-backed version of the launcher.\n\n        Returns a new launcher function with the runner replaced by a\n        _FastCudaLauncher instance (vectorcall C extension), or None if\n        conditions are not met.  Falls back silently on expected errors,\n        logs a warning on unexpected ones.\n        \"\"\"\n        import types\n\n        if not self.inductor_meta.get(\n            \"use_fast_triton_launcher\",\n            torch._inductor.config.use_fast_triton_launcher,\n        ):\n            return None\n\n        # _FastCudaLauncher binds CUDA/HIP function pointers; XPU static\n        # launchers use SYCL kernels stored in PyCapsules.\n        if self.device_props.type not in (\"cuda\", \"hip\"):\n            return None\n\n        try:\n            from torch._C import _FastCudaLauncher\n        except ImportError:\n            return None\n\n        try:\n            # Only works for the static triton launcher path.\n            if not getattr(launcher, \"_is_static\", False):\n                return None\n\n            # Resolve the bound kernel behind the launcher function.\n            runner = launcher.__globals__.get(\"runner\")\n            if not callable(runner):\n                return None\n            kernel = runner.__self__\n            cu_function = kernel.function\n            num_warps = kernel.num_warps\n            shared = kernel.shared\n            arg_tys = kernel.arg_tys\n            if cu_function is None or num_warps is None:\n                return None\n\n            n_scratch = sum(\n                [\n                    getattr(kernel, \"has_global_scratch\", False),\n                    getattr(kernel, \"has_profile_scratch\", False),\n                ]\n            )\n            if torch.version.hip:\n                n_scratch = max(n_scratch, 2)\n\n            fast_runner = _FastCudaLauncher(\n                cu_function, num_warps, shared, arg_tys, n_scratch\n            )\n\n            new_globals = {**launcher.__globals__, \"runner\": fast_runner}\n            new_launcher = types.FunctionType(\n                launcher.__code__,\n                new_globals,\n                launcher.__name__,\n            )\n            # Copy launcher attributes to the new function object.\n            # NOTE: If new attributes are added to launchers in the future,\n            # they must be added here too — otherwise the fast launcher will\n            # silently drop them.\n            for attr in (\n                \"config\",\n                \"n_regs\",\n                \"n_spills\",\n                \"shared\",\n                \"cache_hash\",\n                \"store_cubin\",\n                \"_is_static\",\n                \"_expected_positional_count\",\n            ):\n                val = getattr(launcher, attr, None)\n                if val is not None:\n                    setattr(new_launcher, attr, val)\n            return new_launcher\n        except (AttributeError, TypeError, KeyError, ValueError):\n            # Expected failures - silent fallback is OK.\n            # ValueError is raised when nArgs > MAX_ARGS in the C extension.\n            return None\n        except Exception:\n            # Unexpected failures - log for debugging\n            log.warning(\"Unexpected error building fast launcher\", exc_info=True)\n            return None"
+    },
+    {
+      "id": "torch_npu/_inductor/runtime/triton_heuristics.py::TritonCompileResultNpu.make_launcher",
+      "path": "torch_npu/_inductor/runtime/triton_heuristics.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "0e8699ba39e535e4bf1e626486b5ff2819ab90eb2166e03380fbb21357da6383",
+      "start_line": 399,
+      "end_line": 613,
+      "excerpt": "    def make_launcher(self):\n        cfg = self.config\n        compile_meta = self.compile_meta\n        binary = self.kernel\n        fn = binary.src.fn\n        binary._init_handles()\n\n        known_constants = OrderedSet(\n            arg for i, arg in enumerate(fn.arg_names) if i in fn.constexprs\n        )\n        none_args = OrderedSet(\n            k\n            for k, v in compile_meta[\"constants\"].items()\n            if v is None and k not in known_constants\n        )\n        none_args = none_args.difference(OrderedSet(compile_meta[\"signature\"].keys()))\n\n        if triton_version_uses_attrs_dict():\n            runtime_block_names = tuple(\n                self.inductor_meta.get(\"runtime_block_arg_names\", ())\n            )\n            runtime_block_set = set(runtime_block_names)\n            cfg_dict = config_to_dict(cfg)\n\n            # 构造 constexpr 参数的字面量替换字典（保留 runtime block 参数）\n            repl = {}\n            for i in fn.constexprs:\n                arg = fn.arg_names[i]\n                if arg in runtime_block_set:\n                    continue\n                if arg in compile_meta[\"constants\"]:\n                    repl[arg] = str(compile_meta[\"constants\"][arg])\n                elif arg in cfg_dict:\n                    repl[arg] = str(cfg_dict[arg])\n\n            # def_args: 过滤 constexpr 参数（保留 runtime block 参数），\n            # 因为调用 launcher 时不传 constexpr 参数\n            def_args = [\n                arg\n                for i, arg in enumerate(fn.arg_names)\n                if i not in fn.constexprs or arg in runtime_block_set\n            ]\n            # call_args: 过滤不在 signature 里的参数（如 X0BLOCK_SUB），\n            # constexpr 参数用字面量替换（因为 make_launcher 生成 wrapper 时\n            # 期望所有 signature 参数，包括 constexpr）\n            call_args = []\n            for arg in fn.arg_names:\n                if arg not in compile_meta[\"signature\"]:\n                    continue\n                if arg in repl:\n                    call_args.append(repl[arg])\n                else:\n                    call_args.append(arg)\n        else:\n            call_args = [\n                arg\n                for i, arg in enumerate(fn.arg_names)\n                if i not in fn.constexprs and arg not in none_args\n            ]\n            cfg_dict = config_to_dict(cfg)\n            runtime_block_names = tuple(\n                self.inductor_meta.get(\"runtime_block_arg_names\", ())\n            )\n            def_args = filter_launcher_def_args(\n                fn.arg_names,\n                cfg_dict,\n                none_args,\n                runtime_block_names,\n            )\n\n        if self.inductor_meta.get(\"group_enabled\", False):\n            runtime_block_names = tuple(\n                self.inductor_meta.get(\"runtime_block_append_order\", ())\n            )\n            missing_runtime_block_names = [\n                name\n                for name in runtime_block_names\n                if name not in def_args or name not in call_args\n            ]\n            if missing_runtime_block_names:\n                raise RuntimeError(\n                    \"Grouped launcher is missing runtime block args: \"\n                    f\"{missing_runtime_block_names}\"\n                )\n\n        binary_shared = (\n            binary.shared if hasattr(binary, \"shared\") else binary.metadata.shared\n        )\n        if is_namedtuple_isinstance(binary.packed_metadata):\n            binary.packed_metadata = binary.packed_metadata._asdict()\n        if knobs is None:\n            launcher_enter = binary.__class__.launch_enter_hook\n            launcher_exit = binary.__class__.launch_exit_hook\n        else:\n            launcher_enter = knobs.runtime.launch_enter_hook\n            launcher_exit = knobs.runtime.launch_exit_hook\n        scope = {\n            \"grid_meta\": cfg.kwargs,\n            \"bin\": binary,\n            \"launch_enter_hook\": launcher_enter,\n            \"launch_exit_hook\": launcher_exit,\n            \"metadata\": (\n                binary.packed_metadata\n                if hasattr(binary, \"packed_metadata\")\n                else binary.metadata\n            ),\n            \"shared\": binary_shared,\n            \"num_warps\": (\n                binary.num_warps\n                if hasattr(binary, \"num_warps\")\n                else binary.metadata.num_warps\n            ),\n            \"cta_args\": (\n                (\n                    binary.num_ctas,\n                    *get_first_attr(binary, \"cluster_dims\", \"clusterDims\"),\n                )\n                if hasattr(binary, \"num_ctas\")\n                else (\n                    (binary.metadata.num_ctas, *binary.metadata.cluster_dims)\n                    if hasattr(binary, \"metadata\")\n                    else ()\n                )\n            ),\n            \"function\": get_first_attr(binary, \"function\", \"cu_function\"),\n            \"runner\": get_first_attr(binary, \"run\", \"c_wrapper\"),\n        }\n\n        if not hasattr(binary, \"launch_metadata\"):\n            # launch args before CompiledKernel.launch_metadata is added.\n            # TODO(jansel): delete this branch in mid-2025\n            runner_args = [\n                \"grid_0\",\n                \"grid_1\",\n                \"grid_2\",\n                \"num_warps\",\n                \"*cta_args\",\n                \"shared\",\n                \"stream\",\n                \"function\",\n                \"launch_enter_hook\",\n                \"launch_exit_hook\",\n                \"metadata\",\n                *call_args,\n            ]\n        else:\n            if launcher_enter:\n                launch_metadata = f\"bin.launch_metadata((grid_0, grid_1, grid_2), stream, {', '.join(call_args)})\"\n            else:\n                launch_metadata = \"None\"\n            runner_args = [\n                \"grid_0\",\n                \"grid_1\",\n                \"grid_2\",\n                \"stream\",\n                \"function\",\n                \"metadata\",\n                launch_metadata,\n                \"launch_enter_hook\",\n                \"launch_exit_hook\",\n                *call_args,\n            ]\n\n        if \"extra_launcher_args\" in self.inductor_meta:\n            def_args = [*def_args, *self.inductor_meta[\"extra_launcher_args\"]]\n\n        numels = [\n            arg\n            for arg in fn.arg_names\n            if \"_numel\" in arg\n        ]\n        runtime_block_names = tuple(\n            self.inductor_meta.get(\"runtime_block_arg_names\", ())\n        )\n        grid = _create_launcher_grid(\n            self.inductor_meta,\n            cfg,\n            numels,\n            runtime_block_names,\n        )\n        # grid.prefix is usually empty, grid.x_grid is something like `-(xnumel//-1024)`\n        lines = [\n            f\"def launcher({', '.join(def_args)}, stream):\",\n            *[f\"    {line}\" for line in grid.prefix],\n            f\"    grid_0 = {grid.x_grid}\",\n            f\"    grid_1 = {grid.y_grid}\",\n            f\"    grid_2 = {grid.z_grid}\",\n            f\"    runner({', '.join(runner_args)})\",\n        ]\n        exec(\"\\n\".join(lines), scope)\n\n        launcher = scope[\"launcher\"]\n        launcher.config = cfg\n        launcher.runnable = True\n        launcher.n_regs = getattr(binary, \"n_regs\", None)\n        launcher.n_spills = getattr(binary, \"n_spills\", None)\n        launcher.shared = binary_shared\n        launcher.store_cubin = self.inductor_meta.get(\"store_cubin\", False)\n        # store this global variable to avoid the high overhead of reading it when calling run\n        if launcher.store_cubin:\n            launcher.fn = fn\n            launcher.bin = binary\n            if triton_version_uses_attrs_dict():\n                # arg filtering wasn't done above\n                cfg_dict = config_to_dict(cfg)\n                def_args = [x for x in def_args if x not in cfg_dict]\n                call_args = [\n                    x\n                    for x in call_args\n                    if compile_meta[\"signature\"].get(x, \"constexpr\") != \"constexpr\"\n                    and x not in none_args\n                ]\n            launcher.def_args = def_args\n            launcher.call_args = call_args\n        return launcher"
+    },
+    {
+      "id": "torch_npu/_inductor/runtime/triton_heuristics.py::_precompile_config",
+      "path": "torch_npu/_inductor/runtime/triton_heuristics.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "0e8699ba39e535e4bf1e626486b5ff2819ab90eb2166e03380fbb21357da6383",
+      "start_line": 1004,
+      "end_line": 1124,
+      "excerpt": "    def _precompile_config(self, cfg: Config) -> TritonCompileResultNpu:\n        \"\"\"Ahead of time compile a given autotuner config.\"\"\"\n        compile_meta = copy.deepcopy(self.triton_meta)\n        cfg_kwargs = cfg.kwargs\n        constexpr_arg_names = {self.fn.arg_names[i] for i in self.fn.constexprs}\n        for k, v in cfg_kwargs.items():\n            if k not in constexpr_arg_names:\n                continue\n            compile_meta[\"constants\"][k] = v\n\n        for i in self.fn.constexprs:\n            arg_name = self.fn.arg_names[i]\n            if arg_name not in compile_meta[\"constants\"] and (\n                arg_name == \"num_warps\" or arg_name == \"num_stages\"\n            ):\n                compile_meta[\"constants\"][arg_name] = getattr(cfg, arg_name)\n        compile_meta[\"num_warps\"] = cfg.num_warps\n        compile_meta[\"num_stages\"] = cfg.num_stages\n        compile_meta[\"debug\"] = (\n            os.getenv(\"INDUCTOR_ASCEND_DEBUG\", 'false').lower() in ('true', '1')\n            and self.inductor_meta.get(\"assert_indirect_indexing\", True)\n            and not self.inductor_meta.get(\"is_hip\", False)\n        )\n\n        compile_meta['compile_mode'] = (\n            cfg_kwargs.get('compile_mode') or NPUKernelType.SIMT_TEMPLATE.compile_mode()\n        )\n\n        # device type will be \"hip\" rather than \"cuda\" here\n        compile_meta[\"device_type\"] = self.device_props.type\n        compile_meta[\"cc\"] = self.device_props.cc\n\n        if not ASTSource:\n            raise RuntimeError(\"Installed triton version too old, please upgrade\")\n\n        if compile_meta.get(\"configs\", None):\n            compile_args = (\n                ASTSource(\n                    self.fn,\n                    compile_meta[\"signature\"],\n                    compile_meta[\"constants\"],\n                    compile_meta[\"configs\"][0],\n                ),\n            )\n        else:\n            compile_args = (\n                ASTSource(\n                    self.fn,\n                    compile_meta[\"signature\"],\n                    compile_meta[\"constants\"],\n                ),\n            )\n\n        cc_warp_size = 32\n        target = GPUTarget(\n            compile_meta[\"device_type\"],\n            compile_meta[\"cc\"],\n            cc_warp_size,\n        )\n\n        options = {\n            \"num_warps\": compile_meta[\"num_warps\"],\n            \"num_stages\": compile_meta[\"num_stages\"],\n            \"debug\": compile_meta[\"debug\"],\n            \"compile_mode\": compile_meta['compile_mode'],\n        }\n\n        options = self.parse_triton_ascend_options(\n            self.triton_meta.get(\"npu_compile_options\", {}),\n            options,\n        )\n        options = self.parse_triton_ascend_options(cfg_kwargs, options)\n        if (\n            bool(self.inductor_meta.get(\"enable_auto_blockify\", False))\n            or self.inductor_meta.get(\"requires_no_linear_block_remap\") is True\n        ):\n            # Older Triton-Ascend versions expose this option. Newer versions\n            # manage block mapping internally, so the option is filtered out.\n            options = self.parse_triton_ascend_options(\n                {\"enable_auto_blockify\": True}, options\n            )\n\n        compile_kwargs = {\n            \"target\": target,\n            \"options\": options,\n        }\n        start_time = 0\n        if log.isEnabledFor(logging.DEBUG):\n            start_time = time.perf_counter()\n        try:\n            binary = None\n            binary = triton.compile(*compile_args, **compile_kwargs)\n            required_ub_bits = binary.metadata.required_ub_bits\n            cfg.real_ub_size = required_ub_bits\n\n        except AttributeError as e:\n            # 该错误表示编译无法通过（一些情况下也会被这个Exception捕获）\n            log.debug(\"config: %s compile failed, cost time: %ss\", cfg_kwargs, time.perf_counter() - start_time)\n            if binary is None:\n                raise Exception(\"Triton compilation failed\") from e\n\n            # mistake is metadata no required_ub_bits, but binary work.\n            return TritonCompileResultNpu(binary, cfg, compile_meta, self.inductor_meta)\n\n        except Exception:\n            log.debug(\n                \"Triton compilation failed: %s\\n%s\\nmetadata: %s\",\n                self.inductor_meta.get(\"kernel_name\", \"triton_\"),\n                self.fn.src,\n                compile_meta,\n            )\n            log.debug(\"config: %s compile failed, cost time: %ss\", cfg_kwargs, time.perf_counter() - start_time)\n            import traceback\n            ts = traceback.format_exc()\n            match = re.search(r\"ub overflow.*?requires (\\d+) bits\", ts)\n            if match:\n                required_ub_bits = int(match.group(1))\n                cfg.real_ub_size = required_ub_bits\n            raise\n        log.debug(\"config: %s compile success, cost time: %ss\", cfg_kwargs, time.perf_counter() - start_time)\n        return TritonCompileResultNpu(binary, cfg, compile_meta, self.inductor_meta)"
+    },
+    {
+      "id": "torch_npu/_inductor/runtime/triton_heuristics.py::_make_launchers",
+      "path": "torch_npu/_inductor/runtime/triton_heuristics.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "0e8699ba39e535e4bf1e626486b5ff2819ab90eb2166e03380fbb21357da6383",
+      "start_line": 1126,
+      "end_line": 1153,
+      "excerpt": "    def _make_launchers(self):\n        if len(self.launchers) == len(self.compile_results):\n            return\n\n        from torch._dynamo.device_interface import DeviceGuard\n\n        device_interface = self.get_device_interface()\n\n        # load binary to the correct device\n        with DeviceGuard(device_interface, self.triton_meta[\"device\"]):\n            # need to initialize context\n            device_interface.synchronize(device_interface.current_device())\n            launchers = []\n            exc = None\n            exc_stack = \"\"\n            for result in self.compile_results:\n                try:\n                    launchers.append(result.make_launcher())\n                except Exception as e:\n                    import traceback\n                    exc_stack = traceback.format_exc()\n                    exc = e\n\n        if len(launchers) == 0:\n            raise RuntimeError(f\"No valid triton configs. {type(exc).__name__}: {exc}\\n\"\n                               f\"Stack trace: {exc_stack}\")\n        self.launchers = launchers\n        self._refresh_variant_launchers()"
+    },
+    {
+      "id": "triton/language/extra/libdevice.py::isinf",
+      "path": "triton/language/extra/libdevice.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "f60c2bb2d8eebe1c191f4b8b819844414dd1bce243645635a094f9f92665a58e",
+      "start_line": 549,
+      "end_line": 550,
+      "excerpt": "def isinf(arg0):\n    ..."
+    },
+    {
+      "id": "triton/language/extra/cann/libdevice.py::isinf",
+      "path": "triton/language/extra/cann/libdevice.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "a1759d1b537be1465fd615339e0917e8abc612cc8851978682a21d19e2d7419c",
+      "start_line": 219,
+      "end_line": 237,
+      "excerpt": "def isinf(arg0, _semantic=None):\n    \"\"\"\n    Determines whether the input is infinity.\n\n    :param arg0: ``x``. Supported dtype(s): ``float32``.\n    :type arg0: scalar or tl.tensor\n    :return: True if the input is infinity; otherwise, False.\n    :rtype: ``bool``\n    \"\"\"\n    if _is_libdevice_simt_enabled(_semantic):\n        return core.extern_elementwise(\"\", \"\", [arg0], {\n            (core.dtype(\"fp32\"), ): (\"__hmf_isinf_fp32\", core.dtype(\"int1\")),\n        }, is_pure=True, _semantic=_semantic)\n    return core.extern_elementwise(\n        \"\", \"\", [arg0], {\n            (core.dtype(\"fp32\"), ): (\"__hmf_isinf\", core.dtype(\"int1\")),\n            (core.dtype(\"fp16\"), ): (\"__hmf_isinf\", core.dtype(\"int1\")),\n            (core.dtype(\"bf16\"), ): (\"__hmf_isinf\", core.dtype(\"int1\")),\n        }, is_pure=True, _semantic=_semantic)"
+    },
+    {
+      "id": "triton/backends/ascend/compiler.py::get_module_map",
+      "path": "triton/backends/ascend/compiler.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "34a967e4a2f4f6fa3ffea245bb4038054a999bbebcd28f60be6b42c372ee8589",
+      "start_line": 1628,
+      "end_line": 1629,
+      "excerpt": "    def get_module_map(self) -> Dict[str, ModuleType]:\n        return {}"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:50",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 45,
+      "end_line": 55,
+      "excerpt": "            return (backend, arch)\n\n    # In the latest triton, math functions were shuffled around into different modules:\n    # https://github.com/triton-lang/triton/pull/3172\n    try:\n        from triton.language.extra import libdevice\n\n        libdevice = tl.extra.libdevice  # noqa: F811\n        math = tl.math\n    except ImportError:\n        if hasattr(tl.extra, \"cuda\") and hasattr(tl.extra.cuda, \"libdevice\"):"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:52",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 47,
+      "end_line": 57,
+      "excerpt": "    # In the latest triton, math functions were shuffled around into different modules:\n    # https://github.com/triton-lang/triton/pull/3172\n    try:\n        from triton.language.extra import libdevice\n\n        libdevice = tl.extra.libdevice  # noqa: F811\n        math = tl.math\n    except ImportError:\n        if hasattr(tl.extra, \"cuda\") and hasattr(tl.extra.cuda, \"libdevice\"):\n            libdevice = tl.extra.cuda.libdevice\n            math = tl.math"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:55",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 50,
+      "end_line": 60,
+      "excerpt": "        from triton.language.extra import libdevice\n\n        libdevice = tl.extra.libdevice  # noqa: F811\n        math = tl.math\n    except ImportError:\n        if hasattr(tl.extra, \"cuda\") and hasattr(tl.extra.cuda, \"libdevice\"):\n            libdevice = tl.extra.cuda.libdevice\n            math = tl.math\n        elif hasattr(tl.extra, \"intel\") and hasattr(tl.extra.intel, \"libdevice\"):\n            libdevice = tl.extra.intel.libdevice\n            math = tl.math"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:56",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 51,
+      "end_line": 61,
+      "excerpt": "\n        libdevice = tl.extra.libdevice  # noqa: F811\n        math = tl.math\n    except ImportError:\n        if hasattr(tl.extra, \"cuda\") and hasattr(tl.extra.cuda, \"libdevice\"):\n            libdevice = tl.extra.cuda.libdevice\n            math = tl.math\n        elif hasattr(tl.extra, \"intel\") and hasattr(tl.extra.intel, \"libdevice\"):\n            libdevice = tl.extra.intel.libdevice\n            math = tl.math\n        else:"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:58",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 53,
+      "end_line": 63,
+      "excerpt": "        math = tl.math\n    except ImportError:\n        if hasattr(tl.extra, \"cuda\") and hasattr(tl.extra.cuda, \"libdevice\"):\n            libdevice = tl.extra.cuda.libdevice\n            math = tl.math\n        elif hasattr(tl.extra, \"intel\") and hasattr(tl.extra.intel, \"libdevice\"):\n            libdevice = tl.extra.intel.libdevice\n            math = tl.math\n        else:\n            libdevice = tl.math\n            math = tl"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:59",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 54,
+      "end_line": 64,
+      "excerpt": "    except ImportError:\n        if hasattr(tl.extra, \"cuda\") and hasattr(tl.extra.cuda, \"libdevice\"):\n            libdevice = tl.extra.cuda.libdevice\n            math = tl.math\n        elif hasattr(tl.extra, \"intel\") and hasattr(tl.extra.intel, \"libdevice\"):\n            libdevice = tl.extra.intel.libdevice\n            math = tl.math\n        else:\n            libdevice = tl.math\n            math = tl\n"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:62",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 57,
+      "end_line": 67,
+      "excerpt": "            math = tl.math\n        elif hasattr(tl.extra, \"intel\") and hasattr(tl.extra.intel, \"libdevice\"):\n            libdevice = tl.extra.intel.libdevice\n            math = tl.math\n        else:\n            libdevice = tl.math\n            math = tl\n\n    try:\n        from triton.language.standard import _log2\n    except ImportError:"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:125",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 120,
+      "end_line": 130,
+      "excerpt": "    CompiledKernel = object\n    KernelInterface = object\n    ASTSource = None\n    GPUTarget = None\n    _log2 = _raise_error\n    libdevice = None\n    math = None\n    knobs = None\n    builtins_use_semantic_kwarg = False\n\n    class triton:  # type: ignore[no-redef]"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_compat.py:170",
+      "path": "torch/_inductor/runtime/triton_compat.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "d788acdabd5690dc5da33b8df28dda18b4e8004caa5c5f1397ea71b0f5c3d0d5",
+      "start_line": 165,
+      "end_line": 175,
+      "excerpt": "    \"IntelGPUError\",\n    \"ASTSource\",\n    \"GPUTarget\",\n    \"tl\",\n    \"_log2\",\n    \"libdevice\",\n    \"math\",\n    \"triton\",\n    \"knobs\",\n    \"triton_key\",\n]"
+    },
+    {
+      "id": "TestStaticTritonLauncher.class_decorators",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 104,
+      "end_line": 105,
+      "excerpt": "@requires_gpu_and_triton\nclass TestStaticTritonLauncher(TestCase):"
+    },
+    {
+      "id": "TestStaticTritonCompileResult.class_decorators",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 541,
+      "end_line": 545,
+      "excerpt": "@requires_gpu_and_triton\n@torch._inductor.config.patch(\n    {\"use_static_triton_launcher\": True, \"strict_static_triton_launcher\": True}\n)\nclass TestStaticTritonCompileResult(TestCase):"
+    },
+    {
+      "id": "TestFastCudaLauncher.class_decorators",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 650,
+      "end_line": 654,
+      "excerpt": "@requires_gpu_and_triton\n# _FastCudaLauncher hipModuleLaunchKernel path segfaults on ROCm\n@skipIfRocm\n@skipIfXpu\nclass TestFastCudaLauncher(TestCase):"
+    },
+    {
+      "id": "TestFastCudaLauncherCompileResult.class_decorators",
+      "path": "test/inductor/test_static_triton_launcher.py",
+      "origin": "目标测试源码；git cf30153c4c131c8164ee7798e5022d810682e2cb",
+      "file_sha256": "c0285d6d483dcdaca0fd65a58ffb6da3cf4e7217ba5424bab785cff3200a30e0",
+      "start_line": 796,
+      "end_line": 805,
+      "excerpt": "@requires_gpu_and_triton\n@torch._inductor.config.patch(\n    {\n        \"use_static_triton_launcher\": True,\n        \"strict_static_triton_launcher\": True,\n        \"use_fast_triton_launcher\": True,\n    }\n)\n@skipIfRocm  # see TestFastCudaLauncher\nclass TestFastCudaLauncherCompileResult(TestCase):"
+    },
+    {
+      "id": "triton/backends/ascend/compiler.py::__init__",
+      "path": "triton/backends/ascend/compiler.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "34a967e4a2f4f6fa3ffea245bb4038054a999bbebcd28f60be6b42c372ee8589",
+      "start_line": 1524,
+      "end_line": 1529,
+      "excerpt": "    def __init__(self, target: GPUTarget) -> None:\n        super().__init__(target)\n        if target.backend == \"npu\":\n            self.binary_ext = \"npubin\"\n            # Include all binary file extensions (mlirbc is always emitted for normal kernels).\n            self.binary_extensions = {\"npubin\", \"mlirbc\"}"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_heuristics.py::can_statically_launch",
+      "path": "torch/_inductor/runtime/triton_heuristics.py",
+      "origin": "目标 pta_213 安装源码；2026-10-08 只读采集",
+      "file_sha256": "87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923",
+      "start_line": 2496,
+      "end_line": 2571,
+      "excerpt": "    def can_statically_launch(\n        kernel: CompiledKernel,\n        inductor_meta: dict[str, Any],\n        triton_meta: dict[str, Any],\n        heuristic_type: HeuristicType,\n    ) -> _KernelType | None:\n        if not torch._inductor.config.use_static_triton_launcher:\n            return None\n\n        def check_can_launch() -> _KernelType:\n            if triton_meta.get(\"device_type\") not in (\"cuda\", \"xpu\", \"hip\"):\n                raise CannotStaticallyLaunchKernel(\"Non-cuda/XPU/ROCm device\")\n\n            if triton_meta.get(\"device_type\") == \"xpu\" and XPU_KERNEL_FORMAT == \"spv\":\n                raise CannotStaticallyLaunchKernel(\n                    \"Static XPU Triton kernel launch does not support SPIR-V kernel.\"\n                )\n\n            if torch._inductor.config.cpp_wrapper:\n                # If we're running with cpp wrapper, it doesn't\n                # make sense to statically compile since everything\n                # is codegenned anyway\n                raise CannotStaticallyLaunchKernel(\"Cpp wrapper enabled\")\n\n            if (\n                heuristic_type == HeuristicType.USER_AUTOTUNE\n                and not torch._inductor.config.static_launch_user_defined_triton_kernels\n            ):\n                # Don't support user defined triton kernels yet\n                raise CannotStaticallyLaunchKernel(\"User defined triton kernel\")\n\n            if inductor_meta.get(\"store_cubin\"):\n                # Requires storing the entire binary\n                raise CannotStaticallyLaunchKernel(\"store_cubin is enabled\")\n\n            if getattr(kernel.metadata, \"launch_pdl\", False) or getattr(\n                kernel.metadata, \"launch_cooperative_grid\", False\n            ):\n                raise CannotStaticallyLaunchKernel(\n                    \"static launch does not support launch attributes\"\n                )\n\n            binary_ext = GPU_KERNEL_BIN_EXTS.get(\n                triton_meta.get(\"device_type\"), \".cubin\"\n            )\n            cubin_location = os.path.join(\n                triton_cache_dir(triton_meta.get(\"device\", 0)),\n                triton_hash_to_path_key(kernel.hash),\n                f\"{kernel.src.fn.__name__}{binary_ext}\",\n            )\n\n            if not os.path.exists(cubin_location):\n                raise CannotStaticallyLaunchKernel(\n                    f\"Cubin path not found: {cubin_location}\"\n                )\n\n            else:\n                kernel._cubin_path = cubin_location\n\n            try:\n                static_kernel = statically_launched_kernel_by_device(\n                    kernel, triton_meta.get(\"device_type\")\n                )\n            except NotImplementedError as e:\n                raise CannotStaticallyLaunchKernel(f\"NotImplemented: {str(e)}\") from e\n\n            return static_kernel\n\n        try:\n            result = check_can_launch()\n            return result\n        except CannotStaticallyLaunchKernel as e:\n            log.info(\"Bypassing StaticallyLaunchedCudaKernel due to %s\", e)\n            if torch._inductor.config.strict_static_triton_launcher:\n                raise e\n            return None"
+    }
+  ],
+  "absent_installed_files": [
+    "torch_npu/_inductor/triton_experimental/static_launcher/compile_result.py",
+    "torch_npu/_inductor/triton_experimental/static_launcher/kernel.py"
+  ]
+}

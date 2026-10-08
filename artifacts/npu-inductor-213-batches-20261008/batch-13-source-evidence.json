@@ -1,0 +1,26 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_torchinductor.py::test_convolution4",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5783,
+      "end_line": 5795,
+      "excerpt": "    @skip_if_gpu_halide\n    def test_convolution4(self):\n        def fn(x, w):\n            x = F.conv2d(x, w, groups=w.shape[0])\n            return x.sum()\n\n        self.common(\n            fn,\n            (\n                torch.randn([2, 3, 16, 20]),\n                torch.randn([3, 1, 5, 5]),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_convolution5",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 5797,
+      "end_line": 5815,
+      "excerpt": "    def test_convolution5(self):\n        def fn(x, w):\n            x = F.conv2d(x, w, dilation=[x.size(0)])\n            return x.sum()\n\n        x = torch.randn([2, 1, 16, 20])\n        w = torch.randn([1, 1, 5, 5])\n        # X get specialized ! dilation can't be dynamic.\n        torch._dynamo.maybe_mark_dynamic(x, 0)\n\n        atol = None\n        rtol = None\n        if self.device == \"xpu\":\n            # set to float32 default tolerance,\n            # check_model_gpu with update rotl to 2e-3 for fp16.\n            # fix issue #129974\n            atol = 1e-05\n            rtol = 1.3e-06\n        self.common(fn, (x, w), atol=atol, rtol=rtol)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    }
+  ]
+}

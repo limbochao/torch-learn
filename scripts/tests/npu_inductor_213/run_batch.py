@@ -1,0 +1,308 @@
+"""Run exact upstream pytest nodeids with transfer_to_npu and retain phase reports.
+
+Run from the target container's Inductor test directory. Environment setup and
+cache paths belong to the caller; test sources and installed packages are unchanged.
+"""
+
+import argparse
+import ast
+from collections import Counter
+from contextlib import ExitStack
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+import time
+from unittest import mock
+
+
+class Recorder:
+    def __init__(self, output, nodeids, environment, case_names=False, previous=None):
+        self.output = output
+        self.case_names = case_names
+        self.data = {
+            "requested": nodeids,
+            "environment": environment,
+            "selected": [],
+            "resolved_nodeids": {},
+            "reports": [],
+            "collection_errors": [],
+        }
+        self.completed = set()
+        if previous is not None:
+            if previous["requested"] != nodeids:
+                raise RuntimeError("Resume request differs from the original request")
+            if previous["environment"]["test_sha256"] != environment["test_sha256"]:
+                raise RuntimeError("Test source changed since the interrupted run")
+            for nodeid in previous["selected"]:
+                reports = [r for r in previous["reports"] if r["nodeid"] == nodeid]
+                if any(r["when"] == "teardown" for r in reports) and (
+                    any(r["when"] == "call" for r in reports)
+                    or any(r["when"] == "setup" and r["outcome"] != "passed" for r in reports)
+                ):
+                    self.completed.add(nodeid)
+            self.data["reports"] = [r for r in previous["reports"] if r["nodeid"] in self.completed]
+            self.data["previous_attempts"] = previous.get("previous_attempts", []) + [{
+                "environment": previous["environment"],
+                "running_nodeid": previous.get("running_nodeid"),
+                "incomplete_reports": [r for r in previous["reports"] if r["nodeid"] not in self.completed],
+                "retained_completed": sorted(self.completed),
+                "exitcode": previous.get("exitcode"),
+            }]
+
+    def save(self):
+        temporary = self.output.with_suffix(".writing.json")
+        temporary.write_text(json.dumps(self.data, ensure_ascii=False, indent=2) + "\n")
+        temporary.replace(self.output)
+
+    def pytest_collection_modifyitems(self, items):
+        if self.case_names:
+            self.select_cases(items)
+            items[:] = [item for item in items if item.nodeid not in self.completed]
+            self.save()
+            return
+        self.data["selected"] = [item.nodeid for item in items]
+        for requested in self.data["requested"]:
+            filename, suffix = requested.split("::", 1)
+            matches = [item.nodeid for item in items
+                       if Path(str(item.path)).resolve() == Path(filename).resolve()
+                       and item.nodeid.split("::", 1)[1] == suffix]
+            if len(matches) == 1:
+                self.data["resolved_nodeids"][requested] = matches[0]
+        items[:] = [item for item in items if item.nodeid not in self.completed]
+        self.save()
+
+    def select_cases(self, items):
+        source_names = {}
+        enclosing_methods = {}
+        selected = set()
+        self.data["selection_metadata"] = {}
+        for requested in self.data["requested"]:
+            filename, case = requested.split("::", 1)
+            path = Path(filename).resolve()
+            if path not in source_names:
+                tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+                source_names[path] = {n.name for n in ast.walk(tree)
+                                      if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")}
+                parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+                enclosing_methods[path] = {}
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
+                        continue
+                    name, parent = node.name, parents.get(node)
+                    while parent is not None and not isinstance(parent, ast.ClassDef):
+                        if isinstance(parent, ast.FunctionDef) and parent.name.startswith("test_"):
+                            name = parent.name
+                        parent = parents.get(parent)
+                    enclosing_methods[path][node.name] = name
+            method = enclosing_methods[path].get(case, case)
+            candidates = []
+            for item in items:
+                if Path(str(item.path)).resolve() != path:
+                    continue
+                name = (getattr(item, "originalname", None) or item.name).split("[", 1)[0]
+                matches = [n for n in source_names[path] if name == n or name.startswith(n + "_")]
+                if not matches or max(matches, key=len) != method:
+                    continue
+                device = getattr(item.cls, "device_type", None) or getattr(item.cls, "device", None)
+                device = device if isinstance(device, str) else None
+                candidates.append((item, device))
+            native_npu = [(item, device) for item, device in candidates if device == "npu"]
+            cuda = [(item, device) for item, device in candidates if device == "cuda"]
+            accelerator = native_npu or cuda
+            cpu = [(item, device) for item, device in candidates if device == "cpu"]
+            neutral = [(item, device) for item, device in candidates if device is None]
+            if "_cpu" in case and cpu:
+                chosen, scope = cpu + neutral, "explicit_cpu"
+            elif accelerator:
+                chosen = accelerator + neutral
+                scope = "npu" if native_npu else "cuda_compatibility"
+            elif neutral:
+                chosen, scope = neutral, "host_or_explicit_device"
+            else:
+                chosen, scope = cpu, "cpu_only"
+            nodeids = [item.nodeid for item, _ in chosen]
+            self.data["resolved_nodeids"][requested] = nodeids
+            self.data["selection_metadata"][requested] = {
+                "scope": scope,
+                "source_method": method,
+                "candidates": [{"nodeid": item.nodeid, "device": device} for item, device in candidates],
+            }
+            selected.update(nodeids)
+        items[:] = [item for item in items if item.nodeid in selected]
+        self.data["selected"] = [item.nodeid for item in items]
+
+    def pytest_collectreport(self, report):
+        if report.failed:
+            self.data["collection_errors"].append(str(report.longrepr))
+            self.save()
+
+    def pytest_runtest_logstart(self, nodeid, location):
+        self.current_nodeid = nodeid
+        self.data["running_nodeid"] = nodeid
+        self.save()
+
+    def pytest_runtest_logreport(self, report):
+        self.data["reports"].append({
+            "nodeid": report.nodeid,
+            "when": report.when,
+            "outcome": report.outcome,
+            "duration": report.duration,
+            "longrepr": str(report.longrepr) if report.longrepr else "",
+            "wasxfail": getattr(report, "wasxfail", None),
+            "sections": list(report.sections) if report.outcome == "failed" else [],
+        })
+        self.save()
+
+    def finalize(self, exitcode, collect_only):
+        results = {}
+        for requested in self.data["requested"]:
+            nodeid = self.data["resolved_nodeids"].get(requested)
+            nodeids = nodeid if isinstance(nodeid, list) else ([nodeid] if nodeid else [])
+            reports = [r for r in self.data["reports"] if r["nodeid"] in nodeids]
+            calls = [r for r in reports if r["when"] == "call"]
+            if any(r["outcome"] == "failed" for r in reports):
+                status = "failed"
+            elif any(r["wasxfail"] for r in reports):
+                status = "xfail_or_xpass"
+            elif any(r["outcome"] == "skipped" for r in reports):
+                status = "skipped"
+            elif (nodeids and len(calls) == len(nodeids)
+                  and all(r["outcome"] == "passed" for r in reports)
+                  and all({r["when"] for r in reports if r["nodeid"] == n}
+                          == {"setup", "call", "teardown"} for n in nodeids)):
+                status = "passed"
+            elif collect_only and nodeids and all(n in self.data["selected"] for n in nodeids):
+                status = "collected"
+            elif self.data["collection_errors"]:
+                status = "collection_error"
+            else:
+                status = "no_call"
+            results[requested] = {
+                "nodeid": nodeids[0] if len(nodeids) == 1 else None, "nodeids": nodeids,
+                "status": status, "call_outcomes": [r["outcome"] for r in calls],
+            }
+        self.data["case_results"] = results
+        self.data["summary"] = dict(Counter(r["status"] for r in results.values()))
+        self.data["exitcode"] = int(exitcode)
+        self.data.pop("running_nodeid", None)
+        self.save()
+
+
+def main():
+    parser = argparse.ArgumentParser(__doc__)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--collect-only", action="store_true")
+    parser.add_argument("--case-names", action="store_true", help="Select all variants of file.py::source_method")
+    parser.add_argument("--claim-batch", action="store_true", help="Own this output while another queue waits for it")
+    parser.add_argument("--resume", action="store_true", help="Keep completed phase reports and retry unfinished nodes")
+    parser.add_argument("--precompile-workers", type=int, help="Limit NPU compile workers without changing kernels")
+    parser.add_argument("--device-index", type=int, help="Set the default NPU without hiding other devices")
+    parser.add_argument("--trace-launchers", action="store_true", help="Record launcher calls without changing returns")
+    parser.add_argument("nodeids", nargs="+")
+    args = parser.parse_args()
+    if args.precompile_workers is not None:
+        if args.precompile_workers < 1:
+            parser.error("--precompile-workers must be positive")
+        os.environ["TORCHNPU_PRECOMPILE_THREADS"] = str(args.precompile_workers)
+    if len(set(args.nodeids)) != len(args.nodeids):
+        parser.error("Duplicate nodeids are not allowed")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    previous = json.loads(args.output.read_text()) if args.resume else None
+    claim = args.output.with_suffix(".parallel.json")
+    if args.claim_batch:
+        claim.write_text(json.dumps({"pid": os.getpid(), "requested": args.nodeids}))
+    elif claim.exists() and not args.resume:
+        owner = json.loads(claim.read_text())
+        if owner["requested"] != args.nodeids:
+            raise RuntimeError("Parallel batch request differs from the current request")
+        while True:
+            try:
+                existing = json.loads(args.output.read_text())
+            except (FileNotFoundError, json.JSONDecodeError):
+                existing = {}
+            if "summary" in existing:
+                if existing["requested"] != args.nodeids:
+                    raise RuntimeError("Completed batch request differs from the current request")
+                for filename, expected in existing["environment"]["test_sha256"].items():
+                    if hashlib.sha256(Path(filename).read_bytes()).hexdigest() != expected:
+                        raise RuntimeError("Test source changed since the parallel run")
+                print("REUSE_PARALLEL_BATCH=" + json.dumps(existing["summary"]), flush=True)
+                return existing["exitcode"]
+            os.kill(owner["pid"], 0)
+            time.sleep(2)
+    sys.path.insert(0, str(Path.cwd()))
+    sys.path.insert(0, str(Path.cwd().parent))
+
+    import torch
+    import torch_npu
+    from torch_npu.contrib import transfer_to_npu  # noqa: F401
+    import torch_npu._inductor  # noqa: F401
+    import triton
+    import pytest
+    from torch.testing._internal.inductor_utils import GPU_TYPE, HAS_GPU, HAS_TRITON
+
+    if args.device_index is not None:
+        torch.npu.set_device(args.device_index)
+    environment = {
+        "torch": torch.__version__, "torch_npu": torch_npu.__version__,
+        "triton": triton.__version__, "device": torch.npu.get_device_name(),
+        "GPU_TYPE": GPU_TYPE, "HAS_GPU": bool(HAS_GPU), "HAS_TRITON": bool(HAS_TRITON),
+        "driver": type(triton.runtime.driver.active).__name__,
+        "visible_devices": os.environ.get("ASCEND_RT_VISIBLE_DEVICES", "all"),
+        "device_count": torch.npu.device_count(),
+        "default_device": torch.npu.current_device(),
+        "compile_threads": torch._inductor.config.compile_threads,
+        "npu_precompile_threads": torch_npu._inductor.config.precompile_thread_num,
+        "debug_disable_compile_counter": torch._dynamo.config.debug_disable_compile_counter,
+        "test_sha256": {
+            filename: hashlib.sha256(Path(filename).read_bytes()).hexdigest()
+            for filename in sorted({nodeid.split("::")[0] for nodeid in args.nodeids})
+        },
+    }
+    print(json.dumps(environment), flush=True)
+    recorder = Recorder(args.output, args.nodeids, environment, args.case_names, previous)
+    recorder.save()
+    targets = sorted({n.split("::")[0] for n in args.nodeids}) if args.case_names else args.nodeids
+    options = targets + ["-v", "-ra", "--tb=long", "-p", "no:cacheprovider", "--continue-on-collection-errors"]
+    if args.collect_only:
+        options.append("--collect-only")
+    with ExitStack() as stack:
+        if args.trace_launchers:
+            from torch._inductor.runtime.triton_heuristics import CachingAutotuner, StaticTritonCompileResult
+            from torch_npu._inductor.runtime.triton_heuristics import TritonCompileResultNpu
+
+            events = recorder.data["launcher_events"] = []
+
+            def track(cls, name):
+                original = getattr(cls, name)
+
+                def wrapped(instance, *a, **kw):
+                    event = {
+                        "nodeid": getattr(recorder, "current_nodeid", None),
+                        "method": cls.__module__ + "." + cls.__name__ + "." + name,
+                    }
+                    kernel = getattr(instance, "kernel", None)
+                    if kernel is not None:
+                        event["kernel_type"] = type(kernel).__module__ + "." + type(kernel).__name__
+                        event["asm_keys"] = sorted(getattr(kernel, "asm", {}))
+                    events.append(event)
+                    return original(instance, *a, **kw)
+
+                stack.enter_context(mock.patch.object(cls, name, wrapped))
+
+            track(TritonCompileResultNpu, "make_launcher")
+            track(StaticTritonCompileResult, "make_launcher")
+            track(CachingAutotuner, "_build_fast_launcher")
+            recorder.data["cuda_extensions"] = {
+                name: hasattr(torch._C, name) for name in ("_StaticCudaLauncher", "_FastCudaLauncher")
+            }
+        code = pytest.main(options, plugins=[recorder])
+    recorder.finalize(code, args.collect_only)
+    print("BATCH_SUMMARY=" + json.dumps(recorder.data["summary"]), flush=True)
+    return int(code)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

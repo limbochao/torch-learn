@@ -1,0 +1,15 @@
+{
+  "libdevice_module": "triton.language.extra.libdevice",
+  "isinf_module": "triton.language.extra.libdevice",
+  "isinf_source": "def isinf(arg0):\n    ...\n",
+  "npu_backend": "default",
+  "cuda_extensions": {
+    "_FastCudaLauncher": false,
+    "_StaticCudaLauncher": false
+  },
+  "static_npu_factory": {
+    "exception": "NotImplementedError",
+    "message": "Device type npu is not supported for static launcher"
+  },
+  "reproduction_python": "import inspect, torch, torch_npu\nimport torch_npu._inductor\nfrom torch._inductor.runtime import triton_helpers\nfrom torch._inductor.runtime.static_triton_launcher import statically_launched_kernel_by_device\nprint(torch_npu._inductor._get_backend())\nprint(triton_helpers.libdevice.__name__)\nprint(inspect.getsource(triton_helpers.libdevice.isinf))\nprint({name: hasattr(torch._C, name) for name in (\"_FastCudaLauncher\", \"_StaticCudaLauncher\")})\ntry:\n    statically_launched_kernel_by_device(None, \"npu\")\nexcept Exception as error:\n    print(type(error).__name__, str(error))\n"
+}

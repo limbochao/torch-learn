@@ -1,0 +1,86 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_unbacked_symints.py::test_equivalent_backed_unbacked",
+      "class": "TestUnbackedSymints",
+      "path": "test/inductor/test_unbacked_symints.py",
+      "file_sha256": "3e5d3217ce9f74a431f4273e247bac1e463d0ff8c3406dee78d729e78f510c83",
+      "start_line": 168,
+      "end_line": 199,
+      "excerpt": "    @skipGPUIf(not HAS_GPU, \"requires gpu and triton\")\n    @inductor_config.patch({\"max_autotune\": True})\n    @dynamo_config.patch({\"capture_scalar_outputs\": True})\n    def test_equivalent_backed_unbacked(self, device):\n        # Tests scenario when there are two equivalent backed & unbacked symints,\n        # but when we look-up a size hint on the unbacked symint, we ignorantly\n        # use the default fallback hint.\n\n        def fn(x, w, a, b):\n            # Make tensors where 1st dim is unbacked/backed.\n            u0, s0 = a.item(), b.size(0)\n            unbacked = x.expand(u0, *x.shape)\n            backed = x.expand(s0, *x.shape)\n\n            # The cat unifies u0 and s0 -- i.e. u0 == s0.\n            cat = torch.cat([backed, unbacked, unbacked], dim=1)  # [s0, 30, 16]\n            mat1 = torch.permute(cat, [0, 2, 1])  # [s0, 16, 30]\n            mat2 = w.expand(u0, *w.shape)  # [u0, 30, 32]\n            bmm = torch.ops.aten.bmm(mat1, mat2)\n            return bmm\n\n        example_inputs = (\n            torch.randn((10, 16), dtype=torch.float32, device=device),\n            torch.randn((30, 32), dtype=torch.float32, device=device),\n            torch.tensor(7, device=device),\n            backed := torch.randn((7,), device=device),\n        )\n        torch._dynamo.mark_dynamic(backed, 0)  # create backed symint\n\n        actual = torch.compile(fn, fullgraph=True)(*example_inputs)\n        expected = fn(*example_inputs)\n        torch.testing.assert_close(actual, expected)",
+      "class_header": "class TestUnbackedSymints(InductorTestCase):"
+    },
+    {
+      "id": "test_unbacked_symints.py::test_unbacked_linear_layer_norm_input",
+      "class": "TestUnbackedSymints",
+      "path": "test/inductor/test_unbacked_symints.py",
+      "file_sha256": "3e5d3217ce9f74a431f4273e247bac1e463d0ff8c3406dee78d729e78f510c83",
+      "start_line": 582,
+      "end_line": 611,
+      "excerpt": "    @skipGPUIf(not HAS_GPU, \"torch.compile for gpu requires triton\")\n    @dynamo_config.patch({\"capture_dynamic_output_shape_ops\": True})\n    def test_unbacked_linear_layer_norm_input(self, device):\n        class MyModel(torch.nn.Module):\n            def __init__(self):\n                super().__init__()\n                self.linear = torch.nn.Linear(387, 128, bias=True, device=device)\n                self.layer_norm1 = torch.nn.LayerNorm(387, device=device)\n                self.layer_norm2 = torch.nn.LayerNorm(128, device=device)\n\n            def forward(self, x, mask):\n                masked_select = x.masked_select(mask)\n                view = masked_select.view(-1, 387)\n\n                linear = self.linear(view)\n                layer_norm1 = self.layer_norm1(view)\n                layer_norm2 = self.layer_norm2(linear)\n                return linear, layer_norm1, layer_norm2\n\n        model = MyModel()\n        inputs = (\n            torch.randn((256, 387), dtype=torch.float, device=device),\n            torch.randint(\n                low=0, high=2, size=(256, 1), dtype=torch.bool, device=device\n            ),\n        )\n\n        actual = torch.compile(model, fullgraph=True)(*inputs)\n        expected = model(*inputs)\n        torch.testing.assert_close(actual, expected)",
+      "class_header": "class TestUnbackedSymints(InductorTestCase):"
+    },
+    {
+      "id": "test_unbacked_symints.py::test_triton_kernel_with_unbacked_symint_fallback",
+      "class": "TestUnbackedSymints",
+      "path": "test/inductor/test_unbacked_symints.py",
+      "file_sha256": "3e5d3217ce9f74a431f4273e247bac1e463d0ff8c3406dee78d729e78f510c83",
+      "start_line": 657,
+      "end_line": 677,
+      "excerpt": "    @skipGPUIf(not HAS_GPU, \"requires gpu and triton\")\n    @dynamo_config.patch({\"capture_dynamic_output_shape_ops\": True})\n    @inductor_config.patch({\"benchmark_kernel\": True})\n    def test_triton_kernel_with_unbacked_symint_fallback(self, device):\n        # The benchmark_kernel=True config exercises the codegen_kernel_benchmark code path\n        # Test isinstance(arg_sig, SizeArg) == True in the fallback path\n        def fn(x):\n            # Create unbacked SymInt\n            nz = torch.nonzero(x)\n            u0 = nz.size(0)\n            # Create indices for index_select operation\n            indices = torch.tensor([1, u0 - 5], device=device)\n            # Create SizeArg object\n            x = torch.index_select(x, 0, indices)\n            return x\n\n        example_inputs = (torch.randn(32, device=device, dtype=torch.float16),)\n        torch._dynamo.mark_dynamic(example_inputs[0], 0)\n        actual = torch.compile(fn, fullgraph=True)(*example_inputs)\n        expected = fn(*example_inputs)\n        torch.testing.assert_close(actual, expected)",
+      "class_header": "class TestUnbackedSymints(InductorTestCase):"
+    },
+    {
+      "id": "test_torchinductor_dynamic_shapes.py::test_constant_fold_uniform_value_dynamic",
+      "class": "TestInductorDynamic",
+      "path": "test/inductor/test_torchinductor_dynamic_shapes.py",
+      "file_sha256": "c3bcabdc5867c82d8bd212f20899276daf7f9f6cb0f20cf0322e0507ec06d30f",
+      "start_line": 226,
+      "end_line": 269,
+      "excerpt": "    def test_constant_fold_uniform_value_dynamic(self, device):\n        def full_add_zero(x):\n            a = torch.full(x.shape, 1, dtype=x.dtype, device=x.device)\n            b = a - 1\n            return x + b\n\n        def full_mul_one(x):\n            a = torch.full(x.shape, -1, dtype=x.dtype, device=x.device)\n            b = 2 + a\n            return x * b\n\n        def full_view_op(x):\n            a = torch.ones([1], dtype=x.dtype, device=x.device)\n            a = a[:, None]\n            return x * a\n\n        def full_mul_symint(x):\n            a = torch.full(x.shape, -1, dtype=x.dtype, device=x.device)\n            b = 2 + a\n            return b * x.shape[0]\n\n        fns = (full_add_zero, full_mul_one, full_view_op)\n\n        x = torch.randn((2, 4), device=device)\n        y = torch.randn((3, 4), device=device)\n\n        for dynamic in [False, True]:\n            torch._dynamo.reset()\n            for fn in fns:\n                ref = fn(x)\n                fn_c = torch.compile(fn, dynamic=dynamic)\n\n                actual, source_codes = run_and_get_code(fn_c, x)\n\n                if fn is not full_mul_symint:\n                    # due to constant folding, fn returns x directly.\n                    if device == \"cpu\":\n                        FileCheck().check_not(\"cpp_fused\").run(source_codes[0])\n                    else:\n                        FileCheck().check_not(\"triton.jit\").run(source_codes[0])\n\n                self.assertEqual(ref, actual)\n                self.assertEqual(fn(x), fn_c(x))\n                self.assertEqual(fn(y), fn_c(y))",
+      "class_header": "class TestInductorDynamic(DynamicShapesTestCase):"
+    },
+    {
+      "id": "test_torchinductor_dynamic_shapes.py::test_sym_sum_unbacked",
+      "class": "TestInductorDynamic",
+      "path": "test/inductor/test_torchinductor_dynamic_shapes.py",
+      "file_sha256": "c3bcabdc5867c82d8bd212f20899276daf7f9f6cb0f20cf0322e0507ec06d30f",
+      "start_line": 393,
+      "end_line": 405,
+      "excerpt": "    @torch._dynamo.config.patch(capture_scalar_outputs=True)\n    def test_sym_sum_unbacked(self, device):\n        def f(a):\n            xs = a.tolist()\n            y = sum(xs)\n            return torch.tensor(y)\n\n        splits = torch.randint(10, (100,), device=device)\n\n        opt_f = torch.compile(f, fullgraph=True)\n        r = f(splits)\n        opt_r = opt_f(splits)\n        self.assertEqual(r, opt_r)",
+      "class_header": "class TestInductorDynamic(DynamicShapesTestCase):"
+    },
+    {
+      "id": "test_torchinductor_dynamic_shapes.py::test_float_item_return",
+      "class": "TestInductorDynamic",
+      "path": "test/inductor/test_torchinductor_dynamic_shapes.py",
+      "file_sha256": "c3bcabdc5867c82d8bd212f20899276daf7f9f6cb0f20cf0322e0507ec06d30f",
+      "start_line": 519,
+      "end_line": 528,
+      "excerpt": "    @unittest.skipUnless(IS_FBCODE, \"\")\n    @torch._dynamo.config.patch(\n        capture_scalar_outputs=True, capture_dynamic_output_shape_ops=True\n    )\n    def test_float_item_return(self, device):\n        @torch.compile(fullgraph=True)\n        def f(x):\n            return x.item()\n\n        f(torch.tensor([3.0], device=device))",
+      "class_header": "class TestInductorDynamic(DynamicShapesTestCase):"
+    },
+    {
+      "id": "test_torchinductor_dynamic_shapes.py::test_magic_method_lowerings_with_symbolic_scalars",
+      "class": "TestInductorDynamic",
+      "path": "test/inductor/test_torchinductor_dynamic_shapes.py",
+      "file_sha256": "c3bcabdc5867c82d8bd212f20899276daf7f9f6cb0f20cf0322e0507ec06d30f",
+      "start_line": 926,
+      "end_line": 967,
+      "excerpt": "    def test_magic_method_lowerings_with_symbolic_scalars(self, device):\n        def mod(x):\n            return x.new_ones((x.shape[0] % 3) + 1)\n\n        def floordiv(x):\n            return x.new_ones((x.shape[0] // 3) + 1)\n\n        def shifts(x):\n            return (\n                x.new_ones((x.shape[0] << 1) + 1),\n                x.new_ones((x.shape[0] >> 1) + 1),\n            )\n\n        def comparison(x):\n            n = torch.sym_ite(x.shape[0] < 10, x.shape[0], x.shape[0] + 1)\n            return x.new_ones(n)\n\n        def sym_min_max(x):\n            return (\n                x.new_ones(torch.sym_min(x.shape[0], 3) + 1),\n                x.new_ones(torch.sym_max(x.shape[0], 3) + 1),\n            )\n\n        def pow_log2(x):\n            return x + 2 ** (math.floor(math.log2(x.shape[0]) + 1))\n\n        def float_constant(x):\n            return x + ((x.numel() ** 0) / 1.0)\n\n        x = torch.randn(7, 5, device=device)\n        for fn in (\n            mod,\n            floordiv,\n            shifts,\n            comparison,\n            sym_min_max,\n            pow_log2,\n            float_constant,\n        ):\n            with self.subTest(fn=fn.__name__):\n                cfn = self.compile_fn(fn, fullgraph=True)\n                self.assertEqual(fn(x), cfn(x))",
+      "class_header": "class TestInductorDynamic(DynamicShapesTestCase):"
+    },
+    {
+      "id": "test_torchinductor_dynamic_shapes.py::test_mark_unbacked_slice",
+      "class": "TestInductorDynamic",
+      "path": "test/inductor/test_torchinductor_dynamic_shapes.py",
+      "file_sha256": "c3bcabdc5867c82d8bd212f20899276daf7f9f6cb0f20cf0322e0507ec06d30f",
+      "start_line": 1179,
+      "end_line": 1186,
+      "excerpt": "    def test_mark_unbacked_slice(self):\n        @torch.compile(backend=\"inductor\", mode=\"reduce-overhead\", fullgraph=True)\n        def f(x):\n            return x.sum()\n\n        x = torch.empty_strided((1, 4), (5, 1), device=GPU_TYPE)\n        torch._dynamo.decorators.mark_unbacked(x, 0)\n        f(x)",
+      "class_header": "class TestInductorDynamic(DynamicShapesTestCase):"
+    }
+  ]
+}

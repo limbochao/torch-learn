@@ -1,0 +1,206 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_torchinductor.py::test_builtins_round_int_ndigits_zero",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3723,
+      "end_line": 3733,
+      "excerpt": "    def test_builtins_round_int_ndigits_zero(self):\n        def fn(x, i):\n            return x + round(i, 0)\n\n        cfn = torch.compile(fullgraph=True, dynamic=True)(fn)\n\n        x = torch.zeros(2, device=self.device)\n        i = 123\n\n        with torch.no_grad():\n            self.assertEqual(cfn(x, i), fn(x, i))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_silu",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3735,
+      "end_line": 3739,
+      "excerpt": "    def test_silu(self):\n        def fn(a):\n            return (torch.nn.functional.silu(a),)\n\n        self.common(fn, (torch.randn(8, 8),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_silu_exact_eager",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3741,
+      "end_line": 3761,
+      "excerpt": "    @skip_if_halide  # halide has different precision characteristics\n    def test_silu_exact_eager(self):\n        \"\"\"Test that compiled SiLU matches eager exactly.\"\"\"\n\n        def fn(a):\n            return torch.nn.functional.silu(a)\n\n        # Test with normal random values\n        self.common(fn, (torch.randn(1024, device=self.device),))\n\n        # Test with bfloat16 edge cases (all possible bf16 values)\n        x_bf16 = (\n            torch.arange(0, 2**16, dtype=torch.int32, device=self.device)\n            .to(torch.int16)\n            .view(torch.bfloat16)\n        )\n        eager_result_bf16 = fn(x_bf16)\n        torch._dynamo.reset()\n        compiled_fn = torch.compile(fn)\n        compiled_result_bf16 = compiled_fn(x_bf16)\n        self.assertEqual(eager_result_bf16, compiled_result_bf16, equal_nan=True)",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_nan_to_num",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3763,
+      "end_line": 3779,
+      "excerpt": "    @skip_if_halide  # halide has buggy nan handling\n    def test_nan_to_num(self):\n        def fn(a):\n            return (\n                torch.nan_to_num(a),\n                torch.nan_to_num(a, nan=3.0),\n                torch.nan_to_num(a, nan=None),\n                torch.nan_to_num(a, posinf=4.0),\n                torch.nan_to_num(a, neginf=5.0),\n                torch.nan_to_num(a, nan=3.0, posinf=4.0, neginf=5.0),\n            )\n\n        self.common(\n            fn,\n            (torch.tensor((float(\"nan\"), float(\"inf\"), float(\"-inf\"), 1.0)),),\n            check_lowp=False,  # a much more elaborate test is required to match finfo max's for float and half\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_one_hot",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3781,
+      "end_line": 3789,
+      "excerpt": "    def test_one_hot(self):\n        def fn(a):\n            return torch.nn.functional.one_hot(a, 8) + 1\n\n        self.common(\n            fn,\n            (torch.arange(100).view(4, 5, 5) % 8,),\n            check_lowp=False,\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div1",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3793,
+      "end_line": 3803,
+      "excerpt": "    def test_div1(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        self.common(fn, (torch.randn(8, 8) * 100, torch.randn(8, 8) * 100))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div2",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3805,
+      "end_line": 3815,
+      "excerpt": "    def test_div2(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        self.common(fn, (torch.randint(-100, 100, [8, 8]), 100 * torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div3",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3817,
+      "end_line": 3828,
+      "excerpt": "    def test_div3(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        a = torch.randint(1, 100, [8, 8])\n        self.common(fn, (a * 2, a))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div4",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3830,
+      "end_line": 3843,
+      "excerpt": "    def test_div4(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        self.common(\n            fn,\n            (torch.randint(-100, 0, [8, 8]), torch.randint(1, 10, [8, 8])),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div5",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3845,
+      "end_line": 3856,
+      "excerpt": "    def test_div5(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        # divide a scalar\n        self.common(fn, (torch.randint(-100, 0, [8, 8]), 16))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div6",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3858,
+      "end_line": 3872,
+      "excerpt": "    def test_div6(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        # treat boolean as integer\n        self.common(\n            fn,\n            (torch.ones([8, 8], dtype=torch.bool), torch.randint(-100, -1, [8, 8])),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div7",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3874,
+      "end_line": 3892,
+      "excerpt": "    @skip_if_triton_cpu  # divide by zero; cannot xfail because it crashes process\n    @skipIfXpu(msg=\"https://github.com/intel/intel-xpu-backend-for-triton/issues/6401\")\n    def test_div7(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        self.common(\n            fn,\n            (\n                torch.randint(2**32, 2**40, [100, 100]),\n                torch.randint(-10, -1, [100, 100]),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div9",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3908,
+      "end_line": 3912,
+      "excerpt": "    def test_div9(self):\n        def fn(x):\n            return (torch.div(42, x), aten.true_divide(42, x), aten.div.Tensor(42, x))\n\n        self.common(fn, (torch.randn(8),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div_zero_dim",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3914,
+      "end_line": 3939,
+      "excerpt": "    @skip_if_triton_cpu  # divide by zero; cannot xfail because it crashes process\n    def test_div_zero_dim(self):\n        def fn(a, b):\n            return (\n                aten.div(a, b, rounding_mode=None),\n                aten.div(a, b, rounding_mode=\"floor\"),\n                aten.div(a, b, rounding_mode=\"trunc\"),\n                a / b,\n                a // b,\n            )\n\n        for dtype in (torch.float32, torch.int64):\n            self.common(\n                fn,\n                (\n                    make_tensor(10, device=self.device, dtype=dtype),\n                    make_tensor((), device=self.device, dtype=dtype, exclude_zero=True),\n                ),\n            )\n            self.common(\n                fn,\n                (\n                    make_tensor((), device=self.device, dtype=dtype),\n                    make_tensor(10, device=self.device, dtype=dtype, exclude_zero=True),\n                ),\n            )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_div_prim",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3941,
+      "end_line": 3955,
+      "excerpt": "    @skip_if_triton_cpu  # divide by zero; cannot xfail because it crashes process\n    def test_div_prim(self):\n        def fn(a, b):\n            return (torch.ops.prims.div(a, b),)\n\n        for dtype in (torch.float32, torch.int64):\n            self.common(\n                fn,\n                (\n                    make_tensor(100, device=self.device, dtype=dtype),\n                    make_tensor(\n                        100, device=self.device, dtype=dtype, exclude_zero=True\n                    ),\n                ),\n            )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_floordiv",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3957,
+      "end_line": 3973,
+      "excerpt": "    def test_floordiv(self):\n        def fn_floor_input(a, i):\n            n = (i * 1.234) // 8.234\n            return a + n\n\n        self.common(\n            fn_floor_input,\n            (make_tensor(10, device=self.device, dtype=torch.float32), 33),\n        )\n\n        def fn_int_input(a, i):\n            n = i // 8\n            return a + n\n\n        self.common(\n            fn_int_input, (make_tensor(10, device=self.device, dtype=torch.float32), 33)\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_floordiv_negative_int",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3975,
+      "end_line": 3987,
+      "excerpt": "    def test_floordiv_negative_int(self):\n        # Regression test for https://github.com/pytorch/pytorch/issues/158212\n        # Signed integer floor division must handle negative dividends correctly.\n        # The key case: (-1) // 2 should be -1 (Python floor), not 0 (C truncation).\n        def fn(a, b):\n            return a // b\n\n        for divisor in [2, 3, 7]:\n            a = torch.arange(-32, 32, device=self.device, dtype=torch.int32)\n            b = torch.full_like(a, divisor)\n            self.common(fn, (a, b))\n            b_neg = torch.full_like(a, -divisor)\n            self.common(fn, (a, b_neg))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_floordiv_int_min_neg_one_cpu",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3989,
+      "end_line": 4005,
+      "excerpt": "    def test_floordiv_int_min_neg_one_cpu(self):\n        # Regression test for https://github.com/pytorch/pytorch/issues/184406\n        if not is_cpp_backend(self.device):\n            raise unittest.SkipTest(\"cpp backend required\")\n\n        def fn(a, b):\n            return torch.floor_divide(a, b)\n\n        for dtype in [torch.int32, torch.int64]:\n            min_value = torch.iinfo(dtype).min\n            a = torch.tensor([min_value], dtype=dtype, device=self.device)\n            b = torch.tensor([-1], dtype=dtype, device=self.device)\n            self.common(fn, (a, b))\n\n            a = torch.full((128,), min_value, dtype=dtype, device=self.device)\n            b = torch.full((128,), -1, dtype=dtype, device=self.device)\n            self.common(fn, (a, b))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_floordiv_div_by_zero_int_cpu_inductor_raises_error",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4007,
+      "end_line": 4046,
+      "excerpt": "    def test_floordiv_div_by_zero_int_cpu_inductor_raises_error(self):\n        if not is_cpp_backend(self.device):\n            raise unittest.SkipTest(\"cpp backend required\")\n\n        code = \"\"\"\nimport torch\n\ndef fn(a, b):\n    return torch.floor_divide(a, b)\n\nopt = torch.compile(fn, backend=\"inductor\", fullgraph=True)\nfor dtype in (torch.int32, torch.int64):\n    cases = [\n        (torch.arange(1, 11, dtype=dtype), torch.tensor([1, 1, 1, 0, 1, 1, 1, 1, 1, 1], dtype=dtype)),\n        (torch.tensor([1], dtype=dtype), torch.tensor([0], dtype=dtype)),\n    ]\n    for a, b in cases:\n        try:\n            opt(a, b)\n        except RuntimeError as exc:\n            if \"ZeroDivisionError\" not in str(exc):\n                raise\n        else:\n            raise AssertionError(\"expected ZeroDivisionError\")\n\"\"\"\n        env = os.environ.copy()\n        env.setdefault(\"TORCHINDUCTOR_CPP_CACHE_PRECOMPILE_HEADERS\", \"0\")\n        result = subprocess.run(\n            [sys.executable, \"-c\", code],\n            # Avoid importing the source tree's ungenerated torch package in CI.\n            cwd=Path(__file__).resolve().parents[1],\n            env=env,\n            capture_output=True,\n            text=True,\n        )\n        self.assertEqual(\n            result.returncode,\n            0,\n            msg=f\"stdout:\\n{result.stdout}\\nstderr:\\n{result.stderr}\",\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_floordiv_div_by_zero_int",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 4048,
+      "end_line": 4062,
+      "excerpt": "    @skip_if_cpu\n    def test_floordiv_div_by_zero_int(self):\n        # Integer floor division by zero is undefined behavior on CUDA/Triton.\n        # On CPU, integer division by zero correctly raises ZeroDivisionError.\n        # Eager (c10::div_floor_integer) and compiled (Triton floordiv) must\n        # both return 0 for elements where the divisor is zero on GPU.\n        def fn(a, b):\n            return torch.floor_divide(a, b)\n\n        for dtype in [torch.int32, torch.int64]:\n            # All-zero divisor: every element should be 0\n            for dividend in [0, 1, -1, 5, -5]:\n                a = torch.full((8,), dividend, device=self.device, dtype=dtype)\n                b = torch.full((8,), 0, device=self.device, dtype=dtype)\n                self.common(fn, (a, b))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    }
+  ]
+}

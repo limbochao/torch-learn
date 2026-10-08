@@ -1,0 +1,206 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_torchinductor.py::test_views2",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3479,
+      "end_line": 3493,
+      "excerpt": "    def test_views2(self):\n        for size1, size2 in [\n            ([2, 2, 2, 2], [4, -1]),\n            ([10, 1, 10, 1, 10], [-1, 100]),\n            ([10 * 5, 20], [10, -1, 20]),\n        ]:\n\n            def fn1(x):\n                return (x.view(size2) + 1,)\n\n            def fn2(x):\n                return ((x * 2).view(size2) + 1,)\n\n            self.common(fn1, (torch.randn(size1),))\n            self.common(fn2, (torch.randn(size1),))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_views3",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3495,
+      "end_line": 3509,
+      "excerpt": "    def test_views3(self):\n        # example taken from hf_BigBird\n        def forward(arg1, arg2):\n            index = torch.ops.aten.index(arg1, [arg2])\n            view_1 = torch.ops.aten.view(index, [1, 2232, 64])\n            view_2 = torch.ops.aten.view(view_1, [1, 12, 62, 192])\n            return view_2\n\n        self.common(\n            forward,\n            (\n                rand_strided((64, 64), (64, 1), torch.float32),\n                rand_strided((2232,), (1,), torch.int64),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_views4",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3511,
+      "end_line": 3525,
+      "excerpt": "    def test_views4(self):\n        # example taken from hf_BigBird\n        def forward(arg1, arg2):\n            arg1 = arg1.index_select(0, arg2)\n            arg1 = torch.ops.aten.view(arg1, [2, 3, 4, 5, 5])\n            arg1 = torch.ops.aten.view(arg1, [2, 3, 2, 10, -1])\n            return arg1\n\n        self.common(\n            forward,\n            (\n                torch.randn(12, 5, 5),\n                torch.randint(0, 11, (24,)),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_views5",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3527,
+      "end_line": 3536,
+      "excerpt": "    def test_views5(self):\n        # tensor with shape 0 in any dimension\n        def forward(x):\n            y = x[:, 4:]\n            return y.view(len(y), -1, 4)\n\n        self.common(\n            forward,\n            (torch.randn(4, 4, 4, 4),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_views6",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3538,
+      "end_line": 3550,
+      "excerpt": "    def test_views6(self):\n        def forward(x):\n            x = torch.ops.aten.relu(x)\n            s = torch.ops.aten.slice(x, 0, 0, 9223372036854775807)\n            s = torch.ops.aten.slice(s, 1, 0, 9223372036854775807)\n            s = torch.ops.aten.slice(s, 3, 0, 0)\n            y = torch.ops.aten.view(s, [4, 2, -1])\n            return y\n\n        self.common(\n            forward,\n            (torch.randn(4, 2, 4, 4),),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_views7",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3552,
+      "end_line": 3565,
+      "excerpt": "    def test_views7(self):\n        # x.view(dtype)\n        def forward(x, y):\n            x = (x + 1).to(torch.float32)\n            y = (y + 1).to(torch.int32)\n            return x.view(torch.int32), y.view(torch.float32)\n\n        self.common(\n            forward,\n            (\n                torch.rand(2, 3, dtype=torch.float32),\n                torch.randint(10, (2, 3), dtype=torch.int32),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_view_copy_dtype_change",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3567,
+      "end_line": 3572,
+      "excerpt": "    def test_view_copy_dtype_change(self):\n        def fn(x, dtype):\n            return torch.ops.aten.view_copy(x, dtype=dtype)\n\n        x = torch.randint(2, 32, (8, 16), dtype=torch.int32, device=self.device)\n        self.common(fn, (x, torch.int64))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_relu",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3586,
+      "end_line": 3590,
+      "excerpt": "    def test_relu(self):\n        def fn(a, b):\n            return (torch.relu(a), torch.relu(a + b) / 10)\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_exp",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3592,
+      "end_line": 3596,
+      "excerpt": "    def test_exp(self):\n        def fn(a, b):\n            return (torch.exp(a), torch.exp(a + b))\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_exp2",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3598,
+      "end_line": 3602,
+      "excerpt": "    def test_exp2(self):\n        def fn(a, b):\n            return (torch.exp2(a), torch.exp2(a + b), torch.pow(2, -torch.abs(a - b)))\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_logaddexp",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3604,
+      "end_line": 3613,
+      "excerpt": "    @skipIfXpu(msg=\"logaddexp_xpu not implemented for ComplexFloat\")\n    @skipCUDAIf(True, \"Not implemented for CUDA\")\n    def test_logaddexp(self):\n        self.common(\n            torch.logaddexp,\n            (\n                torch.randn(8, 8).to(dtype=torch.complex64),\n                torch.randn(8, 8).to(dtype=torch.complex64),\n            ),\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_sigmoid",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3615,
+      "end_line": 3619,
+      "excerpt": "    def test_sigmoid(self):\n        def fn(a, b):\n            return (torch.sigmoid(a), torch.sigmoid(a + b))\n\n        self.common(fn, (torch.randn(8, 8), torch.randn(8, 8)))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_round",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3621,
+      "end_line": 3631,
+      "excerpt": "    @xfail_if_triton_cpu\n    def test_round(self):\n        def fn(a, b):\n            return torch.round(a), torch.round(b + 1), torch.round(a, decimals=2)\n\n        # without manual_seed, there is some chance this test fails due to:\n        # https://github.com/triton-lang/triton/issues/530\n        torch.manual_seed(0)\n\n        # with *100 we are always getting a number exactly at .5 which we don't do right in half\n        self.common(fn, (torch.randn(8, 8) * 100, torch.randn(8, 8) * 10))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_round_correctness",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3633,
+      "end_line": 3646,
+      "excerpt": "    @xfail_if_triton_cpu\n    def test_round_correctness(self):\n        if self.device == \"cuda\":\n            raise unittest.SkipTest(\"need to debug tl.libdevice on A100/V100\")\n\n        def fn(a):\n            return torch.round(a)\n\n        dtype = highest_precision_float(self.device)\n        self.common(\n            fn,\n            [torch.arange(-10, 10, 0.1, dtype=dtype)],\n            check_lowp=False,\n        )",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_builtins_round",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3648,
+      "end_line": 3658,
+      "excerpt": "    @xfail_if_triton_cpu\n    def test_builtins_round(self):\n        def fn(x, i):\n            return x[: round(i / 2 + 1)] + round(i / 2)\n\n        cfn = torch.compile(fullgraph=True, dynamic=True)(fn)\n\n        x = torch.zeros(5, dtype=torch.int, device=self.device)\n        with torch.no_grad():\n            for i in range(1, 6):\n                self.assertEqual(cfn(x, i), fn(x, i))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_builtins_round_float_ndigits_pos",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3660,
+      "end_line": 3671,
+      "excerpt": "    @xfail_if_triton_cpu\n    def test_builtins_round_float_ndigits_pos(self):\n        def fn(x, i):\n            return x + round(i / 2 * 123.4567, 1)\n\n        cfn = torch.compile(fullgraph=True, dynamic=True)(fn)\n\n        x = torch.zeros(2, device=self.device)\n        i = 2\n\n        with torch.no_grad():\n            self.assertEqual(cfn(x, i), fn(x, i))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_builtins_round_float_ndigits_zero",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3673,
+      "end_line": 3684,
+      "excerpt": "    @xfail_if_triton_cpu\n    def test_builtins_round_float_ndigits_zero(self):\n        def fn(x, i):\n            return x + round(i / 2 * 123.4567, 0)\n\n        cfn = torch.compile(fullgraph=True, dynamic=True)(fn)\n\n        x = torch.zeros(2, device=self.device)\n        i = 2\n\n        with torch.no_grad():\n            self.assertEqual(cfn(x, i), fn(x, i))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_builtins_round_float_ndigits_neg",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3686,
+      "end_line": 3697,
+      "excerpt": "    @xfail_if_triton_cpu\n    def test_builtins_round_float_ndigits_neg(self):\n        def fn(x, i):\n            return x + round(i / 2 * 123.4567, -1)\n\n        cfn = torch.compile(fullgraph=True, dynamic=True)(fn)\n\n        x = torch.zeros(2, device=self.device)\n        i = 2\n\n        with torch.no_grad():\n            self.assertEqual(cfn(x, i), fn(x, i))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_builtins_round_float_ndigits_neg_uses_value_expr",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3699,
+      "end_line": 3709,
+      "excerpt": "    @skipCPUIf(True, \"requires CUDA/Triton\")\n    @requires_cuda_and_triton\n    def test_builtins_round_float_ndigits_neg_uses_value_expr(self):\n        def fn(x, i):\n            return x + round(i / 2 * 123.4567, -1)\n\n        fn_opt = torch.compile(fn, backend=\"inductor\", fullgraph=True, dynamic=True)\n        x = torch.zeros(2, device=self.device)\n        i = 2\n        with torch.no_grad():\n            self.assertEqual(fn_opt(x, i), fn(x, i))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    },
+    {
+      "id": "test_torchinductor.py::test_builtins_round_int_ndigits_pos",
+      "class": "CommonTemplate",
+      "path": "test/inductor/test_torchinductor.py",
+      "file_sha256": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+      "start_line": 3711,
+      "end_line": 3721,
+      "excerpt": "    def test_builtins_round_int_ndigits_pos(self):\n        def fn(x, i):\n            return x + round(i, 1)\n\n        cfn = torch.compile(fullgraph=True, dynamic=True)(fn)\n\n        x = torch.zeros(2, device=self.device)\n        i = 123\n\n        with torch.no_grad():\n            self.assertEqual(cfn(x, i), fn(x, i))",
+      "class_header": "@instantiate_parametrized_tests\nclass CommonTemplate:"
+    }
+  ]
+}

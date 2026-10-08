@@ -1,0 +1,182 @@
+{
+  "origin": "2026-10-08 目标测试源码，只读采集",
+  "test_commit": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "sources": [
+    {
+      "id": "test_utils.py::test_flops_fx",
+      "class": "TestUtils",
+      "path": "test/inductor/test_utils.py",
+      "file_sha256": "4dcc149970336f1f60cf36e5d9b18f978e4abe99ec39210b926fcf391957b8f0",
+      "start_line": 132,
+      "end_line": 251,
+      "excerpt": "    def test_flops_fx(self):\n        def create_fx_node(\n            aten, op_overload: torch._ops.OpOverload, args, kwargs\n        ) -> tuple[torch.fx.Node, torch.fx.Node]:\n            node1 = torch.fx.Node(\n                graph=torch.fx.Graph(),\n                name=\"\",\n                op=\"call_function\",\n                target=aten,\n                args=args,\n                kwargs=kwargs,\n            )\n            # name: str = aten.overloads()[0]\n            # if aten == torch.ops.aten.addmm:\n            #     name = \"default\"\n            # print(aten)\n            # print(aten.overloads())\n            # print(name)\n            # op_overload: torch._ops.OpOverload = getattr(aten, name)\n            node2 = torch.fx.Node(\n                graph=torch.fx.Graph(),\n                name=\"\",\n                op=\"call_function\",\n                target=op_overload,\n                args=args,\n                kwargs=kwargs,\n            )\n            return node1, node2\n\n        with V.set_fake_mode(\n            torch._subclasses.FakeTensorMode(allow_non_fake_inputs=True)\n        ):\n            trues = [\n                (\n                    torch.ops.aten.addmm,\n                    torch.ops.aten.addmm.default,\n                    (torch.Tensor(4, 4), torch.Tensor(4, 5), torch.Tensor(5, 4)),\n                    {},\n                ),\n                (\n                    torch.ops.aten.bmm,\n                    torch.ops.aten.bmm.default,\n                    (torch.Tensor(10, 4, 5), torch.Tensor(10, 5, 4)),\n                    {},\n                ),\n                (\n                    torch.ops.aten.mm,\n                    torch.ops.aten.mm.default,\n                    (torch.Tensor(2, 3), torch.Tensor(3, 2)),\n                    {},\n                ),\n                (\n                    torch.ops.aten.convolution,\n                    torch.ops.aten.convolution.default,\n                    (\n                        torch.Tensor(2, 2, 3),\n                        torch.Tensor(2, 2, 2),\n                        torch.Tensor(2),\n                        (1,),\n                        (0,),\n                        (1,),\n                        True,\n                        (0,),\n                        1,\n                    ),\n                    {},\n                ),\n                (\n                    torch.ops.aten._convolution,\n                    torch.ops.aten._convolution.deprecated,\n                    (\n                        torch.Tensor(2, 2, 2),\n                        torch.Tensor(2, 2, 2),\n                        torch.Tensor(2),\n                        (1,),\n                        (0,),\n                        (1,),\n                        True,\n                        (0,),\n                        1,\n                        False,\n                        True,\n                        False,\n                    ),\n                    {},\n                ),\n            ]\n            # we don't support pointwise ops\n            falses = [\n                (\n                    torch.ops.aten.add,\n                    torch.ops.aten.add.Tensor,\n                    (torch.Tensor(1, 2, 3), torch.Tensor(1, 2, 3)),\n                    {},\n                ),\n                (\n                    torch.ops.aten.mul,\n                    torch.ops.aten.mul.Tensor,\n                    (torch.Tensor(1, 2, 3), torch.Tensor(1, 2, 3)),\n                    {},\n                ),\n            ]\n            for t, t2, args, kwargs in trues:\n                fx_node_1, fx_node_2 = create_fx_node(t, t2, args, kwargs)\n                self.assertTrue(\n                    countable_fx(fx_node_1), f\"Expected true {t}: {fx_node_1}\"\n                )\n                self.assertTrue(\n                    countable_fx(fx_node_2), f\"Expected true {t}: {fx_node_2}\"\n                )\n                self.assertNotEqual(count_flops_fx(fx_node_1), None)\n                self.assertNotEqual(count_flops_fx(fx_node_2), None)\n            for f, f2, args, kwargs in falses:\n                fx_node_1, fx_node_2 = create_fx_node(f, f2, args, kwargs)\n                self.assertFalse(\n                    countable_fx(fx_node_1), f\"Expected false {f}: {fx_node_1}\"\n                )\n                self.assertFalse(\n                    countable_fx(fx_node_2), f\"Expected false {f}: {fx_node_2}\"\n                )",
+      "class_header": "class TestUtils(TestCase):"
+    },
+    {
+      "id": "test_utils.py::test_get_device_tflops",
+      "class": "TestUtils",
+      "path": "test/inductor/test_utils.py",
+      "file_sha256": "4dcc149970336f1f60cf36e5d9b18f978e4abe99ec39210b926fcf391957b8f0",
+      "start_line": 304,
+      "end_line": 309,
+      "excerpt": "    @xfailIfNoAcceleratorTriton\n    @unittest.skipIf(not torch.cuda.is_available(), \"skip if no device\")\n    @dtypes(torch.float16, torch.bfloat16, torch.float32)\n    def test_get_device_tflops(self, dtype):\n        ret = get_device_tflops(dtype)\n        self.assertTrue(type(ret) is float)",
+      "class_header": "class TestUtils(TestCase):"
+    },
+    {
+      "id": "test_utils.py::test_ensure_fp4_dtype_registered",
+      "class": "TestFP4Support",
+      "path": "test/inductor/test_utils.py",
+      "file_sha256": "4dcc149970336f1f60cf36e5d9b18f978e4abe99ec39210b926fcf391957b8f0",
+      "start_line": 345,
+      "end_line": 362,
+      "excerpt": "    @unittest.skipIf(\n        not torch.cuda.is_available()\n        or importlib.util.find_spec(\"cutlass_api\") is None,\n        \"requires CUDA and cutlass_api\",\n    )\n    def test_ensure_fp4_dtype_registered(self):\n        \"\"\"_ensure_fp4_dtype_registered should patch cutlass_api for FP4.\"\"\"\n        from torch._inductor.utils import _ensure_fp4_dtype_registered\n\n        _ensure_fp4_dtype_registered()\n        import cutlass\n        import cutlass_api.utils\n\n        result = cutlass_api.utils.cutlass_type_from_torch_type(torch.float4_e2m1fn_x2)\n        self.assertEqual(result, cutlass.Float4E2M1FN)\n\n        result_fp32 = cutlass_api.utils.cutlass_type_from_torch_type(torch.float32)\n        self.assertEqual(result_fp32, cutlass.Float32)",
+      "class_header": "class TestFP4Support(TestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_dont_modify_live",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 101,
+      "end_line": 107,
+      "excerpt": "    def test_dont_modify_live(self):\n        def f(x, y):\n            x = x.cos()\n            x2 = x.index_put((y,), const)\n            return x2, x\n\n        self._test(f)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_dont_modify_view_of_live",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 109,
+      "end_line": 117,
+      "excerpt": "    def test_dont_modify_view_of_live(self):\n        def f(x, y):\n            x = x.cos()\n            x2 = aten.alias(x)\n            x2 = x2.index_put((y,), const)\n            y = x2 + x.cos()\n            return y\n\n        self._test(f)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_dont_modify_input",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 119,
+      "end_line": 123,
+      "excerpt": "    def test_dont_modify_input(self):\n        def f(x, y):\n            return x.index_put((y,), const)\n\n        self._test(f)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_should_modify_inner",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 125,
+      "end_line": 131,
+      "excerpt": "    def test_should_modify_inner(self):\n        def f(x, y):\n            x = x.cos()\n            x = x.index_put((y,), const)\n            return x\n\n        self._test(f)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_should_modify_input",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 133,
+      "end_line": 138,
+      "excerpt": "    def test_should_modify_input(self):\n        def f(x, y):\n            x = x.index_put_((y,), const)\n            return x\n\n        self._test(f)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_multi_output_intermediate",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 395,
+      "end_line": 413,
+      "excerpt": "    def test_multi_output_intermediate(self):\n        for requires_grad in [False, True]:\n            for enable_v2 in [False, True]:\n                with inductor_config.patch(\n                    {\"enable_auto_functionalized_v2\": enable_v2}\n                ):\n                    ReinplaceCounters.clear()\n\n                    def f(x):\n                        out1 = torch.empty_like(x)\n                        out2 = torch.empty_like(x)\n                        sin_cos(x, out1, out2)\n                        return out1, out2, x**2\n\n                    x = torch.randn(3, device=device, requires_grad=requires_grad)\n                    res1, res2, _ = torch.compile(f)(x)\n                    self.assertEqual(res1, x.sin())\n                    self.assertEqual(res2, x.cos())\n                    self.assertEqual(num_reinplacing_failures(), 0)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_multiple_mutations",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 415,
+      "end_line": 429,
+      "excerpt": "    def test_multiple_mutations(self):\n        ReinplaceCounters.clear()\n\n        def f(x, out):\n            sin(x, out)\n            sin(out, out)\n            sin(out, out)\n            return out\n\n        x = torch.randn(3, device=device)\n        out = torch.randn(3, device=device)\n        result = torch.compile(f)(x, out)\n        self.assertEqual(result, x.sin().sin().sin())\n        self.assertEqual(result, out)\n        self.assertEqual(num_reinplacing_failures(), 0)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_multiple_intermediate",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 431,
+      "end_line": 444,
+      "excerpt": "    def test_multiple_intermediate(self):\n        ReinplaceCounters.clear()\n\n        def f(x):\n            out = torch.empty_like(x)\n            sin(x, out)\n            sin(out, out)\n            sin(out, out)\n            return out\n\n        x = torch.randn(3, device=device)\n        result = torch.compile(f)(x)\n        self.assertEqual(result, x.sin().sin().sin())\n        self.assertEqual(num_reinplacing_failures(), 0)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_lists_functionalize_v2",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 446,
+      "end_line": 471,
+      "excerpt": "    def test_lists_functionalize_v2(self):\n        with inductor_config.patch({\"enable_auto_functionalized_v2\": True}):\n\n            @torch.library.custom_op(\"mylib::mutate_op\", mutates_args={\"y\"})\n            def mutate_op(y: list[Tensor]) -> None:\n                y[0].add_(2)\n                y[1].add_(3)\n\n            @torch.compile(fullgraph=True, dynamic=False, backend=\"inductor\")\n            def f(b):\n                mutate_op([b[0], b[1]])\n\n            x1 = torch.tensor([0.3, 0.4], device=device)\n            log_stream, ctx = logs_to_string(\n                \"torch._inductor.compile_fx\", \"post_grad_graphs\"\n            )\n            with ctx():\n                torch.compile(f, backend=\"inductor\", fullgraph=True)(x1)\n            post_grad_graphs = \"\\n\".join(\n                log_stream.getvalue().strip().split(\"\\n\")[3:]\n            ).strip()\n\n            # We can inplace the base y. no clones emitted.\n            self.assertEqual(num_reinplacing_failures(), 0)\n            self.assertEqual(miss_inplaced_bytes(), 0)\n            self.assertEqual(post_grad_graphs.count(\"aten.clone\"), 0)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_lists_old_functionalize",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 473,
+      "end_line": 500,
+      "excerpt": "    def test_lists_old_functionalize(self):\n        with inductor_config.patch({\"enable_auto_functionalized_v2\": False}):\n\n            @torch.library.custom_op(\"mylib::mutate_op\", mutates_args={\"y\"})\n            def mutate_op(y: list[Tensor]) -> None:\n                y[0].add_(2)\n                y[1].add_(3)\n\n            @torch.compile(fullgraph=True, dynamic=False, backend=\"inductor\")\n            def f(b):\n                mutate_op([b[0], b[1]])\n\n            x1 = torch.tensor([0.3, 0.4], device=device)\n            log_stream, ctx = logs_to_string(\n                \"torch._inductor.compile_fx\", \"post_grad_graphs\"\n            )\n            with ctx():\n                torch.compile(f, backend=\"inductor\", fullgraph=True)(x1)\n            post_grad_graphs = \"\\n\".join(\n                log_stream.getvalue().strip().split(\"\\n\")[3:]\n            ).strip()\n\n            # Can't reinplace on views yet (1 for the \"entire list\" failing to reinplace)\n            self.assertEqual(num_reinplacing_failures(), 1)\n            self.assertEqual(miss_inplaced_bytes(), 8)\n\n            # Both list inputs failed to reinplace. So we should have emitted clones for them.\n            self.assertEqual(post_grad_graphs.count(\"aten.clone\"), 2)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::test_partitioner_recomputes_factory",
+      "class": "TestReinplacingPassCorrectness",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "start_line": 527,
+      "end_line": 564,
+      "excerpt": "    @parametrize(\n        \"factory_op\",\n        [\n            # Skipping because of https://github.com/pytorch/pytorch/issues/170160\n            # subtest(torch.ones_like, name=\"ones_like\"),\n            subtest(torch.empty_like, name=\"empty_like\"),\n        ],\n    )\n    @parametrize(\n        \"sin_op\",\n        [\n            subtest(sin, name=\"sin_op\"),\n            subtest(sin_triton, name=\"sin_triton\"),\n        ],\n    )\n    def test_partitioner_recomputes_factory(self, factory_op, sin_op):\n        class MySin(torch.autograd.Function):\n            @staticmethod\n            def forward(ctx, x):\n                out = factory_op(x)\n                sin_op(x, out)\n                ctx.save_for_backward(out)\n                return out\n\n            @staticmethod\n            def backward(ctx, grad):\n                (saved,) = ctx.saved_tensors\n                out = factory_op(grad)\n                sin_op(saved, out)\n                return out\n\n        @torch.compile(backend=\"inductor\")\n        def f(x):\n            return MySin.apply(x)\n\n        x = torch.randn(3, requires_grad=True, device=device)\n        f(x)\n        self.assertEqual(num_reinplacing_failures(), 0)",
+      "class_header": "class TestReinplacingPassCorrectness(InductorTestCase):"
+    },
+    {
+      "id": "test_inductor_annotations.py::test_no_annotations",
+      "class": "InductorAnnotationTestCase",
+      "path": "test/inductor/test_inductor_annotations.py",
+      "file_sha256": "4258ebe61ca4028d5da19ad843cd07a2e5c63d89b64b31225a6053dea707ae39",
+      "start_line": 21,
+      "end_line": 26,
+      "excerpt": "    @requires_cuda_and_triton\n    def test_no_annotations(self):\n        code = self.get_code()\n\n        self.assertTrue(\"from torch.cuda import nvtx\" not in code)\n        self.assertTrue(\"training_annotation\" not in code)",
+      "class_header": "class InductorAnnotationTestCase(TestCase):"
+    },
+    {
+      "id": "test_inductor_annotations.py::test_training_annotation",
+      "class": "InductorAnnotationTestCase",
+      "path": "test/inductor/test_inductor_annotations.py",
+      "file_sha256": "4258ebe61ca4028d5da19ad843cd07a2e5c63d89b64b31225a6053dea707ae39",
+      "start_line": 28,
+      "end_line": 38,
+      "excerpt": "    @inductor_config.patch(annotate_training=True)\n    @requires_cuda_and_triton\n    def test_training_annotation(self):\n        code = self.get_code()\n\n        self.assertTrue(\"from torch.cuda import nvtx\" in code)\n        self.assertTrue(\n            code.count(\"training_annotation = nvtx._device_range_start('inference')\")\n            >= 1\n        )\n        self.assertTrue(code.count(\"nvtx._device_range_end(training_annotation)\") >= 1)",
+      "class_header": "class InductorAnnotationTestCase(TestCase):"
+    },
+    {
+      "id": "test_inplacing_pass.py::const",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "start_line": 29,
+      "end_line": 30,
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "excerpt": "const = torch.tensor(0.0)\ndevice = GPU_TYPE"
+    },
+    {
+      "id": "test_inplacing_pass.py::_test",
+      "path": "test/inductor/test_inplacing_pass.py",
+      "start_line": 91,
+      "end_line": 100,
+      "file_sha256": "1a6c3d3df61292e4489abef24613f6ce61dd11c5c5058ace490d8292f0c156e3",
+      "excerpt": "    def _test(self, f):\n        nf = torch.compile(f)\n        inp = (\n            torch.randn(4, device=device),\n            torch.ones(2, device=device, dtype=torch.int),\n        )\n        inp2 = (inp[0].clone(), inp[1].clone())\n        self.assertEqual(f(*inp), nf(*inp2))\n        self.assertEqual(inp, inp2)\n"
+    }
+  ]
+}
