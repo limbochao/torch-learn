@@ -45,7 +45,7 @@ def main():
         cache = results / f'cache-{row}'
         cache.mkdir(exist_ok=True)
         env['TORCHINDUCTOR_CACHE_DIR'] = str(cache)
-        script = 'run_conv_precision_validation.py' if row == 201 else 'run_batch.py'
+        script = 'run_conv_precision_validation.py' if row in (83, 201) else 'run_batch.py'
         command = [sys.executable, script, '--case-names', '--precompile-workers', '4',
                    '--device-index', str(args.device), '--output', str(output), cases[row]]
         invocation = {'row': row, 'case': cases[row], 'device': args.device, 'start': time.time(),
