@@ -1,0 +1,19 @@
+--- a/executed-runner.txt
++++ b/scripts/tests/npu_inductor_213/run_batch.py
+@@ -245,11 +245,15 @@
+ 
+     if args.device_index is not None:
+         torch.npu.set_device(args.device_index)
++    try:
++        benchmark_device = torch._inductor.runtime.benchmarking._get_default_gpu_device_type()
++    except Exception as error:
++        benchmark_device = f"{type(error).__name__}: {error}"
+     environment = {
+         "transfer_sha256": hashlib.sha256(Path(transfer_to_npu.__file__).read_bytes()).hexdigest(),
+         "transfer_pr_head": os.environ.get("NPU_TRANSFER_PR_HEAD"),
+         "npu_backend": os.environ.get("TORCHINDUCTOR_NPU_BACKEND", "default"),
+-        "benchmark_default_device": torch._inductor.runtime.benchmarking._get_default_gpu_device_type(),
++        "benchmark_default_device": benchmark_device,
+         "slow_tests": os.environ.get("PYTORCH_TEST_WITH_SLOW", "0"),
+         "torch": torch.__version__, "torch_npu": torch_npu.__version__,
+         "triton": triton.__version__, "device": torch.npu.get_device_name(),

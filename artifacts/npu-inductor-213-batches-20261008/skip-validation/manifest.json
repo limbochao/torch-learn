@@ -1,0 +1,87 @@
+{
+  "original_test_hashes": {
+    "test_torchinductor.py": "dbda22aad667c11861ab4dced96b9e0d15ab41a7232da5b1a1d058b835e3c532",
+    "test_torchinductor_dynamic_shapes.py": "c3bcabdc5867c82d8bd212f20899276daf7f9f6cb0f20cf0322e0507ec06d30f",
+    "test_compile_subprocess.py": "1b740c0c16db63504d9e5c67579606b694c33bda8762641f4ae29973fc459954",
+    "test_utils.py": "4dcc149970336f1f60cf36e5d9b18f978e4abe99ec39210b926fcf391957b8f0",
+    "test_lookup_table.py": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3"
+  },
+  "overlay_test_hashes": {
+    "test_torchinductor.py": "6d33a90acc49491e52542145fac9856e35b64db1301cfb9fad220a2ad04a6e65",
+    "test_torchinductor_dynamic_shapes.py": "dcacd96e84271aff8a9db780f532e35fbb593803324ede99d6f8fc54ebe771a5",
+    "test_compile_subprocess.py": "7c1fd40416ac95d476a2815bb7697306c2a43e229a6ef9e4beb67ca13fbf0b2f",
+    "test_utils.py": "4dcc149970336f1f60cf36e5d9b18f978e4abe99ec39210b926fcf391957b8f0",
+    "test_lookup_table.py": "70102439cdfd95a6607510509fb94e9189ef1576387c104e092843cea49dbcf3"
+  },
+  "changes": [
+    {
+      "method": "test_large_tensor_reduction",
+      "before": "@largeTensorTest(",
+      "after": "@npu_large_tensor_test("
+    },
+    {
+      "method": "test_large_pointwise",
+      "before": "@largeTensorTest(",
+      "after": "@npu_large_tensor_test("
+    },
+    {
+      "method": "test_large_offset_pointwise",
+      "before": "@largeTensorTest(",
+      "after": "@npu_large_tensor_test("
+    },
+    {
+      "method": "test_large_strided_reduction",
+      "before": "@largeTensorTest(",
+      "after": "@npu_large_tensor_test("
+    },
+    {
+      "method": "test_upsample_cat_conv",
+      "before": "if self.device == GPU_TYPE:",
+      "after": "if self.device == GPU_TYPE and torch.device(self.device).type != \"npu\":"
+    },
+    {
+      "method": "test_conv_bn_fuse",
+      "before": "if self.device == GPU_TYPE:",
+      "after": "if self.device == GPU_TYPE and torch.device(self.device).type != \"npu\":"
+    },
+    {
+      "method": "test_conv_functional_bn_fuse",
+      "before": "if self.device == GPU_TYPE:",
+      "after": "if self.device == GPU_TYPE and torch.device(self.device).type != \"npu\":"
+    },
+    {
+      "method": "test_linear_dynamic_maxautotune",
+      "before": "not IS_BIG_GPU,",
+      "after": "not (npu_triton_templates_available() if GPU_TYPE == \"npu\" else IS_BIG_GPU),"
+    },
+    {
+      "method": "test_float_item_return",
+      "before": "@unittest.skipUnless(IS_FBCODE, \"\")",
+      "after": "@unittest.skipUnless(IS_FBCODE or GPU_TYPE == \"npu\", \"Requires FBCODE or NPU\")"
+    },
+    {
+      "method": "test_float_item_return",
+      "before": "f(torch.tensor([3.0], device=device))",
+      "after": "self.assertEqual(f(torch.tensor([3.0], device=device)), 3.0)"
+    },
+    {
+      "method": "test_progressive",
+      "before": "not IS_BIG_GPU,",
+      "after": "not (npu_triton_templates_available() if GPU_TYPE == \"npu\" else IS_BIG_GPU),"
+    }
+  ],
+  "original_files_mutated": false,
+  "installed_modules_mutated": false,
+  "notes": "临时完整测试副本；不修改规模、dtype、容差、数值/性能断言。float_item 额外检查返回值。",
+  "support_sha256": {
+    "run_batch.py": "9f85ced4fbd616061d57a8de137d16488609a4af109beab4cc1c681d72383f8e",
+    "skip_validation_support.py": "40bb48bc2f49a31b268ff7a3131fa011d9f423e9582ead26fd79d2e0bbae7116",
+    "run_conv_precision_validation.py": "9269248c0067ae47d6b3bdd653b0ca2c9d222c0333ffba3b3e176d748d2d32ce"
+  },
+  "supplemental_run": {
+    "row": 201,
+    "entrypoint": "run_conv_precision_validation.py",
+    "change": "process-local convolution allow_hf32=False; original value restored",
+    "test_source_unchanged_from_first_round": true
+  }
+}

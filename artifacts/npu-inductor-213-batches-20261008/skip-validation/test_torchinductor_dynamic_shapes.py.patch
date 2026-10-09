@@ -1,0 +1,20 @@
+--- original/test_torchinductor_dynamic_shapes.py
++++ temporary/test_torchinductor_dynamic_shapes.py
+@@ -516,7 +516,7 @@
+ 
+         f(torch.tensor([3], device=device), torch.randn(10, device=device))
+ 
+-    @unittest.skipUnless(IS_FBCODE, "")
++    @unittest.skipUnless(IS_FBCODE or GPU_TYPE == "npu", "Requires FBCODE or NPU")
+     @torch._dynamo.config.patch(
+         capture_scalar_outputs=True, capture_dynamic_output_shape_ops=True
+     )
+@@ -525,7 +525,7 @@
+         def f(x):
+             return x.item()
+ 
+-        f(torch.tensor([3.0], device=device))
++        self.assertEqual(f(torch.tensor([3.0], device=device)), 3.0)
+ 
+     @unittest.skipIf(TEST_CUDA_MEM_LEAK_CHECK, "failing memory leak check")
+     @torch._dynamo.config.patch(capture_scalar_outputs=True)

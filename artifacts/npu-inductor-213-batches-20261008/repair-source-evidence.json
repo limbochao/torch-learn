@@ -1,0 +1,94 @@
+{
+  "sources": [
+    {
+      "id": "torch_npu/contrib/transfer_to_npu.py::_patch_cuda",
+      "path": "torch_npu/contrib/transfer_to_npu.py",
+      "start_line": 399,
+      "end_line": 409,
+      "file_sha256": "1a1da0bca8fabe3ec32a90efd8259615502b1993ff559d355f07536cbfda1f35",
+      "origin": "上轮目标 pta_213 安装源码快照；本轮只读复查",
+      "excerpt": "def _patch_cuda():\n    patches = [\n        ['cuda', torch_npu.npu], ['cuda.amp', torch_npu.npu.amp],\n        ['cuda.random', torch_npu.npu.random],\n        ['cuda.amp.autocast_mode', torch_npu.npu.amp.autocast_mode],\n        ['cuda.amp.common', torch_npu.npu.amp.common],\n        ['cuda.amp.grad_scaler', torch_npu.npu.amp.grad_scaler]\n    ]\n\n    from torch_npu._init.patches.monkey_patches import _apply_patches\n    _apply_patches(patches)"
+    },
+    {
+      "id": "torch/_inductor/runtime/triton_heuristics.py::bench",
+      "path": "torch/_inductor/runtime/triton_heuristics.py",
+      "start_line": 1211,
+      "end_line": 1316,
+      "file_sha256": "87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923",
+      "origin": "上轮目标 pta_213 安装源码快照；作为接口对照，不推断 NPU 候选均满足确定性",
+      "excerpt": "    def bench(self, launcher, *args, with_profiler=False, **kwargs):\n        \"\"\"Measure the performance of a given launcher.\"\"\"\n        # we don't skip configs with spilled registers when auto-tuning custom\n        # (user-written) Triton kernels, as (i) we don't have any knowledge or\n        # control over the kernel code; (ii) there is empirical evidence that\n        # for some (complicated) custom Triton kernels, a register-spilling\n        # config may yield the best latency.\n        if (\n            not self.custom_kernel\n            and launcher.n_spills is not None\n            and launcher.n_spills\n            > self.inductor_meta.get(\"spill_threshold\", 32 if torch.version.hip else 16)\n        ):\n            log.debug(\n                \"Skip config %s because of register spilling: %d\",\n                launcher.config,\n                launcher.n_spills,\n            )\n            self.benchmark_failure_reasons[launcher] = (\n                BenchmarkFailureReason.REGISTER_SPILLING\n            )\n            return float(\"inf\")\n\n        device_interface = self.get_device_interface()\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n\n        cpu_copies = self.copy_args_to_cpu_if_needed(*args, **kwargs)\n\n        def kernel_call():\n            cloned_args, cloned_kwargs = self.maybe_clone_args(\n                cpu_copies, *args, **kwargs\n            )\n            kernel_name = self.inductor_meta.get(\"kernel_name\", \"triton kernel\")\n            # reset to zero before evaluating any config\n            self.reset_to_zero_args(*args, **kwargs)\n            if autograd_profiler._is_profiler_enabled:\n                profiler_kwargs = self.get_profiler_kwargs(stream, launcher)\n                with torch._C._profiler._RecordFunctionFast(\n                    kernel_name,\n                    cloned_args,\n                    profiler_kwargs,\n                ):\n                    try:\n                        launcher(\n                            *cloned_args,\n                            **cloned_kwargs,\n                            stream=stream,\n                        )\n                    except Exception as e:\n                        if isinstance(e, TypeError):\n                            self._check_launcher_call_args(launcher, cloned_args)\n                        log.error(\n                            \"Failed during launch %s with config: %s (num_warps=%s, num_stages=%s, kwargs=%s)\",\n                            kernel_name,\n                            launcher.config,\n                            launcher.config.num_warps,\n                            launcher.config.num_stages,\n                            launcher.config.kwargs,\n                        )\n                        raise\n\n            else:\n                try:\n                    launcher(\n                        *cloned_args,\n                        **cloned_kwargs,\n                        stream=stream,\n                    )\n                except Exception as e:\n                    if isinstance(e, TypeError):\n                        self._check_launcher_call_args(launcher, cloned_args)\n                    log.error(\n                        \"Failed during launch %s with config: %s (num_warps=%s, num_stages=%s, kwargs=%s)\",\n                        kernel_name,\n                        launcher.config,\n                        launcher.config.num_warps,\n                        launcher.config.num_stages,\n                        launcher.config.kwargs,\n                    )\n                    raise\n            self.restore_args_from_cpu(cpu_copies)\n\n        # only use profiler when not already in a profiler instance\n        if with_profiler and not autograd_profiler._is_profiler_enabled:\n            from torch._inductor.utils import do_bench_using_profiling\n\n            return do_bench_using_profiling(kernel_call, warmup=10, rep=40)\n\n        benchmark_kwargs = (\n            {}\n            if self.device_props.type == \"cpu\"\n            else {\"rep\": 40, \"is_vetted_benchmarking\": True}\n        )\n        result = benchmarker.benchmark(\n            fn=kernel_call,\n            device=self.device_props.type,\n            **benchmark_kwargs,  # type: ignore[arg-type]\n        )\n        # benchmarker.benchmark() only returns float(\"inf\") when catching an\n        # \"invalid configuration\" exception - all other exceptions are re-raised.\n        # Therefore, if result is inf here, it must be due to invalid config.\n        if result == float(\"inf\"):\n            self.benchmark_failure_reasons[launcher] = (\n                BenchmarkFailureReason.INVALID_CONFIG\n            )\n        return result"
+    },
+    {
+      "id": "test_triton_extension_backend.py::_register_custom_backend_with_heuristics",
+      "path": "test_triton_extension_backend.py",
+      "start_line": 154,
+      "end_line": 212,
+      "file_sha256": "71b8306957643f17f1415e904afae9955bab6773112925bd858035e667bd9cd2",
+      "origin": "上轮目标测试源码快照",
+      "excerpt": "    def _register_custom_backend_with_heuristics(self, device):\n        path_to_ext_heuristics = str(\n            Path(__file__).parent / \"extension_backends\" / \"triton\"\n        )\n        # Add the path to sys.path in the parent process so that the\n        # ExtensionCachingAutotuner class (defined in extension_triton_heuristics)\n        # can be resolved when the compiled kernel is unpickled from the\n        # compile subprocess back into the parent process.\n        if path_to_ext_heuristics not in sys.path:\n            sys.path.append(path_to_ext_heuristics)\n            self.addCleanup(sys.path.remove, path_to_ext_heuristics)\n\n        class ExtensionTritonKernel(codegen.triton.TritonKernel):\n            @classmethod\n            @functools.lru_cache(None)\n            def gen_common_triton_imports(cls) -> str:\n                default_imports = super().gen_common_triton_imports()\n                custom_imports = IndentedBuffer()\n                custom_imports.splice(default_imports)\n\n                custom_imports.splice(\"\"\"\n                    import extension_triton_heuristics as triton_heuristics\n                \"\"\")\n                return custom_imports\n\n            @classmethod\n            def triton_meta_common(cls) -> dict[str, Any]:\n                triton_meta = super().triton_meta_common()\n                triton_meta[EXTENSION_TRITON_META_FIELD] = True\n                return triton_meta\n\n        class ExtensionTritonScheduling(codegen.triton.TritonScheduling):\n            kernel_type = ExtensionTritonKernel\n\n        class ExtensionPythonWrapperCodegen(PythonWrapperCodegen):\n            @classmethod\n            def _get_triton_info_kernel_cls(cls) -> type[codegen.triton.TritonKernel]:\n                return ExtensionTritonKernel\n\n            @staticmethod\n            def create(\n                is_subgraph: bool,\n                subgraph_name: str | None,\n                parent_wrapper: PythonWrapperCodegen | None,\n                partition_signatures: ir.GraphPartitionSignature | None = None,\n            ):\n                if is_subgraph:\n                    if subgraph_name is None:\n                        raise AssertionError\n                    if parent_wrapper is None:\n                        raise AssertionError\n                    return PythonWrapperCodegen.create(\n                        subgraph_name, parent_wrapper, partition_signatures\n                    )\n                return ExtensionPythonWrapperCodegen()\n\n        register_backend_for_device(\n            device, ExtensionTritonScheduling, ExtensionPythonWrapperCodegen\n        )"
+    },
+    {
+      "id": "test_utils.py::device_instantiation",
+      "path": "test/inductor/test_utils.py",
+      "start_line": 307,
+      "end_line": 312,
+      "file_sha256": "4dcc149970336f1f60cf36e5d9b18f978e4abe99ec39210b926fcf391957b8f0",
+      "origin": "上轮目标测试源码快照；test_flops_fx 本体见 batch-03-source-evidence.json",
+      "excerpt": "    def test_get_device_tflops(self, dtype):\n        ret = get_device_tflops(dtype)\n        self.assertTrue(type(ret) is float)\n\n\ninstantiate_device_type_tests(TestUtils, globals(), allow_xpu=True)"
+    },
+    {
+      "id": "torch/_inductor/utils.py::is_big_gpu",
+      "path": "torch/_inductor/utils.py",
+      "start_line": 1933,
+      "end_line": 1958,
+      "file_sha256": "c1aedd001340ec0410c251a3bb7176d96085b04fbd25f58d740bd642c73d4537",
+      "origin": "上轮目标 pta_213 安装源码快照；本轮只读复查跳过条件",
+      "excerpt": "def is_big_gpu(index_or_device: int | torch.device = 0) -> bool:\n    if isinstance(index_or_device, torch.device):\n        device = index_or_device\n    else:\n        device = torch.device(get_gpu_type(), index_or_device)\n\n    prop = DeviceProperties.create(device)\n\n    # SM logic is not relevant to ROCm gpus\n    # Arbitrarily skipping the older models\n    if torch.version.hip:\n        assert prop.major is not None\n        if prop.major < 9 or prop.major == 10:\n            log.warning(\"GPU arch does not support max_autotune_gemm mode usage\")\n            return False\n        return True\n\n    min_sms = 16 if device.type == \"xpu\" else 68  # 3080\n    avail_sms = prop.multi_processor_count\n    if avail_sms < min_sms:\n        log.warning(\n            \"Not enough SMs to use max_autotune_gemm mode\",\n            extra={\"min_sms\": min_sms, \"avail_sms\": avail_sms},\n        )\n        return False\n    return True"
+    },
+    {
+      "id": "torch/_inductor/utils.py::_ensure_fp4_dtype_registered",
+      "path": "torch/_inductor/utils.py",
+      "start_line": 2330,
+      "end_line": 2351,
+      "file_sha256": "c1aedd001340ec0410c251a3bb7176d96085b04fbd25f58d740bd642c73d4537",
+      "origin": "上轮目标 pta_213 安装源码快照；本轮只读复查跳过条件",
+      "excerpt": "def _ensure_fp4_dtype_registered():\n    \"\"\"Patch cutlass_api to handle torch.float4_e2m1fn_x2 -> cutlass.Float4E2M1FN.\n\n    NOTE: cutlass_api doesn't natively map this dtype. We patch the lookup function\n    in-place so all callers (including TensorWrapper) pick up the change.\n    Remove once cutlass_api adds native FP4 support.\n    \"\"\"\n    import cutlass_api.utils\n\n    try:\n        cutlass_api.utils.cutlass_type_from_torch_type(torch.float4_e2m1fn_x2)\n    except (KeyError, AttributeError):\n        import cutlass\n\n        _orig = cutlass_api.utils.cutlass_type_from_torch_type\n\n        def _patched(dtype):\n            if dtype == torch.float4_e2m1fn_x2:\n                return cutlass.Float4E2M1FN\n            return _orig(dtype)\n\n        cutlass_api.utils.cutlass_type_from_torch_type = _patched"
+    },
+    {
+      "id": "torch/testing/_internal/common_utils.py::slowTest",
+      "path": "torch/testing/_internal/common_utils.py",
+      "start_line": 2642,
+      "end_line": 2650,
+      "file_sha256": "223f71a2b85c9043c237a98239bdf36e570bccc3b819f2e27b0d4bb78861d5ff",
+      "origin": "上轮目标 pta_213 安装源码快照；本轮只读复查跳过条件",
+      "excerpt": "def slowTest(fn):\n    @wraps(fn)\n    def wrapper(*args, **kwargs):\n        if not TEST_WITH_SLOW:\n            raise unittest.SkipTest(\"test is slow; run with PYTORCH_TEST_WITH_SLOW to enable test\")\n        else:\n            fn(*args, **kwargs)\n    wrapper.__dict__['slow_test'] = True\n    return wrapper"
+    },
+    {
+      "id": "torch_npu/_inductor/utils.py::use_triton_template",
+      "path": "torch_npu/_inductor/utils.py",
+      "start_line": 58,
+      "end_line": 80,
+      "file_sha256": "f2b9b3cb105fdf3a6b8027a8e922d03faa11573df6c023a2852fded84c089496",
+      "origin": "2026-10-08 从同一目标 pta_213 安装目录只读采集；未执行或修改实现",
+      "excerpt": "def use_triton_template(\n    layout, *, enable_int32: bool = False, enable_float8: bool = False\n) -> bool:\n    from torch._inductor.codegen.common import BackendFeature, has_backend_feature\n    from torch._inductor.utils import _use_autotune_backend, is_gpu\n\n    layout_dtypes = [torch.float16, torch.bfloat16, torch.float32]\n    if enable_int32:\n        layout_dtypes = [torch.float16, torch.bfloat16, torch.float32, torch.int32]\n    if enable_float8:\n        layout_dtypes.extend([torch.float8_e4m3fn, torch.float8_e5m2])\n    return (\n        (\n            (\n                is_gpu(layout.device.type)\n                and _use_template_for_npu(layout, layout_dtypes)\n            )\n            or (layout.device.type == \"cpu\" and layout.dtype in layout_dtypes)\n        )\n        and inductor_config.max_autotune\n        and _use_autotune_backend(\"TRITON\")\n        and has_backend_feature(layout.device, BackendFeature.TRITON_TEMPLATES)\n    )"
+    },
+    {
+      "id": "torch_npu/_inductor/utils.py::_use_template_for_npu",
+      "path": "torch_npu/_inductor/utils.py",
+      "start_line": 54,
+      "end_line": 55,
+      "file_sha256": "f2b9b3cb105fdf3a6b8027a8e922d03faa11573df6c023a2852fded84c089496",
+      "origin": "2026-10-08 从同一目标 pta_213 安装目录只读采集；未执行或修改实现",
+      "excerpt": "def _use_template_for_npu(layout, allowed_layout_dtypes: list[torch.dtype]) -> bool:\n    return layout.device.type == \"npu\" and layout.dtype in allowed_layout_dtypes"
+    },
+    {
+      "id": "torch/utils/_triton.py::has_triton_tma_device",
+      "path": "torch/utils/_triton.py",
+      "start_line": 112,
+      "end_line": 140,
+      "file_sha256": "ca6b84b5751d68afef137a77fbb53f0c947f363e158518d63851032ea298bac4",
+      "origin": "2026-10-08 从同一目标 pta_213 安装目录只读采集；未执行或修改实现",
+      "excerpt": "def has_triton_tma_device() -> bool:\n    if has_triton_package():\n        import torch\n\n        if (\n            torch.cuda.is_available()\n            and torch.cuda.get_device_capability() >= (9, 0)\n            and not torch.version.hip\n        ) or torch.xpu.is_available():\n            # old API\n            try:\n                from triton.language.extra.cuda import (  # noqa: F401\n                    experimental_device_tensormap_create1d,\n                    experimental_device_tensormap_create2d,\n                )\n\n                return True\n            except ImportError:\n                pass\n\n            # new API\n            try:\n                from triton.language import make_tensor_descriptor  # noqa: F401\n\n                return True\n            except ImportError:\n                pass\n\n    return False"
+    }
+  ]
+}

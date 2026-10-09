@@ -1,0 +1,671 @@
+{
+  "date": "2026-10-08",
+  "baseline_commit": "c55748f79be2727dbd85eb554b17c8a20b3c6486",
+  "scope": "共同复查基线 87 个失败及 14 个跳过逻辑用例，共 101 项；保留原状态，不把 skip/xfail 当通过或失败。",
+  "implementation_status": "87 个原失败项仍为源码方案评审；14 个原跳过项全部完成临时验证，最终 8 通过、2 失败、4 跳过；201 包含关闭卷积 HF32 的通过补测。原测试与已安装模块未修改。",
+  "simple_definition": "优先局部测试/torch_npu/_inductor 改动，保留原断言与语义；少量行数本身不等于修复简单。",
+  "groups": [
+    {
+      "id": "R01",
+      "rows": [
+        132,
+        133,
+        134,
+        135,
+        136
+      ],
+      "title": "FX dtype pass 先确认 Tensor 再访问 dtype",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py::dtype_optimal_pass",
+      "external": "否",
+      "change": "局部修改 call_method 分支：先检查 node.target == \"to\" 且有输入，再仅对 Tensor/FakeTensor example_value 读取 dtype。其他标量方法跳过此 Tensor cast 优化，不跳过编译或 round。",
+      "checks": "复测 5 项 builtins_round 的动态标量及正/零/负 ndigits；同时验证原 Tensor.to 和 arange 优化未回退或改变数值。",
+      "limits": "这是当前 AttributeError 的小修复；后续 lowering 尚未运行到，不能承诺 5 项全部通过。",
+      "extra_source": "runtime-source-evidence.json#torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py::dtype_optimal_pass"
+    },
+    {
+      "id": "R02",
+      "rows": [
+        51,
+        52,
+        53,
+        54,
+        55
+      ],
+      "title": "index_put 的常量与输入放到同一设备",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_inplacing_pass.py::const、_test 及相应用例",
+      "external": "否",
+      "change": "将 device = GPU_TYPE 放在常量创建前，按 device 创建相同值和 dtype 的 0 维 const；或在每项测试建立同设备闭包常量。避免每次 forward 中额外搬运常量。",
+      "checks": "保留 eager/compiled 输出比较及 inp/inp2 比较；覆盖 live Tensor、view、输入是否被修改的原 5 项断言。",
+      "limits": "不更改 index_put 为其他算子，不删除输入突变检查；只解除 eager 的设备不一致首错。",
+      "extra_source": ""
+    },
+    {
+      "id": "R03",
+      "rows": [
+        68,
+        69
+      ],
+      "title": "测试 custom op 增加 PrivateUse1 kernel 注册",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_torchinductor.py::define_custom_op_for_test",
+      "external": "否（该 helper 属于测试代码）",
+      "change": "在现有 CPU/CUDA/XPU/MPS/Meta 注册旁，为 PrivateUse1 注册同一个 fn；保持原 fn_meta 和错误 Meta 版本。无需修改生产 dispatcher。",
+      "checks": "正确 Meta 项检查数值和 stride；错误 Meta 项仍要求 storage_offset=1 导致的对齐错误，不能仅要求任意异常。",
+      "limits": "首错消失后 NPU wrapper 是否生成原 alignment assert 仍须验证；不能放宽对齐断言来保证通过。",
+      "extra_source": "runtime-source-evidence.json#test_torchinductor.py::define_custom_op_for_test"
+    },
+    {
+      "id": "R04",
+      "rows": [
+        74,
+        82,
+        83,
+        183,
+        184,
+        187,
+        240,
+        241
+      ],
+      "title": "NPU benchmark 设备表排除 CUDA 迁移别名",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "torch_npu/_inductor/__init__.py::_load_triton_backend；82 也可只改测试 benchmark_gpu 调用",
+      "external": "否",
+      "change": "在 NPU backend 初始化设备表时，仅在确认 cuda 为 NPU 迁移别名的模式下排除重复 cuda 条目；保留真实 CUDA/XPU 等后端。82 可直接传 device_type=device，保留 helper 复用断言。",
+      "checks": "复测 8 项；检查只启用 NPU、存在真实 CUDA、CPU 无设备三种选择逻辑。82 继续检查事件、缓冲区大小和设备；187 继续检查 BMM 代码断言。",
+      "limits": "当前环境是 +cpu torch 加 transfer；不能对所有平台无条件设为 (\"npu\",)。只修公共首错，conv_bn helper 的后续循环和 vmap 的分解断言可能仍失败。",
+      "extra_source": "runtime-source-evidence.json#torch_npu/_inductor/__init__.py::GPU_BENCHMARK_DEVICE_TYPES; runtime-source-evidence.json#torch/_inductor/runtime/benchmarking.py::_get_default_gpu_device_type; repair-source-evidence.json#torch_npu/contrib/transfer_to_npu.py::_patch_cuda"
+    },
+    {
+      "id": "R05",
+      "rows": [
+        243
+      ],
+      "title": "常量折叠允许零生成代码",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_torchinductor_dynamic_shapes.py::test_constant_fold_uniform_value_dynamic",
+      "external": "否",
+      "change": "用 \"\\n\".join(source_codes) 执行原 check_not，允许空列表；若有多个源码文件则全部检查。原来的全部数值及第二种 shape 断言照常运行。",
+      "checks": "3 个函数 × dynamic=False/True，检查两种 shape 的输出；有生成代码时仍禁止意外 triton.jit/cpp_fused。",
+      "limits": "已有独立探针确认 6 组合返回原输入且零 kernel；原测试改动尚未执行。不能直接 return 跳过数值断言。",
+      "extra_source": ""
+    },
+    {
+      "id": "R06",
+      "rows": [
+        48
+      ],
+      "title": "纯 FakeTensor FLOPs 单测移出 CUDA 设备类",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_utils.py::test_flops_fx 所属测试类",
+      "external": "否",
+      "change": "将该不使用 self.device 的方法移到不做设备实例化的 TestCase，保留方法体中的 FakeTensor 和 count_flops_fx 断言。避免 CUDA 类自动启用 CudaNonDefaultStream。",
+      "checks": "原有 addmm/bmm/mm/convolution 正例和 pointwise 反例全部执行；确保实际执行方法而不是新增 skip。",
+      "limits": "这是主机端 FX 元数据单测的归类修复，不是 NPU 流或峰值性能测试通过。49 不能同样推断可修。",
+      "extra_source": "repair-source-evidence.json#test_utils.py::device_instantiation"
+    },
+    {
+      "id": "R07",
+      "rows": [
+        190,
+        195,
+        196
+      ],
+      "title": "非法 dtype 输入使用 NPU 对应错误契约",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_torchinductor.py 中 3 项负向用例",
+      "external": "否",
+      "change": "保留原输入，为 NPU 分支选择 RuntimeError 与已观察到的对应算子/DT_INT64 拒绝信息；CUDA 分支保留原异常。eager 和 compiled 均需被精确的负向断言覆盖。",
+      "checks": "190 检查 eager/compiled 都拒绝 int64 BMM；195 检查两条路径；196 保留 no_grad 和启用 autograd 两个 compiled 分支，并分别确认错误契约。",
+      "limits": "不能改为捕获 Exception 或只匹配 error。195/196 当前证明的是原非法输入被拒绝，不能代替所有受支持 dtype 混用的兼容性检查；后续编译错误尚待实测。",
+      "extra_source": ""
+    },
+    {
+      "id": "R08",
+      "rows": [
+        17,
+        131,
+        210,
+        224
+      ],
+      "title": "新增受支持 dtype 的 NPU 等价功能用例",
+      "verdict": "C：简单适配但改变 dtype 覆盖",
+      "scope": "对应测试方法中的 dtype 选择，仅限 NPU 分支",
+      "external": "否；完整 fp64 修复涉及算子/Triton 编译器",
+      "change": "17 可增加 float32 的 any/isinf/Inf 变体；131 增加 float32 round 边界变体；210 的 y 是全 1，可使用 float32 验证原动态 shape/gather 流程；224 可参照既有 MPS 分支增加 NPU 的 bf16/fp32/bool 转换变体。",
+      "checks": "保留原运算、数值断言和 shape 分支；新变体明确命名或参数化 dtype。原 float64 覆盖单列为未支持/待修，不覆盖其历史结果。",
+      "limits": "代码改动小但减少/替换 dtype 覆盖；只在目标接受“验证 NPU 已支持类型”时建议采用。不能声称修好了原 fp64 用例；182 的目标就是 float64 linear，不能用此方法修。",
+      "extra_source": ""
+    },
+    {
+      "id": "R09",
+      "rows": [
+        86,
+        87,
+        89,
+        90,
+        91,
+        92
+      ],
+      "title": "NPU autotuner 补齐确定性 benchmark 契约",
+      "verdict": "B：有条件的小改候选",
+      "scope": "torch_npu/_inductor/runtime/triton_heuristics.py::_bench_with_launch_args",
+      "external": "否",
+      "change": "参考当前 torch CachingAutotuner.bench 已传递 is_vetted_benchmarking=True 的调用，核对 NPU 候选和输入 reset/clone 语义后传递该标记；仅批准已确认不会改变确定性结果的候选范围。",
+      "checks": "复测 6 项及重复运行一致性，特别检查 reduction/atomic、自定义 kernel 和会修改输入的候选；确认 benchmark 不把被修改的数据带入后续候选。",
+      "limits": "可能仅一处参数传递，但不能只为压下 RuntimeError 全局设置 vetted=True 或关闭 deterministic。核对范围前不列为无条件简单修复。",
+      "extra_source": "repair-source-evidence.json#torch/_inductor/runtime/triton_heuristics.py::bench; runtime-source-evidence.json#torch_npu/_inductor/runtime/triton_heuristics.py::_bench_with_launch_args"
+    },
+    {
+      "id": "R10",
+      "rows": [
+        94
+      ],
+      "title": "编译子进程可导入测试 heuristics 模块",
+      "verdict": "B：有条件的小改候选",
+      "scope": "test/inductor/test_triton_extension_backend.py::_register_custom_backend_with_heuristics 及测试进程 fixture",
+      "external": "否",
+      "change": "让 extension_backends/triton 在创建编译 worker 前进入其模块搜索路径，或使用已可导入的完整包名并同步生成 import 与 pickle 引用；fixture 要恢复原搜索路径和已存在的 NPU 注册。",
+      "checks": "新建 worker 和复用 worker 均检查导入/反序列化；保留生成代码的自定义 import、meta 字段、triton.jit 检查，随后单独确认执行输出。",
+      "limits": "父进程 sys.path 已追加，不能重复同一修复；仅改父进程运行时 PYTHONPATH 对已启动 worker 无效。95 已有独立 launch 地址错误，不能被此方案算作修复。",
+      "extra_source": "repair-source-evidence.json#test_triton_extension_backend.py::_register_custom_backend_with_heuristics"
+    },
+    {
+      "id": "R11",
+      "rows": [
+        93
+      ],
+      "title": "dummy PrivateUse1 注册测试进程隔离",
+      "verdict": "B：有条件的小改候选",
+      "scope": "test/inductor/test_triton_extension_backend.py、test_extension_backend.py 的测试 fixture",
+      "external": "否（测试基础设施）",
+      "change": "在未导入 torch_npu、未自动加载 NPU 后端的独立进程运行原 dummy PrivateUse1 测试；测试清理只删除自己注册的模块，或恢复进入测试前的注册，不删除原 torch.npu。",
+      "checks": "完整保留 backend/DeviceInterface 注册及生成代码断言；运行后父进程 NPU 仍可用。",
+      "limits": "属于测试前提修正，不能使一个进程内同时存在两个 PrivateUse1 runtime；子进程必须验证整个 dummy 用例，而不是只检查注册不报错。",
+      "extra_source": ""
+    },
+    {
+      "id": "R12",
+      "rows": [
+        73
+      ],
+      "title": "右移输出按广播形状分配",
+      "verdict": "D：外部模块的局部修复候选",
+      "scope": "op-plugin/op_plugin/ops/opapi/__Rshift__KernelNpuOpApi.cpp 的 Tensor-Tensor 重载",
+      "external": "是：op-plugin 的 eager C++ 算子，不在 torch_npu/_inductor",
+      "change": "按 self 与 other 的广播形状分配输出，沿用正确 dtype/device，替换当前仅按 self 分配的输出。不要修改原 Q4_K 输入 shape 或先手工 expand 来隐藏算子缺陷。",
+      "checks": "先验证原 eager 右移广播，再跑完整 Q4_K；补 Tensor/Scalar、非连续和 dtype/类型提升契约检查，确认兼容 fallback。",
+      "limits": "局部 C++ 修改候选，需构建部署；现有源码是本地 op-plugin 机制对照，实施前核对远端对应算子源码。当前只知道 eager 首错，后续编译尚未验证。",
+      "extra_source": ""
+    },
+    {
+      "id": "R13",
+      "rows": [
+        223
+      ],
+      "title": "合法空 unpool 输出的 eager 边界处理",
+      "verdict": "D：外部模块的局部修复候选",
+      "scope": "op-plugin/torch_npu eager max_unpool2d、max_unpool3d 适配层及 Meta 契约",
+      "external": "是：eager 算子/Meta，可能涉及 op-plugin/CANN",
+      "change": "核对 PyTorch 对合法 output_size=0 的契约，在 eager 适配层保留参数校验后创建正确的空结果，避免调用只接受正 outputSize 的 CANN kernel。",
+      "checks": "原 1D/2D/3D 全部执行；检查输出 shape/dtype/device 和非法参数仍报错，再验证 compiled。",
+      "limits": "看起来可做局部边界处理，但 1D 映射到 2D、3D 路径及索引/Meta 一致性需先查清；不能只在 Inductor 返回空 Tensor，因为原 eager 已失败。",
+      "extra_source": ""
+    },
+    {
+      "id": "R14",
+      "rows": [
+        1,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        14,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "title": "CUDA static/fast launcher 的 NPU 功能接入",
+      "verdict": "E：不列入简单修复",
+      "scope": "测试适配 + NPU launcher/编译分派；原接口位于 torch/_inductor/runtime/static_triton_launcher.py、torch._C/C++",
+      "external": "原社区接口路径涉及 torch runtime/C++、Triton driver；独立 NPU 替代方案需另行设计",
+      "change": "需建立 NPU 二进制加载、参数 ABI、模块生命周期、资源限制与 strict/fast 分派；再设计等价 NPU 测试。CUDA-only 项可以精确 skip，但那是范围声明。",
+      "checks": "必须观察到真实 NPU static/fast 构造和运行，再验证数值、参数错误、空 grid 和资源边界。",
+      "limits": "换 cubin 为 npubin、删除 fast 构造断言或把预期异常改为不抛出都不是完整修复；不属于少量用例/Inductor 小改。",
+      "extra_source": ""
+    },
+    {
+      "id": "R15",
+      "rows": [
+        2
+      ],
+      "title": "uint64 初始化与 static launcher 双重缺口",
+      "verdict": "E：不列入简单修复",
+      "scope": "测试初始化；torch_npu/op-plugin zero_；static launcher 接入",
+      "external": "完整修复涉及 eager 算子及 launcher runtime",
+      "change": "可尝试保持 uint64 位宽的 CPU 初始化后搬运以诊断首错；完整用例仍需要 NPU static launcher 能力。",
+      "checks": "保留 uint8/16/32/64 的范围和 launcher 参数验证。",
+      "limits": "单改 zeros 初始化不能修完整用例；改成 int64 会失去无符号覆盖。",
+      "extra_source": ""
+    },
+    {
+      "id": "R16",
+      "rows": [
+        6
+      ],
+      "title": "libdevice 映射、输入长度及 static launcher 多层缺口",
+      "verdict": "E：不列入简单修复",
+      "scope": "triton/backends/ascend/compiler.py::get_module_map、测试输入长度、static launcher",
+      "external": "是：triton-ascend backend；另依赖 launcher",
+      "change": "通用 libdevice 到 CANN 的映射需要在 Triton backend 正确接入；同时修正输入长度 4 与 r0_numel=128 不一致，并完成 NPU launcher。",
+      "checks": "确认实际调用 CANN isinf、mask 不越界、implied constant 参数确实被消除。",
+      "limits": "测试显式改用 CANN isinf 只能绕过当前映射问题，后续 launcher 仍阻塞，不列为简单完整修复。",
+      "extra_source": ""
+    },
+    {
+      "id": "R17",
+      "rows": [
+        27,
+        29,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ],
+      "title": "NPU lookup key 与模板体系尚未接入",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch/_inductor/lookup_table/choices.py + NPU key/模板注册与测试",
+      "external": "原实现涉及社区 torch/_inductor；NPU 扩展方案未设计",
+      "change": "需定义稳定 NPU 架构 key、模板 UID/config/hash 契约并接入正向命中路径。",
+      "checks": "正向命中、hash 过滤、非法配置、设备优先级和 variants 均须验证。",
+      "limits": "mock _get_device_key 或预填期望结果可变成纯逻辑单测，但不能修好 NPU 查表集成；放宽为空表会删除测试目标。",
+      "extra_source": ""
+    },
+    {
+      "id": "R18",
+      "rows": [
+        44,
+        75,
+        247
+      ],
+      "title": "CUDA allocator/graph capture 接口误用",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch/_inductor/cudagraph_utils.py 与 NPU graph/allocator runtime 集成",
+      "external": "完整方案可能涉及 torch/_inductor、torch_npu runtime，不能仅承诺 NPU Inductor 改动",
+      "change": "按真实后端接入 allocator 和图捕获能力检查；需要 NPU 等价 capture/replay 契约。",
+      "checks": "保留 max-autotune/reduce-overhead 原模式并验证实际 graph 行为；44 后续仍要检查 lookup 接入。",
+      "limits": "getattr(..., lambda: True)、关闭 cudagraphs、改 compile mode 只能避开目标，不作为简单功能修复。",
+      "extra_source": ""
+    },
+    {
+      "id": "R19",
+      "rows": [
+        49
+      ],
+      "title": "CUDA stream fixture 后还有峰值性能模型适配",
+      "verdict": "E：不列入简单修复",
+      "scope": "test_utils 的设备 fixture + torch/_inductor/utils.py::get_device_tflops/device_info/Triton 性能估计",
+      "external": "是或需新增 NPU 性能信息实现；当前函数属于社区 torch",
+      "change": "先用正确 NPU 流 fixture，再以真实 NPU datasheet/性能接口接入估计值。",
+      "checks": "所有 dtype 返回有依据的数值；不能只满足 type(ret) is float。",
+      "limits": "当前只到 CUDA 流首错；直接返回 0.0 或移除流检查不证明 NPU 峰值性能计算正确。",
+      "extra_source": ""
+    },
+    {
+      "id": "R20",
+      "rows": [
+        63
+      ],
+      "title": "训练标注的 NVTX 与 NPU profiler 语义适配",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch_npu/_inductor wrapper + NPU profiler/range 接口",
+      "external": "可能涉及 torch_npu profiler/runtime；原接口为 torch/cuda/nvtx.py",
+      "change": "为 NPU 生成具有 begin/end 生命周期和 profiler 关联的标注，测试 NPU 对应输出。",
+      "checks": "annotation=True 确实产生可观测范围、成对结束且异常路径不泄漏。",
+      "limits": "将 NVTX 函数设为 no-op 或删去标注检查不是修复，当前缺少可直接替换的等价接口证据。",
+      "extra_source": ""
+    },
+    {
+      "id": "R21",
+      "rows": [
+        95
+      ],
+      "title": "自定义扩展 UDTK launch 地址错误待定位",
+      "verdict": "E：不列入简单修复",
+      "scope": "扩展测试 backend、NPU launcher/生成 kernel 参数",
+      "external": "未定；可能涉及 Triton driver/runtime，不能承诺仅修改 Inductor",
+      "change": "保存 kernel 与 launcher 实参，对照原生 NPU backend，定位 grid、指针、metadata 不一致后再决定修复位置。",
+      "checks": "无非法地址/跨设备超时，输出正确，且确实使用自定义 heuristics。",
+      "limits": "修测试 tearDown 或模块路径不能覆盖独立进程中仍出现的 AIVEC 334；不能先列为简单修复。",
+      "extra_source": ""
+    },
+    {
+      "id": "R22",
+      "rows": [
+        97
+      ],
+      "title": "fallback 序列化条目类型契约待确认",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch/_inductor/compile_fx_ext.py、lowering registry 与 NPU fallback 注册",
+      "external": "可能需改社区 torch/_inductor；违规 key 尚未记录",
+      "change": "先记录非 OpOverload key 的真实类型和来源，再修注册或序列化恢复协议。",
+      "checks": "两个参数化实例、父子 registry 等价及对应 fallback 行为都验证。",
+      "limits": "简单过滤掉非 OpOverload 条目会静默丢失 lowering，不是合理修复；不能根据当前栈承诺一行 isinstance 即可。",
+      "extra_source": ""
+    },
+    {
+      "id": "R23",
+      "rows": [
+        128
+      ],
+      "title": "complex64 logaddexp 未支持",
+      "verdict": "E：不列入简单修复",
+      "scope": "NPU eager logaddexp、复数分解及编译支持",
+      "external": "是：eager 算子/op-plugin/CANN，可能还需编译支持",
+      "change": "若只维护测试矩阵，可仿照原 CUDA/XPU 装饰器为 NPU 标记精确 skip；真实功能修复需要复数 logaddexp 实现。",
+      "checks": "功能修复需覆盖复数对数分支与数值稳定性。",
+      "limits": "添加 skip 可防止无意义红例，但不是通过；换成 real 输入会删除本项的 complex64 目标。",
+      "extra_source": ""
+    },
+    {
+      "id": "R24",
+      "rows": [
+        157
+      ],
+      "title": "整数除零需先定义后端契约",
+      "verdict": "E：不列入简单修复",
+      "scope": "test_torchinductor.py 负向契约、NPU eager floor_divide 与 lowering",
+      "external": "统一 eager/compiled 可能需改 op-plugin/CANN；仅测试 skip 不需其他模块",
+      "change": "先确认整数除零应稳定返回还是报错，再设计精确 eager/compiled 断言与实现。",
+      "checks": "int32/int64、各被除数、非零除数回归。",
+      "limits": "不能把本次 eager 的 2147450751 写成预期常数，也不能删除零除数；当前没有可直接采用的稳定 NPU 契约。",
+      "extra_source": ""
+    },
+    {
+      "id": "R25",
+      "rows": [
+        182
+      ],
+      "title": "float64 linear/addmm 能力缺失",
+      "verdict": "E：不列入简单修复",
+      "scope": "NPU eager addmm/matmul 算子和后端精度支持",
+      "external": "是：op-plugin/CANN 或其他 fp64 实现",
+      "change": "保留原 float64 精度目标，补相应算子实现；不支持时明确能力 skip。",
+      "checks": "完整 float64 数值范围与 eager/compiled 一致性。",
+      "limits": "本项名称和目标就是 float64，换 float32 不能作为该用例修复。",
+      "extra_source": ""
+    },
+    {
+      "id": "R26",
+      "rows": [
+        188,
+        189
+      ],
+      "title": "BMM 小 K 分解策略缺失",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch_npu/_inductor 的 BMM lowering/分解及动态范围证明",
+      "external": "未必；可以是 NPU Inductor 内实现，但不是已确认的简单修复",
+      "change": "保留阈值及动态范围要求，实现或论证 NPU 的点积归约策略。",
+      "checks": "K=32/33、动态 1..64 的分支、代码生成和数值都检查。",
+      "limits": "当前数值通过不等于策略通过；将 FileCheck 改为接受 extern_kernels.bmm 会移除原优化目标。",
+      "extra_source": ""
+    },
+    {
+      "id": "R27",
+      "rows": [
+        203
+      ],
+      "title": "卷积启发式的真实 NPU 代码/布局证据不足",
+      "verdict": "E：不列入简单修复",
+      "scope": "test_torchinductor.py + NPU convolution lowering/layout 策略",
+      "external": "未定；若需公共 channels_last 则涉及 eager/布局实现",
+      "change": "先采集 grouped 与普通卷积完整 wrapper，确认调用和 layout 转换意图，再设计 NPU 等价断言。",
+      "checks": "分组卷积无多余转换、普通卷积期望转换及数值均确认。",
+      "limits": "不能仅将 .convolution( 字符串替换为任意实际出现的函数名；后半段用例尚未执行，现有日志不足以认定只是文本差异。",
+      "extra_source": ""
+    },
+    {
+      "id": "R28",
+      "rows": [
+        209
+      ],
+      "title": "sparse_grad Meta 与 decomposition 递归",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch_npu/op_plugin/meta/_meta_registrations.py::npu_gather_backward__meta，torch/_decomp、torch/_prims",
+      "external": "是：torch_npu 的 Meta 模块也在 _inductor 之外，可能涉及社区分解",
+      "change": "修 sparse_coo Meta 构造/设备迁移的重入，保留 sparse_grad=True 和 AOT 联合图。",
+      "checks": "Meta 不做真实迁移，稀疏梯度布局正确，完整编译可执行。",
+      "limits": "改 sparse_grad=False 或替换为普通 gather 会删除测试目标；暂无证据证明只改一处 dtype/device 即可。",
+      "extra_source": ""
+    },
+    {
+      "id": "R29",
+      "rows": [
+        226
+      ],
+      "title": "channels_last 公开布局接口缺失",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch_npu eager 分配/复制、Meta 与 Inductor 布局契约",
+      "external": "是：eager/runtime/Meta，不限于 Inductor",
+      "change": "实现公开 channels_last stride 语义并与 NPU 私有格式区分。",
+      "checks": "双向转换、stride、数值及 compiled 全部验证。",
+      "limits": "改为 contiguous_format 或 NPU 私有 format 不等价，不能用简单测试修改修复。",
+      "extra_source": ""
+    },
+    {
+      "id": "R30",
+      "rows": [
+        230
+      ],
+      "title": "P2P peer-access 驱动资源失败",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch_npu/csrc/core/npu/NPUPeerToPeerAccess.cpp，CANN/驱动环境",
+      "external": "是：NPU runtime C++、CANN/驱动或环境",
+      "change": "定位 peer-access 启用时失败的资源；先使独立 eager NPU:0→NPU:1 复制正常，再复测编译。",
+      "checks": "真实跨卡复制和计算通过；查询到的双向 capability=True 不足以替代实际复制。",
+      "limits": "独立无编译进程仍报 207001，卡空闲均超过 121 GiB；改默认设备为 1、换同卡目标或设置 skip 不是跨卡修复。",
+      "extra_source": ""
+    },
+    {
+      "id": "R31",
+      "rows": [
+        242,
+        244
+      ],
+      "title": "transfer 构造器身份与 Dynamo 规则兼容",
+      "verdict": "E：不列入简单修复",
+      "scope": "torch_npu/contrib/transfer_to_npu.py、torch/_dynamo 构造器对象规则",
+      "external": "是：torch_npu/contrib 在 _inductor 之外；可能涉及 Dynamo",
+      "change": "在保留 CUDA→NPU 参数迁移的前提下使构造器正确进入 Dynamo 对象规则，保留 unbacked 数据的运行时物化。",
+      "checks": "两项完整 Inductor 用例和其它被包装构造器回归，不能只验证 backend=eager。",
+      "limits": "已有独立恢复 torch.tensor 全局绑定探针可捕获，但不是安全生产修复；禁止在用例中强制 int() 或取消动态输入来通过。",
+      "extra_source": ""
+    },
+    {
+      "id": "R32",
+      "rows": [
+        246
+      ],
+      "title": "符号整数幂意外引入 fp64",
+      "verdict": "E：不列入简单修复",
+      "scope": "符号表达式 lowering/Triton codegen，必要时 CANN libdevice",
+      "external": "可能涉及 torch/_inductor/torch.utils._sympy 或 triton-ascend，不保证仅在 NPU Inductor",
+      "change": "为整数底数/指数建立保持语义和溢出范围的 lowering，或实现完整 fp64 pow。",
+      "checks": "符号指数范围、负指数、溢出和其它 magic methods 均验证。",
+      "limits": "直接替换为 fp32 或无范围证明的位移可能改变结果，不是当前已确认的简单修复。",
+      "extra_source": ""
+    },
+    {
+      "id": "S01",
+      "rows": [
+        163,
+        165,
+        166,
+        167
+      ],
+      "title": "大张量内存检查识别 NPU 后执行原测试",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_torchinductor.py 的局部 NPU 大张量装饰器；或统一修改 common_device_type 内存检查",
+      "external": "局部测试适配：否；统一方案：torch/testing/_internal/common_device_type.py，属额外测试基础设施模块",
+      "change": "为 NPU 使用真实设备索引查询可用内存和进程配额，保留原 4/4/3/2 GiB 门槛及 cpp_wrapper 额外分配估计；其他后端沿用原 largeTensorTest。满足门槛才执行原方法，移除 Unknown device type 造成的误跳过。",
+      "checks": "保留 2^32 或 2^31+1 存储规模、末元素、stride=32 和 2^30 offset；分别检查 max 和完整 pointwise 输出。内存不足仍允许明确 skip，逐项串行运行。",
+      "limits": "优先解除测试工具误判，不等于已经验证 64 位索引能力。不能缩小到 int32 范围、永久返回内存充足或只看设备总容量；旁边大广播归约通过不能替代这些大存储场景。",
+      "extra_source": "runtime-source-evidence.json#torch/testing/_internal/common_device_type.py::_has_sufficient_memory; runtime-source-evidence.json#torch/testing/_internal/common_device_type.py::largeTensorTest"
+    },
+    {
+      "id": "S02",
+      "rows": [
+        204
+      ],
+      "title": "upsample/cat/conv 增加可执行的 NPU 分支",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_torchinductor.py::test_upsample_cat_conv 的设备条件",
+      "external": "否",
+      "change": "将笼统的 self.device == GPU_TYPE 跳过改为精确的已知受限后端条件，为 NPU 执行原 UpsamplingNearest2d→cat→Conv2d 流程；原 CPU 覆盖保留。",
+      "checks": "保持输入 [8,2,12,26]、[8,6,24,52]、模型 eval/no_grad 和 common 的全部数值/dtype 检查；确认原用例完整运行而非新增空分支。",
+      "limits": "源码没有 CUDA 专用算子或 CPU 代码文本断言，适合小范围试跑；当前没有 NPU 运行结果，不能先放宽精度容限或只运行 CPU 并记作 NPU 通过。",
+      "extra_source": ""
+    },
+    {
+      "id": "S03",
+      "rows": [
+        245
+      ],
+      "title": "float item 返回测试不再一概限定 FBCODE",
+      "verdict": "A：优先尝试简单修复",
+      "scope": "test/inductor/test_torchinductor_dynamic_shapes.py::test_float_item_return 的条件及返回值断言",
+      "external": "否；若暴露捕获缺口则后续可能涉及 Dynamo/Inductor",
+      "change": "对实际验证支持的 NPU 配置启用此方法，不全局伪装 IS_FBCODE；保留 fullgraph=True、capture_scalar_outputs 和动态输出捕获设置。建议同时断言返回 Python 标量 3.0。",
+      "checks": "在 NPU float32 Tensor 上执行 x.item()，确认完整捕获和正确标量返回；不能关闭 fullgraph 或允许图中断来通过。",
+      "limits": "函数体只调用公开 torch.compile/item 接口，没有直接 FBCODE import，因此是解除平台粗粒度跳过的候选；既有 FBCODE 门槛可能掩盖后续兼容问题，须实测。",
+      "extra_source": ""
+    },
+    {
+      "id": "S04",
+      "rows": [
+        197
+      ],
+      "title": "动态 linear 的门槛改为 NPU Triton 模板能力",
+      "verdict": "B：有条件的小改候选",
+      "scope": "test/inductor/test_torchinductor.py::test_linear_dynamic_maxautotune；必要时 NPU Inductor 模板能力登记",
+      "external": "测试局部适配不需要；若改共享 is_big_gpu 则涉及 torch/_inductor/utils.py，优先避免",
+      "change": "NPU 分支不沿用 CUDA 的 68-SM 性能门槛，而检查 Triton backend、允许 dtype 和 TRITON_TEMPLATES 能力。保留 max_autotune=True、TRITON-only、dynamic=True 和 mark_dynamic。",
+      "checks": "原输入与 common 数值断言通过，并采集候选/生成代码证明使用 NPU Triton GEMM 路径，不能通过改为 ATEN 或关 max_autotune 获得通过。",
+      "limits": "安装环境 NPU use_triton_template 已使用自己的 _use_template_for_npu，未检查 SM 数量；但 helper 存在不等于此形状有合法候选。先确认能力登记与候选可用，再解除测试门槛。",
+      "extra_source": "repair-source-evidence.json#torch/_inductor/utils.py::is_big_gpu; repair-source-evidence.json#torch_npu/_inductor/utils.py::use_triton_template; repair-source-evidence.json#torch_npu/_inductor/utils.py::_use_template_for_npu"
+    },
+    {
+      "id": "S05",
+      "rows": [
+        96
+      ],
+      "title": "progressive compile 的 NPU 能力与性能条件",
+      "verdict": "B：有条件的小改候选",
+      "scope": "test/inductor/test_compile_subprocess.py 的门槛/benchmark 设备适配；NPU Inductor 集成",
+      "external": "可能涉及 torch/_inductor/compile_fx_async.py、compile_fx_ext.py；当前不能承诺仅改测试",
+      "change": "用 NPU progressive 编译、模板和测时能力条件替代 CUDA SM 门槛；保留后台优化流程。若 triton.testing.do_bench 的设备假设不适用，改用真实 NPU 事件计时；不只强设 IS_BIG_GPU=True。",
+      "checks": "两个收集实例均检查 fast_runs、bg_started/bg_finished、optimized_runs==4、max_autotune 产物和优化版确实快于 baseline；保留超时机制，并增加同输入数值比较。",
+      "limits": "只是解除误门槛的条件性候选，不是已确认的完整简单修复。已有异步编译 R22 的序列化问题是风险线索，未证实本项必然同错；也不能删掉严格性能断言将其伪装成原用例通过。",
+      "extra_source": "repair-source-evidence.json#torch/_inductor/utils.py::is_big_gpu"
+    },
+    {
+      "id": "S06",
+      "rows": [
+        201,
+        202
+      ],
+      "title": "Conv/BN 的历史 GPU 精度跳过细化到 NPU",
+      "verdict": "B：有条件的小改候选",
+      "scope": "test/inductor/test_torchinductor.py::test_conv_bn_fuse、test_conv_functional_bn_fuse；测试 slow 开关",
+      "external": "否；若实际暴露融合或精度问题再定位，不预先归咎其他模块",
+      "change": "201 启用 PYTORCH_TEST_WITH_SLOW=1 后仍要处理函数体的 CPU-only 条件；针对 NPU 增加独立条件分支并保留原 eval/no_grad、freezing 和 common 检查。202 同样按 NPU 实测精度细化条件。",
+      "checks": "201 全部 1D/2D/3D、bias、kernel_size、dilation、groups 组合；202 functional BN 的数值与状态；保留 common 默认低精度检查。要宣称发生融合需额外 graph/code 证据。",
+      "limits": "注释明确提到 GPU 精度问题，不能仅删除 skip 或增大容差后宣称适配完成。201 还存在 dynamic 的 expected-failure 装饰，不能把 xfail 当通过；这两项也可独立运行 CPU 覆盖，但不计 NPU 通过。",
+      "extra_source": "repair-source-evidence.json#torch/testing/_internal/common_utils.py::slowTest"
+    },
+    {
+      "id": "S07",
+      "rows": [
+        50
+      ],
+      "title": "真实 CUTLASS dtype 映射可作为主机端依赖测试",
+      "verdict": "B：有条件的小改候选",
+      "scope": "test/inductor/test_utils.py::test_ensure_fp4_dtype_registered 的依赖门槛与测试环境",
+      "external": "需要真实 cutlass/cutlass_api 依赖（环境/第三方模块）；本次不安装，NPU Inductor 代码不必修改",
+      "change": "确认兼容版本的真实 cutlass 和 cutlass_api 可在该环境导入后，可按实际依赖可用性运行主机端类型映射测试，避免把 CUDA 硬件可用性当作唯一前提。",
+      "checks": "实际执行 _ensure_fp4_dtype_registered，保留 FP4→Float4E2M1FN 与 float32→Float32 两项断言；禁止 mock 期望类型代替真实库。",
+      "limits": "当前直接缺少 cutlass_api，光删装饰器会变成导入失败。第三方包可能有额外 CUDA 运行依赖，需先确认可导入；即使执行通过也不证明 NPU FP4 算子或 CUTLASS kernel 可用。",
+      "extra_source": "repair-source-evidence.json#torch/_inductor/utils.py::_ensure_fp4_dtype_registered"
+    },
+    {
+      "id": "S08",
+      "rows": [
+        42,
+        45,
+        46
+      ],
+      "title": "TMA lookup 不能仅提高 capability 或删除 skip",
+      "verdict": "E：不列入简单修复",
+      "scope": "lookup 测试的模板选择、NPU lookup key/模板注册；Triton TMA 接口",
+      "external": "原功能涉及 torch/_inductor/lookup_table 与 Triton/CUDA TMA；NPU 等价模板方案另需设计",
+      "change": "42 保留原 TMA 能力条件。45/46 的通用多配置/混合模板意图可在 NPU lookup 接入后新增原生模板变体，但必须真实命中 key、模板 UID 和所需候选数量。",
+      "checks": "42 验证实际 TMA 模板；45 同一模板两个不同配置；46 两种真实模板。均保留数值和候选选择检查，不能都换成同一个普通模板。",
+      "limits": "当前还有 R17 的 NPU lookup 接入缺口，尚非简单解除跳过。TORCH_NPU_DEVICE_CAPABILITY 的兼容数值不代表 CUDA TMA 能力，不能改为 9.0 或让 has_triton_tma_device 恒真。",
+      "extra_source": "repair-source-evidence.json#torch/utils/_triton.py::has_triton_tma_device"
+    }
+  ],
+  "counts": {
+    "A：优先尝试简单修复": 31,
+    "C：简单适配但改变 dtype 覆盖": 4,
+    "B：有条件的小改候选": 13,
+    "D：外部模块的局部修复候选": 2,
+    "E：不列入简单修复": 51
+  },
+  "counts_by_original_status": {
+    "失败": {
+      "A：优先尝试简单修复": 25,
+      "C：简单适配但改变 dtype 覆盖": 4,
+      "B：有条件的小改候选": 8,
+      "D：外部模块的局部修复候选": 2,
+      "E：不列入简单修复": 48
+    },
+    "跳过": {
+      "A：优先尝试简单修复": 6,
+      "B：有条件的小改候选": 5,
+      "E：不列入简单修复": 3
+    }
+  },
+  "skip_runtime_validation": {
+    "csv": "skip-validation.csv",
+    "summary": "skip-validation/summary.json",
+    "notes": "scripts/tests/npu_inductor_213/skip_validation.md",
+    "logical_status": {
+      "passed": 8,
+      "failed": 2,
+      "skipped": 4
+    },
+    "successful_test_adaptations": [
+      163,
+      165,
+      166,
+      167,
+      201,
+      202,
+      204,
+      245
+    ]
+  }
+}

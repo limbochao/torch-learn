@@ -15,6 +15,8 @@ def sanitize(value):
         return {key: sanitize(item) for key, item in value.items()}
     if not isinstance(value, str):
         return value
+    # Pytest may truncate the beginning of a home path in an exception repr.
+    value = re.sub(r'''\.\.\.[^\s"'\\]*/PTA_213/pytorch/''', '...<pytorch>/', value)
     value = re.sub(
         r"(?:/home/[^/\s\"']+/miniforge3|(?:\.\./)+miniforge3)/envs/[^/\s]+/lib/python[\d.]+/site-packages/",
         "<site-packages>/", value,
@@ -25,7 +27,8 @@ def sanitize(value):
     value = value.replace("/__w/pytorch/pytorch/", "<pytorch>/")
     value = re.sub(r"PID:\s*\d+", "PID:<redacted>", value)
     value = re.sub(r"(?<=at )0x[0-9a-fA-F]{8,}", "<address>", value)
-    value = re.sub(r"(backend_hash[\"']?\s*[:=]\s*[\"'])[0-9a-fA-F]+", r"\1<redacted>", value)
+    value = re.sub(r"(backend_hash[\\\"']*\s*[:=]\s*[\\\"']+)[0-9a-fA-F]+", r"\1<redacted>", value)
+    value = re.sub(r"(\b[VDIWEF]\d{4} \d{2}:\d{2}:\d{2}\.\d+\s+)\d+", r"\1<redacted>", value)
     return value
 
 

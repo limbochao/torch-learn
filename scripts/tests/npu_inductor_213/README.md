@@ -6,12 +6,30 @@
 参数化展开后为 283 个有效实例：162 通过、99 失败、16 跳过、6 xfail。
 初始中断、独立补测和机制探针保留为证据，不重复计入有效实例。
 
+PR #47384 指定迁移文件的全量重测也已完成：130 通过、99 失败、14 跳过，另有 4 项含预期失败。
+相对上述基线为 5 项转为通过、17 项回归，详见 [PR 重测报告](pr47384_retest.md)。
+全部 247 项已补充测试目的、NPU 覆盖建议及源码引用；原基线统计保持不变。
+
+完整 PR 加回原 Triton driver patch 的复测已完成：147 通过、82 失败、14 跳过，另有 4 项含预期失败。
+17 项回归全部恢复；14 项适配复测另有 1 项转为通过，本轮未发现新增功能回归。
+详见 [driver patch 影响报告](driver_patch_retest.md)，其中列明导入顺序遗漏及未测量的性能影响。
+
 142 个通过项包括 3 项显式 CPU 测试，以及其它主机端、负向和测试适配路径；
 它们不等于 142 项 NPU 功能全部得到正向验证，实际覆盖范围逐行注明。
 统计见 [progress.json](../../../artifacts/npu-inductor-213-batches-20261008/progress.json)，
 完整性检查见 [validation-summary.json](../../../artifacts/npu-inductor-213-batches-20261008/validation-summary.json)。
 
-- [累计 CSV](../../../artifacts/npu-inductor-213-batches-20261008/results.csv)
+- [最新总表：各阶段结果及通过对应修改](../../../artifacts/npu-inductor-pr47384-restored-driver-20261009/results.csv)
+- [原始基线累计 CSV](../../../artifacts/npu-inductor-213-batches-20261008/results.csv)
+- [PR #47384 全量重测与基线对比](pr47384_retest.md)
+- [PR #47384 全部提交同步与驱动问题复核](full_pr_review.md)
+- [PR 加回原 Triton driver patch 的全量影响验证](driver_patch_retest.md)
+- [247 项测试目的与 NPU 覆盖建议](../../../artifacts/npu-inductor-pr47384-20261008/test-objectives.csv)
+- [101 个失败及跳过用例的简单修复评审](repair_plan.md)
+- [逐用例修复建议 CSV](../../../artifacts/npu-inductor-213-batches-20261008/repair-triage.csv)
+- [14 个跳过项的适配建议 CSV](../../../artifacts/npu-inductor-213-batches-20261008/repair-skip-triage.csv)
+- [跳过项临时环境验证](skip_validation.md)
+- [跳过项临时验证 CSV](../../../artifacts/npu-inductor-213-batches-20261008/skip-validation.csv)
 - [第 1 批 CSV](../../../artifacts/npu-inductor-213-batches-20261008/batch-01.csv)
 - [本轮完整清单](cases_20261008.tsv)
 - [第 1 批精确 nodeid](../../../artifacts/npu-inductor-213-batches-20261008/batch-01-nodeids.json)
@@ -23,6 +41,12 @@
 CSV 使用 UTF-8 BOM，便于 Excel 读取中文。每行包含结果、失败阶段、归因、NPU 机制关系、
 能否修复、修复方向、未修复原因、覆盖边界和证据引用。
 JSON 引用中 `#` 后的字符串是 nodeid 或 `sources[].id`，用于在文件内定位，不是网页锚点。
+
+最新总表保留基线、PR 原样、PR 加回 driver patch 三阶段状态，并逐行给出“通过变化类型”、
+“通过对应修改”和补丁证据。基线已通过项、PR benchmark 修改后通过的 5 项、driver patch
+恢复的 17 项分别标注，避免把全部通过都归因于本轮补丁。
+14 项适配复测也列在对应原序号行，单独记录测试条件修改、HF32 设置、适配结果和日志；
+适配版通过不覆盖原用例的跳过状态，也不重复计入原用例通过数。
 
 各批次均已写入独立 CSV，按清单行统计如下：
 

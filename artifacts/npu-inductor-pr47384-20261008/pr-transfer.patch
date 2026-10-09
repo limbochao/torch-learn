@@ -1,0 +1,69 @@
+--- a/torch_npu/contrib/transfer_to_npu.py
++++ b/torch_npu/contrib/transfer_to_npu.py
+@@ -344,10 +344,17 @@ def _patch_jit_script():
+ 
+ 
+ def _patch_has_triton(**kwargs):
+-    return False
++    # Delegate to torch_npu's device-aware has_triton (checks cuda/xpu/cpu/npu
++    # Triton backend availability), so CUDA-originated code gated on has_triton()
++    # keeps running unmodified on the NPU backend.
++    from torch_npu.utils import _dynamo
++    return _dynamo.has_triton(**kwargs)
+ 
+ 
++@functools.lru_cache(None)
+ def _get_npu_type():
++    # Kept cached (with cache_clear) because torch_npu's inductor patch_is_gpu
++    # clears the cache; must resolve to npu regardless of torch.cuda aliasing.
+     return "npu"
+ 
+ 
+@@ -495,6 +502,7 @@ def _init():
+     # torch.cuda.*
+     _patch_cuda()
+     _device_wrapper(torch.cuda, torch_cuda_fn_white_list)
++
+     torch.cuda.device.__init__ = _wrapper_cuda(torch.cuda.device.__init__)
+     torch.cuda.amp.autocast_mode = torch_npu.npu.amp.autocast_mode
+ 
+@@ -595,6 +603,39 @@ def _init():
+     torch._inductor.fx_passes.joint_graph.get_gpu_type = _get_npu_type
+     torch._inductor.autotune_process.get_gpu_type = _get_npu_type
+ 
++    # transfer_to_npu aliases torch.cuda.* onto torch.npu.*, so Triton's CUDA
++    # backend sees torch.cuda.is_available() == True and wrongly reports itself
++    # as an active driver, conflicting with the Ascend driver at kernel launch.
++    # Force the NVIDIA Triton driver inactive so CUDA-originated Triton code
++    # runs on the NPU backend unmodified.
++    def _patch_triton_nvidia_driver():
++        # Only meaningful on NPU machines; leave the NVIDIA Triton driver alone
++        # elsewhere so CUDA-only runs keep their natural behavior.
++        if not torch.npu.is_available():
++            return
++        try:
++            from triton.backends.nvidia import driver as _nvidia_driver
++
++            _nvidia_driver.CudaDriver.is_active = staticmethod(lambda: False)
++        except Exception:
++            pass
++
++    _patch_triton_nvidia_driver()
++
++    # torch_npu/_inductor/__init__.py appends "npu" to
++    # torch._inductor.runtime.benchmarking.GPU_BENCHMARK_DEVICE_TYPES. The
++    # upstream benchmark path (_get_default_gpu_device_type) enumerates that
++    # list via each device's is_available(); because transfer_to_npu aliases
++    # torch.cuda.* onto torch.npu.*, both cuda and npu report available and the
++    # upstream "assert len(avail_gpus) <= 1" fires. Override the default-device
++    # resolution to always target the NPU backend (consistent with get_gpu_type).
++    from torch._inductor.runtime import benchmarking as _benchmarking
++
++    def _npu_default_gpu_device_type():
++        return "npu"
++
++    _benchmarking._get_default_gpu_device_type = _npu_default_gpu_device_type
++
+     torch._utils._get_available_device_type = _patch_get_available_device_type
+     filesystem._OverlappingCpuLoader.__init__ = \
+         _patch_OverlappingCpuLoader_init_

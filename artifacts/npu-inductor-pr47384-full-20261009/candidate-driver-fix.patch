@@ -1,0 +1,42 @@
+--- a/torch_npu/contrib/transfer_to_npu.py
++++ b/torch_npu/contrib/transfer_to_npu.py
+@@ -609,16 +609,31 @@
+     # Force the NVIDIA Triton driver inactive so CUDA-originated Triton code
+     # runs on the NPU backend unmodified.
+     def _patch_triton_nvidia_driver():
+-        # Only meaningful on NPU machines; leave the NVIDIA Triton driver alone
+-        # elsewhere so CUDA-only runs keep their natural behavior.
+         if not torch.npu.is_available():
+             return
+-        try:
+-            from triton.backends.nvidia import driver as _nvidia_driver
+-
+-            _nvidia_driver.CudaDriver.is_active = staticmethod(lambda: False)
+-        except Exception:
+-            pass
++        from torch.utils._triton import has_triton_package
++
++        if not has_triton_package():
++            return
++        from triton.backends import backends
++        from torch._inductor.runtime import triton_helpers
++
++        nvidia_backend = backends.get("nvidia")
++        if nvidia_backend is not None:
++            nvidia_backend.driver.is_active = staticmethod(lambda: False)
++
++        # PyTorch may fall back to the aliased torch.cuda.is_available().
++        original_is_backend_active = getattr(triton_helpers, "_is_backend_active", None)
++        if original_is_backend_active is None:
++            return
++
++        @wraps(original_is_backend_active)
++        def _is_backend_active(name, backend):
++            if name == "nvidia":
++                return False
++            return original_is_backend_active(name, backend)
++
++        triton_helpers._is_backend_active = _is_backend_active
+ 
+     _patch_triton_nvidia_driver()
+ 

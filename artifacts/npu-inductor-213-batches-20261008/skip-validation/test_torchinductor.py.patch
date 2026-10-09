@@ -1,0 +1,79 @@
+--- original/test_torchinductor.py
++++ temporary/test_torchinductor.py
+@@ -1,3 +1,4 @@
++from skip_validation_support import npu_large_tensor_test, npu_triton_templates_available
+ # Owner(s): ["module: inductor"]
+ # ruff: noqa: F841
+ import contextlib
+@@ -4237,7 +4238,7 @@
+ 
+     @skip_if_cpu
+     @skip_if_halide  # only 32-bit indexing
+-    @largeTensorTest("4GB", inductor=True)
++    @npu_large_tensor_test("4GB", inductor=True)
+     def test_large_tensor_reduction(self):
+         # Test 64-bit indexing works correctly
+         def fn(a):
+@@ -4274,7 +4275,7 @@
+ 
+     @skip_if_halide  # only 32-bit indexing
+     @skip_if_pallas  # only 32-bit indexing
+-    @largeTensorTest("4GB", inductor=True)
++    @npu_large_tensor_test("4GB", inductor=True)
+     def test_large_pointwise(self):
+         def fn(a):
+             return a + 1
+@@ -4297,7 +4298,7 @@
+ 
+     @skip_if_halide  # only 32-bit indexing
+     @skip_if_pallas  # only 32-bit indexing
+-    @largeTensorTest("3GB", inductor=True)
++    @npu_large_tensor_test("3GB", inductor=True)
+     def test_large_offset_pointwise(self):
+         # Test 64-bit indexing is used when input views a tensor that can be
+         # indexed with 32-bit strides but the storage offset pushes it over
+@@ -4312,7 +4313,7 @@
+         self.assertTrue((actual == 4).all())
+ 
+     @skip_if_halide  # only 32-bit indexing
+-    @largeTensorTest("2GB", inductor=True)
++    @npu_large_tensor_test("2GB", inductor=True)
+     def test_large_strided_reduction(self):
+         # Test 64-bit indexing is used when input numel is less than INT_MAX
+         # but stride calculations go above INT_MAX
+@@ -4853,7 +4854,7 @@
+             torch.compile(fn)(t)
+ 
+     @unittest.skipIf(
+-        not IS_BIG_GPU, "Skipping triton backend only since not big GPU (not enough SM)"
++        not (npu_triton_templates_available() if GPU_TYPE == "npu" else IS_BIG_GPU), "Skipping triton backend only since not big GPU (not enough SM)"
+     )
+     @config.patch(
+         {
+@@ -4921,7 +4922,7 @@
+     @config.patch({"freezing": True})
+     def test_conv_bn_fuse(self):
+         # For gpu path, there is an accuracy issue
+-        if self.device == GPU_TYPE:
++        if self.device == GPU_TYPE and torch.device(self.device).type != "npu":
+             raise unittest.SkipTest("only support cpu conv bn test")
+ 
+         # fails dynamic check which bn is fused, and there will not have loops vars.
+@@ -4980,7 +4981,7 @@
+ 
+     def test_conv_functional_bn_fuse(self):
+         # For gpu path, there is an accuracy issue
+-        if self.device == GPU_TYPE:
++        if self.device == GPU_TYPE and torch.device(self.device).type != "npu":
+             raise unittest.SkipTest("only support cpu conv bn test")
+ 
+         # Define a BatchNorm using functional BN.
+@@ -5123,7 +5124,7 @@
+                     FileCheck().check("convolution(").check(".run(").run(code[0])
+ 
+     def test_upsample_cat_conv(self):
+-        if self.device == GPU_TYPE:
++        if self.device == GPU_TYPE and torch.device(self.device).type != "npu":
+             raise unittest.SkipTest("only support cpu upsample_cat_conv test")
+ 
+         class M(torch.nn.Module):

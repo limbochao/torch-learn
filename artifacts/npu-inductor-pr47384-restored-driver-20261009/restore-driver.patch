@@ -1,0 +1,35 @@
+--- a/torch_npu/contrib/transfer_to_npu.py
++++ b/torch_npu/contrib/transfer_to_npu.py
+@@ -351,6 +351,23 @@
+     return _dynamo.has_triton(**kwargs)
+ 
+ 
++def _patch_triton_driver():
++    if not _dynamo.has_triton():
++        return
++    from triton.backends import backends
++    from triton.runtime import driver
++
++    backend = backends.get("ascend")
++    if backend is not None:
++        # CUDA aliases would otherwise make both drivers appear active. Keep
++        # this patch in transfer_to_npu: regular NPU Inductor does not need to
++        # change the upstream helper, while translated CUDA tests do.
++        driver.set_active(backend.driver())
++        from torch._inductor.runtime import triton_helpers
++
++        triton_helpers.set_driver_to_gpu = _patch_triton_driver
++
++
+ @functools.lru_cache(None)
+ def _get_npu_type():
+     # Kept cached (with cache_clear) because torch_npu's inductor patch_is_gpu
+@@ -485,6 +502,8 @@
+     import torch._inductor.autotune_process  # noqa: F401
+     from torch.distributed.checkpoint import filesystem
+ 
++    _patch_triton_driver()
++
+     _warning_fn('''
+     *************************************************************************************************************
+     The torch.Tensor.cuda and torch.nn.Module.cuda are replaced with torch.Tensor.npu and torch.nn.Module.npu now..
