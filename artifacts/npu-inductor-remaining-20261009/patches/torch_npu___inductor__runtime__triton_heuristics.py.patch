@@ -1,0 +1,16 @@
+--- a/torch_npu/_inductor/runtime/triton_heuristics.py
++++ b/torch_npu/_inductor/runtime/triton_heuristics.py
+@@ -1308,7 +1308,12 @@
+         ):
+             return do_bench_using_profiling_npu(kernel_call, rep=1)
+ 
+-        return benchmarker.benchmark_gpu(kernel_call, rep=1, device_type='npu')
++        # Pointwise autotuning preserves results across tile configurations.
++        # Keep custom kernels and reductions subject to the deterministic guard.
++        vetted = not self.custom_kernel and self.heuristic_type == HeuristicType.POINTWISE
++        return benchmarker.benchmark_gpu(
++            kernel_call, rep=1, device_type='npu', is_vetted_benchmarking=vetted
++        )
+ 
+     def _profile_batch_benchmark(self, kernel_funcs):
+         def delete_file(base_path):
