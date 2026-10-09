@@ -150,24 +150,6 @@ def prepare_inductor(original):
         'assert isinstance(op, (torch._ops.OpOverload, torch._ops.HigherOrderOperator)), (').replace(
         'Only OpOverload to make the clean up easier',
         'Only individual overloads or higher-order operators can be restored independently'))
-    name = 'torch_npu/_inductor/kernel/bmm.py'
-    updated[name] = replace_once(updated[name],
-        '    def tuned_bmm(mat1, mat2, *, layout=None):\n',
-        '    def tuned_bmm(mat1, mat2, *, layout=None):\n'
-        '        sizevars = V.graph.sizevars\n'
-        '        dtype = mat1.get_dtype()\n'
-        '        # Match the upstream tiny-dot decomposition for NPU floating types.\n'
-        '        # Hints on M/N select the optimization without specializing symbols;\n'
-        '        # K must use a static bound so cached graphs remain valid.\n'
-        '        if (\n'
-        '            mat1.get_device().type == mat2.get_device().type == "npu"\n'
-        '            and dtype == mat2.get_dtype()\n'
-        '            and dtype in (torch.float16, torch.bfloat16, torch.float32)\n'
-        '            and sizevars.optimization_hint(mat1.get_size()[1], fallback=2) == 1\n'
-        '            and sizevars.optimization_hint(mat2.get_size()[2], fallback=2) == 1\n'
-        '            and not sizevars.statically_known_gt(mat1.get_size()[2], 32)\n'
-        '        ):\n'
-        '            return L.sum_(L.mul(L.unsqueeze(mat1, -1), L.unsqueeze(mat2, 1)), axis=2)\n\n')
     return updated
 
 
@@ -198,7 +180,6 @@ def main():
     sources = {name: (args.site_dir / name).read_text(encoding='utf-8-sig') for name in [
         'torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py',
         'torch_npu/_inductor/runtime/triton_heuristics.py',
-        'torch_npu/_inductor/kernel/bmm.py',
     ]}
     for name in sources:
         if name in preflight['source_hashes']:

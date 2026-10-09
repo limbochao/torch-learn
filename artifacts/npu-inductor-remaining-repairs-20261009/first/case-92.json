@@ -1,0 +1,100 @@
+{
+  "requested": [
+    "test_inplace_padding.py::test_linear_and_cel_max_autotune"
+  ],
+  "environment": {
+    "transfer_sha256": "49a970650f02ffdb71ceff01d0f681ea88eb5f70af1f5eff01ea55cced9acf3a",
+    "transfer_pr_head": "16437be0ffc9d67c8b27855a234243e35385c58b",
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "1",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0+git5fd5ddf",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "all",
+    "device_count": 8,
+    "default_device": 2,
+    "compile_threads": 4,
+    "npu_precompile_threads": 4,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_inplace_padding.py": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873"
+    }
+  },
+  "selected": [
+    "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune"
+  ],
+  "resolved_nodeids": {
+    "test_inplace_padding.py::test_linear_and_cel_max_autotune": [
+      "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0005225429777055979,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 490.47780445893295,
+      "longrepr": "self = <inductor.test_inplace_padding.InplacePaddingTest testMethod=test_linear_and_cel_max_autotune>\n\n    @requires_gpu_with_enough_memory(2e10)\n    @inductor_config.patch(max_autotune=True)\n    @serialTest()\n    def test_linear_and_cel_max_autotune(self):\n>       self.test_linear_and_cel()\n\ntest_inplace_padding.py:263: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nargs = (<inductor.test_inplace_padding.InplacePaddingTest testMethod=test_linear_and_cel_max_autotune>,)\nkwds = {}\n\n    @wraps(func)\n    def inner(*args, **kwds):\n        with self._recreate_cm():\n>           return func(*args, **kwds)\n\n<workspace-path>:81: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <inductor.test_inplace_padding.InplacePaddingTest testMethod=test_linear_and_cel_max_autotune>\n\n    @requires_gpu_with_enough_memory(2e10)\n    @inductor_config.patch(force_shape_pad=True)\n    @serialTest()\n    def test_linear_and_cel(self):\n        # Use nan for torch.empty\n        torch.use_deterministic_algorithms(True)\n        torch.utils.deterministic.fill_uninitialized_empty = True\n        os.environ[\"CUBLAS_WORKSPACE_CONFIG\"] = \":4096:8\"\n    \n        B, T, C, V = 32, 1024, 768, 50257\n    \n        linear = nn.Linear(C, V).bfloat16().to(device=GPU_TYPE)\n        ce = torch.nn.CrossEntropyLoss()\n    \n        def f(x, y):\n            x.grad = None\n            linear.weight.grad = None\n            linear.bias.grad = None\n    \n            loss = ce(linear(x), y)\n            loss.backward()\n            return loss\n    \n        x = torch.randn(B * T, C, requires_grad=True).to(GPU_TYPE).bfloat16()\n        x.retain_grad()\n        y = torch.randint(0, V, (B * T,)).to(GPU_TYPE)\n    \n        opt_f = torch.compile(f)\n    \n        expect = (f(x, y), x.grad, linear.weight.grad, linear.bias.grad)\n        actual = (opt_f(x, y), x.grad, linear.weight.grad, linear.bias.grad)\n        if not same(expect, actual, tol=1e-2):\n            raise AssertionError(f\"ref:\\n{expect}\\nact:\\n{actual}\")\n    \n        # We may disable inplace_padding via env-var to test perf.\n>       self.assertEqual(num_inplace_padding(), int(inductor_config.inplace_padding))\n\ntest_inplace_padding.py:249: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <inductor.test_inplace_padding.InplacePaddingTest testMethod=test_linear_and_cel_max_autotune>\nx = 0, y = 1, args = (), kwargs = {}\n\n    def assertEqual(self, x: Any, y: Any, *args: Any, **kwargs: Any) -> None:  # type: ignore[override]\n        if config.debug_disable_compile_counter:\n            if isinstance(x, utils.CompileCounterInt) or isinstance(\n                y, utils.CompileCounterInt\n            ):\n                return\n            # skip checks like self.assertEqual(len(counters[\"graph_break\"]), 1)\n            if (\n                (cur_frame := inspect.currentframe())\n                and (upper_frame := cur_frame.f_back)\n                and (upper_code := inspect.getframeinfo(upper_frame).code_context)\n                and \"counters\" in upper_code[0]\n            ):\n                return\n>       return super().assertEqual(x, y, *args, **kwargs)\nE       AssertionError: Scalars are not equal!\nE       \nE       Expected 1 but got 0.\nE       Absolute difference: 1\nE       Relative difference: 1.0\nE       \nE       To execute this test, run the following from the base repo dir:\nE           PYTORCH_TEST_WITH_SLOW=1 python test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py InplacePaddingTest.test_linear_and_cel_max_autotune\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\n<site-packages>/torch/_dynamo/test_case.py:128: AssertionError",
+      "wasxfail": null,
+      "sections": [
+        [
+          "Captured stderr call",
+          "AUTOTUNE addmm(50264, 32768x768, 768x50264)\nstrides: [1], [768, 1], [50264, 1]\ndtypes: torch.bfloat16, torch.bfloat16, torch.bfloat16\n  addmm 8.7973 ms 100.0% \n  triton_npu_triton_mm_0 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=4\n  triton_npu_triton_mm_1 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=8\n  triton_npu_triton_mm_2 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=3, num_warps=4\n  triton_npu_triton_mm_3 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=3, num_warps=8\n  triton_npu_triton_mm_4 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=4, num_warps=4\n  triton_npu_triton_mm_5 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=4, num_warps=8\n  triton_npu_triton_mm_6 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=4\n  triton_npu_triton_mm_7 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=8\n  triton_npu_triton_mm_8 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, num_stages=3, num_warps=4\nSingleProcess AUTOTUNE benchmarking takes 0.3385 seconds and 68.0141 seconds precompiling for 95 choices\n<site-packages>/triton/backends/ascend/compiler.py:1547: FutureWarning: Ascend compile option 'enable_vf_fusion' is deprecated and will be removed in a future release; it is ignored; this switch is no longer forwarded to the NPU compiler.\n  normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)\n<site-packages>/torch/_dynamo/variables/functions.py:2431: UserWarning: Dynamo does not know how to trace the builtin `torch._VariableFunctionsClass.ones_like.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).\nIf it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.\nIf it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.\n  torch._dynamo.utils.warn_once(explanation + \"\\n\" + \"\\n\".join(hints))\nAUTOTUNE mm(32768x50264, 50264x768)\nstrides: [50264, 1], [768, 1]\ndtypes: torch.bfloat16, torch.bfloat16\n  mm 7.3328 ms 100.0% \n  triton_npu_triton_mm_94 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=False, GROUP_M=8, num_stages=2, num_warps=4\n  triton_npu_triton_mm_95 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=False, GROUP_M=8, num_stages=2, num_warps=8\n  triton_npu_triton_mm_96 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=False, GROUP_M=8, num_stages=3, num_warps=4\n  triton_npu_triton_mm_97 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=False, GROUP_M=8, num_stages=3, num_warps=8\n  triton_npu_triton_mm_98 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=False, GROUP_M=8, num_stages=2, num_warps=4\n  triton_npu_triton_mm_99 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=False, GROUP_M=8, num_stages=2, num_warps=8\n  triton_npu_triton_mm_100 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=False, GROUP_M=8, num_stages=3, num_warps=4\n  triton_npu_triton_mm_101 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=False, GROUP_M=8, num_stages=3, num_warps=8\n  triton_npu_triton_mm_102 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=False, GROUP_M=8, num_stages=2, num_warps=4\nSingleProcess AUTOTUNE benchmarking takes 0.8547 seconds and 212.6483 seconds precompiling for 463 choices\nAUTOTUNE mm(50264x32768, 32768x768)\nstrides: [32768, 1], [768, 1]\ndtypes: torch.bfloat16, torch.bfloat16\n  mm 7.2778 ms 100.0% \n  triton_npu_triton_mm_556 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=4\n  triton_npu_triton_mm_557 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=8\n  triton_npu_triton_mm_558 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=3, num_warps=4\n  triton_npu_triton_mm_559 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=256, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=3, num_warps=8\n  triton_npu_triton_mm_560 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=4\n  triton_npu_triton_mm_561 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=8\n  triton_npu_triton_mm_562 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=True, GROUP_M=8, num_stages=3, num_warps=4\n  triton_npu_triton_mm_563 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=64, BLOCK_M=128, BLOCK_N=256, EVEN_K=True, GROUP_M=8, num_stages=3, num_warps=8\n  triton_npu_triton_mm_564 inf ms 0.0% ACC_TYPE='tl.float32', ALLOW_TF32='False', BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, num_stages=2, num_warps=4\nSingleProcess AUTOTUNE benchmarking takes 0.8192 seconds and 0.0038 seconds precompiling for 463 choices\n"
+        ]
+      ]
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.00029667490161955357,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_inplace_padding.py::test_linear_and_cel_max_autotune": {
+      "scope": "host_or_explicit_device",
+      "source_method": "test_linear_and_cel_max_autotune",
+      "candidates": [
+        {
+          "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune",
+          "device": null
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_inplace_padding.py::test_linear_and_cel_max_autotune": {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune",
+      "nodeids": [
+        "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_linear_and_cel_max_autotune"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

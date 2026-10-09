@@ -1,0 +1,19 @@
+--- a/torch/_inductor/lowering.py
++++ b/torch/_inductor/lowering.py
+@@ -9126,13 +9126,13 @@
+ 
+ 
+ @contextlib.contextmanager
+-def force_fallback(op: torch._ops.OpOverload):
++def force_fallback(op: torch._ops.OpOverload | torch._ops.HigherOrderOperator):
+     """
+     A context manager to force fallback an op. Used in unit test
+     for FallbackKernel.
+     """
+-    assert isinstance(op, torch._ops.OpOverload), (
+-        "Only OpOverload to make the clean up easier"
++    assert isinstance(op, (torch._ops.OpOverload, torch._ops.HigherOrderOperator)), (
++        "Only individual overloads or higher-order operators can be restored independently"
+     )
+     old_handler = lowerings.get(op)
+     try:

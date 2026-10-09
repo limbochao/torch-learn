@@ -1,0 +1,73 @@
+--- a/test_benchmarking.py
++++ b/test_benchmarking.py
+@@ -50,16 +50,15 @@
+         return (fn, fn_args, fn_kwargs), _callable
+ 
+     @unittest.skipIf(not HAS_CPU or not HAS_GPU, "requires CPU and GPU")
+-    @decorateIf(
+-        unittest.expectedFailure,
+-        lambda params: params["benchmarker_cls"] is Benchmarker
+-        and params["device"] == GPU_TYPE,
+-    )
+     @parametrize("benchmarker_cls", ALL_BENCHMARKER_CLASSES)
+     @parametrize("device", (GPU_TYPE, "cpu"))
+     def test_benchmark_smoke(self, benchmarker_cls, device):
+         benchmarker = benchmarker_cls()
+         (fn, fn_args, fn_kwargs), _ = self.make_params(device)
++        if benchmarker_cls is Benchmarker and device != "cpu":
++            with self.assertRaises(NotImplementedError):
++                benchmarker.benchmark(fn, fn_args, fn_kwargs)
++            return
+         timing = benchmarker.benchmark(fn, fn_args, fn_kwargs)
+         self.assertGreater(timing, 0)
+         self.assertEqual(self.get_counter_value(benchmarker_cls, "benchmark"), 1)
+@@ -80,39 +79,39 @@
+         self.assertEqual(self.get_counter_value(benchmarker_cls, "benchmark_cpu"), 1)
+ 
+     @unittest.skipIf(not HAS_GPU, "requires GPU")
+-    @decorateIf(
+-        unittest.expectedFailure,
+-        lambda params: params["benchmarker_cls"] is Benchmarker,
+-    )
+     @parametrize("benchmarker_cls", ALL_BENCHMARKER_CLASSES)
+     def test_benchmark_gpu_smoke(self, benchmarker_cls, device=GPU_TYPE):
+         benchmarker = benchmarker_cls()
+         _, _callable = self.make_params(device)
++        if benchmarker_cls is Benchmarker:
++            with self.assertRaises(NotImplementedError):
++                benchmarker.benchmark_gpu(_callable)
++            return
+         timing = benchmarker.benchmark_gpu(_callable)
+         self.assertGreater(timing, 0)
+         self.assertEqual(self.get_counter_value(benchmarker_cls, "benchmark_gpu"), 1)
+ 
+     @unittest.skipIf(not HAS_CPU and not HAS_GPU, "requires CPU or GPU")
+-    @unittest.expectedFailure
+     @parametrize("benchmarker_cls", ALL_BENCHMARKER_CLASSES)
+     def test_benchmark_safely_infers_device_no_devices(
+         self, benchmarker_cls, device="cpu" if HAS_CPU else GPU_TYPE
+     ):
+         benchmarker = benchmarker_cls()
+         (fn, _, _), _ = self.make_params(device)
+-        benchmarker.benchmark(fn, (), {})
++        with self.assertRaisesRegex(ValueError, "with no device types"):
++            benchmarker.benchmark(fn, (), {})
+ 
+     @unittest.skipIf(not HAS_CPU or not HAS_GPU, "requires CPU and GPU")
+-    @unittest.expectedFailure
+     @parametrize("benchmarker_cls", ALL_BENCHMARKER_CLASSES)
+     def test_benchmark_safely_infers_device_many_devices(self, benchmarker_cls):
+         benchmarker = benchmarker_cls()
+-        (fn, cpu_args, cpu_kwargs), _ = self.make_sum("cpu")
+-        (_, gpu_args, gpu_kwargs), _ = self.make_sum(GPU_TYPE)
++        (fn, cpu_args, cpu_kwargs), _ = self.make_params("cpu")
++        (_, gpu_args, gpu_kwargs), _ = self.make_params(GPU_TYPE)
+         many_devices_args = cpu_args + gpu_args
+         many_devices_kwargs = cpu_kwargs
+         many_devices_kwargs.update(gpu_kwargs)
+-        benchmarker.benchmark(fn, many_devices_args, many_devices_kwargs)
++        with self.assertRaisesRegex(ValueError, "with multiple device types"):
++            benchmarker.benchmark(fn, many_devices_args, many_devices_kwargs)
+ 
+     @unittest.skipIf(not HAS_GPU, "requires GPU")
+     def test_benchmark_warmup_and_rep_defaults(self):

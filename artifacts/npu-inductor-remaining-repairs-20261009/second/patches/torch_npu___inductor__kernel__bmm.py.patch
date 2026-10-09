@@ -1,0 +1,24 @@
+--- a/torch_npu/_inductor/kernel/bmm.py
++++ b/torch_npu/_inductor/kernel/bmm.py
+@@ -245,6 +245,21 @@
+ def _register_npu_inductor_bmm():
+     @L.register_lowering(aten.bmm)
+     def tuned_bmm(mat1, mat2, *, layout=None):
++        sizevars = V.graph.sizevars
++        dtype = mat1.get_dtype()
++        # Match the upstream tiny-dot decomposition for NPU floating types.
++        # Hints on M/N select the optimization without specializing symbols;
++        # K must use a static bound so cached graphs remain valid.
++        if (
++            mat1.get_device().type == mat2.get_device().type == "npu"
++            and dtype == mat2.get_dtype()
++            and dtype in (torch.float16, torch.bfloat16, torch.float32)
++            and sizevars.optimization_hint(mat1.get_size()[1], fallback=2) == 1
++            and sizevars.optimization_hint(mat2.get_size()[2], fallback=2) == 1
++            and not sizevars.statically_known_gt(mat1.get_size()[2], 32)
++        ):
++            return L.sum_(L.mul(L.unsqueeze(mat1, -1), L.unsqueeze(mat2, 1)), axis=2)
++
+         if all(x.get_device().type == "cpu" for x in [mat1, mat2]):
+             # decompose to small ops when memory bound
+             if mat1.get_size()[1] == 1 or mat2.get_size()[2] == 1:

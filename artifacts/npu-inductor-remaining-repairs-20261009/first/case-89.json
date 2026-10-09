@@ -1,0 +1,100 @@
+{
+  "requested": [
+    "test_inplace_padding.py::test_mutating_padding_input"
+  ],
+  "environment": {
+    "transfer_sha256": "49a970650f02ffdb71ceff01d0f681ea88eb5f70af1f5eff01ea55cced9acf3a",
+    "transfer_pr_head": "16437be0ffc9d67c8b27855a234243e35385c58b",
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "1",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0+git5fd5ddf",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "all",
+    "device_count": 8,
+    "default_device": 2,
+    "compile_threads": 4,
+    "npu_precompile_threads": 4,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_inplace_padding.py": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873"
+    }
+  },
+  "selected": [
+    "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input"
+  ],
+  "resolved_nodeids": {
+    "test_inplace_padding.py::test_mutating_padding_input": [
+      "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.00036407611332833767,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 41.095048242015764,
+      "longrepr": "self = <inductor.test_inplace_padding.InplacePaddingTest testMethod=test_mutating_padding_input>\n\n    @inductor_config.patch(can_inplace_pad_graph_input=True)\n    def test_mutating_padding_input(self):\n        \"\"\"\n        Even if `aten.constant_pad_nd` input get inplace updated,\n        doing inplace-padding still generates the correct result.\n        \"\"\"\n    \n        def f(x, y):\n            x2 = aten.constant_pad_nd(x, (0, 8, 0, 0), 12345.0)\n            x.add_(5)\n            return x2 @ y\n    \n        M, N = 2048, 2048\n        x = rand_strided((M, N + 10), (N + 10, 1), device=GPU_TYPE).as_strided(\n            (M, N), (N + 10, 1)\n        )\n        y = torch.randn(N + 8, M, device=GPU_TYPE)\n        check_model(self, f, (x, y), atol=1e-2, rtol=1e-2)\n    \n>       self.assertEqual(num_inplace_padding(), 1)\n\ntest_inplace_padding.py:192: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <inductor.test_inplace_padding.InplacePaddingTest testMethod=test_mutating_padding_input>\nx = 0, y = 1, args = (), kwargs = {}\n\n    def assertEqual(self, x: Any, y: Any, *args: Any, **kwargs: Any) -> None:  # type: ignore[override]\n        if config.debug_disable_compile_counter:\n            if isinstance(x, utils.CompileCounterInt) or isinstance(\n                y, utils.CompileCounterInt\n            ):\n                return\n            # skip checks like self.assertEqual(len(counters[\"graph_break\"]), 1)\n            if (\n                (cur_frame := inspect.currentframe())\n                and (upper_frame := cur_frame.f_back)\n                and (upper_code := inspect.getframeinfo(upper_frame).code_context)\n                and \"counters\" in upper_code[0]\n            ):\n                return\n>       return super().assertEqual(x, y, *args, **kwargs)\nE       AssertionError: Scalars are not equal!\nE       \nE       Expected 1 but got 0.\nE       Absolute difference: 1\nE       Relative difference: 1.0\nE       \nE       To execute this test, run the following from the base repo dir:\nE           PYTORCH_TEST_WITH_SLOW=1 python test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py InplacePaddingTest.test_mutating_padding_input\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\n<site-packages>/torch/_dynamo/test_case.py:128: AssertionError",
+      "wasxfail": null,
+      "sections": [
+        [
+          "Captured stderr call",
+          "<site-packages>/triton/backends/ascend/compiler.py:1547: FutureWarning: Ascend compile option 'enable_vf_fusion' is deprecated and will be removed in a future release; it is ignored; this switch is no longer forwarded to the NPU compiler.\n  normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)\n"
+        ]
+      ]
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.0001649279147386551,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_inplace_padding.py::test_mutating_padding_input": {
+      "scope": "host_or_explicit_device",
+      "source_method": "test_mutating_padding_input",
+      "candidates": [
+        {
+          "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+          "device": null
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_inplace_padding.py::test_mutating_padding_input": {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "nodeids": [
+        "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

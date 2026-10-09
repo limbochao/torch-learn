@@ -1,0 +1,19 @@
+--- a/torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py
++++ b/torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py
+@@ -960,14 +960,14 @@
+             if statically_fits_int32(r_start, r_end):
+                 node.kwargs = {**node.kwargs, "dtype": torch.int32}
+                 changed = True
+-        if node.op == "call_method":
++        if node.op == "call_method" and node.target == "to" and node.args:
+             input_node = node.args[0]
+             input_fake = (
+                 input_node.meta.get("example_value", None)
+                 if hasattr(input_node, "meta")
+                 else None
+             )
+-            input_dtype = input_fake.dtype if input_fake is not None else None
++            input_dtype = input_fake.dtype if isinstance(input_fake, torch.Tensor) else None
+             target_dtype = (
+                 node.args[1] if len(node.args) > 1 else node.kwargs.get("dtype", None)
+             )

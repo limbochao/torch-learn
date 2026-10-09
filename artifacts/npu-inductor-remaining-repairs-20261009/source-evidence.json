@@ -1,0 +1,115 @@
+{
+  "scope": "本地源码对照；远端安装版本以各轮 manifest/hash 和阶段报告为准。",
+  "records": [
+    {
+      "repository": "pytorch_new",
+      "file": "torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py",
+      "function": "dtype_optimal_pass",
+      "source_sha256": "a217dbefa7c7f6b1ca34e901208a4120e063386e77214512cae7bd5a08d5e18b",
+      "first_line": 919,
+      "last_line": 987,
+      "excerpt": "def dtype_optimal_pass(graph: torch.fx.Graph) -> None:\n    \"\"\"Narrow unnecessary int64 to int32: if the values of torch.arange or to(int64)\n    fit safely in int32, downgrade the dtype to cut memory traffic and compute cost.\"\"\"\n    cast_dtype_limit = [torch.float32, torch.int32, torch.bool, torch.int16, torch.int8]\n    changed = False\n    for node in list(graph.nodes):  # use list to avoid mutating while iterating\n        if (\n            node.op == \"call_function\"\n            and node.target == torch.arange\n            and node.kwargs.get(\"dtype\", None) == torch.int64\n        ):\n            # step 1: extract start/end/step dynamically (handles different args lengths)\n            args_len = len(node.args)\n            start = 0\n            end = None\n            step = 1\n            if args_len == 1:\n                end = node.args[0]  # arange(end)\n            elif args_len == 2:\n                start = node.args[0]\n                end = node.args[1]  # arange(start, end)\n            elif args_len >= 3:\n                start = node.args[0]\n                end = node.args[1]\n                step = node.args[2]  # arange(start, end, step)\n            # merge kwargs overrides (e.g. a user-specified kwargs['start'])\n            start = node.kwargs.get(\"start\", start)\n            end = node.kwargs.get(\"end\", end)\n            step = node.kwargs.get(\"step\", step)\n            # if end is None, treat it as unbounded and skip (rare, but safe)\n            if end is None:\n                continue\n            # Normalize start/end/step (symbolic allowed); elements always lie in\n            # [start, end), so downgrade is safe once both bounds provably fit int32; step must be a nonzero int.\n            r_start = resolve_size_arg(start)\n            r_end = resolve_size_arg(end)\n            r_step = resolve_size_arg(step)\n            if r_start is None or r_end is None or r_step is None:\n                continue\n            if not isinstance(r_step, int) or r_step == 0:\n                continue\n            if statically_fits_int32(r_start, r_end):\n                node.kwargs = {**node.kwargs, \"dtype\": torch.int32}\n                changed = True\n        if node.op == \"call_method\":\n            input_node = node.args[0]\n            input_fake = (\n                input_node.meta.get(\"example_value\", None)\n                if hasattr(input_node, \"meta\")\n                else None\n            )\n            input_dtype = input_fake.dtype if input_fake is not None else None\n            target_dtype = (\n                node.args[1] if len(node.args) > 1 else node.kwargs.get(\"dtype\", None)\n            )\n            if (\n                input_dtype in cast_dtype_limit\n                and node.target == \"to\"\n                and target_dtype == torch.int64\n            ):\n                if len(node.args) > 1:\n                    node.args = (node.args[0], torch.int32)  # update the positional dtype\n                else:\n                    node.kwargs = {\n                        **node.kwargs,\n                        \"dtype\": torch.int32,\n                    }  # update the kwargs dtype\n                changed = True\n    eliminate_dead_code(graph, changed, dtype_optimal_pass.__name__, False)",
+      "truncated": false
+    },
+    {
+      "repository": "pytorch_new",
+      "file": "torch_npu/_inductor/runtime/triton_heuristics.py",
+      "function": "_bench_with_launch_args",
+      "source_sha256": "0e8699ba39e535e4bf1e626486b5ff2819ab90eb2166e03380fbb21357da6383",
+      "first_line": 1292,
+      "last_line": 1311,
+      "excerpt": "    def _bench_with_launch_args(self, launcher, launch_args, reset_args, **kwargs):\n        device_interface = self.get_device_interface()\n        stream = device_interface.get_raw_stream(device_interface.current_device())\n\n        def kernel_call():\n            cloned_args, cloned_kwargs = self.clone_args(*launch_args, **kwargs)\n            self.reset_to_zero_args(*reset_args, **kwargs)\n            launcher(\n                *cloned_args,\n                **cloned_kwargs,\n                stream=stream,\n            )\n\n        if (\n            self.inductor_meta.get(\"profile_bandwidth_with_do_bench_using_profiling\", False)\n            and not npu_profiler_session_active()\n        ):\n            return do_bench_using_profiling_npu(kernel_call, rep=1)\n\n        return benchmarker.benchmark_gpu(kernel_call, rep=1, device_type='npu')",
+      "truncated": false
+    },
+    {
+      "repository": "pytorch_new",
+      "file": "torch_npu/_inductor/runtime/triton_heuristics.py",
+      "function": "_should_skip_autotune_for_determinism",
+      "source_sha256": "0e8699ba39e535e4bf1e626486b5ff2819ab90eb2166e03380fbb21357da6383",
+      "first_line": 1570,
+      "last_line": 1585,
+      "excerpt": "    def _should_skip_autotune_for_determinism(self):\n        \"\"\"\n        When deterministic algorithms are enabled, skip benchmarking for\n        reduction kernels and use the first successfully compiled config.\n        All configs are still compiled so that compilation failures on NPU\n        do not crash the program.\n        Pointwise kernels are unaffected because their tiling does not change\n        floating-point numerics.\n        \"\"\"\n        return (\n            self.inductor_meta.get(\"are_deterministic_algorithms_enabled\")\n            and self.heuristic_type in (\n                HeuristicType.REDUCTION,\n                HeuristicType.PERSISTENT_REDUCTION,\n            )\n        )",
+      "truncated": false
+    },
+    {
+      "repository": "pytorch_new",
+      "file": "torch_npu/_inductor/kernel/bmm.py",
+      "function": "tuned_bmm",
+      "source_sha256": "0dd1145c9c0f7abb4b8577caeb7dcedbd1adaea54ef5e1a3294d882197b2b732",
+      "first_line": 247,
+      "last_line": 342,
+      "excerpt": "    def tuned_bmm(mat1, mat2, *, layout=None):\n        if all(x.get_device().type == \"cpu\" for x in [mat1, mat2]):\n            # decompose to small ops when memory bound\n            if mat1.get_size()[1] == 1 or mat2.get_size()[2] == 1:\n                mat1 = L.unsqueeze(mat1, -1)\n                mat2 = L.unsqueeze(mat2, 1)\n                return L.sum_(L.mul(mat1, mat2), axis=2)\n\n            def is_valid_to_require_contiguous(t):\n                if not ir.is_storage_and_layout(t):\n                    return True\n                _, layout = ir.as_storage_and_layout(t, freeze=False)\n                return isinstance(layout, ir.FlexibleLayout)\n\n            def is_preferred_layout_as_bmm_input(sizes, strides):\n                # contiguous on one of the last two dims\n                return (\n                    strides[-1] == 1 and (sizes[-2] == 1 or strides[-2] >= sizes[-1])\n                ) or (strides[-2] == 1 and (sizes[-1] == 1 or strides[-1] >= sizes[-2]))\n\n            # Make the input of bmm contiguous\n            # if it is not contiguous on either of the last two dims,\n            # because bmm cpu implementation would do contiguous() if not.\n            # This is to avoid additional copies in bmm.\n            def may_require_contiguous(t, meta_t):\n                sizes = meta_t.meta[\"val\"].size()\n                strides = meta_t.meta[\"val\"].stride()\n                if not is_preferred_layout_as_bmm_input(sizes, strides):\n                    t = ir.ExternKernel.require_contiguous(t)\n                return t\n\n            if is_valid_to_require_contiguous(mat1):\n                meta_mat1 = V.graph.current_node.args[0]\n                mat1 = may_require_contiguous(mat1, meta_mat1)\n            if is_valid_to_require_contiguous(mat2):\n                meta_mat2 = V.graph.current_node.args[1]\n                mat2 = may_require_contiguous(mat2, meta_mat2)\n\n        m, n, k, layout, mat1, mat2 = mm_args(mat1, mat2, layout=layout)\n\n        # options to tune from\n        choices = (\n            [aten_bmm.bind((mat1, mat2), layout)] if use_aten_gemm_kernels() else []\n        )\n        static_shape, is_nonzero = _is_static_problem(layout)\n        batch_stride_largest_or_zero = is_batch_stride_largest_or_zero(mat1, mat2, layout)\n        is_contiguous_input = False\n        if batch_stride_largest_or_zero:\n            is_contiguous_input = (\n                is_contiguous_striding(mat1.get_size()[1:], mat1.get_stride()[1:])\n                and is_contiguous_striding(mat2.get_size()[1:], mat2.get_stride()[1:])\n            )\n        if (\n            is_contiguous_input\n            and static_shape\n            and is_nonzero\n            and use_catlass_template(\"bmm\", layout, m, n, k)\n        ):\n            from ..codegen.catlass.gemm_template import CATLASS1xGemmTemplate\n\n            CATLASS1xGemmTemplate.add_catlass_gemm_choices(\n                choices, layout, [mat1, mat2]\n            )\n\n        if use_cpp_bmm_template(layout, mat1, mat2):\n            from torch._inductor.codegen.cpp_bmm_template import CppBmmTemplate\n\n            CppBmmTemplate.add_choices(\n                choices,\n                layout,\n                [mat1, mat2],\n            )\n        if use_ck_template(layout):\n            CKGemmTemplate.add_ck_gemm_choices(choices, layout, [mat1, mat2])\n\n        # Add NPU Triton bmm template choices for CV (Compute/Vector) fusion.\n        # The bmm template handles the batch dimension via tl.program_id(1)\n        # and supports epilogue fusion via {{store_output}}.\n        if is_nonzero and use_triton_template(layout):\n            try:\n                add_npu_triton_bmm_choices(\n                    choices, layout, mat1, mat2, m, n, k\n                )\n                log.debug(\n                    \"NPU Triton CV fusion: added triton bmm template choices \"\n                    \"for bmm(%d, %d, %d), total choices now %d\",\n                    m,\n                    n,\n                    k,\n                    len(choices),\n                )\n            except Exception:\n                log.warning(\"Failed to add NPU triton bmm template choices\", exc_info=True)\n\n        if len(choices) == 0:\n            log.warning(\"No choices for GEMM, using ATen backend as fallback\")",
+      "truncated": true
+    },
+    {
+      "repository": "pytorch",
+      "file": "torch/_inductor/kernel/bmm.py",
+      "function": "tuned_bmm",
+      "source_sha256": "87fd9d816bdaf1252422f7690a1e4f7a7165331ebc065eecad10734dcb242f7d",
+      "first_line": 92,
+      "last_line": 187,
+      "excerpt": "def tuned_bmm(mat1, mat2, out_dtype=None, *, layout=None):\n    \"\"\"\n    Lowering for autotuning aten.bmm with different backends (Aten, Triton, CUTLASS, etc.)\n    \"\"\"\n    sizevars = V.graph.sizevars\n    dtype = mat1.get_dtype()\n    device_type = mat1.get_device().type\n\n    def dim_is_one_or_hint(dim):\n        # The mul+sum decomposition is valid for any M/N. The size-1 hint is\n        # only a profitability signal, so avoid specializing dynamic dims here.\n        return sizevars.optimization_hint(dim, fallback=2) == 1\n\n    def dim_is_not_known_gt(dim, threshold):\n        # Do not use optimization_hint() for K: the same symbolic FX graph can\n        # be code-cache reused across different concrete K values.\n        return not sizevars.statically_known_gt(dim, threshold)\n\n    if (\n        out_dtype is None\n        and device_type in (\"cuda\", \"xpu\")\n        and device_type == mat2.get_device().type\n        and dtype == mat2.get_dtype()\n        and dtype in _BMM_DOT_DECOMPOSE_DTYPES\n        and dim_is_one_or_hint(mat1.get_size()[1])\n        and dim_is_one_or_hint(mat2.get_size()[2])\n        and dim_is_not_known_gt(mat1.get_size()[2], _BMM_DOT_K_DECOMPOSE_THRESHOLD)\n    ):\n        # Preserve dot-shaped bmm as pointwise/reduction IR so surrounding\n        # operations can fuse instead of dispatching a tiny extern bmm.\n        mat1 = L.unsqueeze(mat1, -1)\n        mat2 = L.unsqueeze(mat2, 1)\n        return L.sum_(L.mul(mat1, mat2), axis=2)\n\n    if all(x.get_device().type == \"cpu\" for x in [mat1, mat2]):\n        # decompose to small ops when memory bound\n        if mat1.get_size()[1] == 1 or mat2.get_size()[2] == 1:\n            mat1 = L.unsqueeze(mat1, -1)\n            mat2 = L.unsqueeze(mat2, 1)\n            return L.sum_(L.mul(mat1, mat2), axis=2)\n\n        def is_valid_to_require_contiguous(t):\n            if not ir.is_storage_and_layout(t):\n                return True\n            _, layout = ir.as_storage_and_layout(t, freeze=False)\n            return isinstance(layout, ir.FlexibleLayout)\n\n        def is_preferred_layout_as_bmm_input(sizes, strides):\n            # contiguous on one of the last two dims\n            return (\n                strides[-1] == 1 and (sizes[-2] == 1 or strides[-2] >= sizes[-1])\n            ) or (strides[-2] == 1 and (sizes[-1] == 1 or strides[-1] >= sizes[-2]))\n\n        # Make the input of bmm contiguous\n        # if it is not contiguous on either of the last two dims,\n        # because bmm cpu implementation would do contiguous() if not.\n        # This is to avoid additional copies in bmm.\n        def may_require_contiguous(t, meta_t):\n            sizes = meta_t.meta[\"val\"].size()\n            strides = meta_t.meta[\"val\"].stride()\n            if not is_preferred_layout_as_bmm_input(sizes, strides):\n                t = ir.ExternKernel.require_contiguous(t)\n            return t\n\n        if is_valid_to_require_contiguous(mat1):\n            meta_mat1 = V.graph.current_node.args[0]\n            mat1 = may_require_contiguous(mat1, meta_mat1)\n        if is_valid_to_require_contiguous(mat2):\n            meta_mat2 = V.graph.current_node.args[1]\n            mat2 = may_require_contiguous(mat2, meta_mat2)\n\n    if use_native_matmul(mat1, mat2):\n        mat1 = lowerings[aten.unsqueeze](mat1, -1)\n        mat2 = lowerings[aten.unsqueeze](mat2, 1)\n        args, kwargs = transform_args(\n            args=[mat1, mat2],\n            kwargs={},\n            broadcast=True,\n            type_promotion_kind=None,\n            convert_input_to_bool=False,\n        )  # Handles broadcasting the arguments\n\n        if inductor_config.triton.codegen_upcast_to_fp32 and mat1.dtype in [\n            torch.float16,\n            torch.bfloat16,\n        ]:\n\n            def _to_dtype(x):\n                return ops.to_dtype(x, mat1.dtype, use_compute_types=False)\n\n            args = [make_pointwise(_to_dtype)(x) for x in args]\n\n        mul_pointwise = make_pointwise(ops.dot)(*args)\n        dot_reduction = make_reduction(\"dot\")(mul_pointwise, 2)\n\n        return dot_reduction",
+      "truncated": true
+    },
+    {
+      "repository": "pytorch",
+      "file": "torch/_inductor/lowering.py",
+      "function": "force_fallback",
+      "source_sha256": "d969efbd0db1bde6a7f6c0b58a8549de1654c97df56b772b41d08d11f8a563fe",
+      "first_line": 9129,
+      "last_line": 9145,
+      "excerpt": "def force_fallback(op: torch._ops.OpOverload):\n    \"\"\"\n    A context manager to force fallback an op. Used in unit test\n    for FallbackKernel.\n    \"\"\"\n    assert isinstance(op, torch._ops.OpOverload), (\n        \"Only OpOverload to make the clean up easier\"\n    )\n    old_handler = lowerings.get(op)\n    try:\n        register_lowering(op)(fallback_handler(op))\n        yield\n    finally:\n        if old_handler:\n            lowerings[op] = old_handler\n        else:\n            lowerings.pop(op)",
+      "truncated": false
+    },
+    {
+      "repository": "pytorch",
+      "file": "torch/_inductor/lookup_table/choices.py",
+      "function": "_get_device_key",
+      "source_sha256": "854e2ab71b850a451fb1064873bba4ff1ff89585462fa4838d373e2bb11bbe7f",
+      "first_line": 43,
+      "last_line": 56,
+      "excerpt": "    def _get_device_key(device: torch.device) -> str | None:\n        \"\"\"\n        Generate a device key for lookup table indexing.\n        For CPU devices, returns None.\n        For CUDA devices, returns the props.gcnArchName string.\n        \"\"\"\n        if device.type != \"cuda\":\n            # only cuda devices are supported, this indicates that the system is not in use\n            # for this device\n            return None\n\n        # Get CUDA device properties\n        props = torch.cuda.get_device_properties(device.index)\n        return props.gcnArchName",
+      "truncated": false
+    },
+    {
+      "repository": "pytorch",
+      "file": "torch/_inductor/utils.py",
+      "function": "get_device_tflops",
+      "source_sha256": "c1aedd001340ec0410c251a3bb7176d96085b04fbd25f58d740bd642c73d4537",
+      "first_line": 3134,
+      "last_line": 3180,
+      "excerpt": "def get_device_tflops(dtype: torch.dtype) -> float:\n    \"\"\"\n    We don't want to throw errors in this function. First check to see if the device is in device_info.py,\n    then fall back to the inaccurate triton estimation.\n    \"\"\"\n    ds_tops = datasheet_tops(\n        dtype, is_tf32=torch.backends.cuda.matmul.fp32_precision == \"tf32\"\n    )\n    if ds_tops is not None:\n        return ds_tops\n\n    if not torch.cuda.is_available():\n        log.warning(\n            \"get_device_tflops: no Triton fallback available for non-CUDA devices. \"\n            \"Returning 0.0; roofline estimates will use memory bandwidth only.\"\n        )\n        return 0.0\n\n    from triton.testing import get_max_simd_tflops, get_max_tensorcore_tflops\n\n    SM80OrLater = torch.cuda.is_available() and torch.cuda.get_device_capability() >= (\n        8,\n        0,\n    )\n\n    assert dtype in (torch.float16, torch.bfloat16, torch.float32)\n\n    if inspect.signature(get_max_simd_tflops).parameters.get(\"clock_rate\"):\n        # Triton API change in https://github.com/triton-lang/triton/pull/2293\n        from torch._utils_internal import max_clock_rate\n\n        sm_clock = max_clock_rate()\n        if dtype in (torch.float16, torch.bfloat16) and SM80OrLater:\n            return get_max_tensorcore_tflops(dtype, sm_clock)\n\n        if torch.backends.cuda.matmul.fp32_precision == \"tf32\":\n            return get_max_tensorcore_tflops(torch.float32, sm_clock)\n        else:\n            return get_max_simd_tflops(torch.float32, sm_clock)\n    else:\n        if dtype in (torch.float16, torch.bfloat16) and SM80OrLater:\n            return get_max_tensorcore_tflops(dtype)\n\n        if torch.backends.cuda.matmul.fp32_precision == \"tf32\":\n            return get_max_tensorcore_tflops(torch.float32)\n        else:\n            return get_max_simd_tflops(torch.float32)",
+      "truncated": false
+    },
+    {
+      "repository": "op-plugin",
+      "file": "op_plugin/python/meta/_meta_registrations.py",
+      "function": "convolution_meta",
+      "source_sha256": "9c10926b4314bad33b90300c5b25456555aa6ca16810124f17751a96588428ba",
+      "first_line": 6739,
+      "last_line": 6761,
+      "excerpt": "def convolution_meta(input_tensor, weight, bias, stride, padding, dilation, transposeds,\n                    output_padding, groups, benchmark, deterministic, cudnn_enabled, *args):\n\n    batch_size, in_channels = input_tensor.shape[0], input_tensor.shape[1]\n    out_channels = weight.shape[0]\n    if isinstance(stride, (tuple, list)):\n        stride_h, stride_w = stride\n    else:\n        stride_h = stride_w = stride\n    if isinstance(padding, (tuple, list)):\n        pad_h, pad_w = padding\n    else:\n        pad_h = pad_w = padding\n    if isinstance(dilation, (tuple, list)):\n        dilation_h, dilation_w = dilation\n    else:\n        dilation_h = dilation_w = dilation\n    kernel_h, kernel_w = weight.shape[2], weight.shape[3]\n    input_h, input_w = input_tensor.shape[2], input_tensor.shape[3]\n    output_h = (input_h + 2 * pad_h - dilation_h * (kernel_h - 1) - 1) // stride_h + 1\n    output_w = (input_w + 2 * pad_w - dilation_w * (kernel_w - 1) - 1) // stride_w + 1\n    output_shape = (batch_size, out_channels, output_h, output_w)\n    return torch.empty(output_shape, dtype=input_tensor.dtype, device='meta')",
+      "truncated": false
+    },
+    {
+      "repository": "op-plugin",
+      "file": "op_plugin/python/meta/_meta_registrations.py",
+      "function": "npu_gather_backward__meta",
+      "source_sha256": "9c10926b4314bad33b90300c5b25456555aa6ca16810124f17751a96588428ba",
+      "first_line": 5876,
+      "last_line": 5920,
+      "excerpt": "def npu_gather_backward__meta(grad, self_size, dim, index, sparse_grad):\n    if sparse_grad:\n        self_dim = len(self_size)\n        if self_dim == 0:\n            return torch.sparse_coo_tensor(\n                torch.empty((0, grad.numel()), dtype=index.dtype, device=grad.device),\n                grad,\n                self_size,\n                device=grad.device,\n            )\n        if grad.dim() == 0:\n            return torch.sparse_coo_tensor(\n                index.view(1, 1),\n                grad,\n                self_size,\n                device=grad.device,\n            )\n\n        sparse_ind = torch.empty((self_dim, grad.numel()), dtype=torch.long, device=grad.device)\n        grad_numel = grad.numel()\n        if grad_numel > 0:\n            n_above = grad_numel\n            n_below = 1\n            if dim < 0:\n                dim += self_dim\n            for i in range(self_dim):\n                n_above //= grad.size(i)\n                if i == dim:\n                    sparse_ind[i] = index.reshape(-1)\n                else:\n                    sparse_ind[i] = (\n                        torch.arange(grad.size(i), dtype=torch.long, device=grad.device)\n                        .unsqueeze(1)\n                        .expand(grad.size(i), n_above)\n                        .reshape(-1)\n                        .repeat(n_below)\n                    )\n                n_below *= grad.size(i)\n        return torch.sparse_coo_tensor(\n            sparse_ind,\n            grad.reshape(-1),\n            self_size,\n            device=grad.device,\n        )\n    return torch.empty(self_size, dtype=grad.dtype, device=grad.device)",
+      "truncated": false
+    },
+    {
+      "repository": "triton-ascend",
+      "file": "third_party/ascend/backend/compiler.py",
+      "function": "get_module_map",
+      "source_sha256": "e935610ea5efc36ab7ca3c9b86ac01e47991896835276e6b297f414c59ca4c3b",
+      "first_line": 1403,
+      "last_line": 1404,
+      "excerpt": "    def get_module_map(self) -> Dict[str, ModuleType]:\n        return {}",
+      "truncated": false
+    }
+  ]
+}

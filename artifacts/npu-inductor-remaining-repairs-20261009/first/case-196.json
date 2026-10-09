@@ -1,0 +1,99 @@
+{
+  "requested": [
+    "test_torchinductor.py::test_linear_mixed_dtype"
+  ],
+  "environment": {
+    "transfer_sha256": "49a970650f02ffdb71ceff01d0f681ea88eb5f70af1f5eff01ea55cced9acf3a",
+    "transfer_pr_head": "16437be0ffc9d67c8b27855a234243e35385c58b",
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "1",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0+git5fd5ddf",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "all",
+    "device_count": 8,
+    "default_device": 1,
+    "compile_threads": 4,
+    "npu_precompile_threads": 4,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_torchinductor.py": "e1ce872565818de85cf4b99c831768c4dc261bc15baabe770ec10d7174939e45"
+    }
+  },
+  "selected": [
+    "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu"
+  ],
+  "resolved_nodeids": {
+    "test_torchinductor.py::test_linear_mixed_dtype": [
+      "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0005233450792729855,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 0.7022674079053104,
+      "longrepr": "torch._dynamo.exc.BackendCompilerFailed: backend='inductor' raised:\nRuntimeError: expected scalar type torch.int64 but found torch.float32\n\nWhile executing %x : [num_users=1] = call_function[target=torch._C._nn.linear](args = (%permute, %l_self_modules_fc1_parameters_weight_, %l_self_modules_fc1_parameters_bias_), kwargs = {})\nOriginal traceback:\n  File \"<pytorch>/test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py\", line 4846, in forward\n    x = self.fc1(x.permute(1, 2, 0))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nUse tlparse to see full graph. (https://github.com/pytorch/tlparse?tab=readme-ov-file#tlparse-parse-structured-pt2-logs)\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n\n\nDuring handling of the above exception, another exception occurred:\n\nself = <inductor.test_torchinductor.GPUTests testMethod=test_linear_mixed_dtype_npu>\n\n    @xfail_if_mps_unimplemented  # linear for non-float inputs\n    def test_linear_mixed_dtype(self):\n        class Net(nn.Module):\n            def __init__(self) -> None:\n                super(Net, self).__init__()  # noqa: UP008\n                self.fc1 = nn.Linear(3, 3)\n    \n            def forward(self, x):\n                x = self.fc1(x.permute(1, 2, 0))\n                return x\n    \n        fn = Net().to(self.device)\n        t = torch.arange(27, device=self.device).view(3, 3, 3)\n    \n        msg = \"expected .* and .* to have the same dtype, but got: .* != .*\"\n        if torch.device(self.device).type == \"npu\":\n            msg = r\"Tensor matA not implemented for DT_INT64\"\n        with self.assertRaisesRegex(RuntimeError, msg):\n            fn(t)\n        if config.cpp_wrapper:\n            msg = \"aoti_torch_.* API call failed at .*\"\n>       with self.assertRaisesRegex(RuntimeError, msg):\nE       AssertionError: \"Tensor matA not implemented for DT_INT64\" does not match \"backend='inductor' raised:\nE       RuntimeError: expected scalar type torch.int64 but found torch.float32\nE       \nE       While executing %x : [num_users=1] = call_function[target=torch._C._nn.linear](args = (%permute, %l_self_modules_fc1_parameters_weight_, %l_self_modules_fc1_parameters_bias_), kwargs = {})\nE       Original traceback:\nE         File \"<pytorch>/test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py\", line 4846, in forward\nE           x = self.fc1(x.permute(1, 2, 0))\nE               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE       \nE       Use tlparse to see full graph. (https://github.com/pytorch/tlparse?tab=readme-ov-file#tlparse-parse-structured-pt2-logs)\nE       \nE       Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\nE       \"\nE       \nE       To execute this test, run the following from the base repo dir:\nE           PYTORCH_TEST_WITH_SLOW=1 python test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py GPUTests.test_linear_mixed_dtype_npu\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\ntest_torchinductor.py:4859: AssertionError",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.00024520792067050934,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_torchinductor.py::test_linear_mixed_dtype": {
+      "scope": "npu",
+      "source_method": "test_linear_mixed_dtype",
+      "candidates": [
+        {
+          "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::CpuTests::test_linear_mixed_dtype_cpu",
+          "device": "cpu"
+        },
+        {
+          "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu",
+          "device": "npu"
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_torchinductor.py::test_linear_mixed_dtype": {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu",
+      "nodeids": [
+        "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_torchinductor.py::GPUTests::test_linear_mixed_dtype_npu"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

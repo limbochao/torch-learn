@@ -1,0 +1,100 @@
+{
+  "requested": [
+    "test_inplace_padding.py::test_pad_non_zero"
+  ],
+  "environment": {
+    "transfer_sha256": "49a970650f02ffdb71ceff01d0f681ea88eb5f70af1f5eff01ea55cced9acf3a",
+    "transfer_pr_head": "16437be0ffc9d67c8b27855a234243e35385c58b",
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "1",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0+git5fd5ddf",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "all",
+    "device_count": 8,
+    "default_device": 2,
+    "compile_threads": 4,
+    "npu_precompile_threads": 4,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_inplace_padding.py": "114f8814bd7e845063a40a5cfe70153b8da7f2d6d2d8bdc1e2896753856bd873"
+    }
+  },
+  "selected": [
+    "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero"
+  ],
+  "resolved_nodeids": {
+    "test_inplace_padding.py::test_pad_non_zero": [
+      "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0004344610497355461,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 37.99399058800191,
+      "longrepr": "self = <inductor.test_inplace_padding.InplacePaddingTest testMethod=test_pad_non_zero>\n\n    def test_pad_non_zero(self):\n        def f(x):\n            x = x + 1\n            x = aten.constant_pad_nd(x, (0, 1, 0, 0), 12345.0)\n    \n            return x @ x\n    \n        # 'odd' shape on purpose to pad intermediate buffer's strides\n        x = torch.randn(2048, 2047, device=GPU_TYPE)\n    \n        ref = f(x)\n        act, (code,) = run_and_get_code(torch.compile(f), x)\n    \n        # When we allocate the 2048x2047 tensor for the output of 'x + 1'\n        # Instead of doing\n        #   empty_strided_cuda((2048, 2047), (2048, 1), torch.float32)\n        # (note the stride is already padded)\n        # We do\n        #   empty_strided_cuda((2048, 2048), (2048, 1), torch.float32).\n        #     as_strided((2048, 2047), (2048, 1))\n        # . This will allocate an extra item for the last row so that\n        # inplace padding would be safe without accessing out of bound\n        # memory.\n        FileCheck().check_regex(\n            r\"empty_strided.*\\(\\(2048, 2048\\), \\(2048, 1\\), torch.float32\\).\"\n            r\"as_strided\\(\\(2048, 2047\\), \\(2048, 1\\)\\)\"\n>       ).run(code)\nE       RuntimeError: Expected to find regex \"empty_strided.*\\\\(\\\\(2048, 2048\\\\), \\\\(2048, 1\\\\), torch.float32\\\\).as_strided\\\\(\\\\(2048, 2047\\\\), \\\\(2048, 1\\\\)\\\\)\" but did not find it\nE       Searched string:\nE       From CHECK-REGEX: empty_strided.*\\(\\(2048, 2048\\), \\(2048, 1\\), torch.float32\\).as_strided\\(\\(2048, 2047\\), \\(2048, 1\\)\\)\nE       \nE       \nE       To execute this test, run the following from the base repo dir:\nE           PYTORCH_TEST_WITH_SLOW=1 python test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py InplacePaddingTest.test_pad_non_zero\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\ntest_inplace_padding.py:109: RuntimeError",
+      "wasxfail": null,
+      "sections": [
+        [
+          "Captured stderr call",
+          "<site-packages>/triton/backends/ascend/compiler.py:1547: FutureWarning: Ascend compile option 'enable_vf_fusion' is deprecated and will be removed in a future release; it is ignored; this switch is no longer forwarded to the NPU compiler.\n  normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)\n"
+        ]
+      ]
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.00015007494948804379,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_inplace_padding.py::test_pad_non_zero": {
+      "scope": "host_or_explicit_device",
+      "source_method": "test_pad_non_zero",
+      "candidates": [
+        {
+          "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+          "device": null
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_inplace_padding.py::test_pad_non_zero": {
+      "nodeid": "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "nodeids": [
+        "test/inductor/npu_inductor_repairs_20261009/test/inductor/test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

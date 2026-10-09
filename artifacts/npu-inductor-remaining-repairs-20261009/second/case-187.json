@@ -1,0 +1,108 @@
+{
+  "requested": [
+    "test_torchinductor.py::test_vmap_dot_decomposes_bmm"
+  ],
+  "environment": {
+    "transfer_sha256": "49a970650f02ffdb71ceff01d0f681ea88eb5f70af1f5eff01ea55cced9acf3a",
+    "transfer_pr_head": "16437be0ffc9d67c8b27855a234243e35385c58b",
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "1",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0+git5fd5ddf",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "all",
+    "device_count": 8,
+    "default_device": 2,
+    "compile_threads": 4,
+    "npu_precompile_threads": 4,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_torchinductor.py": "cb4df1de8c7a4581883a080f44338b8fa7e3b2d932c7238ee24760b08d43457d"
+    }
+  },
+  "selected": [
+    "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu"
+  ],
+  "resolved_nodeids": {
+    "test_torchinductor.py::test_vmap_dot_decomposes_bmm": [
+      "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0004986869171261787,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 91.61134327901527,
+      "longrepr": "self = <inductor.test_torchinductor.GPUTests testMethod=test_vmap_dot_decomposes_bmm_npu>\n\n    @skip_if_cpu\n    @skip_if_not_triton\n    def test_vmap_dot_decomposes_bmm(self):\n        def dot_based(a, b):\n            return torch.dot(a, b) + torch.dot(a, b)\n    \n        fn = torch.vmap(dot_based)\n        bmm_codegen_call = (\n            \"aoti_torch_cuda_bmm_out\" if config.cpp_wrapper else \"extern_kernels.bmm\"\n        )\n        bmm_fallback_call = (\n            'aoti_torch_call_dispatcher(\"aten::bmm\"'\n            if config.cpp_wrapper\n            else \"torch.ops.aten.bmm.default(\"\n        )\n        for dtype in (\n            torch.float16,\n            torch.bfloat16,\n            torch.float32,\n            torch.float64,\n        ):\n            if not self.is_dtype_supported(dtype):\n                continue\n            for k in (3, 32):\n                with self.subTest(dtype=dtype, k=k):\n                    a = torch.randn(64, k, device=self.device, dtype=dtype)\n                    b = torch.randn(64, k, device=self.device, dtype=dtype)\n    \n>                   expected = fn(a, b)\n\ntest_torchinductor.py:4661: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nargs = (tensor([[ 1.2032, -1.1856, -2.5969],\n        [-0.1796, -0.2839, -1.5395],\n        [-0.6110, -0.1830, -0.4098],\n      ...1862],\n        [-0.0271,  1.6139, -0.4546],\n        [-0.1212, -2.1711, -0.4317]], device='npu:2', dtype=torch.float64))\nkwargs = {}\n\n    def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _R:\n        # pyrefly: ignore[bad-argument-type]\n>       return vmap_impl(\n            # pyrefly: ignore[bad-argument-type]\n            func,\n            in_dims,\n            out_dims,\n            randomness,\n            chunk_size,\n            *args,\n            **kwargs,\n        )\n\n<site-packages>/torch/_functorch/apis.py:246: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nfunc = <function CommonTemplate.test_vmap_dot_decomposes_bmm.<locals>.dot_based at <address>>\nin_dims = 0, out_dims = 0, randomness = 'error', chunk_size = None\nargs = (tensor([[ 1.2032, -1.1856, -2.5969],\n        [-0.1796, -0.2839, -1.5395],\n        [-0.6110, -0.1830, -0.4098],\n      ...1862],\n        [-0.0271,  1.6139, -0.4546],\n        [-0.1212, -2.1711, -0.4317]], device='npu:2', dtype=torch.float64))\nkwargs = {}, batch_size = 64, flat_in_dims = [0, 0]\nflat_args = [tensor([[ 1.2032, -1.1856, -2.5969],\n        [-0.1796, -0.2839, -1.5395],\n        [-0.6110, -0.1830, -0.4098],\n      ...1862],\n        [-0.0271,  1.6139, -0.4546],\n        [-0.1212, -2.1711, -0.4317]], device='npu:2', dtype=torch.float64)]\nargs_spec = TreeSpec(tuple, None, [*,\n  *])\n\n    def vmap_impl(\n        func: Callable[_P, Tensor | tuple[Tensor, ...]],\n        in_dims: in_dims_t,\n        out_dims: out_dims_t,\n        randomness: str,\n        chunk_size: int | None,\n        *args: _P.args,\n        **kwargs: _P.kwargs,\n    ) -> Any:\n        lazy_load_decompositions()\n        _check_out_dims_is_int_or_int_pytree(out_dims, func)\n        batch_size, flat_in_dims, flat_args, args_spec = _process_batched_inputs(\n            in_dims, args, func\n        )\n    \n        if chunk_size is not None:\n            chunks_flat_args = _get_chunked_inputs(\n                flat_args, flat_in_dims, batch_size, chunk_size\n            )\n            return _chunked_vmap(\n                func,\n                flat_in_dims,\n                chunks_flat_args,\n                args_spec,\n                out_dims,\n                randomness,\n                **kwargs,\n            )\n    \n        # If chunk_size is not specified.\n>       return _flat_vmap(\n            func,\n            batch_size,\n            flat_in_dims,\n            flat_args,\n            args_spec,\n            out_dims,\n            randomness,\n            **kwargs,\n        )\n\n<site-packages>/torch/_functorch/vmap.py:316: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nfunc = <function CommonTemplate.test_vmap_dot_decomposes_bmm.<locals>.dot_based at <address>>\nbatch_size = 64, flat_in_dims = [0, 0]\nflat_args = [tensor([[ 1.2032, -1.1856, -2.5969],\n        [-0.1796, -0.2839, -1.5395],\n        [-0.6110, -0.1830, -0.4098],\n      ...1862],\n        [-0.0271,  1.6139, -0.4546],\n        [-0.1212, -2.1711, -0.4317]], device='npu:2', dtype=torch.float64)]\nargs_spec = TreeSpec(tuple, None, [*,\n  *]), out_dims = 0, randomness = 'error'\nkwargs = {}, vmap_level = 1\nbatched_inputs = (BatchedTensor(lvl=1, bdim=0, value=\n    tensor([[ 1.2032, -1.1856, -2.5969],\n            [-0.1796, -0.2839, -1.5395],...         [-0.0271,  1.6139, -0.4546],\n            [-0.1212, -2.1711, -0.4317]], device='npu:2', dtype=torch.float64)\n))\n\n    def _flat_vmap(\n        func: Callable[..., Tensor | tuple[Tensor, ...]],\n        batch_size: int,\n        flat_in_dims: list[int | None],\n        flat_args: list[Any],\n        args_spec: TreeSpec,\n        out_dims: out_dims_t,\n        randomness: str,\n        **kwargs: Any,\n    ) -> Any:\n        with vmap_increment_nesting(batch_size, randomness) as vmap_level:\n            batched_inputs = _create_batched_inputs(\n                flat_in_dims, flat_args, vmap_level, args_spec\n            )\n>           batched_outputs = func(*batched_inputs, **kwargs)\n\n<site-packages>/torch/_functorch/vmap.py:507: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\na = BatchedTensor(lvl=1, bdim=0, value=\n    tensor([[ 1.2032, -1.1856, -2.5969],\n            [-0.1796, -0.2839, -1.5395],\n...          [-0.2013,  0.4962, -0.1825],\n            [ 0.2624, -0.6117, -0.5688]], device='npu:2', dtype=torch.float64)\n)\nb = BatchedTensor(lvl=1, bdim=0, value=\n    tensor([[ 0.0408,  0.5465, -0.4769],\n            [ 0.8275,  0.0149,  1.8014],\n...          [-0.0271,  1.6139, -0.4546],\n            [-0.1212, -2.1711, -0.4317]], device='npu:2', dtype=torch.float64)\n)\n\n    def dot_based(a, b):\n>       return torch.dot(a, b) + torch.dot(a, b)\nE       RuntimeError: matmul_implement_npu:third_party/op-plugin/op_plugin/ops/opapi/MatmulKernelNpuOpApi.cpp:94 NPU function error: call aclnnMatmul failed, error code is 507899\nE       [ERROR] 2026-10-09-23:03:44 (PID:<redacted>, Device:2, RankID:-1) ERR00100 PTA call acl api failed\nE       [Error]: An internal error occurs in the Driver module. \nE               Rectify the fault based on the error information in the ascend log.\nE       [PID:<redacted>] 2026-10-09-23:03:44.187.417 AclNN_Parameter_Error(EZ1001): Tensor matA not implemented for DT_DOUBLE, should be in dtype support list [DT_FLOAT,DT_FLOAT16,DT_BFLOAT16,].\nE       TraceBack (most recent call last):\nE               rtsDeviceGetInfo execution failed, reason=driver error:internal error[FUNC:FuncErrorReason][FILE:error_message_manage.cc][LINE:69]\nE               Tensor matA not implemented for DT_DOUBLE, should be in dtype support list [DT_FLOAT,DT_FLOAT16,DT_BFLOAT16,].\nE               Unsupported data types for Cube\nE       \nE       \nE       To execute this test, run the following from the base repo dir:\nE           PYTORCH_TEST_WITH_SLOW=1 python test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py GPUTests.test_vmap_dot_decomposes_bmm_npu\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\ntest_torchinductor.py:4637: RuntimeError",
+      "wasxfail": null,
+      "sections": [
+        [
+          "Captured stderr call",
+          "<site-packages>/triton/backends/ascend/compiler.py:1547: FutureWarning: Ascend compile option 'enable_vf_fusion' is deprecated and will be removed in a future release; it is ignored; this switch is no longer forwarded to the NPU compiler.\n  normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)\n"
+        ],
+        [
+          "Captured log call",
+          "WARNING  torch_npu._inductor.config:split_tiling.py:1007 [3*x0, 3*x0 + 1, 3*x0 + 2, x0] low_dims is null, {0}, {0}\nWARNING  torch_npu._inductor.config:split_tiling.py:1007 [3*x0, 3*x0 + 1, 3*x0 + 2, x0] low_dims is null, {0}, {0}\nWARNING  torch_npu._inductor.config:split_tiling.py:1007 [3*x0, 3*x0 + 1, 3*x0 + 2, x0] low_dims is null, {0}, {0}"
+        ]
+      ]
+    },
+    {
+      "nodeid": "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.000289273913949728,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_torchinductor.py::test_vmap_dot_decomposes_bmm": {
+      "scope": "npu",
+      "source_method": "test_vmap_dot_decomposes_bmm",
+      "candidates": [
+        {
+          "nodeid": "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::CpuTests::test_vmap_dot_decomposes_bmm_cpu",
+          "device": "cpu"
+        },
+        {
+          "nodeid": "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu",
+          "device": "npu"
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_torchinductor.py::test_vmap_dot_decomposes_bmm": {
+      "nodeid": "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu",
+      "nodeids": [
+        "test/inductor/npu_inductor_repairs_v3_20261009/test/inductor/test_torchinductor.py::GPUTests::test_vmap_dot_decomposes_bmm_npu"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

@@ -5,7 +5,6 @@ import csv
 import hashlib
 import json
 from pathlib import Path
-import re
 import shutil
 
 from summarize_batches import node_status, write_csv
@@ -52,6 +51,8 @@ def archive_round(raw, name, out):
         if change.get('prerequisite'):
             change['patch'] = '../../' + PREVIOUS + '/restore-driver.patch'
             continue
+        if change['file'] == 'torch_npu/_inductor/kernel/bmm.py':
+            change['disposition'] = 'withdrawn: dynamic K graph reuse accuracy regression; see ../bmm-withdrawal.json'
         source = raw / change['patch']
         destination = target / change['patch']
         destination.parent.mkdir(exist_ok=True)
@@ -65,24 +66,38 @@ def archive_round(raw, name, out):
         filename = f'case-{index}.json'
         data = json.loads((raw / name / filename).read_text())
         invocation = json.loads((raw / name / f'case-{index}-invocation.json').read_text())
-        assert data.get('summary') and not data.get('collection_errors'), (name, index)
-        assert not invocation.get('timeout'), (name, index)
+        timed_out = invocation.get('timeout', False)
+        stop_path = raw / name / f'case-{index}-stop.json'
+        stopped = stop_path.exists()
+        incomplete = timed_out or stopped
+        assert (data.get('summary') or incomplete) and not data.get('collection_errors'), (name, index)
         assert data['environment']['transfer_sha256'] == DRIVER_HASH
         nodes = data['selected']
         counts = Counter(node_status([r for r in data['reports'] if r['nodeid'] == node]) for node in nodes)
-        assert nodes and not counts['no_call'] and not counts['xpass'], (name, index, counts)
+        assert nodes and not counts['xpass'], (name, index, counts)
+        assert not counts['no_call'] or incomplete, (name, index, counts)
         hashes = data['environment']['test_sha256']
         for change in changes:
             if change['domain'] == 'test' and change['file'] in hashes:
                 assert hashes[change['file']] == change['after_sha256'], (name, index, change['file'])
         state = '失败' if counts['failed'] else ('跳过' if counts['skipped'] else (
             '含预期失败' if counts['xfail'] else '通过'))
+        if timed_out:
+            state = '超时/未完成'
+        if stopped:
+            state = '中止/未完成'
         errors = [r['longrepr'] for r in data['reports'] if r['outcome'] == 'failed']
         evidence = name + '/' + filename
         save_json(out / evidence, data)
         save_json(target / f'case-{index}-invocation.json', invocation)
         results[index] = {'state': state, 'counts': dict(counts), 'errors': error_tail(errors),
                           'evidence': evidence, 'changes': name + '/changes.json'}
+        if timed_out:
+            results[index]['errors'] = f"完整方法超过 {invocation['timeout_seconds']} 秒，未完成全部断言。"
+        if stopped:
+            stop = json.loads(stop_path.read_text())
+            save_json(target / stop_path.name, stop)
+            results[index]['errors'] = f"运行 {stop['elapsed_seconds']} 秒后主动中止；{stop['reason']}"
     return results
 
 
@@ -109,6 +124,10 @@ def main():
         result = latest.get(index)
         assessment = review.get(str(index), {})
         state = result['state'] if result else row['补丁状态']
+        correction = assessment.get('累计状态覆盖')
+        if correction:
+            assert assessment.get('覆盖依据') and (out / assessment['覆盖依据']).exists(), index
+            state = correction
         row.update({
             '首轮修复结果': first.get(index, {}).get('state', '未另行复测'),
             '第二轮修复结果': second.get(index, {}).get('state', '未另行复测'),
@@ -125,9 +144,12 @@ def main():
             '方案及验收': assessment.get('方案及验收', ''),
             '风险或不修原因': assessment.get('风险或不修原因', ''),
             '当前阻塞证据': assessment.get('当前阻塞证据', ''),
+            '结果采用说明': assessment.get('结果采用说明', '采用本轮完整方法结果；未复测项沿用此前记录。'),
             '本轮通过对应修改': '',
         })
-        if result and state == '通过':
+        if correction:
+            row['本轮通过对应修改'] = assessment['结果采用说明']
+        elif result and state == '通过':
             description = PASS_CHANGES.get(index)
             if description is None and old['补丁状态'] == '跳过':
                 description = old['适配测试修改'] + '；本轮相同适配下复测保持通过。'
@@ -155,7 +177,13 @@ def main():
         'unique_retested_rows': len(latest),
         'retested_remaining_rows': sum(int(n) in latest for n in required),
         'newly_passed_rows': [r['序号'] for r in triage if r['累计最新结果'] == '通过'],
+        'previous_adapted_passes_reconfirmed': [r['序号'] for r in triage
+                                               if r['累计最新结果'] == '通过' and r['适配复测结果'] == '通过'],
+        'additional_passes_vs_prior_adaptation': [r['序号'] for r in triage
+                                                 if r['累计最新结果'] == '通过' and r['适配复测结果'] != '通过'],
         'regression_rows': regressions,
+        'incomplete_rows': [str(n) for n, result in latest.items() if result['state'].endswith('/未完成')],
+        'withdrawn_candidate_rows': [r['序号'] for r in triage if review[r['序号']].get('累计状态覆盖')],
         'latest_retest_instances': dict(sum((Counter(r['counts']) for r in latest.values()), Counter())),
         'test_scope': '累计结果合并本轮测试适配/Inductor 候选与此前结果；不是 247 项在单一配置下全量重跑。',
         'shared_prerequisite': '完整 PR #47384 16437be0 + 恢复 Ascend driver/helper；capability=8.0 为测试兼容值。',
@@ -163,8 +191,10 @@ def main():
     save_json(out / 'progress.json', summary)
     save_json(out / 'validation.json', {
         'review_rows_complete': True, 'original_row_order_preserved': True,
-        'all_selected_nodes_completed': True, 'test_hashes_match_manifests': True,
+        'all_selected_nodes_completed': not summary['incomplete_rows'],
+        'incomplete_rows': summary['incomplete_rows'], 'test_hashes_match_manifests': True,
         'driver_hash_verified': True, 'no_regression_in_retested_prior_passes': True,
+        'supplemental_bmm_accuracy_regression_found': True, 'bmm_candidate_retained': False,
         'result_csv_sha256': hashlib.sha256((out / 'results.csv').read_bytes()).hexdigest(),
     })
     print(json.dumps(summary, ensure_ascii=False, indent=2))
