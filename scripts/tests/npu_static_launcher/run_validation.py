@@ -34,12 +34,17 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    # Test imports load torch_npu._inductor before per-compile options are applied.
+    os.environ.setdefault("TORCHINDUCTOR_NPU_BACKEND", "triton_experimental")
     import pytest
     import torch
     import torch_npu
     import triton
 
     torch.npu.set_device(args.device)
+    # Initialize the shared driver utility in the persistent outer cache, before
+    # test fixtures create and remove their individual Triton cache directories.
+    target = triton.runtime.driver.active.get_current_target()
     binding = getattr(torch_npu._C, "_StaticNpuLauncher", None)
     metadata = {
         "python": sys.executable,
@@ -50,6 +55,8 @@ def main():
         "triton": triton.__version__,
         "device_index": args.device,
         "device_name": torch.npu.get_device_name(args.device),
+        "startup_backend": os.environ["TORCHINDUCTOR_NPU_BACKEND"],
+        "triton_target": str(target),
         "binding_present": binding is not None,
         "binding_supported": binding._is_supported() if binding is not None else False,
         "suite": str(args.suite),
