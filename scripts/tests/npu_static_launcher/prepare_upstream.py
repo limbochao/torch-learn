@@ -61,19 +61,22 @@ def _observe_static_test(method):
             mock.patch.object(NPUStaticallyLaunchedTritonKernel, "run",
                               autospec=True, side_effect=run) as launched,
         ):
-            method(self)
-            if method.__name__ not in ("test_disable_static_triton_launcher", "test_incompatible_code"):
-                self.assertGreater(made.call_count, 0, "NPU static compile result was never used")
-                self.assertGreater(launched.call_count, 0, "NPU static kernel was never launched")
-            if method.__name__ == "test_disable_static_triton_launcher":
-                self.assertEqual(made.call_count, 0)
-                self.assertEqual(launched.call_count, 0)
-            print("STATIC_EVIDENCE", method.__name__, made.call_count, launched.call_count, flush=True)
+            try:
+                method(self)
+                if method.__name__ not in ("test_disable_static_triton_launcher", "test_incompatible_code"):
+                    self.assertGreater(made.call_count, 0, "NPU static compile result was never used")
+                    self.assertGreater(launched.call_count, 0, "NPU static kernel was never launched")
+                if method.__name__ == "test_disable_static_triton_launcher":
+                    self.assertEqual(made.call_count, 0)
+                    self.assertEqual(launched.call_count, 0)
+            finally:
+                print("STATIC_EVIDENCE", method.__name__, made.call_count, launched.call_count, flush=True)
     return checked
 
 
-for _name, _method in list(vars(TestStaticTritonCompileResult).items()):
+for _name in dir(TestStaticTritonCompileResult):
     if _name.startswith("test_"):
+        _method = getattr(TestStaticTritonCompileResult, _name)
         setattr(TestStaticTritonCompileResult, _name, _observe_static_test(_method))
 '''
 
