@@ -35,6 +35,7 @@ from torch_npu._inductor.triton_experimental.static_launcher import (
     NPUStaticTritonCompileResult,
 )
 from torch_npu._inductor.triton_experimental.static_launcher.adapter import NPUStaticArtifactAdapter
+from torch_npu._inductor.triton_experimental.npu_triton_helpers import libdevice
 
 GPU_TYPE = "npu"
 HAS_XPU_AND_TRITON = False
@@ -112,6 +113,11 @@ def main():
         direct = direct.replace(old, new)
     # Preserve unsigned scalar signatures; the output tensor stores their small sum as int64.
     direct = direct.replace("dtype=torch.uint64", "dtype=torch.int64")
+    # The upstream implicit-constant example allocates four elements but passes
+    # a reduction length of 128. Preserve specialization of xnumel=1 while
+    # keeping both ordinary and static launches inside the input allocation.
+    direct = direct.replace("arg0, arg1, 1, 128, XBLOCK", "arg0, arg1, 1, arg0.numel(), XBLOCK")
+    direct = direct.replace("stream, arg0, arg2, 128)", "stream, arg0, arg2, arg0.numel())")
     for name, reason in {
         "test_high_shared_mem": "CUDA shared-memory mutation has no equivalent NPU resource contract",
         "test_too_high_shared_mem": "CUDA shared-memory OOM assertion is device-specific",
