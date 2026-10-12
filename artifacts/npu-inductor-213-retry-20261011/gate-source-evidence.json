@@ -1,0 +1,98 @@
+[
+  {
+    "topic": "dynamic setup gate",
+    "file": "<test-repo>/test/inductor/test_torchinductor_dynamic_shapes.py",
+    "sha256": "f51cddce0c986097655b2d318438cde49269aaaa1b710c4707f595bfd82978b5",
+    "start_line": 204,
+    "end_line": 217,
+    "source": "class TestInductorDynamic(DynamicShapesTestCase):\n    compile_fn = partial(torch.compile, dynamic=True)\n\n    def setUp(self):\n        # HAS_CUDA_AND_TRITON also checks compute capability to skip tests\n        # on older devices\n        if not HAS_GPU:\n            self.skipTest(\"Triton not available\")\n        torch._dynamo.reset()\n        super().setUp()\n        # this should be in setUpClass, but device-generic tests\n        # don't work with setUpClass well (non-deterministically the wrong setUpClass is resolved),\n        # so put it in test setUp, it's cheap\n        self._stack = contextlib.ExitStack()"
+  },
+  {
+    "topic": "FBCODE marker",
+    "file": "<test-repo>/test/inductor/test_torchinductor_dynamic_shapes.py",
+    "sha256": "f51cddce0c986097655b2d318438cde49269aaaa1b710c4707f595bfd82978b5",
+    "start_line": 527,
+    "end_line": 536,
+    "source": "    @unittest.skipUnless(IS_FBCODE, \"\")\n    @torch._dynamo.config.patch(\n        capture_scalar_outputs=True, capture_dynamic_output_shape_ops=True\n    )\n    def test_float_item_return(self, device):\n        @torch.compile(fullgraph=True)\n        def f(x):\n            return x.item()\n\n        f(torch.tensor([3.0], device=device))"
+  },
+  {
+    "topic": "CPU-only dynamic tests",
+    "file": "<test-repo>/test/inductor/test_torchinductor_dynamic_shapes.py",
+    "sha256": "f51cddce0c986097655b2d318438cde49269aaaa1b710c4707f595bfd82978b5",
+    "start_line": 977,
+    "end_line": 1008,
+    "source": "    @onlyCPU\n    def test_arithmetic_constant_folding(self, device):\n        def test(fn):\n            cfn = self.compile_fn(fn)\n            expect = fn(3)\n            actual = cfn(3)\n            self.assertEqual(expect, actual)\n\n        def add(x):\n            return x + torch.zeros(3)\n\n        test(add)\n\n        def mul(x):\n            return x * torch.ones(3)\n\n        test(mul)\n\n        def div(x):\n            return x / torch.ones(3)\n\n        test(div)\n\n    @onlyCPU\n    def test_sub_constant_folding(self, device):\n        def sub(x):\n            return x - torch.zeros(3)\n\n        cfn = self.compile_fn(sub)\n        expect = sub(3)\n        actual = cfn(3)\n        self.assertEqual(expect, actual)"
+  },
+  {
+    "topic": "CPU cpp backend",
+    "file": "<test-repo>/test/inductor/test_torchinductor.py",
+    "sha256": "95cadeeafa2fc7d20437b79c3580475d75b68341443c495a7aa29f418ad68ca7",
+    "start_line": 4003,
+    "end_line": 4025,
+    "source": "    def test_floordiv_int_min_neg_one_cpu(self):\n        # Regression test for https://github.com/pytorch/pytorch/issues/184406\n        if not is_cpp_backend(self.device):\n            raise unittest.SkipTest(\"cpp backend required\")\n\n        def fn(a, b):\n            return torch.floor_divide(a, b)\n\n        for dtype in [torch.int32, torch.int64]:\n            min_value = torch.iinfo(dtype).min\n            a = torch.tensor([min_value], dtype=dtype, device=self.device)\n            b = torch.tensor([-1], dtype=dtype, device=self.device)\n            self.common(fn, (a, b))\n\n            a = torch.full((128,), min_value, dtype=dtype, device=self.device)\n            b = torch.full((128,), -1, dtype=dtype, device=self.device)\n            self.common(fn, (a, b))\n\n    def test_floordiv_div_by_zero_int_cpu_inductor_raises_error(self):\n        if not is_cpp_backend(self.device):\n            raise unittest.SkipTest(\"cpp backend required\")\n\n        code = \"\"\""
+  },
+  {
+    "topic": "CPU cpp regression",
+    "file": "<test-repo>/test/inductor/test_torchinductor.py",
+    "sha256": "95cadeeafa2fc7d20437b79c3580475d75b68341443c495a7aa29f418ad68ca7",
+    "start_line": 4351,
+    "end_line": 4354,
+    "source": "    def test_softmax_reused_expensive_pointwise_cpu(self):\n        if not is_cpp_backend(self.device):\n            raise unittest.SkipTest(\"C++ CPU codegen regression test\")\n"
+  },
+  {
+    "topic": "slow flag then CPU-only restriction",
+    "file": "<test-repo>/test/inductor/test_torchinductor.py",
+    "sha256": "95cadeeafa2fc7d20437b79c3580475d75b68341443c495a7aa29f418ad68ca7",
+    "start_line": 4933,
+    "end_line": 4940,
+    "source": "    @slowTest\n    @expectedFailureCodegenDynamic\n    @config.patch({\"freezing\": True})\n    def test_conv_bn_fuse(self):\n        # For gpu path, there is an accuracy issue\n        if self.device == GPU_TYPE:\n            raise unittest.SkipTest(\"only support cpu conv bn test\")\n"
+  },
+  {
+    "topic": "functional conv bn CPU-only restriction",
+    "file": "<test-repo>/test/inductor/test_torchinductor.py",
+    "sha256": "95cadeeafa2fc7d20437b79c3580475d75b68341443c495a7aa29f418ad68ca7",
+    "start_line": 4995,
+    "end_line": 4999,
+    "source": "    def test_conv_functional_bn_fuse(self):\n        # For gpu path, there is an accuracy issue\n        if self.device == GPU_TYPE:\n            raise unittest.SkipTest(\"only support cpu conv bn test\")\n"
+  },
+  {
+    "topic": "upsample conv CPU-only restriction",
+    "file": "<test-repo>/test/inductor/test_torchinductor.py",
+    "sha256": "95cadeeafa2fc7d20437b79c3580475d75b68341443c495a7aa29f418ad68ca7",
+    "start_line": 5139,
+    "end_line": 5142,
+    "source": "    def test_upsample_cat_conv(self):\n        if self.device == GPU_TYPE:\n            raise unittest.SkipTest(\"only support cpu upsample_cat_conv test\")\n"
+  },
+  {
+    "topic": "CUTLASS FP4 dependency",
+    "file": "<test-repo>/test/inductor/test_utils.py",
+    "sha256": "e13d0486c5556a735ef6dafe55b1558ad5439002f252ea31b7a0f4a6bd070190",
+    "start_line": 350,
+    "end_line": 365,
+    "source": "class TestFP4Support(TestCase):\n    \"\"\"Tests for FP4 (float4_e2m1fn_x2) infrastructure support.\"\"\"\n\n    @unittest.skipIf(\n        not torch.cuda.is_available()\n        or importlib.util.find_spec(\"cutlass_api\") is None,\n        \"requires CUDA and cutlass_api\",\n    )\n    def test_ensure_fp4_dtype_registered(self):\n        \"\"\"_ensure_fp4_dtype_registered should patch cutlass_api for FP4.\"\"\"\n        from torch._inductor.utils import _ensure_fp4_dtype_registered\n\n        _ensure_fp4_dtype_registered()\n        import cutlass\n        import cutlass_api.utils\n"
+  },
+  {
+    "topic": "static binary format",
+    "file": "<test-repo>/test/inductor/test_static_triton_launcher.py",
+    "sha256": "5e7d9e77a762200914a4caab0dee17241612086da966d40d3b5e3c5e7b5c586d",
+    "start_line": 135,
+    "end_line": 160,
+    "source": "        \"\"\"\n        if hasattr(kernel, \"_cubin_path\"):\n            return\n        # Just used by tests for now.\n        # TODO: derive cubin_path from wherever triton stores the cubin file on disk.\n        binary_key = \"\"\n        with tempfile.NamedTemporaryFile(mode=\"wb\", delete=False) as tmp_file:\n            if GPU_TYPE == \"xpu\":\n                binary_key = \"zebin\"\n            else:\n                binary_key = \"hsaco\" if torch.version.hip else \"cubin\"\n\n            tmp_file.write(kernel.asm[binary_key])\n            self.tmp_files.append(tmp_file)\n            return tmp_file.name\n\n    def _make_launcher(\n        self,\n        compiled_kernel: CompiledKernel,\n    ) -> StaticallyLaunchedCudaKernel | StaticallyLaunchedXpuKernel:\n        \"\"\"\n        Compiles a Triton kernel with the provided *args,\n        writes its cubin to the temporary file, and returns the file path.\n        \"\"\"\n        cubin_file = self.write_cubin_to_tmp(compiled_kernel)\n        compiled_kernel._cubin_path = cubin_file"
+  },
+  {
+    "topic": "community GPU capability detection",
+    "file": "<test-env>/lib/python3.11/site-packages/torch/testing/_internal/inductor_utils.py",
+    "sha256": "a04807ab887c9d2dec22c04293efac32a07eb8b653b079ae3642bdf3a195b812",
+    "start_line": 75,
+    "end_line": 100,
+    "source": "HAS_HELION = has_helion()\n\nif HAS_TRITON:\n    import triton\n\n    TRITON_HAS_CPU = \"cpu\" in triton.backends.backends\nelse:\n    TRITON_HAS_CPU = False\n\n\nHAS_CUDA_AND_TRITON = torch.cuda.is_available() and HAS_TRITON\n\nHAS_XPU_AND_TRITON = torch.xpu.is_available() and HAS_TRITON\n\nHAS_MPS = torch.mps.is_available()\n\nHAS_GPU = HAS_CUDA_AND_TRITON or HAS_XPU_AND_TRITON\nHAS_GPU_AND_TRITON = HAS_GPU\n\nGPU_TYPE = get_gpu_type()\n\nHAS_MULTIGPU = any(\n    getattr(torch, gpu).is_available() and getattr(torch, gpu).device_count() >= 2\n    for gpu in GPU_TYPES\n)\n"
+  },
+  {
+    "topic": "memory checker supported devices",
+    "file": "<test-env>/lib/python3.11/site-packages/torch/testing/_internal/common_device_type.py",
+    "sha256": "5152a6b617240a666a6df79d08d1472bd025f362c99b3ccaa92e84509bc571c7",
+    "start_line": 1512,
+    "end_line": 1546,
+    "source": "def _has_sufficient_memory(device, size):\n    device_ = torch.device(device)\n    device_type = device_.type\n    if device_type in [\"cuda\", \"xpu\"]:\n        acc = torch.accelerator.current_accelerator()\n        # Case 1: no accelerator found\n        if not acc:\n            return False\n        # Case 2: accelerator found but not matching device type\n        if acc.type != device_type:\n            return True\n        # Case 3: accelerator found and matching device type but not available\n        if not torch.accelerator.is_available():\n            return False\n        # Case 4: accelerator found and matching device type and available\n        gc.collect()\n        torch.accelerator.empty_cache()\n\n        if device_.index is None:\n            device_ = torch.device(device_type, 0)\n\n        if device_type == \"cuda\":\n            return (\n                torch.cuda.memory.mem_get_info(device_)[0]\n                * torch.cuda.memory.get_per_process_memory_fraction(device_)\n            ) >= size\n\n        if device_type == \"xpu\":\n            return torch.xpu.memory.mem_get_info(device_)[0] >= size\n\n    if device_type == \"xla\":\n        raise unittest.SkipTest(\"TODO: Memory availability checks for XLA?\")\n\n    if device_type not in [\"cpu\", \"mps\"]:\n        raise unittest.SkipTest(\"Unknown device type\")"
+  }
+]
