@@ -1,7 +1,12 @@
 # PTA 2.13 NPU Inductor 分批验证
 
-最新的剩余 100 项全量评审、修复补丁和复测结论见 [剩余用例修复报告](remaining_repairs.md)。
-该报告逐项标明必要性、负责模块、通过对应修改和未修原因；下文保留原始批次统计。
+最新的 331 行清单已完成失败与跳过重跑，合并结果为 **225 PASS、89 FAIL、9 SKIP、3 XFAIL、
+2 MIXED、2 TIMEOUT、1 NOT_COLLECTED**。重跑 197 行、执行 228 次 pytest 调用，新增 98 行 PASS；
+未重跑项在总表中明确标记，原测试源码未修改。
+详见 [最新重跑结果与验证证据](../../../artifacts/npu-inductor-213-retry-20261011/README.md)。
+
+此前 247 行清单的剩余 100 项全量评审、修复补丁和复测结论见 [剩余用例修复报告](remaining_repairs.md)。
+该报告逐项标明必要性、负责模块、通过对应修改和未修原因；下文保留此前 247 行清单的批次统计。
 
 2026-10-08 清单共 247 行，保留用户提供的顺序及重名项。
 14 个批次已全部完成执行和分析，累计表没有待测试或待分析行。
@@ -22,7 +27,10 @@ PR #47384 指定迁移文件的全量重测也已完成：130 通过、99 失败
 统计见 [progress.json](../../../artifacts/npu-inductor-213-batches-20261008/progress.json)，
 完整性检查见 [validation-summary.json](../../../artifacts/npu-inductor-213-batches-20261008/validation-summary.json)。
 
-- [最新总表：各阶段结果及通过对应修改](../../../artifacts/npu-inductor-pr47384-restored-driver-20261009/results.csv)
+- [最新总表：331 行上轮结果、重跑处理及最新结果](../../../artifacts/npu-inductor-213-retry-20261011/results.csv)
+- [331 行重跑前的基线 CSV](../../../artifacts/npu-inductor-213-recheck-20261010/results.csv)
+- [此前 247 行修复汇总及通过对应修改](../../../artifacts/npu-inductor-remaining-repairs-20261009/results.csv)
+- [此前 247 行 PR 加回 driver patch 的阶段对比](../../../artifacts/npu-inductor-pr47384-restored-driver-20261009/results.csv)
 - [原始基线累计 CSV](../../../artifacts/npu-inductor-213-batches-20261008/results.csv)
 - [PR #47384 全量重测与基线对比](pr47384_retest.md)
 - [PR #47384 全部提交同步与驱动问题复核](full_pr_review.md)
@@ -45,7 +53,7 @@ CSV 使用 UTF-8 BOM，便于 Excel 读取中文。每行包含结果、失败�
 能否修复、修复方向、未修复原因、覆盖边界和证据引用。
 JSON 引用中 `#` 后的字符串是 nodeid 或 `sources[].id`，用于在文件内定位，不是网页锚点。
 
-最新总表保留基线、PR 原样、PR 加回 driver patch 三阶段状态，并逐行给出“通过变化类型”、
+此前 247 行的阶段对比表保留基线、PR 原样、PR 加回 driver patch 三阶段状态，并逐行给出“通过变化类型”、
 “通过对应修改”和补丁证据。基线已通过项、PR benchmark 修改后通过的 5 项、driver patch
 恢复的 17 项分别标注，避免把全部通过都归因于本轮补丁。
 14 项适配复测也列在对应原序号行，单独记录测试条件修改、HF32 设置、适配结果和日志；

@@ -2,6 +2,8 @@
 
 该脚本复测既有 331 行清单中的失败、超时、收集异常及可解除的跳过，保持原测试源码不变。
 运行记录见 [重试结果](../../../artifacts/npu-inductor-213-retry-20261011/README.md)。
+331 行按原始顺序合并后的最新总表为 [results.csv](../../../artifacts/npu-inductor-213-retry-20261011/results.csv)；
+[旧基线结果](../../../artifacts/npu-inductor-213-recheck-20261010/README.md) 保留供对照。
 
 ## 执行
 
