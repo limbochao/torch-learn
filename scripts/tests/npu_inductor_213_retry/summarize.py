@@ -90,6 +90,42 @@ def sanitize(value):
     return value
 
 
+def pass_change(previous_status, current_status, attempt):
+    """Describe the retry-only change for rows that became PASS."""
+    if current_status != "PASS" or previous_status == "PASS" or attempt is None:
+        return ""
+    invocation = attempt["invocation"]
+    environment = invocation.get("environment", {})
+    phase = attempt["phase"]
+    changes = []
+
+    if previous_status == "TIMEOUT":
+        duration = invocation.get("duration", 0)
+        return ("未修改代码或测试门控；使用独立 pytest 进程再次执行，"
+                f"本轮 {duration:.3f}s 完成，上轮达到 900s 超时上限。")
+
+    if previous_status == "PROCESS_ERROR":
+        collected = "\n".join(attempt["report"].get("collected", []))
+        if "TestInductorDynamicPRIVATEUSE1" in collected:
+            changes.append("将原 TestInductorDynamicNPU 节点映射为实际的 TestInductorDynamicPRIVATEUSE1 节点")
+        if environment.get("RETRY_DYNAMIC_GATE") == "1":
+            changes.append("运行时将 dynamic_shapes.HAS_GPU 从 False 置为 True")
+        if environment.get("RETRY_FBCODE_FLOAT_ITEM") == "1":
+            changes.append("仅解除 test_float_item_return 的 IS_FBCODE 装饰器")
+        changes.append("未修改测试源码、断言或后端代码")
+        return "；".join(changes) + "。"
+
+    if phase == "skips_followup":
+        changes.append("运行时补充拦截 unittest.case.skip（覆盖 skipIf/skipUnless）")
+    elif environment.get("RETRY_NPU_MEMORY") == "1":
+        changes.append("运行时使用 torch.npu.mem_get_info 检查实际空闲内存")
+        changes.append("内存不足时仍保留原有 SKIP")
+    else:
+        changes.append("运行时解除明确的 GPU/CUDA/Triton 可用性门控")
+    changes.append("未修改测试源码、断言或后端代码")
+    return "；".join(changes) + "。"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("baseline", type=Path)
@@ -136,6 +172,7 @@ def main():
             action = "RETAIN_SKIP" if number in audit else "PREVIOUS_RESULT"
         rows.append({"序号": number, "文件": old["文件"], "原始用例名": old["原始用例名"],
                      "上轮结果": old["结果"], "本次处理": action, "最新结果": current,
+                     "通过对应修改": pass_change(old["结果"], current, result),
                      "本次调用数": sum(item["row"] == number for item in attempts),
                      **{key: counts.get(key, 0) for key in STATUSES},
                      "说明": reason, "跳过评估": audit.get(number, {}).get("reason", ""),
