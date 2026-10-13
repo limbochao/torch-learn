@@ -4,6 +4,8 @@
 
 执行环境为 NPU_A5 的 `pta_213_case` conda 环境，使用 NPU 0-6 七卡并发；每张卡使用独立的 `TORCHINDUCTOR_CACHE_DIR`。
 
+**标准执行路径**：pytest 的工作目录是 `v2.13.0/inductor_npu`，测试文件也从该目录加载。总表中的 `实际节点` 保留原始节点名以便和 98 条记录对应；复测命令不能切换到 `v2.13.0/pytorch/test/inductor` 原始镜像路径。
+
 | 结果 | 行数 | 节点数 |
 | --- | ---: | ---: |
 | PASS | 92 | 114 |
