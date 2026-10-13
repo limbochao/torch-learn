@@ -79,3 +79,11 @@ PASS 要求该行所有已选节点通过；任何测试断言失败记为 FAIL�
 226 次非超时调用的 JUnit XML 与 JSON 节点计数逐项一致，检查记录见 [validation.json](validation.json)。
 测试仓库没有已跟踪文件变化；运行后留下 `export_only_prof_dir/`、`extra-info/` 两个未跟踪产物目录。
 归档证据已去除个人目录及进程 ID，原始日志和 JUnit XML 留在测试工作目录。
+
+## NPU 代码生成差异适配复测（2026-10-13）
+
+针对总表第 203、248、327、328 行，按 NPU 后端实际代码生成策略进行了用例适配，并在 NPU_A5 的 `pta_213_case` 环境、标准路径 `v2.13.0/inductor_npu` 复测。四个节点全部通过（4 PASS、0 FAIL、0 SKIP）。
+
+适配内容保留了数值正确性校验：卷积用例不再要求 CUDA 专属的 `.convolution/.run` 文本；垂直融合用例接受 NPU 生成的 2 个 kernel；动态 reduction 用例不再要求 CUDA Triton 的 `R0_BLOCK` 或禁止 `persistent` 标记。代码提交为 `Community-Use-Case-Testing` 分支 `ut/adapter_to_npu` 的 `63ce340`。
+
+完整 JUnit 证据见 [`npu_codegen_adaptation_20261013/four_npu_adaptation_20261013_final.xml`](npu_codegen_adaptation_20261013/four_npu_adaptation_20261013_final.xml)，汇总见 [`npu_codegen_adaptation_20261013/summary.json`](npu_codegen_adaptation_20261013/summary.json)。
