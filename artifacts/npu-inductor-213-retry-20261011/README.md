@@ -27,6 +27,8 @@
 102 行 SKIP 全部检查，其中 96 行尝试解除门控，6 行因 CPU 专属路径或 CUTLASS 依赖保留跳过。
 
 2026-10-13 在 `NPU_A5` 的 `pta_213_case` 环境、标准路径 `v2.13.0/inductor_npu` 复测表中原先仍标记 SKIP 的 6 行（163、165、166、167、197、292）已随 adapter 提交 `ed65776` 修复并全部通过；对应证据见 [`adapter_fix_20261013-summary.json`](adapter_fix_20261013-summary.json) 和 `adapter_fix_20261013/`。98 行重跑结果现为 98 PASS、0 SKIP。
+
+同日对 `test_static_triton_launcher.py` 的 25 行进行了 NPU static launcher 适配复测：23 行 PASS，2 行保留为 SKIP。保留的两行为 `test_unsigned_integers`（`uint64`）和 `test_any`（`float64` 的 `isinf/any` 路径），原因和未修改用例的结论已写入 `results.csv`；证据见 [`static_triton_adapter_20261013-summary.json`](static_triton_adapter_20261013-summary.json) 和 `static_triton_adapter_20261013/`。
 原 127 行 PASS 和 1 行 NOT_COLLECTED 沿用上一轮证据，CSV 明确标记 `PREVIOUS_RESULT`。
 
 每行使用一个独立 pytest 进程，参数化用例仍可能对应多个节点。
