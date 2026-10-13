@@ -25,6 +25,8 @@
 
 原 38 行 FAIL、58 行 PROCESS_ERROR、3 行 TIMEOUT 全部重试；原 2 行 XFAIL 也重新执行，保留预期失败标记。
 102 行 SKIP 全部检查，其中 96 行尝试解除门控，6 行因 CPU 专属路径或 CUTLASS 依赖保留跳过。
+
+2026-10-13 在 `NPU_A5` 的 `pta_213_case` 环境、标准路径 `v2.13.0/inductor_npu` 复测表中原先仍标记 SKIP 的 6 行（163、165、166、167、197、292）已随 adapter 提交 `ed65776` 修复并全部通过；对应证据见 [`adapter_fix_20261013-summary.json`](adapter_fix_20261013-summary.json) 和 `adapter_fix_20261013/`。98 行重跑结果现为 98 PASS、0 SKIP。
 原 127 行 PASS 和 1 行 NOT_COLLECTED 沿用上一轮证据，CSV 明确标记 `PREVIOUS_RESULT`。
 
 每行使用一个独立 pytest 进程，参数化用例仍可能对应多个节点。
