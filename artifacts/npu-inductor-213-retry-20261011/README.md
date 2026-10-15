@@ -1,5 +1,30 @@
 # PyTorch 2.13 NPU Inductor 失败与 SKIP 重试
 
+## 最新 adapter 分支复测（2026-10-15）
+
+已基于 Community-Use-Case-Testing 的最新 `main`（`762c46e`）建立
+`ut/adapter_to_npu_main_20261015`，合入原 `ut/adapter_to_npu`（`2b5b9b2`）尚未进入主线的修改。
+验证提交为 `99d0217`；相对主线仅涉及 inplacing 常量设备和 round value-expression 的 NPU 入口。
+
+NPU_A5 Docker 内使用 `pta_213_case`、标准目录 `v2.13.0/inductor_npu`，复测 134 行、156 个节点。
+结果已逐行写入 [results.csv](results.csv)，日期、代码分支、提交、基线和 JUnit 证据均可直接在表中查看。
+
+| 验证环境 | 行结果 | 节点结果 |
+| --- | --- | --- |
+| 原安装环境 | 125 PASS、9 FAIL | 147 PASS、9 FAIL |
+| 7 行补充加载已发布后端修复 `4f5017beec` 后，合并最新结果 | 132 PASS、2 FAIL | 154 PASS、2 FAIL |
+
+7 行为五个 round 用例、`test_compile_decorator` 和 `test_mark_unbacked_slice`。
+其 PASS 依赖后端修复；CSV 的 `NPU_A5原安装环境结果` 保留 FAIL，`NPU_A5复测后端补丁` 明确记录依赖。
+后端通过独立 Python 包副本加载，原安装包未修改。
+`test_unsigned_integers`（uint64）和 `test_any`（float64 的 isinf/any）保留原输入；
+本次实际执行为 FAIL，表中已说明不支持原因，不再沿用历史的人工 SKIP 结论。
+
+完整证据与复现方式见 [本轮归档](adapter_main_20261015/README.md)；
+统计见 [summary.json](adapter_main_20261015/summary.json)。以下章节保留 2026-10-11 至 2026-10-13 的历史口径。
+
+## 初始重试（2026-10-11）
+
 本轮接续 [331 行原始复测](../npu-inductor-213-recheck-20261010/README.md)，
 执行要求为“失败的全部重试一次，SKIP 检查能否解除后重试”。
 原测试文件保持不变，使用同一 PyTorch 2.13 / torch_npu 2.13 环境和输入清单。

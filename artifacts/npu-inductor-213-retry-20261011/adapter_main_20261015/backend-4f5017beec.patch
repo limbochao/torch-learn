@@ -1,0 +1,42 @@
+diff --git a/torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py b/torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py
+index 37c7e5dac7..6fc0a78e20 100644
+--- a/torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py
++++ b/torch_npu/_inductor/fx_passes/ascend_custom_passes/ascend_graph_pass.py
+@@ -967,7 +967,9 @@ def dtype_optimal_pass(graph: torch.fx.Graph) -> None:
+                 if hasattr(input_node, "meta")
+                 else None
+             )
+-            input_dtype = input_fake.dtype if input_fake is not None else None
++            input_dtype = (
++                input_fake.dtype if isinstance(input_fake, torch.Tensor) else None
++            )
+             target_dtype = (
+                 node.args[1] if len(node.args) > 1 else node.kwargs.get("dtype", None)
+             )
+diff --git a/torch_npu/utils/_graph_tree.py b/torch_npu/utils/_graph_tree.py
+index 1b9bc21e97..7cb0b29d41 100644
+--- a/torch_npu/utils/_graph_tree.py
++++ b/torch_npu/utils/_graph_tree.py
+@@ -392,6 +392,22 @@ def _apply_npugraph_tree_methods():
+         register_backend(name="npugraphs", compiler_fn=_npugraphs_backend_entrypoint)
+     torch._inductor.compile_fx.cudagraphify = npugraphify
+     torch._inductor.cudagraph_utils.check_multiple_devices_or_any_cpu_nodes = check_multiple_devices_or_any_cpu_nodes
++    cudagraph_utils = torch._inductor.cudagraph_utils
++    if not getattr(
++        cudagraph_utils.check_caching_allocator_for_cudagraphs, "_npu_compatible", False
++    ):
++        check_caching_allocator = cudagraph_utils.check_caching_allocator_for_cudagraphs
++
++        @functools.wraps(check_caching_allocator)
++        def check_caching_allocator_for_npugraphs():
++            if torch.version.cuda is None and torch.version.hip is None:
++                return None
++            return check_caching_allocator()
++
++        check_caching_allocator_for_npugraphs._npu_compatible = True
++        cudagraph_utils.check_caching_allocator_for_cudagraphs = (
++            check_caching_allocator_for_npugraphs
++        )
+     torch.compiler.npugraph_mark_step_begin = npugraph_mark_step_begin
+ 
+     import torch._inductor.cudagraph_trees as _upstream_cgt  # noqa: F401

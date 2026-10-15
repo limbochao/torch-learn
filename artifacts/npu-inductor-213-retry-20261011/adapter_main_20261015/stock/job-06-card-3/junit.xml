@@ -1,0 +1,54 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="9" time="59.487" timestamp="2026-10-15T22:14:14.794682+08:00" hostname="l30023782"><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_high_shared_mem" time="6.947" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_implied_constant" time="6.671" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_kernel_empty_tensor" time="6.751" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_kernel_many_args" time="6.892" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_kernel_no_args" time="6.535" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_launcher_keeps_module_owner_alive_until_release" time="0.555" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_signed_integers" time="6.843" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_too_high_shared_mem" time="6.770" /><testcase classname="test_static_triton_launcher.TestStaticTritonLauncher" name="test_unsigned_integers" time="0.023"><failure message="RuntimeError: zero_:third_party/op-plugin/op_plugin/ops/opapi/ZerosLikeKernelNpuOpApi.cpp:25 NPU function error: call aclnnInplaceZero failed, error code is 507899&#10;[ERROR] 2026-10-15-22:15:14 (PID:&lt;redacted&gt;, Device:0, RankID:-1) ERR00100 PTA call acl api failed&#10;[Error]: An internal error occurs in the Driver module. &#10;        Rectify the fault based on the error information in the ascend log.&#10;[PID:&lt;redacted&gt;] 2026-10-15-22:15:14.238.801 AclNN_Parameter_Error(EZ1001): Tensor self not implemented for DT_UINT64, should be in dtype support list [DT_INT8,DT_INT32,DT_INT64,DT_UINT8,DT_FLOAT16,DT_FLOAT,DT_BOOL,DT_DOUBLE,DT_INT16,DT_UINT16,DT_COMPLEX128,DT_COMPLEX64,DT_BFLOAT16,DT_FLOAT8_E5M2,DT_FLOAT8_E4M3FN,DT_HIFLOAT8,DT_FLOAT4_E1M2,DT_FLOAT4_E2M1,].&#10;TraceBack (most recent call last):&#10;        rtsDeviceGetInfo execution failed, reason=driver error:internal error[FUNC:FuncErrorReason][FILE:error_message_manage.cc][LINE:69]&#10;        Tensor self not implemented for DT_UINT64, should be in dtype support list [DT_INT8,DT_INT32,DT_INT64,DT_UINT8,DT_FLOAT16,DT_FLOAT,DT_BOOL,DT_DOUBLE,DT_INT16,DT_UINT16,DT_COMPLEX128,DT_COMPLEX64,DT_BFLOAT16,DT_FLOAT8_E5M2,DT_FLOAT8_E4M3FN,DT_HIFLOAT8,DT_FLOAT4_E1M2,DT_FLOAT4_E2M1,].&#10;&#10;&#10;To execute this test, run the following from the base repo dir:&#10;    python test_static_triton_launcher.py TestStaticTritonLauncher.test_unsigned_integers&#10;&#10;This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0">self = &lt;inductor_npu.test_static_triton_launcher.TestStaticTritonLauncher testMethod=test_unsigned_integers&gt;
+
+    def test_unsigned_integers(self):
+        @triton.jit
+        def unsigned_integers(
+            arg0, arg1: tl.uint8, arg2: tl.uint16, arg3: tl.uint32, arg4: tl.uint64
+        ):
+            x = tl.load(arg0)
+            y = arg1 + arg2 + arg3 + arg4
+            tl.store(arg0, x + y)
+    
+&gt;       arg0 = torch.zeros(1, dtype=torch.uint64, device=GPU_TYPE)
+
+test_static_triton_launcher.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = [1], kwargs = {'device': 'npu', 'dtype': torch.uint64}
+replace_int = False, args_new = [1], device_arg = 'device_id', device = None
+device_ids = None
+
+    @wraps(fn)
+    def decorated(*args, **kwargs):
+        replace_int = fn.__name__ in ['to', 'to_empty']
+        if args:
+            args_new = list(args)
+            args = _replace_cuda_to_npu_in_list(args_new, replace_int)
+        if kwargs:
+            for device_arg in device_kwargs_list:
+                device = kwargs.get(device_arg, None)
+                if device is not None:
+                    _replace_cuda_to_npu_in_kwargs(kwargs, device_arg, device)
+            device_ids = kwargs.get('device_ids', None)
+            if isinstance(device_ids, list):
+                kwargs["device_ids"] = _replace_cuda_to_npu_in_list(device_ids, replace_int)
+            elif isinstance(device_ids, tuple):
+                kwargs["device_ids"] = tuple(_replace_cuda_to_npu_in_list(list(device_ids), replace_int))
+&gt;       return fn(*args, **kwargs)
+E       RuntimeError: zero_:third_party/op-plugin/op_plugin/ops/opapi/ZerosLikeKernelNpuOpApi.cpp:25 NPU function error: call aclnnInplaceZero failed, error code is 507899
+E       [ERROR] 2026-10-15-22:15:14 (PID:&lt;redacted&gt;, Device:0, RankID:-1) ERR00100 PTA call acl api failed
+E       [Error]: An internal error occurs in the Driver module. 
+E               Rectify the fault based on the error information in the ascend log.
+E       [PID:&lt;redacted&gt;] 2026-10-15-22:15:14.238.801 AclNN_Parameter_Error(EZ1001): Tensor self not implemented for DT_UINT64, should be in dtype support list [DT_INT8,DT_INT32,DT_INT64,DT_UINT8,DT_FLOAT16,DT_FLOAT,DT_BOOL,DT_DOUBLE,DT_INT16,DT_UINT16,DT_COMPLEX128,DT_COMPLEX64,DT_BFLOAT16,DT_FLOAT8_E5M2,DT_FLOAT8_E4M3FN,DT_HIFLOAT8,DT_FLOAT4_E1M2,DT_FLOAT4_E2M1,].
+E       TraceBack (most recent call last):
+E               rtsDeviceGetInfo execution failed, reason=driver error:internal error[FUNC:FuncErrorReason][FILE:error_message_manage.cc][LINE:69]
+E               Tensor self not implemented for DT_UINT64, should be in dtype support list [DT_INT8,DT_INT32,DT_INT64,DT_UINT8,DT_FLOAT16,DT_FLOAT,DT_BOOL,DT_DOUBLE,DT_INT16,DT_UINT16,DT_COMPLEX128,DT_COMPLEX64,DT_BFLOAT16,DT_FLOAT8_E5M2,DT_FLOAT8_E4M3FN,DT_HIFLOAT8,DT_FLOAT4_E1M2,DT_FLOAT4_E2M1,].
+E       
+E       
+E       To execute this test, run the following from the base repo dir:
+E           python test_static_triton_launcher.py TestStaticTritonLauncher.test_unsigned_integers
+E       
+E       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0
+
+../../../../miniforge3/envs/pta_213_case/lib/python3.11/site-packages/torch_npu/contrib/transfer_to_npu.py:194: RuntimeError</failure></testcase></testsuite></testsuites>
