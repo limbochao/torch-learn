@@ -24,3 +24,5 @@
 - `dlrm_embedding_dense_full_26_cross_device.py`：从 0914 DLRM graph 抽取 26 个真实 full kernel 的
   `[rows, 16]` ATen `full` case，支持按单个 kernel 或全部 26 个 case 对比 CUDA/NPU Eager 与 Inductor。
 - `symbolic_mask_perf/`：对比无 `x2` mask、`x2 < 200` 和显式 full-shape 恒真 mask 的三份 SIMT kernel。
+- `yolov3_maxpool_channels_last_repro.py`：从 YOLOv3 缓存提取的单个 `max_pool2d`，使用 `torch.compile`
+  复现 NPU channels-last 输出 stride 断言失败；默认保留原始 `[8,512,12,16]` 输入。
