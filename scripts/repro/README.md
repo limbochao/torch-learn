@@ -29,3 +29,6 @@
 - `resnet50_batchnorm_channels_last_repro.py`：从 resnet50 训练缓存提取的单个 `batch_norm`，使用
   `torch.compile` 复现 channels-last 输出 stride 断言失败；保留 TorchBench 移除 BN decomposition 的配置，
   默认输入 `[32,64,112,112]`，可用 `SHAPE=1,2,3,3` 缩小输入。
+- `tf_efficientnet_b0_pad_channels_last_repro.py`：从 tf_efficientnet_b0 推理缓存提取的单个 `F.pad`，
+  使用 `torch.compile` 复现 `constant_pad_nd` 的 channels-last 输出 stride 断言失败；默认输入
+  `[128,96,112,112]`，可用 `SHAPE=1,2,3,3` 缩小输入，无需修改 decomposition 或 fallback 配置。
