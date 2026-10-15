@@ -26,3 +26,6 @@
 - `symbolic_mask_perf/`：对比无 `x2` mask、`x2 < 200` 和显式 full-shape 恒真 mask 的三份 SIMT kernel。
 - `yolov3_maxpool_channels_last_repro.py`：从 YOLOv3 缓存提取的单个 `max_pool2d`，使用 `torch.compile`
   复现 NPU channels-last 输出 stride 断言失败；默认保留原始 `[8,512,12,16]` 输入。
+- `resnet50_batchnorm_channels_last_repro.py`：从 resnet50 训练缓存提取的单个 `batch_norm`，使用
+  `torch.compile` 复现 channels-last 输出 stride 断言失败；保留 TorchBench 移除 BN decomposition 的配置，
+  默认输入 `[32,64,112,112]`，可用 `SHAPE=1,2,3,3` 缩小输入。
