@@ -8,3 +8,6 @@
 
 - `dlrm-dynamic-vs-static-codegen/`: DLRM 在 `dynamic=True` 和 `dynamic=False` 下的 FX readable graph 与
   Inductor generated code 对照产物。
+
+- [npu-inductor-cicd-codegen-20261014](npu-inductor-cicd-codegen-20261014/README.md):
+  44 个 CICD kernel 用例的精度复测和 codegen 问题分类汇总。
