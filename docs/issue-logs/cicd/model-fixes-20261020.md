@@ -49,11 +49,11 @@ axes 采用有序依赖，复用 mask 布局构造，避免两个分支分别维
 
 | 修复类别 | 可以解释或解决的原问题 | 验证边界 |
 | --- | --- | --- |
-| reduction mask | GPT2 两个推理精度失败，BERT 四个精度失败中的前向部分 | GPT2 8 项通过；BERT 静态训练还需要 axes 修复 |
+| reduction mask | GPT2 两个推理精度失败，BERT 四个精度失败中的前向部分 | GPT2、BERT 各 8 项通过；BERT 静态训练还需要 axes 修复 |
 | reduction axes | BERT 静态训练反向 bias gradient 错误 | 同输入单 kernel、静态训练整模型通过；动态反向本来使用另一生成路径 |
 | negative index | dump/check 开关使负索引失去 wrap 语义，另有 no-wrap bounds 传播错误 | 专门回归通过；本轮模型使用的索引未证明触发此缺陷，不将它计入原 14 项失败的修复数 |
 | load liveness + resource tiling | Albert 四个训练编译失败，以及复测新暴露的动态 softmax 资源失败 | 原配置 DSL 对照和整模型 8 项通过 |
-| kernel type 资源边界与候选搜索 | NFNet 四个动态场景的 pooling 编译失败 | 独立小 tile 反例已确认，通用代码修复后的四个整模型场景仍在复测 |
+| kernel type 资源边界与候选搜索 | NFNet 四个动态场景的 pooling 编译失败 | 动态推理 performance/accuracy 已通过；两个动态训练场景仍在复测 |
 
 前两类错误在 generated DSL 中已违反 tensor semantics，应由 Inductor 修复；负索引也在 DSL 生成前
 改变了语义。后两类针对工作集排布和合法候选覆盖，属于 Inductor NPU 适配层资源管理。
@@ -148,6 +148,14 @@ NFNet 动态 avg_pool2d 的 pure SIMT 候选限制为每 tile 8 KiB，但旧搜�
 persistent/no-loop 轴不能继续切分；即使 pointer 估计过于保守，也保留最小合法 tile 供编译器验证。
 该估计用于搜索，不声称可以精确预测编译器的 UB 分配。
 
+最新整合分支上的 NFNet 动态推理 performance 已通过，batch=128，speedup=1.017493。
+动态推理 accuracy 也已通过，在两台空闲设备上独立执行的相同场景均为 `pass_accuracy`，不重复计入总数。
+其真实 autotune cache 中，三个 dynamic pooling kernel（后缀 21、32、40）选中
+`XBLOCK=512, compile_mode=simt_only`。原先这里没有任何合法 SIMT 候选；这次通过的是修复后的
+正常候选枚举与选择，未向模型注入固定配置。配置记录见
+[`nfnet_pooling_selected_v4.json`](../../../artifacts/cicd/model_fixes_20261020/nfnet_pooling_selected_v4.json)，
+原失败 kernel 对应的生成函数见同目录 `generated/nfnet_pooling_v4.py`。
+
 复测又暴露 Albert 动态训练 performance 的 softmax kernel：X2=512、R3=512，约需 33.6 Mbits UB。
 原因是 `rebuild_dynamic_axis` 在决定免循环轴时只看 X2 大小，漏算完整 persistent R3，
 并以 `axis_name == 'r'` 判断实际名为 `r3` 的轴。修复先计入所有 persistent reduction 轴，
@@ -212,8 +220,8 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 | Albert 初版完整矩阵 | 7/8 PASS；动态训练 performance 暴露 softmax tiling 问题 |
 | Albert softmax 通用修复后 | 动态训练 performance PASS；合计 8/8 PASS |
 | GPT2 完整矩阵 | 8/8 PASS |
-| BERT 完整矩阵 | 已通过 7/8；动态训练 accuracy 复测中 |
-| NFNet 完整矩阵 | 已通过静态推理两项；其余复测中 |
+| BERT 完整矩阵 | 8/8 PASS |
+| NFNet 完整矩阵 | 推理 4/4 PASS；训练四项仍在复测 |
 | TA 独立 kernel 在最新 Inductor 修复环境下 | template 两个 other 对照仍失败；pure SIMT 两项通过 |
 
 最新分支的 32 项数值回归全部通过，10 个独立子进程均正常退出；结果保存在
