@@ -212,7 +212,7 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 | Albert 初版完整矩阵 | 7/8 PASS；动态训练 performance 暴露 softmax tiling 问题 |
 | Albert softmax 通用修复后 | 动态训练 performance PASS；合计 8/8 PASS |
 | GPT2 完整矩阵 | 8/8 PASS |
-| BERT 完整矩阵 | 已通过 6/8；动态训练两项复测中 |
+| BERT 完整矩阵 | 已通过 7/8；动态训练 accuracy 复测中 |
 | NFNet 完整矩阵 | 已通过静态推理两项；其余复测中 |
 | TA 独立 kernel 在最新 Inductor 修复环境下 | template 两个 other 对照仍失败；pure SIMT 两项通过 |
 
