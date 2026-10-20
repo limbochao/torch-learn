@@ -1,0 +1,109 @@
+# Installed torch_npu/_inductor/runtime/triton_heuristics.py; original source line numbers follow.
+
+# source lines 3586-3670
+def _triton_config_npu_index_legacy(
+    size_hints,
+    inductor_meta,
+    triton_meta=None,
+    is_reduction=False,
+    is_persistent_reduction=False,
+) -> List[Config]:
+    num_warps = 1
+    num_stages = 2
+    configs = []
+    split_axis = inductor_meta["split_axis"]
+    tiling_axis = inductor_meta["tiling_axis"]
+    no_loop_axis = inductor_meta.get("no_loop_axis", [])
+    low_dims = inductor_meta["low_dims"]
+    split_axis_dtype = inductor_meta["split_axis_dtype"]
+    axis_names = inductor_meta["axis_names"]
+    dual_reduction = inductor_meta["dual_reduction"]
+    input_signature = triton_meta["signature"]
+    input_ptr_num = len(list(filter(lambda k: 'ptr' in k, input_signature))) if triton_meta is not None else 0
+    npu_kernel_type = NPUKernelType(inductor_meta.get("npu_kernel_type", "simd"))
+    size_hints = [size_hints.get(axis_name, 1) for axis_name in axis_names]
+
+    if npu_config.fasta_autotune:
+        from .fasta_autotune import FastATileGenerator
+        tile_generator = FastATileGenerator(size_hints, axis_names, tiling_axis, no_loop_axis, split_axis, low_dims,
+                                            persistent_reduction=is_persistent_reduction,
+                                            dtype=split_axis_dtype,
+                                            npu_kernel_type=npu_kernel_type,
+                                            input_ptr_num=input_ptr_num, dual_reduction=dual_reduction)
+        configs = tile_generator.descend_split_tiling()
+    else:
+        tile_generator = TileGenerator(size_hints, axis_names, tiling_axis, no_loop_axis, split_axis, low_dims,
+                                       persistent_reduction=is_persistent_reduction,
+                                       dtype=split_axis_dtype,
+                                       npu_kernel_type=npu_kernel_type,
+                                       input_ptr_num=input_ptr_num, dual_reduction=dual_reduction)
+        if npu_kernel_type == NPUKernelType.SIMD_SIMT_MIX:
+            tile_generator.set_kernel_type(NPUKernelType.SIMT_ONLY)
+            configs.extend(tile_generator.descend_split_tiling())
+            tile_generator.set_kernel_type(NPUKernelType.SIMT_TEMPLATE)
+            configs.extend(tile_generator.descend_split_tiling())
+        else:
+            configs = tile_generator.descend_split_tiling()
+
+    if not configs:
+        cfg = {}
+        for x in split_axis:
+            cfg[f"{axis_names[x].upper()}BLOCK"] = size_hints[x]
+        for x in tiling_axis:
+            cfg[f"{axis_names[x].upper()}BLOCK_SUB"] = size_hints[x]
+        if not cfg:
+            cfg["dummy"] = 1
+        tmp = Config(cfg, num_warps=num_warps, num_stages=num_stages)
+        configs.append(tmp)
+
+    for cfg in configs:
+        split_blocks = [None for x in split_axis]
+        for i, axis in enumerate(split_axis):
+            name = axis_names[axis]
+            block_name = f"{name.upper()}BLOCK"
+            split_blocks[i] = cfg.kwargs[block_name]
+        cfg.kwargs["split_axis"] = tuple(split_axis)
+        cfg.kwargs["split_blocks"] = tuple(split_blocks)
+
+    _remap_fallback_block_subs(configs, inductor_meta)
+
+    set_reduction_runtime_blocks_to_numel(configs, split_axis, axis_names, size_hints,
+                                          inductor_meta.get("runtime_block_arg_names", ()))
+
+    logging.debug("[%s], generate candidate tiling count: [%s]",
+                  inductor_meta["kernel_name"],
+                  len(configs))
+
+    # if fast run, we prune the configs to the last max_num configs
+    configs = brutal_prune_tiling_configs_if_fast_run(configs, inductor_meta)
+    return configs
+
+def _remap_fallback_block_subs(configs, inductor_meta):
+    if inductor_meta.get("requires_no_linear_block_remap") is not True:
+        return
+    for tiling_cfg in configs:
+        for name, value in list(tiling_cfg.kwargs.items()):
+            if isinstance(name, str) and name.endswith("_SUB"):
+                tiling_cfg.kwargs[name.removesuffix("_SUB")] = value
+                tiling_cfg.kwargs.pop(name)
+
+# source lines 3692-3710
+def pointwise(
+    size_hints,
+    triton_meta,
+    tile_hint=None,
+    filename=None,
+    min_elem_per_thread=0,
+    inductor_meta=None,
+):
+    inductor_meta = {} if inductor_meta is None else inductor_meta
+    configs = triton_config_npu_index(size_hints, inductor_meta, triton_meta)
+
+    return cached_autotune(
+        size_hints,
+        [*configs],
+        triton_meta=triton_meta,
+        inductor_meta=inductor_meta,
+        heuristic_type=HeuristicType.POINTWISE,
+        filename=filename,
+    )

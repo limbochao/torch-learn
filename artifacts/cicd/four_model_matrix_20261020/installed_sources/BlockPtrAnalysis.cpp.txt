@@ -1,0 +1,86 @@
+# Local TA source reference; installed build correspondence is unverified.
+
+# BlockPtrAnalysis.cpp:2584-2681
+/// @brief Rewrite the triton::AddPtrOp to handle unstructured memory access.
+/// @param op The triton::AddPtrOp to be rewritten.
+/// @param adaptor The adaptor of the triton::AddPtrOp, used to get operands.
+/// @param rewriter The pattern rewriter used to modify the IR.
+/// @param data The BlockData containing information about the memory access.
+void BlockDataParser::rewriteAddPtrToUnstrucMemAcc(
+    triton::AddPtrOp op, triton::AddPtrOp::Adaptor &adaptor,
+    ConversionPatternRewriter &rewriter, BlockData &data) {
+  auto loc = op.getLoc();
+  auto &offsets = data.getOffsetsRef();
+  auto &blockSizes = data.getSizesRef();
+  auto &strides = data.getStridesRef();
+  Value ptrOffset = adaptor.getOffset();
+  Value zeroIdx =
+      rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(0));
+  Value oneIdx =
+      rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(1));
+  auto addptrRes = op.getResult();
+  assert(addptrRes.hasOneUse() && "Invalid: tt.addptr has multiple users");
+  auto loadOp = *(addptrRes.user_begin());
+
+  // Prepare empty tensor for loop based scalar load
+  // FIXME: We use cast here because addptr must return tensor<?x!tt.ptr<f32>>.
+  // True?
+  auto resTy = cast<ShapedType>(addptrRes.getType());
+  auto resEPtrTy = resTy.getElementType();
+  auto resETy = cast<triton::PointerType>(resEPtrTy).getPointeeType();
+  Value loaded = rewriter.create<tensor::EmptyOp>(loc, blockSizes, resETy);
+  SmallVector<Value> initArgs;
+  initArgs.push_back(loaded);
+
+  SmallVector<Value> forLBs;
+  SmallVector<Value> forUBs;
+  SmallVector<Value> forSteps;
+  for (auto &s : offsets) {
+    forLBs.push_back(zeroIdx);
+  }
+  for (auto &s : blockSizes) {
+    forUBs.push_back(getValueOrCreateConstantIndexOp(rewriter, loc, s));
+  }
+  for (auto &s : strides) {
+    forSteps.push_back(oneIdx);
+  }
+  SmallVector<Value> ivs;
+  OpBuilder builder(op);
+  auto loop = createNestedLoops(
+      builder, loc, 0, blockSizes.size(), forLBs, forUBs, forSteps, ivs,
+      initArgs,
+      [&](OpBuilder &bB, Location bLoc, SmallVector<Value> &allIVs,
+          ValueRange iterArgs) {
+        OpBuilder::InsertionGuard g(bB);
+        bB.setInsertionPointToStart(bB.getBlock());
+
+        Value scalarOffsetRaw =
+            bB.create<tensor::ExtractOp>(bLoc, ptrOffset, allIVs);
+        Value scalarOffset = bB.create<arith::IndexCastOp>(
+            bLoc, bB.getIndexType(), scalarOffsetRaw);
+        OpFoldResult baseOffset = bB.getIndexAttr(0);
+        for (auto ofr : data.getOffsetsRef()) {
+          baseOffset =
+              addOpFoldResult(baseOffset, ofr, bLoc, bB, bB.getIndexType());
+        }
+        Value baseVal = getValueOrCreateConstantIndexOp(bB, bLoc, baseOffset);
+        Value combinedOffset =
+            bB.create<arith::AddIOp>(bLoc, baseVal, scalarOffset);
+        // Replace offset & size. Only single element.
+        data.getOffsetsRef().clear();
+        data.getOffsetsRef().push_back(combinedOffset);
+        data.getSizesRef().clear();
+        data.getSizesRef().push_back(bB.getIndexAttr(1));
+        data.getStridesRef().clear();
+        data.getStridesRef().push_back(bB.getIndexAttr(1));
+        memref::ReinterpretCastOp castOp = data.createCastOp({1}, bLoc, bB);
+        rewriter.replaceOp(op, castOp);
+        // Move tt.load using this tt.addptr into this block
+        loadOp->moveAfter(castOp);
+        loadOp->setAttr("IndirectLoad", UnitAttr::get(op.getContext()));
+        bB.create<scf::YieldOp>(bLoc, iterArgs);
+      });
+}
+
+} // namespace triton
+} // namespace mlir

@@ -1,0 +1,42 @@
+# Local TA source reference; installed build correspondence is unverified.
+
+# LoadStoreConverter.cpp:179-217
+/// @param rewriter The pattern rewriter used to rewrite the operation.
+/// @return Return success if the operation is successful; otherwise, return
+/// failure.
+LogicalResult LoadConverter::continueModifyFromAddPtrConverter(
+    triton::LoadOp &op, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  auto loc = op.getLoc();
+  auto forOp = op->getParentOfType<scf::ForOp>();
+  Operation *firstOp = &forOp.getBody()->front();
+  auto extractOp = cast<tensor::ExtractOp>(firstOp);
+  auto ivs = extractOp.getIndices();
+  // Single iterArg which is inserted by AddPtrConverter.
+  auto iterArg = forOp.getRegionIterArg(0);
+  auto ptr = adaptor.getPtr();
+
+  rewriter.setInsertionPointAfter(op);
+  Value castVal = ptr.getDefiningOp<memref::ReinterpretCastOp>();
+  Value idxZero =
+      rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexAttr(0));
+  Value loadVal =
+      rewriter.create<memref::LoadOp>(loc, castVal, ValueRange{idxZero});
+  propagateWasBoolToInt8Attr(op.getOperation(), loadVal.getDefiningOp(),
+                             rewriter);
+  Value insertedVal =
+      rewriter.create<tensor::InsertOp>(loc, loadVal, iterArg, ValueRange{ivs});
+  // a yield op is already created by AddPtrConverter.
+  // so we need to replace it with a new yield op.
+  Operation *terminator = forOp.getBody()->getTerminator();
+  scf::YieldOp oldYieldOp = cast<scf::YieldOp>(terminator);
+  auto yieldOp = rewriter.create<scf::YieldOp>(loc, ValueRange{insertedVal});
+  rewriter.replaceOp(oldYieldOp, yieldOp);
+  // Now the scf.for is complete, we can replace tt.load with it.
+  auto rank = cast<ShapedType>(op.getResult().getType()).getShape().size();
+  Operation *rootForOp = op;
+  while (rank != 0) {
+    rank--;
+    rootForOp = rootForOp->getParentOfType<scf::ForOp>();
+  }
+  rewriter.replaceOp(op, rootForOp);

@@ -1,0 +1,109 @@
+# Original kernel_analysis.py:335-445
+class ReductionAnalysis:
+    def __init__(self, kernel):
+        self.kernel = kernel
+        self.reduction = None
+        self.reduced_dim = None
+        self.contiguous_reduction = self.kernel.is_contiguous_reduction()
+        if self.numof_reduction_axis() > 1:
+            self.reduced_dim = self.analyze_reduction_dim()
+            return
+
+        reduction = self.kernel.find_reduction_node()
+        if reduction is None or not isinstance(reduction, ir.Reduction):
+            raise RuntimeError("failed to get one reduction node")
+        self.reduction = reduction
+        self.reduced_dim = self.analyze_reduction_dim()
+
+    def is_higher_order_reduction(self):
+        return self.dim < len(self.kernel.tiling_axis) - 1
+
+    def is_1d_reduction(self):
+        return self.kernel.numels["r"] > 1 and len(self.kernel.numels) == 1
+
+    def get_reduce_dim_reshape(self, reduce_axis):
+        if self.is_1d_reduction():
+            shape_str = f"[{reduce_axis.name.upper()}BLOCK_SUB]"
+        else:
+            shape = ["1"] * len(self.kernel.tiling_axis)
+            shape[self.reduced_dim] = f"{reduce_axis.name.upper()}BLOCK_SUB"
+            shape_str = f"[{','.join(shape)}]"
+        return shape_str
+
+    def dense_size_list(self) -> List[str]:
+        sizes = ["1"] * len(self.kernel.golden_var_list)
+        for i, axis in enumerate(self.kernel.golden_var_list):
+            if axis.name[0] != 'r' or self.kernel.inside_reduction:
+                sizes[i] = f"{axis.name.upper()}BLOCK_SUB"
+        sizes = list(reversed(sizes))
+        return sizes
+
+    def dense_reduction_list(self) -> List[str]:
+        reduction_sizes = [f"{x.name.upper()}BLOCK_SUB" for x in self.kernel.reduction_axis_list()]
+        reduction_sizes = list(reversed(reduction_sizes))
+        return reduction_sizes
+
+    def dense_post_reduction_list(self) -> List[str]:
+        reduction_list_str = f"{' * '.join(self.dense_reduction_list())}"
+        no_reduction_list = []
+        # ensure order
+        for dense_size in self.dense_size_list():
+            if dense_size not in self.dense_reduction_list():
+                no_reduction_list.append(dense_size)
+        no_reduction_list.append(reduction_list_str)
+        return no_reduction_list
+
+    def dense_size_str(self):
+        sizes = self.dense_size_list()
+        num_red = self.numof_reduction_axis()
+        is_contig = self.contiguous_reduction
+
+        if num_red > 1:
+            if is_contig:
+                result = f"[{', '.join(self.dense_post_reduction_list())}]"
+            else:
+                result = f"[{'* '.join(sizes)}]"
+        else:
+            result = f"[{', '.join(sizes)}]"
+
+        return result
+
+    def numof_reduction_axis(self):
+        return self.kernel.numof_reduction_axis()
+
+    def reduction_axis_list(self):
+        return self.kernel.reduction_axis_list()
+
+    def analyze_reduction_dim(self):
+        if self.numof_reduction_axis() > 1:
+            if not self.contiguous_reduction:
+                self.reduced_dim = 0
+                return 0
+
+        if self.numof_reduction_axis() == 1:
+            if not self.kernel.golden_var_list:
+                self.kernel.select_golden_varlist()
+            reduction_layout_var_list = list(self.kernel.golden_var_list) if self.kernel.golden_var_list else []
+            if not reduction_layout_var_list:
+                reduction_layout_var_list = self.kernel.parse_golden_from_load_store_index()
+        else:
+            reduction_layout_var_list = self.kernel.parse_golden_from_load_store_index()
+            if not reduction_layout_var_list or not any(x.name[0] == 'r' for x in reduction_layout_var_list):
+                if not self.kernel.golden_var_list:
+                    self.kernel.select_golden_varlist()
+                reduction_layout_var_list = list(self.kernel.golden_var_list) if self.kernel.golden_var_list else []
+
+        if not reduction_layout_var_list:
+            raise RuntimeError("assert reduction_layout_var_list is not empty")
+
+        if self.numof_reduction_axis() > 1 and self.contiguous_reduction:
+            if not self.kernel.golden_var_list:
+                self.kernel.select_golden_varlist()
+            return sum(1 for x in self.kernel.golden_var_list if x.name[0] != 'r')
+
+        dim = -1
+        for i, x in enumerate(reversed(reduction_layout_var_list)):
+            if x.name[0] == 'r':
+                dim = i
+                break
+        return dim

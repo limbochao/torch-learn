@@ -1,0 +1,175 @@
+# Installed torch_npu/_inductor/runtime/tile_generator.py; original source line numbers follow.
+
+# source lines 21-69
+
+    def __init__(self, numels, axis_names, tiling_axis, no_loop_axis, split_axis, low_dims, persistent_reduction,
+                 dtype, npu_kernel_type=NPUKernelType.SIMD, input_ptr_num=0, dual_reduction=False):
+        self.numels = copy.deepcopy(numels)
+        self.blocks = list(self.numels)
+        self.candidate_blocks = []
+        self.sub_blocks = self.blocks.copy()
+        self.axis_name = axis_names
+        self.tiling_axis = tiling_axis
+        self.no_loop_axis = no_loop_axis
+        self.split_axis = split_axis
+        self.low_dims = low_dims
+        self.configs = []
+        self.dtype_bytes = get_byte_per_numel(dtype)
+        self.rebuild_dynamic_axis()
+        self.block_name = {}
+        self.sub_block_name = {}
+        self.persistent_reduction = persistent_reduction
+        self.dual_reduction = dual_reduction
+        self.npu_kernel_type = npu_kernel_type
+        self.max_total_numel = functools.reduce(lambda x, y: x * y, self.blocks) if self.blocks else 1
+        self.tiny_kernel = self.max_total_numel < 128 * 1024
+        self.input_ptr_num = 3 if input_ptr_num == 0 else min(input_ptr_num, 3)
+
+        local_mem_size = 128 * 1024 if self.npu_kernel_type == NPUKernelType.SIMT_ONLY else config.ub_size
+        self.max_numel_threshold = local_mem_size // self.input_ptr_num // self.dtype_bytes
+        self.stop_numel = min(self.max_numel_threshold, self.max_total_numel // config.num_vector_core) // 8
+        for axis, name in enumerate(self.axis_name):
+            if axis not in tiling_axis and axis not in split_axis:
+                self.blocks[axis] = 1
+                self.sub_blocks[axis] = 1
+                continue
+            if axis in self.split_axis:
+                self.block_name[axis] = f"{name.upper()}BLOCK"
+            if axis in self.tiling_axis:
+                self.sub_block_name[axis] = f"{name.upper()}BLOCK_SUB"
+
+        self.program_threshold = (
+            config.num_vector_core // 8
+            if self.tiny_kernel and self.npu_kernel_type != NPUKernelType.SIMT_ONLY
+            else config.num_vector_core // 2
+        )
+        self.program_threshold = min(self.max_total_numel // 128 - 1, self.program_threshold)
+        self.program_threshold = max(0, self.program_threshold)
+        self.npu_kernel_type = npu_kernel_type
+        self.real_tiling_axis = []
+        for tiling_axis in self.tiling_axis:
+            if tiling_axis in self.no_loop_axis:
+                continue
+
+# source lines 150-200
+
+    def fill_config(self, cfg, blocks):
+        for axis in self.split_axis:
+            cfg[self.block_name[axis]] = aligned_numel_32byte(blocks[axis], self.dtype_bytes)
+        for axis in self.tiling_axis:
+            if self.npu_kernel_type == NPUKernelType.SIMT_ONLY:
+                tiling_numel = next_power_of_2(self.sub_blocks[axis])
+                while tiling_numel > blocks[axis]:
+                    tiling_numel = tiling_numel // 2
+            else:
+                tiling_numel = min(self.sub_blocks[axis], blocks[axis])
+            cfg[self.sub_block_name[axis]] = aligned_numel_32byte(tiling_numel, self.dtype_bytes)
+        cfg["compile_mode"] = self.npu_kernel_type.compile_mode()
+
+    def cal_cfg_remain_programs(self, cfg):
+        remain_programs = 0
+        for i, block in enumerate(self.blocks):
+            block_name = self.block_name.get(i, "")
+            config_block = cfg.get(block_name, None)
+            if config_block is None:
+                remain_programs += self.numels[i] % block
+            else:
+                remain_programs += self.numels[i] % config_block
+        return remain_programs
+
+    def find_config(self, cfg):
+        for config_var in self.configs:
+            if config_var.kwargs == cfg:
+                return True
+        return False
+
+    def add_to_configs(self, candi_block):
+        newcfg = {}
+        self.fill_config(newcfg, candi_block)
+        total_numel = self.calculate_config_numel(newcfg)
+        stop_numel_threshold = 0 if len(self.configs) < 10 or self.tiny_kernel else self.stop_numel + 100
+        if not self.valid_tile_numel(total_numel):
+            return False
+        if self.find_config(newcfg):
+            return False
+        if total_numel < stop_numel_threshold:
+            return False
+
+        # This is tmp check for simt overflow, and will be removed latter
+        if self.npu_kernel_type == NPUKernelType.SIMT_ONLY and total_numel * self.dtype_bytes > 8 * 1024:
+            return False
+        self.configs.append(Config(newcfg, num_warps=1, num_stages=2))
+        return True
+
+    def desecnd_all_low_dims_with_all_blocks(self):
+        restore_sub_blocks = {}
+
+# source lines 236-259
+                if self.add_to_configs(self.blocks):
+                    self.desecnd_all_low_dims_with_all_blocks()
+
+            # tile numel reached threshold
+            total_numel = self.calculate_total_numel()
+            if total_numel <= self.stop_numel:
+                if self.add_to_configs(self.blocks):
+                    self.desecnd_all_low_dims_with_all_blocks()
+                reached_stop_numel = True
+                break
+
+            numel = self.sub_blocks[axis]
+            if numel == 1:
+                if self.add_to_configs(self.blocks):
+                    self.desecnd_all_low_dims_with_all_blocks()
+                break
+
+            if numel >= 32:
+                self.sub_blocks[axis] = next_power_of_2(numel // 2)
+
+            else:  # numel < 32 :
+                numel = self.sub_blocks[axis]
+                self.sub_blocks[axis] = numel - 1
+        return reached_stop_numel
+
+# source lines 428-469
+    def descend_split_tiling(self):
+        self.reset_configs()
+        tiling_not_low_dims = [x for x in self.tiling_axis if x not in self.low_dims]
+
+        def descend_split_axis():
+
+            for axis_index in range(len(self.split_axis)):
+                if self.descend_split_axis_inner(axis_index):
+                    return True
+
+            total = self.calculate_total_numel()
+            return total <= self.stop_numel
+
+        def desceond_tiling_not_low_dims():
+            for axis in tiling_not_low_dims:
+                if self.axis_name[axis][0] == "r" and self.persistent_reduction:
+                    continue
+                if axis in self.no_loop_axis:
+                    continue
+
+                if self.descend_tiling_axis(axis):
+                    return True
+            total = self.calculate_total_numel()
+            return total <= self.stop_numel
+
+        while True:
+            # descend split axis
+            if descend_split_axis():
+                break
+            if len(self.candidate_blocks) > 0:
+                self.sub_blocks = list(self.candidate_blocks[0])
+            # descend tiling but not low dims
+            if desceond_tiling_not_low_dims():
+                break
+                # descend low dims, need to descend all axis at the same time
+            self.descend_all_low_dims()
+            break
+        self.add_extra_options()
+        # do config filter for simt kernel, if there're configs with 0 remain programs others can be dropped because:
+        # 1. for simt kernel, numels do not need to too detailed tiling
+        # 2. for kernel, loop with no mask which means numel can be divisible by tiling blocksub is preferable
+        if self.npu_kernel_type == NPUKernelType.SIMT_ONLY and len(self.configs) > 0:

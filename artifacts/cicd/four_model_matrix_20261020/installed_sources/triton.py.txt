@@ -1,0 +1,147 @@
+# Original triton.py:2654-2667
+            self.body.splice(self.indexing_code)
+            loads = (
+                self._original_loads_buf
+                if self._original_loads_buf is not None
+                else self.loads
+            )
+            self.body.splice(loads)
+            compute = (
+                self._original_compute_buf
+                if self._original_compute_buf is not None
+                else self.compute
+            )
+            self.body.splice(compute)
+            if allow_stores:
+
+# Original triton.py:4018-4038
+
+        for node in self.sorted_axis:
+            is_persistent_reduction_axis = (
+                self.persistent_reduction and node.is_reduction
+            )
+            if node.is_vectorized_split:
+                masked_axis_name.append(node.name)
+                continue
+            if self.is_unified_simt_kernel():
+                if not node.is_tiling_axis:
+                    continue
+            else:
+                if (
+                    not node.is_tiling_axis
+                    or is_persistent_reduction_axis
+                    or (node.is_no_loop_axis and not is_dynamic_axis(node))
+                ):
+                    continue
+
+            if save_variable_mask and node.name in subblock_axis:
+                continue
+
+# Original triton.py:4082-4100
+        value: CSEVariable | tuple[CSEVariable, ...],
+    ) -> CSEVariable | tuple[CSEVariable, ...]:
+        if not self.inside_reduction:
+            raise RuntimeError("assert self.inside_reduction")
+        if self.persistent_reduction and self.numof_reduction_axis() == 1:
+            masks = {  # noqa: set_linter
+                f"{node.symbol()}_mask"
+                for node in self.sorted_axis
+                if node.name[0] != "r"
+            }
+        else:
+            masks = {f"{node.symbol()}_mask" for node in self.sorted_axis}  # noqa: set_linter
+        self.filter_masks(masks)
+        masks = sorted(masks)
+        if self._load_mask:
+            masks.append(self._load_mask)
+        if not self.reduce_analysis:
+            self.reduce_analysis = ReductionAnalysis(self)
+
+
+# Original triton.py:4138-4177
+                    shape=vectorized_value_shape,
+                ),
+                value,
+            )
+        elif (
+            len(dense_size_str) > 2
+            and (
+                not self.persistent_reduction or self.numof_reduction_axis() != 1
+            )
+        ):
+            if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
+                value_order = list(reversed(self.golden_var_list))
+                target_order = [x for x in value_order if x.name[0] != "r"] + [
+                    x for x in value_order if x.name[0] == "r"
+                ]
+                permute_order = [value_order.index(x) for x in target_order]
+                current_order = list(range(len(value_order)))
+                need_permute = permute_order != current_order
+
+            if need_permute:
+                value = self._map_tuple_or_scalar(
+                    lambda v: self.cse.generate(
+                        self.compute,
+                        f"tl.reshape({v}.permute({permute_order}), {dense_size_str})",
+                        dtype=v.dtype,
+                        shape=value_shape,
+                    ),
+                    value,
+                )
+            else:
+                value = self._map_tuple_or_scalar(
+                    lambda v: self.cse.generate(
+                        self.compute,
+                        f"tl.reshape({v}, {dense_size_str})",
+                        dtype=v.dtype,
+                        shape=value_shape,
+                    ),
+                    value,
+                )
+
+
+# Original triton.py:4224-4235
+            if not cond:
+                return tval
+            return TritonKernelOverrides.where(cond, tval, fval)
+
+        if self.persistent_reduction:
+            masked_value = value
+
+            if reduction_type in {"argmax", "argmin", "max", "min"}:
+                if reduction_type == "argmax" or reduction_type == "argmin":
+                    reduce_axis = get_reduction_axis()
+                    broadcast_string: str
+                    reshape_str = self.reduce_analysis.get_reduce_dim_reshape(
+
+# Original triton.py:4524-4553
+                else:
+                    shape = NPUTritonSymbols.get_block_shape(indexing.index)
+
+        if (
+            dtype in (torch.float16, torch.bfloat16)
+            and config.triton.codegen_upcast_to_fp32
+        ):
+            line += ".to(tl.float32)"
+            dtype = torch.float32
+
+        if has_tmpmask:
+            # Masked loads must come after the mask is computed
+            load_buffer = self.compute
+        elif (
+            self.inside_reduction
+            and self.range_trees[-1].is_loop
+            and not indirect_indexing
+            and not has_rindex
+        ):
+            # can lift a common load outside of reduction loop
+            # One exception is when this is an indirect_load.
+            load_buffer = self.prefix
+
+        else:
+            load_buffer = self.loads
+
+        result_var = self.cse.generate(load_buffer, line, dtype=dtype, shape=shape)
+        if not (isinstance(result_var, TritonCSEVariable)):
+            raise RuntimeError("assert isinstance(result_var, TritonCSEVariable)")
+        result_var.mask_vars = indexing.mask_vars  # type: ignore[assignment]
