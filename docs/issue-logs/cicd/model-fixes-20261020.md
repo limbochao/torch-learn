@@ -17,9 +17,11 @@ published: false
 performance 使用模型默认 batch size，不能用 accuracy 的小 batch 结果代替。
 每个编译候选的超时为 60 分钟；performance PASS 只表示成功执行并产生正 speedup，不证明精度。
 
-最终调试分支：`debug/cicd-all-fixes-20261020`，head `60497a26f0`，建立于 Ascend master `1ca45b1e26`。
+最终调试分支：`debug/cicd-all-fixes-20261020`，head `5b18fac653`，建立于 Ascend master `0b4b636555`。
 TA 仅做定界和独立 kernel 抽取，不修改 TA，也不在 Inductor 中添加针对 TA 的绕过。
-下文结果是持续更新的验证记录，尚未写入结果的项目不表示通过。
+四模型 32 个场景全部执行通过；这是各修复阶段的累计结果，具体运行版本分别保留。
+最终 Python 修复集的 32 项数值回归、双 shape 训练复现及针对性单元检查也已通过。
+NFNet 动态训练 performance 的单次 speedup 为 0.922258，成功执行但慢于 eager。
 
 ## 分支组织
 
@@ -51,6 +53,10 @@ axes 采用有序依赖，复用 mask 布局构造，避免两个分支分别维
 v6 加入 stride 操作数规范化的对照补丁，但动态双 shape 复现仍失败；
 v7 改为整数取模并单独复测，v8 再对齐 CantSplit 的拒绝接口。
 stride 补丁涉及的两个新增目标文件，原安装内容均与 master 一致。
+收尾时 master 更新到 `0b4b636555`，只改变 `third_party/op-plugin` gitlink。
+最终分支已 rebase 到该版本；整个 `torch_npu` 和 `test/_inductor` 的 tree 与已验证版本完全相同，
+证明记录见 [`source_rebase_equivalence.json`](../../../artifacts/cicd/model_fixes_20261020/source_rebase_equivalence.json)。
+沿用现有环境的 native 库，没有据此声称重建并验证了新 op-plugin 二进制。
 该说明用于区分源码版本，不能把旧版运行结果标为新版实际运行。
 
 ## 修复与原失败的对应关系
@@ -62,7 +68,7 @@ stride 补丁涉及的两个新增目标文件，原安装内容均与 master �
 | negative index | dump/check 开关使负索引失去 wrap 语义，另有 no-wrap bounds 传播错误 | 专门回归通过；本轮模型使用的索引未证明触发此缺陷，不将它计入原 14 项失败的修复数 |
 | load liveness + resource tiling | Albert 四个训练编译失败，以及复测新暴露的动态 softmax 资源失败 | 原配置 DSL 对照和整模型 8 项通过 |
 | kernel type 资源边界与候选搜索 | NFNet 四个动态场景的 pooling 编译失败 | 动态推理 performance/accuracy 已通过；动态训练随后暴露独立的 scheduling 错误 |
-| symbolic group scheduling | NFNet 两个动态训练场景新暴露的 `unexpected group` | 调度单元对照通过，整模型重测进行中 |
+| symbolic group scheduling | NFNet 两个动态训练场景新暴露的 `unexpected group` | 调度单元对照通过，NFNet 动态训练 performance/accuracy 均通过 |
 | symbolic stride comparison | 小复现第二个动态 shape 的卷积反向 `Invalid ranges [0:-1]` | v7 框架测试 4/4 PASS，动态/静态两组 shape 均通过前向及梯度比较 |
 | range split rejection | 小复现融合检查的 `CantSplit.__init__` TypeError | v8 单元检查 3/3 PASS；旧版五个拒绝对照报错 |
 
@@ -216,8 +222,15 @@ CUDA 对齐边界：沿用社区调度顺序及 sizevars 的证明接口；社�
 [`symbolic_group_training.py`](../../../scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py)：
 30 行脚本执行 stride=32 的卷积和空间 mean 门控，并比较前向、输入梯度和权重梯度。
 旧 overlay 在第一组输入 `(2, 16, 224, 224)` 上独立复现相同 `unexpected group`；
-修复后的数值结果和 NFNet 整模型结果持续记录于
+修复后的数值结果和 NFNet 整模型结果分别记录于
 [`scheduler_checks`](../../../artifacts/cicd/model_fixes_20261020/scheduler_checks/) 和 `matrix_v5/`。
+NFNet 在 v5 中的两个动态训练场景均通过：performance batch=128，accuracy batch=8。
+performance 编译耗时约 4615 秒，speedup=0.922258；accuracy 为 `pass_accuracy`。
+模型编译由多个候选组成，超过 60 分钟的总耗时没有触发单候选超时。
+accuracy 的前向/反向捕获在一个图中，0 graph break；performance 沿用 runner 默认行为，记录 9 次 graph break。
+成功生成的真实反向规约 kernel 见
+[`nfnet_backward_v5.py`](../../../artifacts/cicd/model_fixes_20261020/generated/nfnet_backward_v5.py)。
+
 新增框架测试在两种 scheduler、Welford 开关两种取值下匹配等价尺寸，
 并验证不相等的组继续被拒绝、没有新增 guard。旧版失败，修复版 2/2 PASS。
 
@@ -296,11 +309,12 @@ template 的尾部返回 9，pure SIMT 返回 0。由此可以在 Inductor 之�
 因此实际归属证据以运行时 TTIR → ttadapter 转换和独立结果为准。
 
 修复 Inductor 后，GPT2 全部 8 个场景通过，包含原先失败的静态/动态推理 accuracy。
-在包含前五类修复的 v4 独立包目录中运行本用例，template 的 `other=0` 和 `other=-7` 都仍返回尾部 9，
+分别在包含前五类修复的 v4、包含全部修复的 v8 独立包目录中运行本用例，template 的 `other=0` 和 `other=-7` 都仍返回尾部 9，
 pure SIMT 的两个对照分别正确返回 0 和 -7；有效 768 个位置四种情况都正确。
 TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件 `memref.load`。
 结果及 IR 见
-[`ta_after_inductor_v4`](../../../artifacts/cicd/model_fixes_20261020/ta_after_inductor_v4/)。
+[`ta_after_inductor_v4`](../../../artifacts/cicd/model_fixes_20261020/ta_after_inductor_v4/)
+和最终复核的 [`ta_after_inductor_v8`](../../../artifacts/cicd/model_fixes_20261020/ta_after_inductor_v8/)。
 
 因此两者是独立缺陷，在模型症状上存在耦合：新 Inductor 会在每次 sum/max 等操作前重新屏蔽
 无效 lane，既保护均值，也保护方差，消除了 TA 错误尾值对这些规约结果的贡献。
@@ -308,7 +322,7 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 独立用例完全不运行 Inductor，仍能复现，从而把剩余问题定界到 TA lowering。
 依照任务边界，不改 TA，也不通过更换 kernel type 来规避该问题。
 
-## 当前验证记录
+## 验证结果
 
 数值回归入口：
 [`validate_codegen.py`](../../../scripts/repro/cicd/model_fixes_20261020/validate_codegen.py)，
@@ -322,7 +336,7 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 | symbolic group scheduling 单元检查 | 2/2 PASS；旧版本在四个等价组对照中抛出异常 |
 | symbolic stride comparison 单元检查 | v7/v8 均 4/4 PASS；原 Layout 在 CPU 元数据比较中复现异常 |
 | range split compatibility 单元检查 | v8 3/3 PASS；旧版拒绝对照出现 TypeError/IndexError |
-| 动态双 shape 训练小复现 | v7 动态/静态各 2 组 PASS；v8 消除初次编译的 CantSplit TypeError 后再测 |
+| 动态双 shape 训练小复现 | v8 动态/静态各 2 组 PASS，前向与两项梯度比较通过，未再出现 CantSplit TypeError |
 | 静态/动态 embedding + norm、sum/prod/min/max、argmin/argmax、int32/int64 | 22/22 PASS |
 | 静态/动态 BERT bias gradient、分离规约轴 | 4/4 PASS |
 | 静态/动态负索引，none/dump/check 开关（包含 no-wrap bounds 修改） | 6/6 PASS |
@@ -330,8 +344,8 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 | Albert softmax 通用修复后 | 动态训练 performance PASS；合计 8/8 PASS |
 | GPT2 完整矩阵 | 8/8 PASS |
 | BERT 完整矩阵 | 8/8 PASS |
-| NFNet 完整矩阵 | 推理 4/4、静态训练 2/2 PASS；两个动态训练场景复测中 |
-| TA 独立 kernel 在含原精度修复的 v4 环境下 | template 两个 other 对照仍失败；pure SIMT 两项通过 |
+| NFNet 完整矩阵 | 8/8 PASS；动态训练 performance 的单次 speedup=0.922258 |
+| TA 独立 kernel 在 v4/v8 环境下 | template 两个 other 对照仍失败；pure SIMT 两项通过 |
 
 v4 整合源码的 32 项数值回归全部通过，10 个独立子进程均正常退出；结果保存在
 [`regressions_v4`](../../../artifacts/cicd/model_fixes_20261020/regressions_v4/)。
@@ -340,13 +354,22 @@ argmin/argmax 使用精确比较；prod 用 `value+0.99`，使 padded lane 上�
 
 测试使用独立包目录加载修复文件，v4 另加载 master 的 decomposition.py；v5 加入 scheduling.py。
 v5、v7 的 32 项数值回归和各 10 个独立子进程也全部通过，结果见同目录 `regressions_v5/`、`regressions_v7/`。
-v7/v8 的 stride 单元、双 shape 训练复现及全组数值回归单独执行，不把旧版结果标为新版实际结果。原环境安装文件不变。
+最终补充检查中，mask 4/4、negative 1/1、tiling 3/3、scheduling 2/2 也在 v8 下通过，
+见同目录 `final_checks/`；与 stride 4/4、range 拆分 3/3 合计 17 项针对性框架测试。
+TA 记录脚本正常退出只表示完成独立定界，不能把 `final_checks` 中的执行成功当作 TA 已修复；
+它的实际 template 数值结果仍为失败，完整明细保存在 `ta_after_inductor_v8/results.json`。
+
+v8 的 stride 单元 4/4、range 拆分单元 3/3、双 shape 训练复现和 32 项数值回归均通过；
+数值回归的 10 个子进程退出码均为 0，见同目录 `layout_checks_v8/`、`regressions_v8/`。
+动态训练日志不再出现此前的 CantSplit TypeError，静态对照也通过。原环境安装文件不变。
 原安装 decomposition.py 与首轮 master 的差异也仅位于未使用的 TE 注册函数内，
 为 matmul_backward 是否已注册的 guard，不影响本轮 triton loader 的结论。
 完整模型入口为同目录 `run_matrix.py`，通过 `MATRIX_MODELS`、`MATRIX_CASES` 选择复测项。
 阶段结果、源码哈希、分支提交与 generated DSL 保存在
 [`artifacts/cicd/model_fixes_20261020`](../../../artifacts/cicd/model_fixes_20261020/)。
-其中 `model_matrix.json` 合并各阶段最新结果，原始阶段结果分别保留；进行中状态不能作最终结论。
+其中 `model_matrix.json` 合并各阶段最终结果，32 项均为 PASS；原始失败与修复阶段分别保留。
+整模型结果来自 v1/v2/v4/v5，后续 v8 新修复由上述独立训练复现、单元检查和数值回归验证，
+未将整模型的早期阶段结果改标为 v8 全矩阵重跑。
 
 本轮覆盖 FP32 和上表注明的整数回归；未将其推广为所有 dtype、所有模型的验证结论。
 tiling 工作集估算是搜索启发式，实际合法性仍由编译器确认；单次性能记录用于确认场景执行成功。
