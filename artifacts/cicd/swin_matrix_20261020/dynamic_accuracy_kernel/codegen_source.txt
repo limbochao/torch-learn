@@ -1,0 +1,139 @@
+Installed torch_npu/_inductor/codegen/triton.py
+SHA256: dc7ff8c142f979645111c13ad56f3a8bfff38d418d4428989ba4100f84b51674
+
+3989:     def filter_masks(self, mask_vars, index_vars=None):
+3990:         variable_mask_vars = {  # noqa: set_linter
+3991:             mask_var
+3992:             for mask_var in mask_vars
+3993:             if isinstance(mask_var, TritonCSEVariable)
+3994:         }
+3995:         normal_mask_vars = mask_vars.copy() - variable_mask_vars
+3996:         # This function is only allowed to remove *axis* masks that are known
+3997:         # to be redundant/invalid for current kernel shape lowering.
+3998:         #
+3999:         # It must NOT drop "semantic" masks (e.g. tmp masks guarding padded
+4000:         # loads/stores, indirect indexing validity masks, etc.), otherwise we
+4001:         # can generate incorrect tl.load/tl.store.
+4002:         masked_axis_name = []
+4003:         # Size symbols are not loop axes: "y0 < s0" only constrains y0, and
+4004:         # ops.masked skips them when it ands the axis masks in. Left in, they
+4005:         # fail the subset test below for every load whose index does not spell
+4006:         # the size symbol out, e.g. the first slice of a cat over a dynamic
+4007:         # dimension, whose guarding mask would then be dropped.
+4008:         subblock_axis = {  # noqa: set_linter
+4009:             axis
+4010:             for axis in V.kernel.current_subblock_axis
+4011:             if not str(axis).startswith(("s", "ps", "i"))
+4012:         }
+4013:         save_variable_mask = True
+4014:         if index_vars and subblock_axis:
+4015:             save_variable_mask = subblock_axis.issubset(
+4016:                 {str(var) for var in index_vars}  # noqa: set_linter
+4017:             )
+4018: 
+4019:         for node in self.sorted_axis:
+4020:             is_persistent_reduction_axis = (
+4021:                 self.persistent_reduction and node.is_reduction
+4022:             )
+4023:             if node.is_vectorized_split:
+4024:                 masked_axis_name.append(node.name)
+4025:                 continue
+4026:             if self.is_unified_simt_kernel():
+4027:                 if not node.is_tiling_axis:
+4028:                     continue
+4029:             else:
+4030:                 if (
+4031:                     not node.is_tiling_axis
+4032:                     or is_persistent_reduction_axis
+4033:                     or (node.is_no_loop_axis and not is_dynamic_axis(node))
+4034:                 ):
+4035:                     continue
+4036: 
+4037:             if save_variable_mask and node.name in subblock_axis:
+4038:                 continue
+4039: 
+4040:             masked_axis_name.append(node.name)
+4041: 
+4042:         for mask_var in variable_mask_vars:
+4043:             if save_variable_mask:
+4044:                 continue
+4045:             mask_vars.discard(mask_var)
+4046: 
+4047:         # Be careful when remove mask from load store
+4048:         # 1. Current only leave axis mask from sorted axis
+4049:         # 2. If z0 is permute, maybe have z0_mask, z0_1_mask
+4050:         # 3. xmask, x0_mask: if axis is x, will not remove x0_mask, can't just use startswith
+4051:         for mask_var in normal_mask_vars:
+4052:             valid_mask_var = False
+4053:             mask_var_str = str(mask_var)
+4054:             for axis_name in masked_axis_name:
+4055:                 if mask_var_str == f"{axis_name}mask" or mask_var_str.startswith(
+4056:                     f"{axis_name}_"
+4057:                 ):
+4058:                     valid_mask_var = True
+4059: 
+4060:             if not valid_mask_var:
+4061:                 mask_vars.discard(mask_var)
+4062: 
+
+4077:     def reduction(
+4078:         self,
+4079:         dtype: torch.dtype,
+4080:         src_dtype: torch.dtype,
+4081:         reduction_type: ReductionType,
+4082:         value: CSEVariable | tuple[CSEVariable, ...],
+4083:     ) -> CSEVariable | tuple[CSEVariable, ...]:
+4084:         if not self.inside_reduction:
+4085:             raise RuntimeError("assert self.inside_reduction")
+4086:         if self.persistent_reduction and self.numof_reduction_axis() == 1:
+4087:             masks = {  # noqa: set_linter
+4088:                 f"{node.symbol()}_mask"
+4089:                 for node in self.sorted_axis
+4090:                 if node.name[0] != "r"
+4091:             }
+4092:         else:
+4093:             masks = {f"{node.symbol()}_mask" for node in self.sorted_axis}  # noqa: set_linter
+4094:         self.filter_masks(masks)
+4095:         masks = sorted(masks)
+4096:         if self._load_mask:
+4097:             masks.append(self._load_mask)
+4098:         if not self.reduce_analysis:
+4099:             self.reduce_analysis = ReductionAnalysis(self)
+4100: 
+4101:         dense_size_str = self.dense_size_str()
+4102:         value_shape = tuple(self.dense_size_list())
+4103:         permute_order = None
+
+4209:             return self.cse.reduction_cache[cache_key]
+4210: 
+4211:         dim = self.reduction_dim()
+4212:         acc_type = triton_acc_type(src_dtype)
+4213:         torch_acc_type = upcast_acc_dtype(src_dtype)
+4214:         result_shape = list(self.dense_size_list())
+4215:         result_shape[dim] = "1"
+4216:         result_var: Any = self.cse.newvar(dtype=torch_acc_type, shape=tuple(result_shape))
+4217:         result_var.mask_vars = {var for var in masks if var[0] != "r"}  # noqa: set_linter
+4218:         cond_expr = f"({' & '.join(masks)})"
+4219:         if need_permute:
+4220:             cond_expr = f"{cond_expr}.permute({permute_order})"
+4221:         cond = f"{cond_expr}.reshape({dense_size_str})"
+4222: 
+4223:         def where_cond(tval, fval):
+4224:             if not cond:
+4225:                 return tval
+4226:             return TritonKernelOverrides.where(cond, tval, fval)
+4227: 
+4228:         if self.persistent_reduction:
+4229:             masked_value = value
+4230: 
+4231:             if reduction_type in {"argmax", "argmin", "max", "min"}:
+4232:                 if reduction_type == "argmax" or reduction_type == "argmin":
+4233:                     reduce_axis = get_reduction_axis()
+4234:                     broadcast_string: str
+4235:                     reshape_str = self.reduce_analysis.get_reduce_dim_reshape(
+4236:                         reduce_axis
+4237:                     )
+4238:                     broadcast_string = f"tl.broadcast_to({reduce_axis.symbol()}.reshape({reshape_str}), {masked_value}.shape)"
+4239:                     accumulator_index = str(
+4240:                         self.cse.generate(
+4241:                             self.compute, broadcast_string, dtype=torch.int64, shape=masked_value.shape,

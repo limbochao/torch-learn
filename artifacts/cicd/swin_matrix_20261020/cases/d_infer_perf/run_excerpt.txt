@@ -1,0 +1,380 @@
+[Excerpt: original log retained in target workspace; warnings/IR dump before tail omitted.]
+# cwd: <workspace>/pytorch_new/benchmarks/torchbench
+# TORCHBENCH_DATA_PATH=<workspace>/pta_213_cicd/data
+# HF_ENDPOINT=https://hf-mirror.com
+# command: <python-env>/bin/python <workspace>/pytorch_new/benchmarks/torchbench/timm_models.py --performance --repeat 1 --iterations 1 --inference --float32 --backend inductor --npu-backend triton --disable-aclgraph --only swin_base_patch4_window7_224 --output <workspace>/swin_matrix_20261020/dynamic_results/torchbench_20261020_012553_eQAbPk/0001_timm_models_swin_base_patch4_window7_224/d_infer_perf/benchmark.csv --dynamic-shapes
+# started: 2026-10-20T01:25:53+08:00
+<site-packages>/triton/language/extra/cann/extension/math_ops.py:13: FutureWarning: triton.language.extra.cann.extension.atan2 is deprecated and will be removed in the next release; use triton.language.extra.cann.libdevice.atan2 instead.
+  @_deprecated(replacement="triton.language.extra.cann.libdevice.atan2")
+<site-packages>/triton/language/extra/cann/extension/math_ops.py:35: FutureWarning: triton.language.extra.cann.extension.isfinited is deprecated and will be removed in the next release; use triton.language.extra.cann.libdevice.isfinited instead.
+  @_deprecated(replacement="t
+[...]
+or<8x1x1x512xf32>
+          %72 = arith.addf %61, %71 : tensor<8x1x1x512xf32>
+          %73 = arith.addi %67, %cst_5 : tensor<1x1x1x1xi64>
+          %74 = arith.cmpi slt, %67, %cst_6 : tensor<1x1x1x1xi64>
+          %75 = arith.select %74, %73, %67 : tensor<1x1x1x1xi1>, tensor<1x1x1x1xi64>
+          %76 = arith.addi %68, %cst_5 : tensor<1x1x1x1xi64>
+          %77 = arith.cmpi slt, %68, %cst_6 : tensor<1x1x1x1xi64>
+          %78 = arith.select %77, %76, %68 : tensor<1x1x1x1xi1>, tensor<1x1x1x1xi64>
+          %79 = arith.remsi %75, %cst_4 : tensor<1x1x1x1xi64>
+          %80 = arith.muli %79, %cst_3 : tensor<1x1x1x1xi64>
+          %81 = tt.broadcast %80 : tensor<1x1x1x1xi64> -> tensor<8x1x1x512xi64>
+          %82 = arith.addi %28, %81 : tensor<8x1x1x512xi64>
+          %83 = arith.remsi %78, %cst_4 : tensor<1x1x1x1xi64>
+          %84 = arith.muli %83, %cst_2 : tensor<1x1x1x1xi64>
+          %85 = tt.broadcast %84 : tensor<1x1x1x1xi64> -> tensor<8x1x1x512xi64>
+          %86 = arith.addi %82, %85 : tensor<8x1x1x512xi64>
+          %87 = arith.divsi %75, %cst_4 : tensor<1x1x1x1xi64>
+          %88 = arith.remsi %87, %cst_1 : tensor<1x1x1x1xi64>
+          %89 = arith.muli %88, %cst_0 : tensor<1x1x1x1xi64>
+          %90 = tt.broadcast %89 : tensor<1x1x1x1xi64> -> tensor<8x1x1x512xi64>
+          %91 = arith.addi %86, %90 : tensor<8x1x1x512xi64>
+          %92 = arith.divsi %78, %cst_4 : tensor<1x1x1x1xi64>
+          %93 = arith.remsi %92, %cst_1 : tensor<1x1x1x1xi64>
+          %94 = arith.muli %93, %cst : tensor<1x1x1x1xi64>
+          %95 = tt.broadcast %94 : tensor<1x1x1x1xi64> -> tensor<8x1x1x512xi64>
+          %96 = arith.addi %91, %95 : tensor<8x1x1x512xi64>
+          %97 = arith.addi %96, %40 : tensor<8x1x1x512xi64>
+          %98 = tt.addptr %29, %97 : tensor<8x1x1x512x!tt.ptr<f32>>, tensor<8x1x1x512xi64>
+          %99 = tt.load %98, %60, %cst_8 : tensor<8x1x1x512x!tt.ptr<f32>>
+          %100 = tt.broadcast %69 : tensor<1x1x1x512xf32> -> tensor<8x1x1x512xf32>
+          %101 = arith.addf %100, %99 : tensor<8x1x1x512xf32>
+          %102 = arith.addf %72, %101 : tensor<8x1x1x512xf32>
+          tt.store %57, %102, %60 : tensor<8x1x1x512x!tt.ptr<f32>>
+        }
+      }
+    }
+    tt.return
+  }
+}
+
+{-#
+  external_resources: {
+    mlir_reproducer: {
+      pipeline: "builtin.module(convert-triton-distributed-to-hivm{pattern-benefit-prioritize-over-llvm-conversions=10}, triton-control-flow-opt, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, discrete-mask-access-conversion{compile-mode=simd_simt_template compile-on-910-95=true}, triton-to-annotation, triton-to-unstructure{compile-mode=simd_simt_template compile-on-910-95=true force-scalarize-mode=false}, triton-to-hivm, triton-to-hfusion, triton-to-llvm, bubble-up-operation{enable-aggressive-mode=true}, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, triton-to-linalg{compile-mode=simd_simt_template compile-on-910-95=true enable-nd2nz-on-vector=false enable-select-analysis=true global-kernel=false named-ops=true}, merge-concat-load-buffer, add_dynamic_cv_pipeline{compile-on-910-95=true})",
+      disable_threading: true,
+      verify_each: true
+    }
+  }
+#-}
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: error: Failures have been detected while processing an MLIR pass pipeline
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: note: Pipeline failed while executing [`TritonToLinalg` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:61: error: 'arith.remsi' op address expressions with modulo are not supported by BlockDataParser
+                tmp17 = tl.load(in_ptr5 + (x3 + 512*((tmp9 % 7)) + 3584*((tmp14 % 7)) + 25088*(((tmp9 // 7) % 2)) + 50176*(((tmp14 // 7) % 2)) + 100352*t0), t0_mask & x3_mask & y2_mask & z1_mask)
+                                                            ^
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:61: error: 'arith.remsi' op address expressions with modulo are not supported by BlockDataParser
+                tmp17 = tl.load(in_ptr5 + (x3 + 512*((tmp9 % 7)) + 3584*((tmp14 % 7)) + 25088*(((tmp9 // 7) % 2)) + 50176*(((tmp14 // 7) % 2)) + 100352*t0), t0_mask & x3_mask & y2_mask & z1_mask)
+                                                            ^
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:43: error: failed to legalize unresolved materialization from () to ('tensor<7x1x1x512x!tt.ptr<f32>>') that remained live after conversion
+                tmp17 = tl.load(in_ptr5 + (x3 + 512*((tmp9 % 7)) + 3584*((tmp14 % 7)) + 25088*(((tmp9 // 7) % 2)) + 50176*(((tmp14 // 7) % 2)) + 100352*t0), t0_mask & x3_mask & y2_mask & z1_mask)
+                                          ^
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:43: note: see existing live user here: %221 = tt.addptr %40, %220 {MetaUse} : tensor<7x1x1x512x!tt.ptr<f32>>, tensor<7x1x1x512xi64>
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: error: failed to apply Conversion Patterns
+module attributes {hacc.target = #hacc.target<"Ascend950PR_9579">, ssbuffer.insertionOptimization} {
+  tt.func public @triton_poi_fused_add_addmm_clone_matmul_permut_58(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg3: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg4: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg5: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg6: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg7: i32, %arg8: i32, %arg9: i32, %arg10: i32 {tt.divisibility = 16 : i32}, %arg11: i32, %arg12: i32) attributes {noinline = false} {
+    %cst = arith.constant dense<50176> : tensor<1x1x1x1xi64>
+    %cst_0 = arith.constant dense<25088> : tensor<1x1x1x1xi64>
+    %cst_1 = arith.constant dense<2> : tensor<1x1x1x1xi64>
+    %cst_2 = arith.constant dense<3584> : tensor<1x1x1x1xi64>
+    %cst_3 = arith.constant dense<512> : tensor<1x1x1x1xi64>
+    %cst_4 = arith.constant dense<7> : tensor<1x1x1x1xi64>
+    %cst_5 = arith.constant dense<14> : tensor<1x1x1x1xi64>
+    %c7168_i32 = arith.constant 7168 : i32
+    %c512_i32 = arith.constant 512 : i32
+    %cst_6 = arith.constant dense<0> : tensor<1x1x1x1xi64>
+    %c1_i32 = arith.constant 1 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c6_i32 = arith.constant 6 : i32
+    %cst_7 = arith.constant dense<0.000000e+00> : tensor<1x1x1x512xf32>
+    %cst_8 = arith.constant dense<0.000000e+00> : tensor<7x1x1x512xf32>
+    %cst_9 = arith.constant dense<100352> : tensor<7x1x1x1xi32>
+    %cst_10 = arith.constant dense<512> : tensor<1x1x1x512xi32>
+    %c7_i32 = arith.constant 7 : i32
+    %0 = tt.get_program_id x : i32
+    %1 = arith.muli %0, %arg11 : i32
+    %2 = tt.make_range {end = 7 : i32, start = 0 : i32} : tensor<7xi32>
+    %3 = arith.addi %arg11, %c6_i32 : i32
+    %4 = arith.divsi %3, %c7_i32 : i32
+    %5 = tt.get_program_id y : i32
+    %6 = arith.muli %5, %arg12 : i32
+    %7 = tt.make_range {end = 512 : i32, start = 0 : i32} : tensor<512xi32>
+    %8 = tt.expand_dims %2 {axis = 1 : i32} : tensor<7xi32> -> tensor<7x1xi32>
+    %9 = tt.expand_dims %8 {axis = 2 : i32} : tensor<7x1xi32> -> tensor<7x1x1xi32>
+    %10 = tt.expand_dims %9 {axis = 3 : i32} : tensor<7x1x1xi32> -> tensor<7x1x1x1xi32>
+    %11 = arith.addi %arg11, %1 : i32
+    %12 = arith.minsi %11, %arg7 : i32
+    %13 = tt.splat %12 : i32 -> tensor<7x1x1x1xi32>
+    %14 = arith.addi %arg12, %6 : i32
+    %15 = arith.minsi %14, %arg8 : i32
+    %16 = tt.expand_dims %7 {axis = 0 : i32} : tensor<512xi32> -> tensor<1x512xi32>
+    %17 = tt.expand_dims %16 {axis = 1 : i32} : tensor<1x512xi32> -> tensor<1x1x512xi32>
+    %18 = tt.expand_dims %17 {axis = 2 : i32} : tensor<1x1x512xi32> -> tensor<1x1x1x512xi32>
+    %19 = arith.cmpi slt, %18, %cst_10 : tensor<1x1x1x512xi32>
+    %20 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<7x1x1x512x!tt.ptr<f32>>
+    %21 = tt.broadcast %19 : tensor<1x1x1x512xi1> -> tensor<7x1x1x512xi1>
+    %22 = tt.splat %arg1 : !tt.ptr<f32> -> tensor<1x1x1x512x!tt.ptr<f32>>
+    %23 = tt.addptr %22, %18 : tensor<1x1x1x512x!tt.ptr<f32>>, tensor<1x1x1x512xi32>
+    %24 = tt.splat %arg2 : !tt.ptr<f32> -> tensor<7x1x1x512x!tt.ptr<f32>>
+    %25 = tt.splat %arg5 : !tt.ptr<f32> -> tensor<1x1x1x512x!tt.ptr<f32>>
+    %26 = tt.addptr %25, %18 : tensor<1x1x1x512x!tt.ptr<f32>>, tensor<1x1x1x512xi32>
+    %27 = arith.extsi %18 : tensor<1x1x1x512xi32> to tensor<1x1x1x512xi64>
+    %28 = tt.broadcast %27 : tensor<1x1x1x512xi64> -> tensor<7x1x1x512xi64>
+    %29 = tt.splat %arg6 : !tt.ptr<f32> -> tensor<7x1x1x512x!tt.ptr<f32>>
+    scf.for %arg13 = %c0_i32 to %4 step %c1_i32  : i32 {
+      %30 = arith.muli %arg13, %c7_i32 : i32
+      %31 = arith.addi %1, %30 : i32
+      %32 = tt.splat %31 : i32 -> tensor<7x1x1x1xi32>
+      %33 = arith.addi %32, %10 : tensor<7x1x1x1xi32>
+      %34 = arith.cmpi slt, %33, %13 : tensor<7x1x1x1xi32>
+      %35 = arith.muli %33, %cst_9 : tensor<7x1x1x1xi32>
+      %36 = tt.broadcast %35 : tensor<7x1x1x1xi32> -> tensor<7x1x1x512xi32>
+      %37 = tt.broadcast %34 : tensor<7x1x1x1xi1> -> tensor<7x1x1x512xi1>
+      %38 = arith.andi %37, %21 : tensor<7x1x1x512xi1>
+      %39 = arith.extsi %35 : tensor<7x1x1x1xi32> to tensor<7x1x1x1xi64>
+      %40 = tt.broadcast %39 : tensor<7x1x1x1xi64> -> tensor<7x1x1x512xi64>
+      scf.for %arg14 = %c0_i32 to %arg12 step %c1_i32  : i32 {
+        %41 = arith.addi %6, %arg14 : i32
+        %42 = arith.cmpi slt, %41, %15 : i32
+        %43 = tt.splat %42 : i1 -> tensor<1x1x1x1xi1>
+        %44 = arith.muli %41, %c7168_i32 : i32
+        %45 = tt.splat %44 : i32 -> tensor<1x1x1x512xi32>
+        %46 = tt.splat %42 : i1 -> tensor<7x1x1x512xi1>
+        %47 = tt.addptr %arg4, %41 : !tt.ptr<i64>, i32
+        %48 = tt.splat %47 : !tt.ptr<i64> -> tensor<1x1x1x1x!tt.ptr<i64>>
+        scf.for %arg15 = %c0_i32 to %arg9 step %c1_i32  : i32 {
+          %49 = arith.cmpi slt, %arg15, %arg9 : i32
+          %50 = tt.splat %49 : i1 -> tensor<1x1x1x1xi1>
+          %51 = arith.muli %arg15, %c512_i32 : i32
+          %52 = tt.splat %51 : i32 -> tensor<1x1x1x512xi32>
+          %53 = arith.addi %18, %52 : tensor<1x1x1x512xi32>
+          %54 = arith.addi %53, %45 : tensor<1x1x1x512xi32>
+          %55 = tt.broadcast %54 : tensor<1x1x1x512xi32> -> tensor<7x1x1x512xi32>
+          %56 = arith.addi %55, %36 : tensor<7x1x1x512xi32>
+          %57 = tt.addptr %20, %56 : tensor<7x1x1x512x!tt.ptr<f32>>, tensor<7x1x1x512xi32>
+          %58 = tt.splat %49 : i1 -> tensor<7x1x1x512xi1>
+          %59 = arith.andi %38, %58 : tensor<7x1x1x512xi1>
+          %60 = arith.andi %59, %46 : tensor<7x1x1x512xi1>
+          %61 = tt.load %57, %60, %cst_8 : tensor<7x1x1x512x!tt.ptr<f32>>
+          %62 = tt.load %23, %19, %cst_7 : tensor<1x1x1x512x!tt.ptr<f32>>
+          %63 = tt.addptr %24, %56 : tensor<7x1x1x512x!tt.ptr<f32>>, tensor<7x1x1x512xi32>
+          %64 = tt.load %63, %60, %cst_8 : tensor<7x1x1x512x!tt.ptr<f32>>
+          %65 = tt.addptr %arg3, %arg15 : !tt.ptr<i64>, i32
+          %66 = tt.splat %65 : !tt.ptr<i64> -> tensor<1x1x1x1x!tt.ptr<i64>>
+          %67 = tt.load %66, %50, %cst_6 : tensor<1x1x1x1x!tt.ptr<i64>>
+          %68 = tt.load %48, %43, %cst_6 : tensor<1x1x1x1x!tt.ptr<i64>>
+          %69 = tt.load %26, %19, %cst_7 : tensor<1x1x1x512x!tt.ptr<f32>>
+          %70 = tt.broadcast %62 : tensor<1x1x1x512xf32> -> tensor<7x1x1x512xf32>
+          %71 = arith.addf %70, %64 : tensor<7x1x1x512xf32>
+          %72 = arith.addf %61, %71 : tensor<7x1x1x512xf32>
+          %73 = arith.addi %67, %cst_5 : tensor<1x1x1x1xi64>
+          %74 = arith.cmpi slt, %67, %cst_6 : tensor<1x1x1x1xi64>
+          %75 = arith.select %74, %73, %67 : tensor<1x1x1x1xi1>, tensor<1x1x1x1xi64>
+          %76 = arith.addi %68, %cst_5 : tensor<1x1x1x1xi64>
+          %77 = arith.cmpi slt, %68, %cst_6 : tensor<1x1x1x1xi64>
+          %78 = arith.select %77, %76, %68 : tensor<1x1x1x1xi1>, tensor<1x1x1x1xi64>
+          %79 = arith.remsi %75, %cst_4 : tensor<1x1x1x1xi64>
+          %80 = arith.muli %79, %cst_3 : tensor<1x1x1x1xi64>
+          %81 = tt.broadcast %80 : tensor<1x1x1x1xi64> -> tensor<7x1x1x512xi64>
+          %82 = arith.addi %28, %81 : tensor<7x1x1x512xi64>
+          %83 = arith.remsi %78, %cst_4 : tensor<1x1x1x1xi64>
+          %84 = arith.muli %83, %cst_2 : tensor<1x1x1x1xi64>
+          %85 = tt.broadcast %84 : tensor<1x1x1x1xi64> -> tensor<7x1x1x512xi64>
+          %86 = arith.addi %82, %85 : tensor<7x1x1x512xi64>
+          %87 = arith.divsi %75, %cst_4 : tensor<1x1x1x1xi64>
+          %88 = arith.remsi %87, %cst_1 : tensor<1x1x1x1xi64>
+          %89 = arith.muli %88, %cst_0 : tensor<1x1x1x1xi64>
+          %90 = tt.broadcast %89 : tensor<1x1x1x1xi64> -> tensor<7x1x1x512xi64>
+          %91 = arith.addi %86, %90 : tensor<7x1x1x512xi64>
+          %92 = arith.divsi %78, %cst_4 : tensor<1x1x1x1xi64>
+          %93 = arith.remsi %92, %cst_1 : tensor<1x1x1x1xi64>
+          %94 = arith.muli %93, %cst : tensor<1x1x1x1xi64>
+          %95 = tt.broadcast %94 : tensor<1x1x1x1xi64> -> tensor<7x1x1x512xi64>
+          %96 = arith.addi %91, %95 : tensor<7x1x1x512xi64>
+          %97 = arith.addi %96, %40 : tensor<7x1x1x512xi64>
+          %98 = tt.addptr %29, %97 : tensor<7x1x1x512x!tt.ptr<f32>>, tensor<7x1x1x512xi64>
+          %99 = tt.load %98, %60, %cst_8 : tensor<7x1x1x512x!tt.ptr<f32>>
+          %100 = tt.broadcast %69 : tensor<1x1x1x512xf32> -> tensor<7x1x1x512xf32>
+          %101 = arith.addf %100, %99 : tensor<7x1x1x512xf32>
+          %102 = arith.addf %72, %101 : tensor<7x1x1x512xf32>
+          tt.store %57, %102, %60 : tensor<7x1x1x512x!tt.ptr<f32>>
+        }
+      }
+    }
+    tt.return
+  }
+}
+
+{-#
+  external_resources: {
+    mlir_reproducer: {
+      pipeline: "builtin.module(convert-triton-distributed-to-hivm{pattern-benefit-prioritize-over-llvm-conversions=10}, triton-control-flow-opt, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, discrete-mask-access-conversion{compile-mode=simd_simt_template compile-on-910-95=true}, triton-to-annotation, triton-to-unstructure{compile-mode=simd_simt_template compile-on-910-95=true force-scalarize-mode=false}, triton-to-hivm, triton-to-hfusion, triton-to-llvm, bubble-up-operation{enable-aggressive-mode=true}, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, triton-to-linalg{compile-mode=simd_simt_template compile-on-910-95=true enable-nd2nz-on-vector=false enable-select-analysis=true global-kernel=false named-ops=true}, merge-concat-load-buffer, add_dynamic_cv_pipeline{compile-on-910-95=true})",
+      disable_threading: true,
+      verify_each: true
+    }
+  }
+#-}
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: error: Failures have been detected while processing an MLIR pass pipeline
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: note: Pipeline failed while executing [`TritonToLinalg` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:61: error: 'arith.remsi' op address expressions with modulo are not supported by BlockDataParser
+                tmp17 = tl.load(in_ptr5 + (x3 + 512*((tmp9 % 7)) + 3584*((tmp14 % 7)) + 25088*(((tmp9 // 7) % 2)) + 50176*(((tmp14 // 7) % 2)) + 100352*t0), t0_mask & x3_mask & y2_mask & z1_mask)
+                                                            ^
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:61: error: 'arith.remsi' op address expressions with modulo are not supported by BlockDataParser
+                tmp17 = tl.load(in_ptr5 + (x3 + 512*((tmp9 % 7)) + 3584*((tmp14 % 7)) + 25088*(((tmp9 // 7) % 2)) + 50176*(((tmp14 // 7) % 2)) + 100352*t0), t0_mask & x3_mask & y2_mask & z1_mask)
+                                                            ^
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:43: error: failed to legalize unresolved materialization from () to ('tensor<6x1x1x512x!tt.ptr<f32>>') that remained live after conversion
+                tmp17 = tl.load(in_ptr5 + (x3 + 512*((tmp9 % 7)) + 3584*((tmp14 % 7)) + 25088*(((tmp9 // 7) % 2)) + 50176*(((tmp14 // 7) % 2)) + 100352*t0), t0_mask & x3_mask & y2_mask & z1_mask)
+                                          ^
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:65:43: note: see existing live user here: %221 = tt.addptr %40, %220 {MetaUse} : tensor<6x1x1x512x!tt.ptr<f32>>, tensor<6x1x1x512xi64>
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: error: failed to apply Conversion Patterns
+module attributes {hacc.target = #hacc.target<"Ascend950PR_9579">, ssbuffer.insertionOptimization} {
+  tt.func public @triton_poi_fused_add_addmm_clone_matmul_permut_58(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg3: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg4: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg5: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg6: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg7: i32, %arg8: i32, %arg9: i32, %arg10: i32 {tt.divisibility = 16 : i32}, %arg11: i32, %arg12: i32) attributes {noinline = false} {
+    %cst = arith.constant dense<50176> : tensor<1x1x1x1xi64>
+    %cst_0 = arith.constant dense<25088> : tensor<1x1x1x1xi64>
+    %cst_1 = arith.constant dense<2> : tensor<1x1x1x1xi64>
+    %cst_2 = arith.constant dense<3584> : tensor<1x1x1x1xi64>
+    %cst_3 = arith.constant dense<512> : tensor<1x1x1x1xi64>
+    %cst_4 = arith.constant dense<7> : tensor<1x1x1x1xi64>
+    %cst_5 = arith.constant dense<14> : tensor<1x1x1x1xi64>
+    %c7168_i32 = arith.constant 7168 : i32
+    %c512_i32 = arith.constant 512 : i32
+    %cst_6 = arith.constant dense<0> : tensor<1x1x1x1xi64>
+    %c1_i32 = arith.constant 1 : i32
+    %c0_i32 = arith.constant 0 : i32
+    %c5_i32 = arith.constant 5 : i32
+    %cst_7 = arith.constant dense<0.000000e+00> : tensor<1x1x1x512xf32>
+    %cst_8 = arith.constant dense<0.000000e+00> : tensor<6x1x1x512xf32>
+    %cst_9 = arith.constant dense<100352> : tensor<6x1x1x1xi32>
+    %cst_10 = arith.constant dense<512> : tensor<1x1x1x512xi32>
+    %c6_i32 = arith.constant 6 : i32
+    %0 = tt.get_program_id x : i32
+    %1 = arith.muli %0, %arg11 : i32
+    %2 = tt.make_range {end = 6 : i32, start = 0 : i32} : tensor<6xi32>
+    %3 = arith.addi %arg11, %c5_i32 : i32
+    %4 = arith.divsi %3, %c6_i32 : i32
+    %5 = tt.get_program_id y : i32
+    %6 = arith.muli %5, %arg12 : i32
+    %7 = tt.make_range {end = 512 : i32, start = 0 : i32} : tensor<512xi32>
+    %8 = tt.expand_dims %2 {axis = 1 : i32} : tensor<6xi32> -> tensor<6x1xi32>
+    %9 = tt.expand_dims %8 {axis = 2 : i32} : tensor<6x1xi32> -> tensor<6x1x1xi32>
+    %10 = tt.expand_dims %9 {axis = 3 : i32} : tensor<6x1x1xi32> -> tensor<6x1x1x1xi32>
+    %11 = arith.addi %arg11, %1 : i32
+    %12 = arith.minsi %11, %arg7 : i32
+    %13 = tt.splat %12 : i32 -> tensor<6x1x1x1xi32>
+    %14 = arith.addi %arg12, %6 : i32
+    %15 = arith.minsi %14, %arg8 : i32
+    %16 = tt.expand_dims %7 {axis = 0 : i32} : tensor<512xi32> -> tensor<1x512xi32>
+    %17 = tt.expand_dims %16 {axis = 1 : i32} : tensor<1x512xi32> -> tensor<1x1x512xi32>
+    %18 = tt.expand_dims %17 {axis = 2 : i32} : tensor<1x1x512xi32> -> tensor<1x1x1x512xi32>
+    %19 = arith.cmpi slt, %18, %cst_10 : tensor<1x1x1x512xi32>
+    %20 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<6x1x1x512x!tt.ptr<f32>>
+    %21 = tt.broadcast %19 : tensor<1x1x1x512xi1> -> tensor<6x1x1x512xi1>
+    %22 = tt.splat %arg1 : !tt.ptr<f32> -> tensor<1x1x1x512x!tt.ptr<f32>>
+    %23 = tt.addptr %22, %18 : tensor<1x1x1x512x!tt.ptr<f32>>, tensor<1x1x1x512xi32>
+    %24 = tt.splat %arg2 : !tt.ptr<f32> -> tensor<6x1x1x512x!tt.ptr<f32>>
+    %25 = tt.splat %arg5 : !tt.ptr<f32> -> tensor<1x1x1x512x!tt.ptr<f32>>
+    %26 = tt.addptr %25, %18 : tensor<1x1x1x512x!tt.ptr<f32>>, tensor<1x1x1x512xi32>
+    %27 = arith.extsi %18 : tensor<1x1x1x512xi32> to tensor<1x1x1x512xi64>
+    %28 = tt.broadcast %27 : tensor<1x1x1x512xi64> -> tensor<6x1x1x512xi64>
+    %29 = tt.splat %arg6 : !tt.ptr<f32> -> tensor<6x1x1x512x!tt.ptr<f32>>
+    scf.for %arg13 = %c0_i32 to %4 step %c1_i32  : i32 {
+      %30 = arith.muli %arg13, %c6_i32 : i32
+      %31 = arith.addi %1, %30 : i32
+      %32 = tt.splat %31 : i32 -> tensor<6x1x1x1xi32>
+      %33 = arith.addi %32, %10 : tensor<6x1x1x1xi32>
+      %34 = arith.cmpi slt, %33, %13 : tensor<6x1x1x1xi32>
+      %35 = arith.muli %33, %cst_9 : tensor<6x1x1x1xi32>
+      %36 = tt.broadcast %35 : tensor<6x1x1x1xi32> -> tensor<6x1x1x512xi32>
+      %37 = tt.broadcast %34 : tensor<6x1x1x1xi1> -> tensor<6x1x1x512xi1>
+      %38 = arith.andi %37, %21 : tensor<6x1x1x512xi1>
+      %39 = arith.extsi %35 : tensor<6x1x1x1xi32> to tensor<6x1x1x1xi64>
+      %40 = tt.broadcast %39 : tensor<6x1x1x1xi64> -> tensor<6x1x1x512xi64>
+      scf.for %arg14 = %c0_i32 to %arg12 step %c1_i32  : i32 {
+        %41 = arith.addi %6, %arg14 : i32
+        %42 = arith.cmpi slt, %41, %15 : i32
+        %43 = tt.splat %42 : i1 -> tensor<1x1x1x1xi1>
+        %44 = arith.muli %41, %c7168_i32 : i32
+        %45 = tt.splat %44 : i32 -> tensor<1x1x1x512xi32>
+        %46 = tt.splat %42 : i1 -> tensor<6x1x1x512xi1>
+        %47 = tt.addptr %arg4, %41 : !tt.ptr<i64>, i32
+        %48 = tt.splat %47 : !tt.ptr<i64> -> tensor<1x1x1x1x!tt.ptr<i64>>
+        scf.for %arg15 = %c0_i32 to %arg9 step %c1_i32  : i32 {
+          %49 = arith.cmpi slt, %arg15, %arg9 : i32
+          %50 = tt.splat %49 : i1 -> tensor<1x1x1x1xi1>
+          %51 = arith.muli %arg15, %c512_i32 : i32
+          %52 = tt.splat %51 : i32 -> tensor<1x1x1x512xi32>
+          %53 = arith.addi %18, %52 : tensor<1x1x1x512xi32>
+          %54 = arith.addi %53, %45 : tensor<1x1x1x512xi32>
+          %55 = tt.broadcast %54 : tensor<1x1x1x512xi32> -> tensor<6x1x1x512xi32>
+          %56 = arith.addi %55, %36 : tensor<6x1x1x512xi32>
+          %57 = tt.addptr %20, %56 : tensor<6x1x1x512x!tt.ptr<f32>>, tensor<6x1x1x512xi32>
+          %58 = tt.splat %49 : i1 -> tensor<6x1x1x512xi1>
+          %59 = arith.andi %38, %58 : tensor<6x1x1x512xi1>
+          %60 = arith.andi %59, %46 : tensor<6x1x1x512xi1>
+          %61 = tt.load %57, %60, %cst_8 : tensor<6x1x1x512x!tt.ptr<f32>>
+          %62 = tt.load %23, %19, %cst_7 : tensor<1x1x1x512x!tt.ptr<f32>>
+          %63 = tt.addptr %24, %56 : tensor<6x1x1x512x!tt.ptr<f32>>, tensor<6x1x1x512xi32>
+          %64 = tt.load %63, %60, %cst_8 : tensor<6x1x1x512x!tt.ptr<f32>>
+          %65 = tt.addptr %arg3, %arg15 : !tt.ptr<i64>, i32
+          %66 = tt.splat %65 : !tt.ptr<i64> -> tensor<1x1x1x1x!tt.ptr<i64>>
+          %67 = tt.load %66, %50, %cst_6 : tensor<1x1x1x1x!tt.ptr<i64>>
+          %68 = tt.load %48, %43, %cst_6 : tensor<1x1x1x1x!tt.ptr<i64>>
+          %69 = tt.load %26, %19, %cst_7 : tensor<1x1x1x512x!tt.ptr<f32>>
+          %70 = tt.broadcast %62 : tensor<1x1x1x512xf32> -> tensor<6x1x1x512xf32>
+          %71 = arith.addf %70, %64 : tensor<6x1x1x512xf32>
+          %72 = arith.addf %61, %71 : tensor<6x1x1x512xf32>
+          %73 = arith.addi %67, %cst_5 : tensor<1x1x1x1xi64>
+          %74 = arith.cmpi slt, %67, %cst_6 : tensor<1x1x1x1xi64>
+          %75 = arith.select %74, %73, %67 : tensor<1x1x1x1xi1>, tensor<1x1x1x1xi64>
+          %76 = arith.addi %68, %cst_5 : tensor<1x1x1x1xi64>
+          %77 = arith.cmpi slt, %68, %cst_6 : tensor<1x1x1x1xi64>
+          %78 = arith.select %77, %76, %68 : tensor<1x1x1x1xi1>, tensor<1x1x1x1xi64>
+          %79 = arith.remsi %75, %cst_4 : tensor<1x1x1x1xi64>
+          %80 = arith.muli %79, %cst_3 : tensor<1x1x1x1xi64>
+          %81 = tt.broadcast %80 : tensor<1x1x1x1xi64> -> tensor<6x1x1x512xi64>
+          %82 = arith.addi %28, %81 : tensor<6x1x1x512xi64>
+          %83 = arith.remsi %78, %cst_4 : tensor<1x1x1x1xi64>
+          %84 = arith.muli %83, %cst_2 : tensor<1x1x1x1xi64>
+          %85 = tt.broadcast %84 : tensor<1x1x1x1xi64> -> tensor<6x1x1x512xi64>
+          %86 = arith.addi %82, %85 : tensor<6x1x1x512xi64>
+          %87 = arith.divsi %75, %cst_4 : tensor<1x1x1x1xi64>
+          %88 = arith.remsi %87, %cst_1 : tensor<1x1x1x1xi64>
+          %89 = arith.muli %88, %cst_0 : tensor<1x1x1x1xi64>
+          %90 = tt.broadcast %89 : tensor<1x1x1x1xi64> -> tensor<6x1x1x512xi64>
+          %91 = arith.addi %86, %90 : tensor<6x1x1x512xi64>
+          %92 = arith.divsi %78, %cst_4 : tensor<1x1x1x1xi64>
+          %93 = arith.remsi %92, %cst_1 : tensor<1x1x1x1xi64>
+          %94 = arith.muli %93, %cst : tensor<1x1x1x1xi64>
+          %95 = tt.broadcast %94 : tensor<1x1x1x1xi64> -> tensor<6x1x1x512xi64>
+          %96 = arith.addi %91, %95 : tensor<6x1x1x512xi64>
+          %97 = arith.addi %96, %40 : tensor<6x1x1x512xi64>
+          %98 = tt.addptr %29, %97 : tensor<6x1x1x512x!tt.ptr<f32>>, tensor<6x1x1x512xi64>
+          %99 = tt.load %98, %60, %cst_8 : tensor<6x1x1x512x!tt.ptr<f32>>
+          %100 = tt.broadcast %69 : tensor<1x1x1x512xf32> -> tensor<6x1x1x512xf32>
+          %101 = arith.addf %100, %99 : tensor<6x1x1x512xf32>
+          %102 = arith.addf %72, %101 : tensor<6x1x1x512xf32>
+          tt.store %57, %102, %60 : tensor<6x1x1x512x!tt.ptr<f32>>
+        }
+      }
+    }
+    tt.return
+  }
+}
+
+{-#
+  external_resources: {
+    mlir_reproducer: {
+      pipeline: "builtin.module(convert-triton-distributed-to-hivm{pattern-benefit-prioritize-over-llvm-conversions=10}, triton-control-flow-opt, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, discrete-mask-access-conversion{compile-mode=simd_simt_template compile-on-910-95=true}, triton-to-annotation, triton-to-unstructure{compile-mode=simd_simt_template compile-on-910-95=true force-scalarize-mode=false}, triton-to-hivm, triton-to-hfusion, triton-to-llvm, bubble-up-operation{enable-aggressive-mode=true}, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, triton-to-linalg{compile-mode=simd_simt_template compile-on-910-95=true enable-nd2nz-on-vector=false enable-select-analysis=true global-kernel=false named-ops=true}, merge-concat-load-buffer, add_dynamic_cv_pipeline{compile-on-910-95=true})",
+      disable_threading: true,
+      verify_each: true
+    }
+  }
+#-}
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: error: Failures have been detected while processing an MLIR pass pipeline
+<workspace>/cicd_compile_20261019/swin_cache/qv/cqv4qreokduyxbrmhasuxsbh7lp6dal6v3n4eumeptcpxdanduqi.py:25:0: note: Pipeline failed while executing [`TritonToLinalg` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`
+W1020 02:22:23.050000 <pid> site-packages/torch/_inductor/debug.py:545] [0/0_1] swin_base_patch4_window7_224__1_inference_0 debug trace: <workspace>/swin_matrix_20261020/dynamic_debug/torch_compile_debug/<debug-trace>/torchinductor/swin_base_patch4_window7_224__1_inference_0.0
+running benchmark:   0%|          | 0/1 [00:00<?, ?it/s]running benchmark: 100%|██████████| 1/1 [00:05<00:00,  5.80s/it]running benchmark: 100%|██████████| 1/1 [00:05<00:00,  5.80s/it]
+0.767x
+
+# exit_code: 0
+# finished: 2026-10-20T02:25:46+08:00
