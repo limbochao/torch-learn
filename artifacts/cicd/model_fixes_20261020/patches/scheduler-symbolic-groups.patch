@@ -1,0 +1,135 @@
+diff --git a/test/_inductor/test_symbolic_group_schedule.py b/test/_inductor/test_symbolic_group_schedule.py
+new file mode 100644
+index 0000000000..9f862266e3
+--- /dev/null
++++ b/test/_inductor/test_symbolic_group_schedule.py
+@@ -0,0 +1,72 @@
++from types import SimpleNamespace
++from unittest.mock import patch
++
++import sympy
++from torch._inductor.codegen.simd import DisableReduction, EnableReduction
++from torch._inductor.sizevars import SizeVarAllocator
++from torch._inductor.virtualized import V
++from torch.testing._internal.common_utils import TestCase, run_tests
++from torch.utils._sympy.functions import FloorDiv
++
++from torch_npu._inductor import config
++from torch_npu._inductor.codegen.npu_kernel_features import NumelList
++from torch_npu._inductor.codegen.scheduling import (
++    NPUNoLinearTritonScheduling,
++    NPUTritonScheduling,
++)
++
++
++class ScheduleNode:
++    def __init__(self, numel, rnumel):
++        self.group = ("npu", (numel, rnumel))
++        self.node = SimpleNamespace()
++        self.ancestors = set()
++        self.read_writes = SimpleNamespace(reads=[], writes=[])
++
++    def get_nodes(self):
++        return [self]
++
++    def is_reduction(self):
++        return self.group[1][1] != 1
++
++
++class TestSymbolicGroupSchedule(TestCase):
++    def test_expanded_pointwise_and_reduction_groups(self):
++        batch, height = sympy.symbols("batch height", integer=True, positive=True)
++        numel = 16 * batch
++        rnumel = (FloorDiv(height - 1, 32) + 1) ** 2
++        sizevars = SizeVarAllocator()
++        for scheduling in (NPUNoLinearTritonScheduling, NPUTritonScheduling):
++            for welford in (False, True):
++                with self.subTest(scheduling=scheduling, welford=welford):
++                    if scheduling is NPUTritonScheduling:
++                        groups = (NumelList((16, batch)), NumelList((rnumel,)))
++                    else:
++                        groups = (numel, sizevars.simplify(rnumel))
++                    pointwise = ScheduleNode(sizevars.simplify(numel * rnumel), 1)
++                    reduction = ScheduleNode(*groups)
++                    epilogue = ScheduleNode(sizevars.simplify(numel), 1)
++                    nodes = [pointwise, reduction, epilogue]
++                    with V.set_graph_handler(SimpleNamespace(sizevars=sizevars)), patch.object(
++                        config, "enable_welford", welford
++                    ):
++                        result = scheduling(None).generate_node_schedule(nodes, *groups)
++                    self.assertEqual(
++                        result, [pointwise, reduction, DisableReduction, epilogue, EnableReduction]
++                    )
++
++    def test_unproven_groups_are_rejected_without_new_guards(self):
++        x, y = sympy.symbols("x y", integer=True, positive=True)
++        sizevars = SizeVarAllocator()
++        guards = list(sizevars.shape_env.guards)
++        for scheduling in (NPUNoLinearTritonScheduling, NPUTritonScheduling):
++            with self.subTest(scheduling=scheduling):
++                nodes = [ScheduleNode(x, 7), ScheduleNode(y, 1)]
++                with V.set_graph_handler(SimpleNamespace(sizevars=sizevars)):
++                    with self.assertRaisesRegex(NotImplementedError, "unexpected group"):
++                        scheduling(None).generate_node_schedule(nodes, x, 7)
++                self.assertEqual(sizevars.shape_env.guards, guards)
++
++
++if __name__ == "__main__":
++    run_tests()
+diff --git a/torch_npu/_inductor/codegen/scheduling.py b/torch_npu/_inductor/codegen/scheduling.py
+index 2241d7b289..0f5b400c24 100644
+--- a/torch_npu/_inductor/codegen/scheduling.py
++++ b/torch_npu/_inductor/codegen/scheduling.py
+@@ -75,11 +75,13 @@ def _generate_npu_node_schedule(self, nodes, numel, rnumel):
+     sizevars = V.graph.sizevars
+ 
+     def same_size(left, right):
++        # Group products may have been expanded independently by group_fn.
++        # Compare their extents rather than requiring the same SymPy tree.
++        left = left.numels() if isinstance(left, NumelList) else left
++        right = right.numels() if isinstance(right, NumelList) else right
+         if left == right:
+             return True
+-        if isinstance(left, sympy.Expr) and isinstance(right, sympy.Expr):
+-            return sizevars.statically_known_equals(left, right)
+-        return False
++        return sizevars.statically_known_equals(left, right)
+ 
+     def fits_in_main_body(n):
+         _, (node_numel, node_rnumel) = n.group
+@@ -159,17 +161,6 @@ class NPUNoLinearTritonScheduling(TritonScheduling):
+     kernel_type = NPUTritonKernel
+ 
+     def generate_node_schedule(self, nodes, numel, rnumel):
+-        if not npu_config.enable_welford:
+-            return super().generate_node_schedule(nodes, numel, rnumel)
+-        from ..choices import contains_welford_group
+-        if not contains_welford_group(nodes):
+-            # Kernels without Welford reductions keep the baseline (upstream)
+-            # scheduling so unrelated fusion decisions stay unchanged.  The
+-            # caller may have canonicalized numel/rnumel; recompute the raw
+-            # group extents so the default scheduler's equality checks match
+-            # the (uncanonicalized) node groups exactly as in the baseline.
+-            _, (numel, rnumel) = max(nodes, key=lambda x: int(x.is_reduction())).group
+-            return super().generate_node_schedule(nodes, numel, rnumel)
+         return _generate_npu_node_schedule(self, nodes, numel, rnumel)
+ 
+ class NPUTritonScheduling(TritonScheduling):
+@@ -187,17 +178,6 @@ class NPUTritonScheduling(TritonScheduling):
+     )
+ 
+     def generate_node_schedule(self, nodes, numel, rnumel):
+-        if not npu_config.enable_welford:
+-            return super().generate_node_schedule(nodes, numel, rnumel)
+-        from ..choices import contains_welford_group
+-        if not contains_welford_group(nodes):
+-            # Kernels without Welford reductions keep the baseline (upstream)
+-            # scheduling so unrelated fusion decisions stay unchanged.  The
+-            # caller may have canonicalized numel/rnumel; recompute the raw
+-            # group extents so the default scheduler's equality checks match
+-            # the (uncanonicalized) node groups exactly as in the baseline.
+-            _, (numel, rnumel) = max(nodes, key=lambda x: int(x.is_reduction())).group
+-            return super().generate_node_schedule(nodes, numel, rnumel)
+         return _generate_npu_node_schedule(self, nodes, numel, rnumel)
+ 
+     def group_fn(self, sizes):

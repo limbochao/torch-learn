@@ -75,3 +75,15 @@ python scripts/repro/cicd/model_fixes_20261020/albert_softmax_compile.py --xbloc
 保留原 kernel body、signature 和编译选项，仅移除了本例用不到的公共导出 helper。
 默认用例只编译，不创建模型和输入；`--check` 才分配输入并 launch 一次。
 框架修复通过通用 tiling 规则搜索可编译候选，不固定该对照 tile。
+
+## 动态训练调度复现
+
+```bash
+python scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py
+python scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py --static
+```
+
+脚本只包含卷积、空间 mean 门控和梯度比较，不需要 TorchBench、模型权重或数据集。
+默认动态 shape，连续检查 `(batch, height) = (2, 224)` 和 `(3, 256)`；`--static` 为静态对照。
+旧调度在动态模式出现展开式乘积不匹配的 `unexpected group`，修复后应通过前向和两项梯度比较。
+该问题发生在 kernel 生成前，`inductor-kernel-compile-debug` 的候选捕获流程不适用于它。

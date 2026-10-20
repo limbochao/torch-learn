@@ -17,7 +17,7 @@ published: false
 performance 使用模型默认 batch size，不能用 accuracy 的小 batch 结果代替。
 每个编译候选的超时为 60 分钟；performance PASS 只表示成功执行并产生正 speedup，不证明精度。
 
-最终调试分支：`debug/cicd-all-fixes-20261020`，head `81f8f87a4e`，建立于 Ascend master `b9f98688f2`。
+最终调试分支：`debug/cicd-all-fixes-20261020`，head `093161cade`，建立于 Ascend master `1ca45b1e26`。
 TA 仅做定界和独立 kernel 抽取，不修改 TA，也不在 Inductor 中添加针对 TA 的绕过。
 下文结果是持续更新的验证记录，尚未写入结果的项目不表示通过。
 
@@ -30,6 +30,7 @@ TA 仅做定界和独立 kernel 抽取，不修改 TA，也不在 Inductor 中�
 | `bugfix/codegen-negative-index` | 调试开关下的负索引语义与 no-wrap bounds | master |
 | `bugfix/codegen-load-liveness` | reduction load 与消费它的计算相邻生成 | master |
 | `bugfix/tiling-resource-budget` | 按 kernel type 更新搜索边界、保护可继续切分的轴 | master |
+| `bugfix/scheduler-symbolic-groups` | 证明展开式和因式分解形式的 group 尺寸相等 | master |
 
 mask 原三个提交通过 interactive rebase 合为一个，合并前后 tree 完全相同。
 旧 head 保存在 `backup/codegen-reduction-mask-before-squash-20261020`。
@@ -37,12 +38,14 @@ mask 原三个提交通过 interactive rebase 合为一个，合并前后 tree �
 axes 采用有序依赖，复用 mask 布局构造，避免两个分支分别维护同一段代码。
 各分支精确 revision 与 patch 保存在
 [`branches.json`](../../../artifacts/cicd/model_fixes_20261020/branches.json)
-和同目录 `patches/`，最终调试分支只包含上述 5 类修复，没有 TA 修改。
+和同目录 `patches/`，最终调试分支只包含上述 6 类修复，没有 TA 修改。
 
 模型矩阵初版基于 master `bf4abcfc94`，整合分支随后移到 `b9f98688f2`。
 新增 master 提交只修改测试以及 `decomposition.py` 的 `triton_experimental` RNG 注册路径，
 本轮使用的 `triton` loader 不调用该函数；三个修复文件内容完全一致。
-最新分支的独立包目录另含最新 `decomposition.py`，用于最终数值回归和 NFNet 动态场景复核。
+最新分支的独立包目录另含最新 `decomposition.py`，用于数值回归和 NFNet 动态场景复核。
+随后整合分支再次 rebase 到 `1ca45b1e26`；这次新增 master 提交仅修改 API 文档及 Autograd 测试，
+上述四个文件的 hash 均未改变。v5 另加入本轮 scheduling.py 修复。
 该说明用于区分源码版本，不能把旧版运行结果标为新版实际运行。
 
 ## 修复与原失败的对应关系
@@ -53,7 +56,8 @@ axes 采用有序依赖，复用 mask 布局构造，避免两个分支分别维
 | reduction axes | BERT 静态训练反向 bias gradient 错误 | 同输入单 kernel、静态训练整模型通过；动态反向本来使用另一生成路径 |
 | negative index | dump/check 开关使负索引失去 wrap 语义，另有 no-wrap bounds 传播错误 | 专门回归通过；本轮模型使用的索引未证明触发此缺陷，不将它计入原 14 项失败的修复数 |
 | load liveness + resource tiling | Albert 四个训练编译失败，以及复测新暴露的动态 softmax 资源失败 | 原配置 DSL 对照和整模型 8 项通过 |
-| kernel type 资源边界与候选搜索 | NFNet 四个动态场景的 pooling 编译失败 | 动态推理 performance/accuracy 已通过；两个动态训练场景仍在复测 |
+| kernel type 资源边界与候选搜索 | NFNet 四个动态场景的 pooling 编译失败 | 动态推理 performance/accuracy 已通过；动态训练随后暴露独立的 scheduling 错误 |
+| symbolic group scheduling | NFNet 两个动态训练场景新暴露的 `unexpected group` | 调度单元对照通过，整模型重测进行中 |
 
 前两类错误在 generated DSL 中已违反 tensor semantics，应由 Inductor 修复；负索引也在 DSL 生成前
 改变了语义。后两类针对工作集排布和合法候选覆盖，属于 Inductor NPU 适配层资源管理。
@@ -174,6 +178,42 @@ Albert 动态训练 performance 修复后已通过，batch=4、speedup=1.017143�
 结合初版其余 7 项 PASS，Albert 原有 4 个训练编译失败均已解决。
 数值验证由 accuracy 场景承担，performance 的单次 speedup 不作为稳定性能提升结论。
 
+## 动态训练 scheduling：符号乘积需要按尺寸语义比较
+
+NFNet 动态训练在 pooling 编译问题修复后，performance 和 accuracy 都到达 backward scheduling，
+并抛出 `unexpected group`。accuracy 进程虽返回 0，CSV 为 `fail_to_run`，仍应计为 FAIL。
+该错误发生在 generated kernel 之前，因此需要保留调度 IR 和图级复现，不能抽取不存在的 Triton kernel。
+
+真实 backward 的 `op59_op60_op61` 为 pointwise producer、空间 sum 和 epilogue。
+完整融合节点的原始 IR 摘录见
+[`nfnet_backward_fused_group_ir.txt`](../../../artifacts/cicd/model_fixes_20261020/scheduler/nfnet_backward_fused_group_ir.txt)。
+令 `q = FloorDiv(H - 1, 32)`、`A = 1536 * batch`：规约组为 `(A, q² + 2q + 1)`，
+pointwise 组为 `(Aq² + 2Aq + A, 1)`。二者满足 pointwise_numel = numel × rnumel。
+
+社区 `SIMDScheduling.group_fn` 通过 `sizevars.simplify` 展开各组尺寸，
+而 `generate_node_schedule::fits_in_main_body` 在匹配 producer 时直接计算 `numel * rnumel`，
+不会再次展开乘积。SymPy 的 `==` 比较表达式结构，因此将数学上相等的两个尺寸判为不同。
+NPU 的 index 路径使用 `NumelList`，失败后回到社区标量路径；两种路径均可触发这个缺陷。
+已有 `_generate_npu_node_schedule` 仅在包含 Welford 节点时采用符号证明，普通 sum 不会进入。
+
+修复复用该调度实现，让两条 NPU 路径都使用 `sizevars.statically_known_equals` 匹配尺寸，
+并在比较前将 `NumelList` 转为元素总数。该接口仅使用可证明的等式，不添加 shape guard；
+未能证明的组仍抛出原异常。调度顺序、关闭规约循环的位置、依赖处理和融合策略保持原规则。
+删除两处 Welford 专属的重复分流，避免为同一种组匹配维护两套实现。
+
+CUDA 对齐边界：沿用社区调度顺序及 sizevars 的证明接口；社区 `cf30153c4c1` 的上述直接比较
+仍可在同一 scheduler 元数据上复现。没有 GPU 整模型结果，因此不宣称 CUDA 模型一定出现同一异常。
+这是 kernel 生成前的 Inductor 调度职责，与 TA 编译和运行无关。
+
+小复现为
+[`symbolic_group_training.py`](../../../scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py)：
+30 行脚本执行 stride=32 的卷积和空间 mean 门控，并比较前向、输入梯度和权重梯度。
+旧 overlay 在第一组输入 `(2, 16, 224, 224)` 上独立复现相同 `unexpected group`；
+修复后的数值结果和 NFNet 整模型结果持续记录于
+[`scheduler_checks`](../../../artifacts/cicd/model_fixes_20261020/scheduler_checks/) 和 `matrix_v5/`。
+新增框架测试在两种 scheduler、Welford 开关两种取值下匹配等价尺寸，
+并验证不相等的组继续被拒绝、没有新增 guard。旧版失败，修复版 2/2 PASS。
+
 ## TA masked indirect load：独立定界
 
 独立复现脚本为
@@ -214,6 +254,7 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 | mask codegen 单元检查 | 4/4 PASS |
 | negative no-wrap bounds 单元检查 | 1/1 PASS |
 | tiling resource 单元检查（含 softmax 轴保护） | 3/3 PASS |
+| symbolic group scheduling 单元检查 | 2/2 PASS；旧版本在四个等价组对照中抛出异常 |
 | 静态/动态 embedding + norm、sum/prod/min/max、argmin/argmax、int32/int64 | 22/22 PASS |
 | 静态/动态 BERT bias gradient、分离规约轴 | 4/4 PASS |
 | 静态/动态负索引，none/dump/check 开关（包含 no-wrap bounds 修改） | 6/6 PASS |
@@ -221,15 +262,16 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 | Albert softmax 通用修复后 | 动态训练 performance PASS；合计 8/8 PASS |
 | GPT2 完整矩阵 | 8/8 PASS |
 | BERT 完整矩阵 | 8/8 PASS |
-| NFNet 完整矩阵 | 推理 4/4 PASS；训练四项仍在复测 |
+| NFNet 完整矩阵 | 推理 4/4、静态训练 performance PASS；静态训练 accuracy 与两个动态训练场景复测中 |
 | TA 独立 kernel 在最新 Inductor 修复环境下 | template 两个 other 对照仍失败；pure SIMT 两项通过 |
 
-最新分支的 32 项数值回归全部通过，10 个独立子进程均正常退出；结果保存在
+v4 整合源码的 32 项数值回归全部通过，10 个独立子进程均正常退出；结果保存在
 [`regressions_v4`](../../../artifacts/cicd/model_fixes_20261020/regressions_v4/)。
 argmin/argmax 使用精确比较；prod 用 `value+0.99`，使 padded lane 上的表达式不是单位元 1。
 这避免了原先 `value+1` 的对照在缺少 mask 时也可能通过的问题。
 
-测试使用独立包目录加载本轮三个修复文件，v4 另加载 master 的 decomposition.py；原环境安装文件不变。
+测试使用独立包目录加载修复文件，v4 另加载 master 的 decomposition.py；v5 加入 scheduling.py。
+v5 的全组数值回归正在排队，不能将 v4 的结果标为 v5 实际运行结果。原环境安装文件不变。
 原安装 decomposition.py 与首轮 master 的差异也仅位于未使用的 TE 注册函数内，
 为 matmul_backward 是否已注册的 guard，不影响本轮 triton loader 的结论。
 完整模型入口为同目录 `run_matrix.py`，通过 `MATRIX_MODELS`、`MATRIX_CASES` 选择复测项。
