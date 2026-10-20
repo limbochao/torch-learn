@@ -1,0 +1,95 @@
+STRIDE_PROBE (((s43 - 1)//32)) + 1 ((((s43 - 1)//32)) + 1)**2
+CANONICAL (((s43 - 1)//32)) + 1 (((s43 - 1)//32))**2 + 2*(((s43 - 1)//32)) + 1
+MOD ((((s43 - 1)//32)) + 1)*(Mod(1, ((((s43 - 1)//32))**2 + 2*(((s43 - 1)//32)) + 1)/((((s43 - 1)//32)) + 1)))
+RANGES {s4: VR[2, int_oo], s14: VR[2, int_oo], s43: VR[33, int_oo]}
+REPLACEMENTS {}
+STRIDE_PROBE (((s43 - 1)//32)) + 1 ((((s43 - 1)//32)) + 1)**2
+CANONICAL (((s43 - 1)//32)) + 1 (((s43 - 1)//32))**2 + 2*(((s43 - 1)//32)) + 1
+MOD ((((s43 - 1)//32)) + 1)*(Mod(1, ((((s43 - 1)//32))**2 + 2*(((s43 - 1)//32)) + 1)/((((s43 - 1)//32)) + 1)))
+RANGES {s4: VR[2, int_oo], s14: VR[2, int_oo], s43: VR[33, int_oo]}
+REPLACEMENTS {}
+          return value * value.mean((-2, -1), keepdim=True).sigmoid(),
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^,
+      ,
+      }
+    )
+  ))
+  args[1]: TensorBox(StorageBox(
+    InputBuffer(name='primals_4', layout=FixedLayout('npu:0', torch.float32, size=[s4, s14, s43, s43], stride=[s14*s43**2, s43**2, s43, 1]))
+  ))
+  args[2]: TensorBox(StorageBox(
+    InputBuffer(name='primals_5', layout=FixedLayout('npu:0', torch.float32, size=[s14, s14, 1, 1], stride=[s14, 1, 1, 1]))
+  ))
+  args[3]: [0]
+  args[4]: [32, 32]
+  args[5]: [0, 0]
+  args[6]: [1, 1]
+  args[7]: False
+  args[8]: [0, 0]
+  args[9]: 1
+  args[10]: [True, True, False]ValueRangeError: Invalid ranges [0:-1]
+  target: aten.convolution_backward.default
+  args[0]: TensorBox(StorageBox(
+    Pointwise(
+      'npu',
+      torch.float32,
+      def inner_fn(index):
+          i0, i1, i2, i3 = index
+          tmp0 = ops.load(tangents_1, i3 + i1 * ((((s43 - 1)//32)) + 1)**2 + i2 * (1 + FloorDiv(-1 + s43, 32)) + i0 * s14 * ((((s43 - 1)//32)) + 1)**2)
+          tmp1 = ops.load(sigmoid, i1 + i0 * s14)
+          tmp2 = tmp0 * tmp1
+          tmp3 = ops.load(buf0, i1 + i0 * s14)
+          tmp4 = ops.load(sigmoid, i1 + i0 * s14)
+          tmp5 = ops.constant(1, torch.float32)
+          tmp6 = ops.load(sigmoid, i1 + i0 * s14)
+          tmp7 = tmp5 - tmp6
+          tmp8 = tmp4 * tmp7
+          tmp9 = tmp3 * tmp8
+          tmp10 = ops.index_expr(((((s43 - 1)//32)) + 1)**2, torch.float32)
+          tmp11 = tmp9 / tmp10
+          tmp12 = tmp2 + tmp11
+          return tmp12
+      ,
+      ranges=[s4, s14, (((s43 - 1)//32)) + 1, (((s43 - 1)//32)) + 1],
+      origin_node=add_25,
+      origins=OrderedSet([add_25, mul_19, div, expand, mul_21, mul_...,
+      stack_traces = {,
+        File "<workspace>", line 11, in model,
+          return value * value.mean((-2, -1), keepdim=True).sigmoid(),
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^,
+      Gradient addition node due to multiple use of tensor around:,
+      },
+      stack_traces = {,
+        File "<workspace>", line 11, in model,
+          return value * value.mean((-2, -1), keepdim=True).sigmoid(),
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^,
+      ,
+      },
+      stack_traces = {,
+        File "<workspace>", line 11, in model,
+          return value * value.mean((-2, -1), keepdim=True).sigmoid(),
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^,
+      ,
+      }
+    )
+  ))
+  args[1]: TensorBox(StorageBox(
+    InputBuffer(name='primals_4', layout=FixedLayout('npu:0', torch.float32, size=[s4, s14, s43, s43], stride=[s14*s43**2, s43**2, s43, 1]))
+  ))
+  args[2]: TensorBox(StorageBox(
+    InputBuffer(name='primals_5', layout=FixedLayout('npu:0', torch.float32, size=[s14, s14, 1, 1], stride=[s14, 1, 1, 1]))
+  ))
+  args[3]: [0]
+  args[4]: [32, 32]
+  args[5]: [0, 0]
+  args[6]: [1, 1]
+  args[7]: False
+  args[8]: [0, 0]
+  args[9]: 1
+  args[10]: [True, True, False]
+Found from :
+   File "<workspace>", line 10, in model
+    value = F.conv2d(value, weight, stride=32)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[ERROR] 2026-10-20-22:44:19 (process:<redacted>, Device:0, RankID:-1) ERR99999 UNKNOWN applicaiton exception

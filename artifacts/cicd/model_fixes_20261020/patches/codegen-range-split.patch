@@ -1,0 +1,90 @@
+diff --git a/test/_inductor/test_range_split_compatibility.py b/test/_inductor/test_range_split_compatibility.py
+new file mode 100644
+index 0000000000..2a9ecebaae
+--- /dev/null
++++ b/test/_inductor/test_range_split_compatibility.py
+@@ -0,0 +1,40 @@
++from types import SimpleNamespace
++
++import sympy
++from torch._inductor.codegen.simd import CantSplit
++from torch._inductor.sizevars import SizeVarAllocator
++from torch._inductor.virtualized import V
++from torch.testing._internal.common_utils import TestCase, run_tests
++
++from torch_npu._inductor.codegen.triton import NPUIndexTritonKernel
++
++
++class TestRangeSplitCompatibility(TestCase):
++    def test_incompatible_ranges_return_false(self):
++        for groups, lengths in (
++            ((6, 1), ([4], [1])),
++            ((2, 3), ([10], [])),
++            ((2,), ([6], [])),
++            ((2,), ([2, 3], [])),
++        ):
++            with self.subTest(groups=groups, lengths=lengths):
++                with V.set_graph_handler(SimpleNamespace(sizevars=SizeVarAllocator())):
++                    self.assertFalse(NPUIndexTritonKernel.is_compatible(groups, lengths))
++
++    def test_rejection_contains_divisibility_operands(self):
++        with V.set_graph_handler(SimpleNamespace(sizevars=SizeVarAllocator())):
++            with self.assertRaises(CantSplit) as error:
++                NPUIndexTritonKernel._split_iteration_ranges((6, 1), ([4], [1]))
++        self.assertEqual(error.exception.expr, 6)
++        self.assertEqual(error.exception.remaining, 4)
++
++    def test_three_group_index_reconstruction(self):
++        with V.set_graph_handler(SimpleNamespace(sizevars=SizeVarAllocator())):
++            ranges, getters = NPUIndexTritonKernel._split_iteration_ranges((2, 3, 5), ([30], []))
++        self.assertEqual(ranges, [[2], [3], [5]])
++        indices = sympy.symbols("i0:3", integer=True, nonnegative=True)
++        self.assertEqual(sympy.expand(getters[0][0](indices)), 15 * indices[0] + 5 * indices[1] + indices[2])
++
++
++if __name__ == "__main__":
++    run_tests()
+diff --git a/torch_npu/_inductor/codegen/triton.py b/torch_npu/_inductor/codegen/triton.py
+index 2c905f782b..631f238b73 100644
+--- a/torch_npu/_inductor/codegen/triton.py
++++ b/torch_npu/_inductor/codegen/triton.py
+@@ -4946,7 +4946,7 @@ class NPUIndexTritonKernel(TritonKernel):
+             if sv.statically_known_equals(remaining[i], expr):
+                 pass
+             elif not sv.statically_known_multiple_of(remaining[i], expr):
+-                raise CantSplit
++                raise CantSplit(remaining[i], expr)
+             # guard on the last item out
+             remaining[i] = FloorDiv(remaining[i], expr)
+             new_ranges[i].append(expr)
+@@ -4983,13 +4983,13 @@ class NPUIndexTritonKernel(TritonKernel):
+                 group_size = remaining[group]
+                 # size should be divisible by group_size
+                 if not sv.statically_known_multiple_of(remained_size, group_size):
+-                    raise CantSplit
++                    raise CantSplit(remained_size, group_size)
+                 index_list.append(add_range(group, group_size))
+                 remained_size = FloorDiv(remained_size, group_size)
+                 stride_list.append(remained_size)
+                 group = group + 1
+             if remained_size != 1:
+-                raise CantSplit
++                raise CantSplit(remained_size, 1)
+             return_getters.append(make_combined(stride_list, index_list))
+ 
+         def safe_size_hint_is_one(expr):
+@@ -5014,12 +5014,12 @@ class NPUIndexTritonKernel(TritonKernel):
+                 ):
+                     # scroll to next group with remaining elements
+                     current_group += 1
++                if current_group >= len(remaining):
++                    raise CantSplit(size, 0)
+                 if sv.statically_known_gt(size, remaining[current_group]):
+                     # add multiple ranges (two or more) to the list, as well as the getter funcs
+                     add_multiple_range(size, return_getters)
+                 else:
+-                    if current_group >= len(remaining):
+-                        raise CantSplit
+                     return_getters.append(
+                         operator.itemgetter(add_range(current_group, size))
+                     )

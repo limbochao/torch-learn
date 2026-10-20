@@ -1,0 +1,148 @@
+diff --git a/test/_inductor/test_symbolic_stride_comparison.py b/test/_inductor/test_symbolic_stride_comparison.py
+new file mode 100644
+index 0000000000..2800114843
+--- /dev/null
++++ b/test/_inductor/test_symbolic_stride_comparison.py
+@@ -0,0 +1,68 @@
++import subprocess
++import sys
++from types import SimpleNamespace
++
++import sympy
++import torch_npu._inductor  # noqa: F401
++from torch._dynamo.source import LocalSource
++from torch._inductor.ir import Layout
++from torch._inductor.sizevars import SizeVarAllocator
++from torch._inductor.virtualized import V
++from torch.fx.experimental.symbolic_shapes import DimDynamic, ShapeEnv
++from torch.testing._internal.common_utils import TestCase, run_tests
++from torch.utils._sympy.functions import FloorDiv
++from torch.utils._sympy.numbers import int_oo
++
++
++class TestSymbolicStrideComparison(TestCase):
++    def test_linear_and_squared_stride_order(self):
++        env = ShapeEnv()
++        h = env.create_symbol(256, LocalSource("h"), dynamic_dim=DimDynamic.DYNAMIC)
++        env.constrain_symbol_range(h, 33, int_oo)
++        side = FloorDiv(h - 1, 32) + 1
++        with V.set_graph_handler(SimpleNamespace(sizevars=SizeVarAllocator(env))):
++            self.assertFalse(Layout._stride_expr_ge_or_false(side, side**2))
++            self.assertTrue(Layout._stride_expr_ge_or_false(side**2, side))
++
++    def test_polynomial_stride_order(self):
++        for expanded_left in (False, True):
++            with self.subTest(expanded_left=expanded_left):
++                env = ShapeEnv()
++                h, w, c = [
++                    env.create_symbol(value, LocalSource(name), dynamic_dim=DimDynamic.DYNAMIC)
++                    for name, value in (("h", 256), ("w", 256), ("c", 16))
++                ]
++                spatial = (FloorDiv(h - 1, 32) + 1) * (FloorDiv(w - 1, 32) + 1)
++                left = sympy.expand(spatial) if expanded_left else spatial
++                with V.set_graph_handler(SimpleNamespace(sizevars=SizeVarAllocator(env))):
++                    self.assertFalse(Layout._stride_expr_ge_or_false(left, c * spatial))
++                    self.assertTrue(Layout._stride_expr_ge_or_false(c * spatial, left))
++
++    def test_static_strides_and_zero(self):
++        with V.set_graph_handler(SimpleNamespace(sizevars=SizeVarAllocator())):
++            for left, right, expected in ((0, 0, True), (0, 8, False), (8, 0, True),
++                                          (8, 8, True), (4, 8, False), (8, 4, True)):
++                with self.subTest(left=left, right=right):
++                    self.assertEqual(Layout._stride_expr_ge_or_false(left, right), expected)
++
++    def test_restore_preserves_staticmethod_descriptor(self):
++        # Baseline restoration changes process-wide registries. Keep that
++        # check isolated without re-registering unrelated decompositions.
++        subprocess.check_call([sys.executable, "-c", """
++import torch_npu._inductor
++from torch._inductor.ir import Layout
++from torch_npu._inductor.codegen._sizevars import patch_simplify
++from torch_npu._inductor.lowering_patch import restore_inductor_baseline
++patched = Layout._stride_expr_ge_or_false
++patch_simplify()
++assert Layout._stride_expr_ge_or_false is patched
++restore_inductor_baseline()
++assert not getattr(Layout._stride_expr_ge_or_false, '_torch_npu_integer_strides', False)
++assert isinstance(vars(Layout)['_stride_expr_ge_or_false'], staticmethod)
++patch_simplify()
++assert Layout._stride_expr_ge_or_false._torch_npu_integer_strides
++"""])
++
++
++if __name__ == "__main__":
++    run_tests()
+diff --git a/torch_npu/_inductor/codegen/_sizevars.py b/torch_npu/_inductor/codegen/_sizevars.py
+index 0cc2bc0d3d..9443e0b945 100644
+--- a/torch_npu/_inductor/codegen/_sizevars.py
++++ b/torch_npu/_inductor/codegen/_sizevars.py
+@@ -1,6 +1,10 @@
++import functools
++
+ import sympy
+ from sympy import Expr
+-from torch._inductor import sizevars
++from torch._inductor import ir, sizevars
++from torch._inductor.virtualized import V
++from torch.utils._sympy.functions import PythonMod
+ 
+ 
+ def simplify(self, expr: Expr):
+@@ -10,3 +14,23 @@ def simplify(self, expr: Expr):
+ 
+ def patch_simplify():
+     sizevars.SizeVarAllocator.simplify = simplify
++    original = getattr(ir.Layout, "_stride_expr_ge_or_false", None)
++    if original is None or getattr(original, "_torch_npu_integer_strides", False):
++        return
++
++    @functools.wraps(original)
++    def compare_strides(left, right):
++        # Keep the upstream zero/order/divisibility proofs, but use integer
++        # modulo: SymPy Mod can introduce rational expressions whose negative
++        # powers are invalid for ShapeEnv's integer value-range analysis.
++        sizevars = V.graph.sizevars
++        if sizevars.guard_or_false(sympy.Eq(right, 0)):
++            return True
++        if sizevars.guard_or_false(sympy.Eq(left, 0)):
++            return False
++        return sizevars.guard_or_false(sympy.Ge(left, right)) or sizevars.guard_or_false(
++            sympy.Eq(PythonMod(left, right), 0)
++        )
++
++    compare_strides._torch_npu_integer_strides = True
++    ir.Layout._stride_expr_ge_or_false = staticmethod(compare_strides)
+diff --git a/torch_npu/_inductor/lowering_patch.py b/torch_npu/_inductor/lowering_patch.py
+index 37c452fee7..f725bf0996 100644
+--- a/torch_npu/_inductor/lowering_patch.py
++++ b/torch_npu/_inductor/lowering_patch.py
+@@ -10,6 +10,7 @@ from __future__ import annotations
+ import copy
+ import functools
+ import importlib
++import inspect
+ import os
+ from collections.abc import Iterable, Mapping
+ from dataclasses import dataclass, field
+@@ -268,7 +269,7 @@ def restore_lowering_baseline() -> None:
+ 
+ 
+ def _snapshot_inductor_attr(owner, name):
+-    return owner, name, hasattr(owner, name), getattr(owner, name, None)
++    return owner, name, hasattr(owner, name), inspect.getattr_static(owner, name, None)
+ 
+ 
+ def _get_inductor_attr_baseline():
+@@ -276,10 +277,12 @@ def _get_inductor_attr_baseline():
+     if _INDUCTOR_ATTR_BASELINE is not None:
+         return _INDUCTOR_ATTR_BASELINE
+ 
++    from torch._inductor import ir as inductor_ir
+     from torch._inductor import scheduler as inductor_scheduler
+ 
+     Scheduler = inductor_scheduler.Scheduler
+     _INDUCTOR_ATTR_BASELINE = (
++        _snapshot_inductor_attr(inductor_ir.Layout, "_stride_expr_ge_or_false"),
+         _snapshot_inductor_attr(Scheduler, "_codegen"),
+         _snapshot_inductor_attr(Scheduler, "compute_ancestors"),
+         _snapshot_inductor_attr(inductor_scheduler, "_prune_redundant_deps"),

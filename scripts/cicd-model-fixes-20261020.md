@@ -87,3 +87,9 @@ python scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py --stat
 默认动态 shape，连续检查 `(batch, height) = (2, 224)` 和 `(3, 256)`；`--static` 为静态对照。
 旧调度在动态模式出现展开式乘积不匹配的 `unexpected group`，修复后应通过前向和两项梯度比较。
 该问题发生在 kernel 生成前，`inductor-kernel-compile-debug` 的候选捕获流程不适用于它。
+
+第二个动态 shape 还可复现 stride 取模证明的 `Invalid ranges [0:-1]`，
+以及融合兼容性检查的 CantSplit 构造参数错误。
+完整修复后应连续通过两组 shape，且不再依靠 backward 首次编译失败后的重编译。
+这两项均在 Triton kernel 生成前，分别用框架的
+`test_symbolic_stride_comparison.py`、`test_range_split_compatibility.py` 做元数据级对照。
