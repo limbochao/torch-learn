@@ -1,0 +1,218 @@
+diff --git a/torch_npu/_inductor/codegen/kernel_analysis.py b/torch_npu/_inductor/codegen/kernel_analysis.py
+index 54427e4b86..0b65711dae 100644
+--- a/torch_npu/_inductor/codegen/kernel_analysis.py
++++ b/torch_npu/_inductor/codegen/kernel_analysis.py
+@@ -378,24 +378,19 @@ class ReductionAnalysis:
+ 
+     def dense_post_reduction_list(self) -> List[str]:
+         reduction_list_str = f"{' * '.join(self.dense_reduction_list())}"
+-        no_reduction_list = []
+-        # ensure order
+-        for dense_size in self.dense_size_list():
+-            if dense_size not in self.dense_reduction_list():
+-                no_reduction_list.append(dense_size)
+-        no_reduction_list.append(reduction_list_str)
+-        return no_reduction_list
++        value_axes = list(reversed(self.kernel.golden_var_list))
++        kept_sizes = [
++            f"{axis.name.upper()}BLOCK_SUB"
++            for axis in value_axes
++            if axis.name[0] != "r"
++        ]
++        return kept_sizes + [reduction_list_str]
+ 
+     def dense_size_str(self):
+         sizes = self.dense_size_list()
+         num_red = self.numof_reduction_axis()
+-        is_contig = self.contiguous_reduction
+-
+         if num_red > 1:
+-            if is_contig:
+-                result = f"[{', '.join(self.dense_post_reduction_list())}]"
+-            else:
+-                result = f"[{'* '.join(sizes)}]"
++            result = f"[{', '.join(self.dense_post_reduction_list())}]"
+         else:
+             result = f"[{', '.join(sizes)}]"
+ 
+@@ -409,9 +404,12 @@ class ReductionAnalysis:
+ 
+     def analyze_reduction_dim(self):
+         if self.numof_reduction_axis() > 1:
+-            if not self.contiguous_reduction:
+-                self.reduced_dim = 0
+-                return 0
++            if not self.kernel.golden_var_list:
++                self.kernel.select_golden_varlist()
++            self.reduced_dim = sum(
++                1 for axis in self.kernel.golden_var_list if axis.name[0] != "r"
++            )
++            return self.reduced_dim
+ 
+         if self.numof_reduction_axis() == 1:
+             if not self.kernel.golden_var_list:
+@@ -429,11 +427,6 @@ class ReductionAnalysis:
+         if not reduction_layout_var_list:
+             raise RuntimeError("assert reduction_layout_var_list is not empty")
+ 
+-        if self.numof_reduction_axis() > 1 and self.contiguous_reduction:
+-            if not self.kernel.golden_var_list:
+-                self.kernel.select_golden_varlist()
+-            return sum(1 for x in self.kernel.golden_var_list if x.name[0] != 'r')
+-
+         dim = -1
+         for i, x in enumerate(reversed(reduction_layout_var_list)):
+             if x.name[0] == 'r':
+diff --git a/torch_npu/_inductor/codegen/triton.py b/torch_npu/_inductor/codegen/triton.py
+index 1982d78a4f..7664824444 100644
+--- a/torch_npu/_inductor/codegen/triton.py
++++ b/torch_npu/_inductor/codegen/triton.py
+@@ -3063,9 +3063,9 @@ class NPUIndexTritonKernel(TritonKernel):
+     # for creat constant tensor, if have two axis, constant=tl.full([1,1]) else  tl.full([1])
+     def triton_tensor_ndim(self):
+         if self.numof_reduction_axis() > 1:
+-            if self.is_contiguous_reduction():
+-                return len(self.tiling_axis) - self.numof_reduction_axis() + 1
+-            return 1
++            if not self.golden_var_list:
++                self.select_golden_varlist()
++            return len(self.golden_var_list) - self.numof_reduction_axis() + 1
+ 
+         return len(self.tiling_axis)
+ 
+@@ -3910,15 +3910,11 @@ class NPUIndexTritonKernel(TritonKernel):
+             return len(axis_set) == (max(axis_set) - min(axis_set) + 1)
+ 
+         if self.numof_reduction_axis() > 1:
+-            stride_sorted_var_list = self.parse_golden_from_load_store_index()
++            if not self.golden_var_list:
++                self.select_golden_varlist()
++            value_axis_list = list(self.golden_var_list or [])
+             reduction_dim_list = []
+-            if not stride_sorted_var_list:
+-                if not self.golden_var_list:
+-                    self.select_golden_varlist()
+-                stride_sorted_var_list = (
+-                    list(self.golden_var_list) if self.golden_var_list else []
+-                )
+-            for i, x in enumerate(reversed(stride_sorted_var_list)):
++            for i, x in enumerate(reversed(value_axis_list)):
+                 if x.name[0] == "r":
+                     reduction_dim_list.append(i)
+             return is_contiguous_axis(reduction_dim_list)
+@@ -3946,15 +3942,11 @@ class NPUIndexTritonKernel(TritonKernel):
+         if ndims == 1:
+             return f"triton_helpers.promote_to_tensor({value})"
+ 
+-        if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
+-            if not self.golden_var_list:
+-                self.select_golden_varlist()
+-
++        if self.numof_reduction_axis() > 1:
+             dense_list = self.reduce_analysis.dense_size_list()
+             for i, axis in enumerate(reversed(self.golden_var_list)):
+                 if axis.name[0] == "r":
+                     dense_list[i] = "1"
+-
+             expand_str = ", ".join(dense_list)
+             return f"{value}.reshape({expand_str})"
+ 
+@@ -4124,6 +4116,12 @@ class NPUIndexTritonKernel(TritonKernel):
+ 
+         dense_size_str = self.dense_size_str()
+         value_shape = tuple(self.dense_size_list())
++        full_value_shape = tuple(self.reduce_analysis.dense_size_list())
++        packed_value_shape = tuple(
++            self.reduce_analysis.dense_post_reduction_list()
++            if self.numof_reduction_axis() > 1
++            else self.dense_size_list()
++        )
+         permute_order = None
+         need_permute = False
+         axis_list = []
+@@ -4133,12 +4131,17 @@ class NPUIndexTritonKernel(TritonKernel):
+                     axis_list.append(axis)
+ 
+         if len(axis_list) < len(self.dense_size_list()):
++            broadcast_shape = (
++                f"[{', '.join(full_value_shape)}]"
++                if self.numof_reduction_axis() > 1
++                else dense_size_str
++            )
+             value = self._map_tuple_or_scalar(
+                 lambda v: self.cse.generate(
+                     self.compute,
+-                    f"tl.broadcast_to({v}, {dense_size_str})",
++                    f"tl.broadcast_to({v}, {broadcast_shape})",
+                     dtype=v.dtype,
+-                    shape=value_shape,
++                    shape=full_value_shape if self.numof_reduction_axis() > 1 else value_shape,
+                 ),
+                 value,
+             )
+@@ -4169,7 +4172,7 @@ class NPUIndexTritonKernel(TritonKernel):
+                 not self.persistent_reduction or self.numof_reduction_axis() != 1
+             )
+         ):
+-            if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
++            if self.numof_reduction_axis() > 1:
+                 value_order = list(reversed(self.golden_var_list))
+                 target_order = [x for x in value_order if x.name[0] != "r"] + [
+                     x for x in value_order if x.name[0] == "r"
+@@ -4184,7 +4187,7 @@ class NPUIndexTritonKernel(TritonKernel):
+                         self.compute,
+                         f"tl.reshape({v}.permute({permute_order}), {dense_size_str})",
+                         dtype=v.dtype,
+-                        shape=value_shape,
++                        shape=packed_value_shape,
+                     ),
+                     value,
+                 )
+@@ -4194,7 +4197,7 @@ class NPUIndexTritonKernel(TritonKernel):
+                         self.compute,
+                         f"tl.reshape({v}, {dense_size_str})",
+                         dtype=v.dtype,
+-                        shape=value_shape,
++                        shape=packed_value_shape,
+                     ),
+                     value,
+                 )
+@@ -4235,8 +4238,14 @@ class NPUIndexTritonKernel(TritonKernel):
+         dim = self.reduction_dim()
+         acc_type = triton_acc_type(src_dtype)
+         torch_acc_type = upcast_acc_dtype(src_dtype)
+-        result_shape = list(self.dense_size_list())
+-        result_shape[dim] = "1"
++        if self.numof_reduction_axis() > 1:
++            result_shape = self.reduce_analysis.dense_size_list()
++            for i, axis in enumerate(reversed(self.golden_var_list)):
++                if axis.name[0] == "r":
++                    result_shape[i] = "1"
++        else:
++            result_shape = list(self.dense_size_list())
++            result_shape[dim] = "1"
+         result_var: Any = self.cse.newvar(dtype=torch_acc_type, shape=tuple(result_shape))
+         result_var.mask_vars = {var for var in masks if var[0] != "r"}  # noqa: set_linter
+         cond_expr = " & ".join(masks)
+@@ -4346,7 +4355,7 @@ class NPUIndexTritonKernel(TritonKernel):
+                         self.compute,
+                         final_reduction(masked_value),
+                         dtype=masked_value.dtype,
+-                        shape=masked_value.shape,
++                        shape=tuple(result_shape),
+                     )
+             elif reduction_type == "welford_reduce":
+                 acc_sum = f"{result_var}_acc_sum"
+@@ -4485,10 +4494,10 @@ class NPUIndexTritonKernel(TritonKernel):
+                     self.compute,
+                     final_reduction(masked_value),
+                     dtype=masked_value.dtype,
+-                    shape=masked_value.shape,
++                    shape=tuple(result_shape),
+                 )
+         else:
+-            accumulator = self.cse.namedvar(f"_{result_var}", dtype=torch_acc_type, shape=tuple(self.dense_size_list()))
++            accumulator = self.cse.namedvar(f"_{result_var}", dtype=torch_acc_type, shape=packed_value_shape)
+             default = ir.Reduction.default_accumulator(reduction_type, src_dtype)
+             default = self._map_tuple_or_scalar(constant_repr, default)
+             if not isinstance(default, tuple):

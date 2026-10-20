@@ -1,0 +1,37 @@
+diff --git a/torch_npu/_inductor/codegen/triton.py b/torch_npu/_inductor/codegen/triton.py
+index 2c905f782b..aaab314080 100644
+--- a/torch_npu/_inductor/codegen/triton.py
++++ b/torch_npu/_inductor/codegen/triton.py
+@@ -4531,8 +4531,8 @@ class NPUIndexTritonKernel(TritonKernel):
+             line += ".to(tl.float32)"
+             dtype = torch.float32
+ 
+-        if has_tmpmask:
+-            # Masked loads must come after the mask is computed
++        if has_tmpmask or indirect_indexing:
++            # Indirect loads and their masks depend on computed values.
+             load_buffer = self.compute
+         elif (
+             self.inside_reduction
+@@ -4544,6 +4544,11 @@ class NPUIndexTritonKernel(TritonKernel):
+             # One exception is when this is an indirect_load.
+             load_buffer = self.prefix
+ 
++        elif self.inside_reduction:
++            # Emit reduction inputs beside their consumers. Hoisting every
++            # independent input to self.loads keeps all fused producer tiles
++            # live at once and can overflow the NPU's unified buffer.
++            load_buffer = self.compute
+         else:
+             load_buffer = self.loads
+ 
+@@ -4568,7 +4573,8 @@ class NPUIndexTritonKernel(TritonKernel):
+         # triton can handle broadcast
+         elif index_analyze.need_permute:
+             line = f"{result_var}{index_analyze.generate_statement()}"
+-            result_var = self.cse.generate(self.loads, line, dtype=dtype, shape=result_var.shape)
++            transform_buffer = self.compute if load_buffer is self.compute else self.loads
++            result_var = self.cse.generate(transform_buffer, line, dtype=dtype, shape=result_var.shape)
+             if index_analyze.need_reshape or index_analyze.need_broadcast:
+                 # Mixed reshape/broadcast/permute transforms are conservatively
+                 # treated as layout-unknown.

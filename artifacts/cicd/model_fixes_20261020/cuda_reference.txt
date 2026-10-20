@@ -1,0 +1,219 @@
+CUDA reference revision: cf30153c4c131c8164ee7798e5022d810682e2cb
+
+torch/_inductor/codegen/triton.py:4009::get_load_buffer
+    def get_load_buffer(self, indexing):
+        if indexing.has_indirect() or indexing.has_tmpmask():
+            # Masked loads must come after the mask is computed
+            return self.compute
+        elif (
+            self.inside_reduction
+            and self.range_trees[-1].is_loop
+            and not indexing.has_rindex()
+        ):
+            # can lift a common load outside of reduction loop
+            # One exception is when this is an indirect_load.
+            return self.body
+        else:
+            return self.loads
+
+torch/_inductor/codegen/triton.py:6818::_has_constant_mask
+    def _has_constant_mask(self, tree: IterationRangesRoot) -> bool:
+        if not tree.supports_constant_mask():
+            return False
+
+        if self.is_native_matmul:
+            # tl.dot requires the shape to be >= 16,
+            # so when matmul shape is smaller than 16, we always keep the mask.
+            if V.graph.sizevars.statically_known_lt(tree.numel, 16):
+                return False
+
+        if not self.optimize_mask:
+            return False
+
+        if self.fixed_config and f"{tree.prefix.upper()}BLOCK" in self.fixed_config:
+            if self.fixed_config[f"{tree.prefix.upper()}BLOCK"] == 1:
+                return True
+        elif not self.is_combo_kernel:
+            if V.graph.sizevars.statically_known_equals(tree.numel, 1):
+                if not (tree.is_reduction and self.persistent_reduction):
+                    return True
+
+        # Masks are superfluous if numel is a multiple of BLOCK
+        # (We use the fact that BLOCK is required by triton to be a power of 2)
+        if tree.is_reduction and self.persistent_reduction:
+            max_block = self._get_persistent_RBLOCK(tree.numel)
+            # Triton's auto-tuner can map a full hardware warp along the
+            # reduction axis.  When RBLOCK < warp_size the excess lanes
+            # would execute out-of-bounds global loads.  This results in
+            # faults on AMD hardware.  Keep the dynamic mask so that all
+            # hardware stays correct.
+            device = V.graph.get_current_device_or_throw()
+            warp_size = get_warp_size(device)
+            if isinstance(max_block, int) and max_block < warp_size:
+                return False
+        elif tree.prefix == "x" and self.no_x_dim:
+            max_block = 1
+        else:
+            max_block = self.max_block(tree.prefix)
+
+        if tree.is_reduction and self.cooperative_reduction:
+            max_block = max_block * self.max_rsplit()
+
+        # [Note: Constant mask optimisation]
+        # Optional optimization: if block divides numel exactly, we will
+        # never need to do a masked load to handle stragglers at the end.
+        # If this tree is for the y dimension, we should only use a constant
+        # mask if it can be guaranteed that:
+        # 1. (ynumel / YBLOCK) < max_ygrid or
+        # 2. (ynumel / YBLOCK) % max_ygrid == 0
+        # Because YBLOCK is not constant, use a conservative heuristic:
+        # only use a constant mask if ynumel < max_ygrid.
+        # It's faster to avoid masking at all.  But it is sound to always
+        # mask.
+        if V.graph.sizevars.statically_known_multiple_of(tree.numel, max_block):
+            return (
+                tree.grid_dim != 1
+                or tree.has_zdim
+                or V.graph.sizevars.statically_known_leq(tree.numel, get_max_y_grid())
+            )
+
+        return False
+
+torch/_inductor/codegen/common.py:1087::indirect_indexing
+    def indirect_indexing(
+        self,
+        var: OpVarT,
+        size: sympy.Expr | int,
+        check: bool = True,
+        wrap_neg: bool = True,
+    ) -> sympy.Symbol:
+        return sympy_index_symbol(str(var))
+
+torch/_inductor/codegen/common.py:2804::indirect_indexing
+    def indirect_indexing(
+        self,
+        var: CSEVariable,
+        size: sympy.Expr | int,
+        check: bool = True,
+        wrap_neg: bool = True,
+    ) -> sympy.Symbol:
+        if isinstance(size, int):
+            size = sympy.Integer(size)
+        assert isinstance(size, sympy.Expr), (type(size), size)
+        # Skip CSE since this doesn't return an expression
+
+        if var.bounds.lower < 0:
+            if wrap_neg:
+                stm = ops.add(var, ops.index_expr(size, torch.long))
+                # Mixed negative and non-negative
+                if var.bounds.upper >= 0:
+                    lt = ops.lt(var, 0)
+                    stm = ops.where(lt, stm, var)
+            else:
+                stm = var
+
+            # Propagate bounds as we know how to compute them properly.
+            # When wrap_neg=False, negative indices stay negative and must keep
+            # their original bounds so lower-bound checks are not elided.
+            new_bounds = var.bounds if not wrap_neg else ValueRanges.unknown()
+            if (
+                wrap_neg
+                and var.bounds != ValueRanges.unknown()
+                and isinstance(size, sympy.Number)
+            ):
+                # Take the negative part of the bound and add size to it
+                # Then take union of that and the positive part
+                # This is a tighter bound than that of a generic ops.where, as we have info on the cond
+                neg_bounds = var.bounds & ValueRanges(-int_oo, -1)
+                new_bounds = ValueRanges(
+                    neg_bounds.lower + size, neg_bounds.upper + size
+                )
+                # We don't have a good way of representing the empty range
+                if var.bounds.upper >= 0:
+                    pos = var.bounds & ValueRanges(0, int_oo)
+                    new_bounds = new_bounds | pos
+
+            var = self.kernel.cse.generate(
+                self.kernel.compute,
+                stm,
+                bounds=new_bounds,
+                dtype=var.dtype,
+                shape=var.shape,
+            )
+
+        sympy_var = self.parent_handler.indirect_indexing(var, size, check)
+        if generate_assert(check):
+            assert_lower = not (var.bounds.lower >= 0)
+            # value ranges cannot x < s when x and s are symbols
+            assert_upper = not isinstance(size, sympy.Number) or not (
+                var.bounds.upper < size
+            )
+            self.kernel.check_bounds(sympy_var, size, assert_lower, assert_upper)
+        return sympy_var
+
+torch/_inductor/codegen/triton.py:4794::persistent reduction mask
+            default = ir.Reduction.default_value(reduction_type, src_dtype)
+
+            def update_constant_dtype(constant, src_dtype, dst_dtype):
+                "update reduction constant mask value to match dst_dtype"
+
+                # int is the only mask which may not fit within lower bitwidth,
+                # because float uses inf/-inf
+                if src_dtype.is_floating_point or src_dtype == torch.bool:
+                    return constant
+
+                if src_dtype == dst_dtype or constant == 0:
+                    return constant
+
+                if constant == torch.iinfo(src_dtype).max:
+                    return torch.iinfo(dst_dtype).max
+                elif constant == torch.iinfo(src_dtype).min:
+                    return torch.iinfo(dst_dtype).min
+                else:
+                    return constant
+
+            def _mask_value(value, default) -> CSEVariable:
+                default = update_constant_dtype(default, src_dtype, value.dtype)
+                default_str = self._map_tuple_or_scalar(constant_repr, default)
+
+                return self.cse.generate(
+                    self.compute,
+                    where_cond(value, default_str),
+                    dtype=value.dtype,
+                    shape=value.shape,
+                )
+
+            masked_value: CSEVariable | Sequence[CSEVariable] | None
+            if reduction_type == "online_softmax_reduce" and not isinstance(
+                value, tuple
+            ):
+                # Don't generate mask value for online_softmax since we
+                # will fallback below
+                masked_value = None
+            elif isinstance(value, tuple):
+                masked_value = [_mask_value(v, d) for v, d in zip(value, default)]  # type: ignore[arg-type]
+            elif reduction_type == "dot":
+                # Here, we don't perform the masking.
+                # Masking w/ where condition in native matmul is handled in ops.dot codegen.
+                # Since tl.dot performs reduction within the triton block,
+                # masking should happen before the tl.dot is called.
+                masked_value = self.cse.generate(self.compute, value, dtype=value.dtype)
+            else:
+                masked_value = _mask_value(value, default)
+
+            if reduction_type in arg_reduction_types:
+                assert isinstance(masked_value, CSEVariable)
+                assert index_dtype is not None
+                if logical_index:
+                    accumulator_index = (
+                        f"({str(logical_index)}).to({self.dtype_to_str(index_dtype)})"
+                    )
+                else:
+                    accumulator_index = str(
+                        self.cse.generate(
+                            self.compute,
+                            f"tl.broadcast_to({reduction_range_prefix}index, {masked_value}.shape)",
+                            dtype=index_dtype,
+                            shape=masked_value.shape,
+                        )
+                    )

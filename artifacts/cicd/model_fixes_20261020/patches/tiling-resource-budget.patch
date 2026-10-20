@@ -1,0 +1,130 @@
+diff --git a/test/_inductor/test_tile_generator_resources.py b/test/_inductor/test_tile_generator_resources.py
+new file mode 100644
+index 0000000000..d2f57d0982
+--- /dev/null
++++ b/test/_inductor/test_tile_generator_resources.py
+@@ -0,0 +1,48 @@
++import torch
++import torch_npu  # noqa: F401
++from torch.testing._internal.common_utils import TestCase, run_tests
++
++from torch_npu._inductor.codegen.triton_utils import NPUKernelType
++from torch_npu._inductor.runtime.tile_generator import TileGenerator
++
++
++class TestTileGeneratorResources(TestCase):
++    def test_mixed_mode_searches_below_simt_limit(self):
++        generator = TileGenerator(
++            [67108864], ['x'], [0], [], [0], [0], False, torch.float32,
++            NPUKernelType.SIMD_SIMT_MIX, input_ptr_num=2,
++        )
++        generator.set_kernel_type(NPUKernelType.SIMT_ONLY)
++        simt = generator.descend_split_tiling()
++        self.assertTrue(simt)
++        self.assertTrue(all(cfg.kwargs['XBLOCK_SUB'] <= 2048 for cfg in simt))
++        generator.set_kernel_type(NPUKernelType.SIMT_TEMPLATE)
++        template = generator.descend_split_tiling()
++        self.assertTrue(template)
++        self.assertTrue(all(cfg.kwargs['compile_mode'] == 'simd_simt_template' for cfg in template))
++        self.assertTrue(all(cfg.kwargs['compile_mode'] == 'simt_only' for cfg in simt))
++
++    def test_many_inputs_keep_the_minimum_persistent_tile(self):
++        generator = TileGenerator(
++            [768, 2048], ['x0', 'r1'], [0, 1], [], [0], [1], True, torch.float32,
++            NPUKernelType.SIMT_TEMPLATE, input_ptr_num=83,
++        )
++        configs = generator.descend_split_tiling()
++        self.assertEqual(generator.input_ptr_num, 83)
++        self.assertTrue(configs)
++        self.assertTrue(all(cfg.kwargs['X0BLOCK_SUB'] == 1 for cfg in configs))
++        self.assertTrue(all(cfg.kwargs['R1BLOCK_SUB'] == 2048 for cfg in configs))
++
++    def test_no_loop_selection_counts_persistent_axes(self):
++        generator = TileGenerator(
++            [4, 64, 512, 512], ['z0', 'y1', 'x2', 'r3'], [0, 1, 2, 3], [], [0, 1], [2, 3],
++            True, torch.float32, NPUKernelType.SIMT_TEMPLATE, input_ptr_num=2,
++        )
++        self.assertNotIn(2, generator.no_loop_axis)
++        configs = generator.descend_split_tiling()
++        self.assertTrue(configs)
++        self.assertTrue(any(cfg.kwargs['X2BLOCK_SUB'] <= 8 for cfg in configs))
++
++
++if __name__ == '__main__':
++    run_tests()
+diff --git a/torch_npu/_inductor/runtime/tile_generator.py b/torch_npu/_inductor/runtime/tile_generator.py
+index 3e87fc5004..9bcd1d4ddd 100644
+--- a/torch_npu/_inductor/runtime/tile_generator.py
++++ b/torch_npu/_inductor/runtime/tile_generator.py
+@@ -32,19 +32,16 @@ class TileGenerator:
+         self.low_dims = low_dims
+         self.configs = []
+         self.dtype_bytes = get_byte_per_numel(dtype)
++        self.persistent_reduction = persistent_reduction
+         self.rebuild_dynamic_axis()
+         self.block_name = {}
+         self.sub_block_name = {}
+-        self.persistent_reduction = persistent_reduction
+         self.dual_reduction = dual_reduction
+         self.npu_kernel_type = npu_kernel_type
+         self.max_total_numel = functools.reduce(lambda x, y: x * y, self.blocks) if self.blocks else 1
+         self.tiny_kernel = self.max_total_numel < 128 * 1024
+-        self.input_ptr_num = 3 if input_ptr_num == 0 else min(input_ptr_num, 3)
+-
+-        local_mem_size = 128 * 1024 if self.npu_kernel_type == NPUKernelType.SIMT_ONLY else config.ub_size
+-        self.max_numel_threshold = local_mem_size // self.input_ptr_num // self.dtype_bytes
+-        self.stop_numel = min(self.max_numel_threshold, self.max_total_numel // config.num_vector_core) // 8
++        self.input_ptr_num = input_ptr_num if input_ptr_num > 0 else 3
++        self._update_resource_limits()
+         for axis, name in enumerate(self.axis_name):
+             if axis not in tiling_axis and axis not in split_axis:
+                 self.blocks[axis] = 1
+@@ -76,8 +73,12 @@ class TileGenerator:
+     def rebuild_dynamic_axis(self):
+         if len(self.tiling_axis) > 3 and not self.no_loop_axis:
+             current_numels = 1
++            if self.persistent_reduction:
++                for axis in self.tiling_axis:
++                    if self.axis_name[axis].startswith('r'):
++                        current_numels *= self.numels[axis]
+             for low_dim in self.low_dims:
+-                if self.axis_name[low_dim] == 'r':
++                if self.axis_name[low_dim].startswith('r'):
+                     continue
+                 current_numels *= self.numels[low_dim]
+                 if current_numels * self.dtype_bytes > 4 * 1024:
+@@ -86,7 +87,7 @@ class TileGenerator:
+ 
+ 
+     def reset_configs(self):
+-        self.config = []
++        self.configs = []
+         self.blocks = list(self.numels)
+         self.candidate_blocks = []
+         self.sub_blocks = self.blocks.copy()
+@@ -424,6 +425,25 @@ class TileGenerator:
+ 
+     def set_kernel_type(self, npu_kernel_type):
+         self.npu_kernel_type = npu_kernel_type
++        self._update_resource_limits()
++
++    def _update_resource_limits(self):
++        local_mem_size = 128 * 1024 if self.npu_kernel_type == NPUKernelType.SIMT_ONLY else config.ub_size
++        capacity = local_mem_size // self.input_ptr_num // self.dtype_bytes
++        # Persistent and no-loop axes cannot be tiled further. The pointer
++        # count is a conservative working-set estimate, so still enumerate the
++        # smallest legal tile when that estimate exceeds local memory.
++        minimum_tile = 1
++        for axis in self.tiling_axis:
++            if axis in self.no_loop_axis or (self.persistent_reduction and self.axis_name[axis][0] == "r"):
++                minimum_tile *= self.numels[axis]
++        self.max_numel_threshold = max(1, capacity, minimum_tile)
++        if self.npu_kernel_type == NPUKernelType.SIMT_ONLY:
++            # Keep the search range consistent with add_to_configs' SIMT limit.
++            self.max_numel_threshold = min(self.max_numel_threshold, 8 * 1024 // self.dtype_bytes)
++        self.stop_numel = max(
++            1, min(self.max_numel_threshold, self.max_total_numel // config.num_vector_core) // 8
++        )
+ 
+     def descend_split_tiling(self):
+         self.reset_configs()

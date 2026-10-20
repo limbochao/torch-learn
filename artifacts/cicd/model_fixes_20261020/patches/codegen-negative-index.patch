@@ -1,0 +1,96 @@
+diff --git a/test/_inductor/test_negative_index_codegen.py b/test/_inductor/test_negative_index_codegen.py
+new file mode 100644
+index 0000000000..16c3b92db7
+--- /dev/null
++++ b/test/_inductor/test_negative_index_codegen.py
+@@ -0,0 +1,44 @@
++from contextlib import ExitStack
++from types import SimpleNamespace
++from unittest import mock
++
++import sympy
++import torch
++from torch._inductor.codegen.triton import TritonCSEVariable, TritonKernel
++from torch._inductor.virtualized import V
++from torch.testing._internal.common_utils import TestCase, run_tests
++from torch.utils._sympy.value_ranges import ValueRanges
++
++from torch_npu._inductor.codegen.triton import NPUIndexTritonKernel
++
++
++class TestNegativeIndexCodegen(TestCase):
++    def test_no_wrap_preserves_negative_bounds_and_checks(self):
++        kernel = object.__new__(NPUIndexTritonKernel)
++        kernel.exit_stack = ExitStack()
++        kernel.compute = object()
++        kernel.check_bounds = mock.Mock()
++        bounds = ValueRanges(-2, 3)
++        value = TritonCSEVariable('tmp0', bounds, torch.int64, (8,))
++        result = TritonCSEVariable('tmp1', bounds, torch.int64, (8,))
++        kernel.cse = SimpleNamespace(generate=mock.Mock(return_value=result))
++        parent = SimpleNamespace(indirect_indexing=mock.Mock(return_value=sympy.Symbol('tmp1')))
++        kernel.overrides = lambda: parent
++        with (
++            mock.patch.object(TritonKernel, '__enter__'),
++            mock.patch('torch_npu._inductor.codegen.triton.generate_assert', return_value=True),
++            V.set_interpreter_handler(SimpleNamespace(current_node=None)),
++        ):
++            try:
++                kernel.__enter__()
++                V.ops.indirect_indexing(value, 8, check=True, wrap_neg=False)
++            finally:
++                kernel.exit_stack.close()
++        kernel.cse.generate.assert_called_once_with(
++            kernel.compute, value, bounds=bounds, dtype=torch.int64, shape=(8,)
++        )
++        kernel.check_bounds.assert_called_once_with(sympy.Symbol('tmp1'), sympy.Integer(8), True, False)
++
++
++if __name__ == '__main__':
++    run_tests()
+diff --git a/torch_npu/_inductor/codegen/triton.py b/torch_npu/_inductor/codegen/triton.py
+index 2c905f782b..6ccd37d92b 100644
+--- a/torch_npu/_inductor/codegen/triton.py
++++ b/torch_npu/_inductor/codegen/triton.py
+@@ -5,7 +5,6 @@ import functools
+ import itertools
+ import math
+ import operator
+-import os
+ import re
+ from collections.abc import Callable, Iterable, Sequence
+ from typing import Any, cast, Optional
+@@ -5179,11 +5178,6 @@ class NPUIndexTritonKernel(TritonKernel):
+                     return sympy_var
+ 
+                 if var.bounds.lower < 0:  # type: ignore[operator]
+-                    if (
+-                        os.environ.get("INDUCTOR_ASCEND_DUMP_FX_GRAPH")
+-                        or os.environ.get("INDUCTOR_ASCEND_CHECK_ACCURACY")
+-                    ):
+-                        wrap_neg = False
+                     if wrap_neg:
+                         stm = ops.add(var, ops.index_expr(size, torch.long))
+                         # Mixed negative and non-negative
+@@ -5194,8 +5188,8 @@ class NPUIndexTritonKernel(TritonKernel):
+                         stm = var
+ 
+                     # Propagate bounds as we know how to compute them properly
+-                    new_bounds = ValueRanges.unknown()
+-                    if var.bounds != ValueRanges.unknown() and isinstance(
++                    new_bounds = ValueRanges.unknown() if wrap_neg else var.bounds
++                    if wrap_neg and var.bounds != ValueRanges.unknown() and isinstance(
+                         size, sympy.Number
+                     ):
+                         # Take the negative part of the bound and add size to it
+@@ -5210,7 +5204,9 @@ class NPUIndexTritonKernel(TritonKernel):
+                             pos = var.bounds & ValueRanges(0, int_oo)
+                             new_bounds = new_bounds | pos
+ 
+-                    var = self.cse.generate(self.compute, stm, bounds=new_bounds)
++                    var = self.cse.generate(
++                        self.compute, stm, bounds=new_bounds, dtype=var.dtype, shape=var.shape
++                    )
+ 
+                 sympy_var = parent_handler.indirect_indexing(var, size, check)
+                 if generate_assert(check):
