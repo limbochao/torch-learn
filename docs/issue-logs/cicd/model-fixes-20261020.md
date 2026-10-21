@@ -59,8 +59,29 @@ NFNet 的第三、第四层来自 30 行图级复现扩展的双 shape 检查，
 - **TA masked indirect load**：与 GPT2/BERT 前向症状有关联，属于并存的下层语义缺陷。
   原始 DSL 对照中，补方差 mask 后仍能发现均值受错误 load 尾值影响；通用 Inductor 修复会在各次
   reduction 前重新 mask，因此最终模型可通过，但独立 TA kernel 仍失败。
+  **标记：缺陷未修复，影响被屏蔽；不阻塞当前模型验证。**
 - **negative index**：代码审查和专门回归发现，尚无证据证明这四个模型的实际输入触发它，
   不计入原 14 项失败，也不分配模型故障层级。
+
+## 整网通过但缺陷影响被屏蔽：模型验证非阻塞
+
+存在修复一个问题后，另一个已识别缺陷仍存在、但不再影响整网结果的情况。
+此类问题统一标记为 **“缺陷未修复，影响被屏蔽；不阻塞当前模型验证”**，
+分别保留模型结果与缺陷状态。模型完成既定场景并满足原通过标准后，验证可记 PASS；
+缺陷继续保留独立复现和证据，不因整网 PASS 关闭，也不要求先修复它才能完成当前模型验证。
+
+| 涉及模型 | 仍存在的缺陷 | 影响被屏蔽的原因 | 模型验证状态 | 缺陷状态 |
+| --- | --- | --- | --- | --- |
+| GPT2ForSequenceClassification、BERT_pytorch | TA template 路径的 masked indirect load 未遵守 mask/other | Inductor 在每次 reduction 前重新应用 mask，错误尾值不再进入均值、方差等归约结果 | 各自累计 8/8 PASS；当前验证非阻塞 | 未修复，影响被屏蔽；独立 kernel 的两个 template 对照仍 FAIL |
+
+证据为修复后的[模型矩阵](../../../artifacts/cicd/model_fixes_20261020/model_matrix.json)及
+[v8 TA 独立结果](../../../artifacts/cicd/model_fixes_20261020/ta_after_inductor_v8/results.json)：
+template 对 `other=0`、`other=-7` 均错误返回尾值 9，pure SIMT 两个对照均正确。
+这说明缺陷仍存在；当前非阻塞的范围限于已验证的模型、shape 场景、dtype 和后端。
+其他消费错误尾值的计算，仍需按其实际模型结果判断是否阻塞。
+
+目前有证据支持上述标记的是 TA masked indirect load。negative index 未证明被模型触发；
+NFNet 小复现的第三、第四层属于扩展检查且已修复，均不标记为“缺陷影响被屏蔽”。
 
 ## triton 与 triton_experimental 的区别
 
@@ -388,6 +409,7 @@ NPU 四个拒绝分支却使用无参 `raise CantSplit`，实际抛出 TypeError
 
 涉及模型关联：GPT2ForSequenceClassification、BERT_pytorch 的前向 embedding + norm。
 这是与 Inductor mask 问题并存的独立 TA 缺陷，模型通过后仍复现，不能标为模型修复后的下一层失败。
+**状态：缺陷未修复，影响被屏蔽；不阻塞当前模型验证。**
 
 独立复现脚本为
 [`masked_indirect_load.py`](../../../scripts/repro/cicd/model_fixes_20261020/masked_indirect_load.py)。
@@ -440,7 +462,7 @@ TTIR 仍保留 mask/other，ttadapter 仍出现覆盖 1024 个元素的无条件
 | GPT2 完整矩阵 | 8/8 PASS |
 | BERT 完整矩阵 | 8/8 PASS |
 | NFNet 完整矩阵 | 8/8 PASS；动态训练 performance 的单次 speedup=0.922258 |
-| TA 独立 kernel 在 v4/v8 环境下 | template 两个 other 对照仍失败；pure SIMT 两项通过 |
+| TA 独立 kernel 在 v4/v8 环境下 | template 两个 other 对照仍失败；pure SIMT 两项通过；缺陷未修复，影响被屏蔽，不阻塞当前模型验证 |
 
 v4 整合源码的 32 项数值回归全部通过，10 个独立子进程均正常退出；结果保存在
 [`regressions_v4`](../../../artifacts/cicd/model_fixes_20261020/regressions_v4/)。

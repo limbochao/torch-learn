@@ -69,6 +69,10 @@ python scripts/repro/cicd/model_fixes_20261020/run_matrix.py
 
 ## TA 独立定界
 
+关联模型：GPT2ForSequenceClassification、BERT_pytorch。
+**状态：缺陷未修复，影响被 Inductor reduction mask 屏蔽；不阻塞当前模型验证。**
+两个模型各自累计 8/8 PASS，TA 独立 template 用例仍 FAIL，两类结果分别保留。
+
 ```bash
 python scripts/repro/cicd/model_fixes_20261020/masked_indirect_load.py \
   --output-dir ta_evidence
@@ -78,6 +82,7 @@ python scripts/repro/cicd/model_fixes_20261020/masked_indirect_load.py \
 一个独立 kernel 验证 template/pure SIMT 两种模式，以及 `other=0`/`other=-7`。
 输出数值记录及 TTIR/ttadapter，便于对照 mask 丢失的位置。
 它默认记录缺陷，不因已知缺陷退出失败；需要验证已修复的 TA 版本时可以添加 `--expect-fixed`。
+当前模型验证可按模型矩阵结果完成；独立缺陷继续跟踪，脚本正常退出不表示缺陷已修复。
 本任务不修改 TA 源码或安装包。
 
 ## AlbertForMaskedLM 第二层：softmax 编译失败
