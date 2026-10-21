@@ -1,0 +1,19 @@
+Source revision: 5b18fac65380a14a404251de2eb6b89072c60911
+File: torch_npu/csrc/aten/common/TensorFactories.cpp
+186:   auto tensor = at::detail::make_tensor<torch_npu::NPUTensorImpl>(storage_impl, dtype);
+187:
+188:   // Default at::TensorImpl has size [0]
+189:   if (size.size() != 1 || size[0] != 0) {
+190:     tensor.unsafeGetTensorImpl()->set_sizes_contiguous(size);
+191:   }
+192:   auto memory_format = memory_format_opt.value_or(c10::MemoryFormat::Contiguous);
+193:   TORCH_CHECK(
+194:       memory_format == c10::MemoryFormat::Contiguous,
+195:       "Only c10::MemoryFormat::Contiguous is supported for creating a npu tensor",
+196:       OPS_ERROR(ErrCode::NOT_SUPPORT));
+197:   tensor.unsafeGetTensorImpl()->empty_tensor_restride(memory_format);
+198:   StorageDescHelper::SetDesc(tensor, size, tensor.strides());
+199:   if (C10_UNLIKELY(should_fill_empty_deterministic())) {
+200:     at::native::fill_empty_deterministic_(tensor);
+201:   }
+202:

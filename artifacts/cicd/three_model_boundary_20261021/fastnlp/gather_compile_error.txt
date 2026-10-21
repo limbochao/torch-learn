@@ -1,0 +1,101 @@
+fastnlp_gather_compile.py:34:36: error: failed to legalize unresolved materialization from () to ('tensor<1xi64>') that remained live after conversion
+        tmp8 = tl.where(tmp7, tmp6, tmp0)
+                                   ^
+<workspace>/three_model_boundary_20261021/fastnlp_gather_compile.py:36:34: note: see existing live user here: %extracted_12 = tensor.extract %15[%c0_11] : tensor<1xi64>
+        tmp10 = tl.load(in_ptr1 + tmp8, r0_mask)
+                                 ^
+<workspace>/three_model_boundary_20261021/fastnlp_gather_compile.py:16:0: error: failed to apply Conversion Patterns
+module attributes {hacc.target = #hacc.target<"Ascend950PR_9579">, ssbuffer.insertionOptimization} {
+  tt.func public @triton_red_fused_eq_index_masked_fill_max_ne_s_0(%arg0: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg3: !tt.ptr<i1> {tt.divisibility = 16 : i32}, %arg4: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg5: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg6: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg7: i32) attributes {noinline = false} {
+    %cst = arith.constant dense<2869> : tensor<1xi64>
+    %cst_0 = arith.constant dense<false> : tensor<1xi1>
+    %cst_1 = arith.constant dense<0> : tensor<1xi64>
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %0 = tt.splat %arg2 : !tt.ptr<i64> -> tensor<1x!tt.ptr<i64>>
+    %1:2 = scf.for %arg8 = %c0_i32 to %arg7 step %c1_i32 iter_args(%arg9 = %cst_1, %arg10 = %cst_1) -> (tensor<1xi64>, tensor<1xi64>)  : i32 {
+      %8 = arith.cmpi slt, %arg8, %arg7 : i32
+      %9 = tt.splat %8 : i1 -> tensor<1xi1>
+      %10 = tt.addptr %arg1, %arg8 : !tt.ptr<i64>, i32
+      %11 = tt.splat %10 : !tt.ptr<i64> -> tensor<1x!tt.ptr<i64>>
+      %12 = tt.load %11, %9, %cst_1 : tensor<1x!tt.ptr<i64>>
+      %13 = arith.cmpi ne, %12, %cst_1 : tensor<1xi64>
+      %14 = arith.cmpi eq, %13, %cst_0 : tensor<1xi1>
+      %15 = arith.addi %12, %cst : tensor<1xi64>
+      %16 = arith.cmpi slt, %12, %cst_1 : tensor<1xi64>
+      %17 = arith.select %16, %15, %12 : tensor<1xi1>, tensor<1xi64>
+      %18 = tt.addptr %0, %17 : tensor<1x!tt.ptr<i64>>, tensor<1xi64>
+      %19 = tt.load %18, %9, %cst_1 : tensor<1x!tt.ptr<i64>>
+      %20 = arith.select %14, %cst_1, %19 : tensor<1xi1>, tensor<1xi64>
+      %21 = arith.addi %arg9, %20 : tensor<1xi64>
+      %22 = arith.select %9, %21, %arg9 : tensor<1xi1>, tensor<1xi64>
+      %23 = arith.extui %13 : tensor<1xi1> to tensor<1xi64>
+      %24 = arith.addi %arg10, %23 : tensor<1xi64>
+      %25 = arith.select %9, %24, %arg10 : tensor<1xi1>, tensor<1xi64>
+      %26 = tt.addptr %arg3, %arg8 : !tt.ptr<i1>, i32
+      %27 = tt.bitcast %26 : !tt.ptr<i1> -> !tt.ptr<i8>
+      %28 = tt.splat %27 : !tt.ptr<i8> -> tensor<1x!tt.ptr<i8>>
+      %29 = arith.extui %13 : tensor<1xi1> to tensor<1xi8>
+      tt.store %28, %29, %9 : tensor<1x!tt.ptr<i8>>
+      %30 = tt.addptr %arg4, %arg8 : !tt.ptr<i64>, i32
+      %31 = tt.splat %30 : !tt.ptr<i64> -> tensor<1x!tt.ptr<i64>>
+      tt.store %31, %20, %9 : tensor<1x!tt.ptr<i64>>
+      scf.yield %22, %25 : tensor<1xi64>, tensor<1xi64>
+    }
+    %2 = "tt.reduce"(%1#0) <{axis = 0 : i32}> ({
+    ^bb0(%arg8: i64, %arg9: i64):
+      %8 = arith.addi %arg8, %arg9 : i64
+      tt.reduce.return %8 : i64
+    }) : (tensor<1xi64>) -> i64
+    %3 = tt.splat %2 : i64 -> tensor<1xi64>
+    %4 = "tt.reduce"(%1#1) <{axis = 0 : i32}> ({
+    ^bb0(%arg8: i64, %arg9: i64):
+      %8 = arith.addi %arg8, %arg9 : i64
+      tt.reduce.return %8 : i64
+    }) : (tensor<1xi64>) -> i64
+    %5 = tt.splat %4 : i64 -> tensor<1xi64>
+    %6 = tt.splat %arg5 : !tt.ptr<i64> -> tensor<1x!tt.ptr<i64>>
+    tt.store %6, %3 : tensor<1x!tt.ptr<i64>>
+    %7 = tt.splat %arg6 : !tt.ptr<i64> -> tensor<1x!tt.ptr<i64>>
+    tt.store %7, %5 : tensor<1x!tt.ptr<i64>>
+    tt.return
+  }
+}
+
+{-#
+  external_resources: {
+    mlir_reproducer: {
+      pipeline: "builtin.module(convert-triton-distributed-to-hivm{pattern-benefit-prioritize-over-llvm-conversions=10}, triton-control-flow-opt, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, discrete-mask-access-conversion{compile-mode=simd_simt_template compile-on-910-95=true}, triton-to-annotation, triton-to-unstructure{compile-mode=simd_simt_template compile-on-910-95=true force-scalarize-mode=false}, triton-to-hivm, triton-to-hfusion, triton-to-llvm, bubble-up-operation{enable-aggressive-mode=true}, triton-to-structured{enable-mask-fallback-conversion=false optimize-dynamic-offset=false}, triton-to-linalg{compile-mode=simd_simt_template compile-on-910-95=true enable-nd2nz-on-vector=false enable-select-analysis=true global-kernel=false named-ops=true}, merge-concat-load-buffer, add_dynamic_cv_pipeline{compile-on-910-95=true})",
+      disable_threading: true,
+      verify_each: true
+    }
+  }
+#-}
+<workspace>/three_model_boundary_20261021/fastnlp_gather_compile.py:16:0: error: Failures have been detected while processing an MLIR pass pipeline
+<workspace>/three_model_boundary_20261021/fastnlp_gather_compile.py:16:0: note: Pipeline failed while executing [`TritonToLinalg` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`
+Traceback (most recent call last):
+  File "<env>/lib/python3.11/site-packages/triton/compiler/compiler.py", line 326, in compile
+    next_module = compile_ir(module, metadata)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<env>/lib/python3.11/site-packages/triton/backends/ascend/compiler.py", line 1643, in <lambda>
+    stages["ttadapter"] = lambda src, metadata: ttir_to_linalg(src, metadata, options)
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<env>/lib/python3.11/site-packages/triton/backends/ascend/compiler.py", line 438, in ttir_to_linalg
+    pm.run(mod, 'ttir_to_linalg')
+RuntimeError: PassManager::run failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<workspace>/three_model_boundary_20261021/fastnlp_gather_compile.py", line 76, in <module>
+    triton.compile(source, target=GPUTarget("npu", "Ascend950PR_9579", 32), options=options)
+  File "<env>/lib/python3.11/site-packages/triton/compiler/compiler.py", line 347, in compile
+    raise MLIRCompilationError(stage_name, error_detail) from e
+triton.compiler.errors.MLIRCompilationError:
+///------------------[ERROR][Triton][BEG]------------------
+[ConvertTritonIRToLinalgIR] encounters error:
+PassManager::run failed
+
+[INFO]: The compiled kernel cache is in <workspace>/pta_213_cicd/cache/triton/BDIMGTO23FBQXRVUXNWTGHNOYLH36ND5L3XPV4S34NL4RQPFHTTA
+
+///------------------[ERROR][Triton][END]------------------

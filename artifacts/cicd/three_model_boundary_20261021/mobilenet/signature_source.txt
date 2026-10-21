@@ -1,0 +1,84 @@
+def device_supports_fp64(device: torch.device | None) -> bool:
+    """Check if the given device supports float64."""
+    if device is not None and device.type == "xpu":
+        return torch.xpu.get_device_properties(device).has_fp64
+    return True
+
+def signature_of(arg: KernelArgType, *, size_dtype: str | None) -> str:
+    if isinstance(arg, TensorArg):
+        typ = _type_of(arg.dtype)
+        if should_unwrap_unspec_arg(arg.buffer):
+            # had unwrapped 0d tensor as scalar
+            new_typ = typ.lstrip("*")
+            if new_typ in ["fp16", "bf16"]:
+                return "fp32"
+            else:
+                return new_typ
+        elif use_uint8_triton_storage_for_cuda_float8_e4m3fn(arg.dtype, arg.name):
+            return "*u8"
+        else:
+            return typ
+    if isinstance(arg, SizeArg):
+        if arg.expr is None:
+            if triton_version_uses_attrs_dict():
+                # In newer versions of Triton, the signature includes "None" args
+                # and their type is marked as "constexpr"
+                return "constexpr"
+            else:
+                # In older versions of Triton...
+                # From triton/runtime/jit.py
+                # `None` is nullptr.  Implicitly convert to *i8.
+                return "*i8"
+        elif _arg_equals_1(arg) and triton_version_uses_attrs_dict():
+            # In new versions of Triton, if we have an equal-to-1 arg that's marked as a constant,
+            # it should be marked as "constexpr" in the signature.
+            return "constexpr"
+        elif isinstance(arg.expr, (float, sympy.Float)):
+            # Python floats are natively fp64, so use fp64 to preserve precision
+            if config._use_fp64_for_unbacked_floats and device_supports_fp64(
+                V.graph.current_device
+            ):
+                return "fp64"
+            return "fp32"
+        elif isinstance(arg.expr, sympy.Symbol) and symbol_is_type(
+            arg.expr, (SymT.UNBACKED_FLOAT)
+        ):
+            # Unbacked floats from .item() should preserve fp64 precision
+            if config._use_fp64_for_unbacked_floats and device_supports_fp64(
+                V.graph.current_device
+            ):
+                return "fp64"
+            return "fp32"
+        elif isinstance(arg.expr, bool):
+            return "i1"
+
+        # if this is an integer
+        if size_dtype == "tl.int32":
+            return "i32"
+        elif size_dtype == "tl.int64":
+            return "i64"
+        elif size_dtype is None:
+            # no hint: we'll see if we know that this is a 32-bit int, and guard if possible.
+            int_max = torch.iinfo(torch.int32).max
+            if expr_fits_within_32bit(arg.expr):
+                V.graph.sizevars.check_leq(arg.expr, int_max)
+                return "i32"
+            else:
+                return "i64"
+        else:
+            raise NotImplementedError(f"unhandled size_dtype {size_dtype}")
+    if isinstance(arg, WorkspaceArg):
+        return _type_of(arg.dtype)
+    if isinstance(arg, TMADescriptorArg):
+        if arg.api_type == "experimental":
+            return "nvTmaDesc"
+        else:
+            # https://github.com/triton-lang/triton/blob/9695baed9b46cf957e08b157bb4133f4a4b331c5/python/triton/runtime/jit.py#L360-L363
+            assert arg.api_type == "stable"
+            assert arg.block_shape is not None
+            assert arg.dtype is not None
+            inner = _type_of(arg.dtype)[1:]  # strip the `*`: *fp32 -> fp32
+            return f"tensordesc<{inner}{list(arg.block_shape)}>"
+    if isinstance(arg, ConstexprArg):
+        return "constexpr"
+    raise NotImplementedError(f"unhandled {type(arg)}: {arg}")
