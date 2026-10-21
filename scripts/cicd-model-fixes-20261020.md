@@ -3,6 +3,18 @@
 分析见 [修复审查与复测](../docs/issue-logs/cicd/model-fixes-20261020.md)。
 脚本目录为 `scripts/repro/cicd/model_fixes_20261020/`。
 
+| 模型 | 套件 | 故障层级与对应复现 |
+| --- | --- | --- |
+| AlbertForMaskedLM | huggingface | 第一层 LayerNorm backward load/tiling；第二层动态训练 softmax，见 `albert_softmax_compile.py` |
+| GPT2ForSequenceClassification | huggingface | 第一层前向 reduction mask；另有独立 TA masked load，见 `masked_indirect_load.py` |
+| nfnet_l0 | timm_models | 第一层 pooling tiling；第二层训练 scheduling，见 `symbolic_group_training.py` |
+| BERT_pytorch | torchbench | 第一层前向 reduction mask；第二层静态训练 bias gradient reduction axes |
+
+每个模型默认执行静态/动态 × 推理/训练 × performance/accuracy，共 8 项。
+NFNet 图级小复现的第二组动态 shape 继续暴露第三层 stride 证明及第四层 range 拆分问题；
+这两层属于小复现的扩展检查。negative index 为审查发现的独立回归，尚未归因到四模型实际失败。
+完整的层级、证据及验证范围见分析文档中的“问题层级”一节。
+
 ## 环境
 
 使用已能执行 torch_npu Inductor 的 NPU 环境及 TorchBench 模型依赖。
@@ -11,11 +23,18 @@
 将修复分支中的 Python 文件部署到专用包目录，并在 `PYTHONPATH` 中优先使用该目录。
 应保留原环境的其它补丁，并记录实际加载的文件及其 SHA256。
 
+本轮使用默认 NPU Triton 后端：runner 参数为 `--backend inductor --npu-backend triton`，
+映射到 `TORCHINDUCTOR_NPU_BACKEND=default`。`run_matrix.py` 已显式传入该 runner 参数。
+实验后端使用 `--npu-backend triton_experimental`，或独立脚本设置同名环境变量值；
+它有独立的 codegen/autotune 路径，两者共用安装的 Triton-Ascend 编译器。
+区别、源码入口和验证范围见分析文档中的“triton 与 triton_experimental 的区别”一节。
+本页命令及 32 项累计 PASS 结果均对应 `triton`。
+
 ## 数值回归
 
 ```bash
 export ASCEND_RT_VISIBLE_DEVICES=0
-export TORCHINDUCTOR_NPU_BACKEND=triton
+export TORCHINDUCTOR_NPU_BACKEND=default
 export TORCHINDUCTOR_COMPILE_THREADS=1
 export TORCHNPU_PRECOMPILE_THREADS=4
 export REGRESSION_DIR="$PWD/regression_results"
@@ -61,7 +80,7 @@ python scripts/repro/cicd/model_fixes_20261020/masked_indirect_load.py \
 它默认记录缺陷，不因已知缺陷退出失败；需要验证已修复的 TA 版本时可以添加 `--expect-fixed`。
 本任务不修改 TA 源码或安装包。
 
-## 新暴露的 softmax 编译失败
+## AlbertForMaskedLM 第二层：softmax 编译失败
 
 ```bash
 # 原候选：预期 UB overflow
@@ -76,7 +95,7 @@ python scripts/repro/cicd/model_fixes_20261020/albert_softmax_compile.py --xbloc
 默认用例只编译，不创建模型和输入；`--check` 才分配输入并 launch 一次。
 框架修复通过通用 tiling 规则搜索可编译候选，不固定该对照 tile。
 
-## 动态训练调度复现
+## nfnet_l0 第二层及小复现后续层级：动态训练调度
 
 ```bash
 python scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py

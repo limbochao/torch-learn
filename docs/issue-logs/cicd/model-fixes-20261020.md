@@ -9,6 +9,15 @@ published: false
 
 本轮针对 [四模型完整矩阵](four-model-matrix-20261020.md) 的精度与编译失败实施框架修复。
 模型为 AlbertForMaskedLM、GPT2ForSequenceClassification、nfnet_l0、BERT_pytorch。
+每个模型覆盖静态/动态 shape × 推理/训练 × performance/accuracy，共 8 项：
+
+| 模型全名 | 测试套件 | 基线失败场景 | 修复后的累计结果 |
+| --- | --- | --- | --- |
+| AlbertForMaskedLM | huggingface | 静态/动态训练的 performance、accuracy，共 4 项编译失败 | 8/8 PASS |
+| GPT2ForSequenceClassification（下文 GPT2） | huggingface | 静态/动态推理 accuracy，共 2 项精度失败 | 8/8 PASS |
+| nfnet_l0（下文 NFNet） | timm_models | 动态推理/训练的 performance、accuracy，共 4 项编译失败 | 8/8 PASS |
+| BERT_pytorch（下文 BERT） | torchbench | 静态/动态推理/训练 accuracy，共 4 项精度失败 | 8/8 PASS |
+
 基线 32 个场景中 18 PASS、14 FAIL。基线的 kernel、模型结果和独立 DSL 对照实验保留在
 [`artifacts/cicd/four_model_matrix_20261020`](../../../artifacts/cicd/four_model_matrix_20261020/)。
 
@@ -22,6 +31,72 @@ TA 仅做定界和独立 kernel 抽取，不修改 TA，也不在 Inductor 中�
 四模型 32 个场景全部执行通过；这是各修复阶段的累计结果，具体运行版本分别保留。
 最终 Python 修复集的 32 项数值回归、双 shape 训练复现及针对性单元检查也已通过。
 NFNet 动态训练 performance 的单次 speedup 为 0.922258，成功执行但慢于 eager。
+
+## 问题层级：修复前一阻塞后暴露的下一问题
+
+层级按每个模型的故障链分别编号：第一层是原始失败，解决后继续执行才暴露的下一问题为第二层，
+依此类推。这里的层级表示故障暴露顺序；同层可以需要多个修复分支，v4/v5 等验证版本号也不等于层级。
+
+| 模型或派生用例 | 层级 | 失败及归属 | 解决该层后的结果 |
+| --- | --- | --- | --- |
+| AlbertForMaskedLM：四个训练场景 | 第一层 | LayerNorm 参数梯度融合中 81 个 load 集中存活，叠加 tiling 候选覆盖不足；Inductor NPU 资源管理 | 初版矩阵 7/8 PASS，动态训练 performance 继续遇到 softmax 失败 |
+| AlbertForMaskedLM：动态训练 performance | 第二层 | softmax 的动态轴重建漏算 persistent R3，错误地禁止 X2 切分，候选仍超 UB；Inductor tiling | 补全轴资源计算后该项 PASS，累计 8/8 |
+| GPT2ForSequenceClassification：静态/动态推理 accuracy | 第一层 | persistent reduction 未在计算后屏蔽无效 lane，导致 norm 结果错误；Inductor codegen | 通用 mask 修复后累计 8/8；TA 独立缺陷仍可复现，见下文 |
+| BERT_pytorch：四个 accuracy 场景 | 第一层 | embedding + norm 前向的 reduction mask 错误；Inductor codegen | 前向对照通过，静态训练 accuracy 仍失败 |
+| BERT_pytorch：静态训练 accuracy | 第二层 | backward bias gradient 将应保留的 channel 轴一并归约；Inductor codegen | 再修正 reduction axes 后该项 PASS，累计 8/8 |
+| nfnet_l0：四个动态场景 | 第一层 | pooling 搜索停止过早，遗漏合法小 tile，SIMT 模式资源边界未同步；Inductor tiling | 动态推理两项 PASS，动态训练继续暴露 scheduling 错误 |
+| nfnet_l0：动态训练 performance、accuracy | 第二层 | 等价符号乘积因结构不同触发 `unexpected group`；Inductor scheduling | v5 两项均 PASS，整模型累计 8/8；抽取复现继续检查第二组 shape |
+| NFNet 问题抽取的训练小复现：第二组动态 shape | 第三层（小复现） | stride 整除证明引入倒数，触发 `Invalid ranges [0:-1]`；社区 Inductor Layout/符号证明入口 | 整数取模修复后两组 shape 数值通过，但初次 backward 编译仍出现下一层异常 |
+| 同一训练小复现：第二组动态 shape | 第四层（小复现） | range 拆分拒绝时无参构造 `CantSplit`，触发 TypeError；Inductor NPU 接口适配 | v8 动态/静态各两组 shape PASS，日志不再出现该异常 |
+
+NFNet 的第三、第四层来自 30 行图级复现扩展的双 shape 检查，没有在 NFNet 整模型矩阵中观察到
+这两项新失败。第三层曾尝试的 stride 操作数规范化方案仍失败，这是同一层修复方案的迭代。
+逐层证据见下文各节、[原始定界实验](four-model-matrix-20261020.md)及
+[`model_matrix.json`](../../../artifacts/cicd/model_fixes_20261020/model_matrix.json)。
+
+另有两类独立发现，不能据此续编号为某个模型的下一层：
+
+- **TA masked indirect load**：与 GPT2/BERT 前向症状有关联，属于并存的下层语义缺陷。
+  原始 DSL 对照中，补方差 mask 后仍能发现均值受错误 load 尾值影响；通用 Inductor 修复会在各次
+  reduction 前重新 mask，因此最终模型可通过，但独立 TA kernel 仍失败。
+- **negative index**：代码审查和专门回归发现，尚无证据证明这四个模型的实际输入触发它，
+  不计入原 14 项失败，也不分配模型故障层级。
+
+## triton 与 triton_experimental 的区别
+
+两者是 torch_npu Inductor 的两套 NPU Triton 后端实现，共用安装的 Triton-Ascend 编译器。
+区别主要发生在生成 Triton kernel 之前的分解、调度、代码生成，以及编译候选与运行时调优。
+以下以本轮最终源码 `5b18fac65380a14a404251de2eb6b89072c60911` 为准。
+
+| 对比项 | triton | triton_experimental |
+| --- | --- | --- |
+| TorchBench 选择参数 | `--backend inductor --npu-backend triton` | `--backend inductor --npu-backend triton_experimental` |
+| 对应环境变量 | `TORCHINDUCTOR_NPU_BACKEND=default` | `TORCHINDUCTOR_NPU_BACKEND=triton_experimental` |
+| 激活入口 | `_load_triton_backend()` | `_load_triton_experimental_backend()` → `_activate()` |
+| 调度与代码生成 | `NPUCombinedScheduling`，其中 Triton 调度使用 `NPUIndexTritonKernel`，实现位于 `_inductor/codegen/` | 注册独立的 `NPUTritonScheduling`、`NPUWrapperCodeGen`，实现位于 `_inductor/triton_experimental/codegen/`，继承社区 Triton 类并添加 NPU 适配 |
+| tiling/autotune | `_inductor/runtime/triton_heuristics.py`，包括 `TileGenerator` 候选搜索 | 自有 `triton_experimental/npu_triton_heuristics.py` 和 `NPUCachingAutotuner` |
+| 算子分解与 fallback | `_register_triton_decompositions()` 及默认后端 lowering | 独立的 `_register_triton_experimental_decompositions()`、lowering/fallback 注册；分解注册代码仍放在共享 `decomposition.py` 中 |
+| 本轮验证 | 四模型累计 32/32 PASS | 未运行本轮四模型矩阵，不能沿用左侧通过结论 |
+
+源码依据：[runner 参数映射][backend-runner]、[两个 loader 与公共 patch][backend-loaders]、
+[实验后端激活][backend-experimental]、[实验后端设备注册][backend-device]、
+[分解注册][backend-decomposition]。两者也复用部分公共 NPU patch、设备接口和算法选择设施，
+“独立”指各自维护的调度/codegen/heuristics，不能理解为所有基础设施都复制了一份。
+
+`--backend inductor` 选择 PyTorch 图编译器，`--npu-backend` 才选择这里的 NPU 实现。
+runner 会将 CLI 的 `triton` 映射为环境变量值 `default`；CLI 的 `--npu-backend default`
+还会查询 runner 的模型后端配置，因此复现本轮结果应显式传 `--npu-backend triton`。
+独立脚本则直接设置上表中的环境变量值。`simd_simt_template` / `simt_only` 是单个 kernel 的
+编译模式，与选择这两套 Inductor 后端是不同层面的配置。
+
+本轮修复主要位于默认后端的 codegen/runtime/scheduling 路径；切换到实验后端会改变生成路径和
+候选规则，需要另做验证。源码和本轮结果均不足以断言哪个后端对所有模型更快或更稳定。
+
+[backend-runner]: https://gitcode.com/luqichao/pytorch_new/blob/5b18fac65380a14a404251de2eb6b89072c60911/benchmarks/torchbench/common.py
+[backend-loaders]: https://gitcode.com/luqichao/pytorch_new/blob/5b18fac65380a14a404251de2eb6b89072c60911/torch_npu/_inductor/__init__.py
+[backend-experimental]: https://gitcode.com/luqichao/pytorch_new/blob/5b18fac65380a14a404251de2eb6b89072c60911/torch_npu/_inductor/triton_experimental/__init__.py
+[backend-device]: https://gitcode.com/luqichao/pytorch_new/blob/5b18fac65380a14a404251de2eb6b89072c60911/torch_npu/_inductor/triton_experimental/device.py
+[backend-decomposition]: https://gitcode.com/luqichao/pytorch_new/blob/5b18fac65380a14a404251de2eb6b89072c60911/torch_npu/_inductor/decomposition.py
 
 ## 分支组织
 
@@ -78,6 +153,8 @@ stride 补丁涉及的两个新增目标文件，原安装内容均与 master �
 
 ## Persistent reduction：必须在计算后重新应用 mask
 
+涉及模型：GPT2ForSequenceClassification、BERT_pytorch，均为第一层前向精度问题。
+
 归约 lane 指一次归约 tile 中的一个元素位置。例如隐藏维度 768 在统一 SIMT 路径上扩展到 1024，
 多出的 256 个位置无效。即使 load 的 `other=0` 正确，`(value - mean) ** 2` 在这些位置也不再为零。
 因此直接 `tl.sum(square, ...)` 会把无效位置计入方差。
@@ -105,6 +182,8 @@ TA masked load 是否还存在必须另外验证，不能仅从模型 PASS 推�
 
 ## 多轴规约：只压平规约维，保留 channel 维
 
+涉及模型：BERT_pytorch，静态训练 accuracy 的第二层问题，修复第一层前向 mask 后仍失败。
+
 BERT 静态反向的 bias gradient 需要对输入 `[48,128,64]` 进行
 `reshape(4,12,128,64).permute(0,2,1,3).reshape(512,768).sum(0)`。
 原 `ReductionAnalysis.dense_size_str` 在 non-contiguous multi-reduction 情况把 R2、R3 和 X5 全部
@@ -128,6 +207,8 @@ CUDA 的数学参考是保留输出维、只对目标 reduction dim 规约；其
 
 ## 负索引：调试开关不能改变算子语义
 
+涉及范围：专门负索引回归，未证明四模型输入触发，不分配模型故障层级。
+
 原 `NPUIndexTritonKernel.__enter__` 内的 `CSEProxy.indirect_indexing`，在设置
 `INDUCTOR_ASCEND_DUMP_FX_GRAPH` 或 `INDUCTOR_ASCEND_CHECK_ACCURACY` 时强制 `wrap_neg=False`。
 例如长度 8 的 tensor 中，索引 -1 本应先变成 7；dump/check 开关不能取消这个转换。
@@ -142,6 +223,8 @@ CUDA 的数学参考是保留输出维、只对目标 reduction dim 规约；其
 
 ### Albert 多路 LayerNorm 参数梯度融合
 
+涉及模型：AlbertForMaskedLM，四个训练场景的第一层编译失败；同时需要合法 tiling 候选覆盖。
+
 基线 kernel 融合 12 路梯度贡献，81 个 input load 被集中写到 `self.loads`，随后才写计算。
 大量 tile 同时存活，导致 UB（NPU 的片上 unified buffer）容量不足。
 独立 DSL 实验已证明：将 load 移到首次消费前，原来失败的部分 tile 可以编译并通过梯度数值对比。
@@ -155,6 +238,9 @@ CUDA `TritonKernel.get_load_buffer()` 同样把 indirect/tmpmask load 放在 com
 该资源策略不是照抄 CUDA 对普通 load 的默认安排。
 
 ### 搜索范围需要覆盖可编译 tile
+
+涉及模型：AlbertForMaskedLM、nfnet_l0。通用资源搜索属于两者第一层问题的修复；
+本节后半的 Albert 动态 softmax 是解决第一层后才暴露的第二层问题。
 
 `TileGenerator` 原来把 pointer 数量截断到 3，且切换 SIMD/SIMT 模式后没有更新容量和 stop 阈值。
 NFNet 动态 avg_pool2d 的 pure SIMT 候选限制为每 tile 8 KiB，但旧搜索在 4096 个 FP32 元素处就停止，
@@ -192,6 +278,8 @@ Albert 动态训练 performance 修复后已通过，batch=4、speedup=1.017143�
 数值验证由 accuracy 场景承担，performance 的单次 speedup 不作为稳定性能提升结论。
 
 ## 动态训练 scheduling：符号乘积需要按尺寸语义比较
+
+涉及模型：nfnet_l0，动态训练的第二层问题；同时抽取图级小复现供双 shape 检查。
 
 NFNet 动态训练在 pooling 编译问题修复后，performance 和 accuracy 都到达 backward scheduling，
 并抛出 `unexpected group`。accuracy 进程虽返回 0，CSV 为 `fail_to_run`，仍应计为 FAIL。
@@ -236,6 +324,8 @@ accuracy 的前向/反向捕获在一个图中，0 graph break；performance 沿
 
 ## 动态 stride 比较：整除证明必须保留整数取模
 
+涉及范围：NFNet 问题抽取的训练小复现第三层，非 NFNet 整模型新增失败记录。
+
 调度修复后，上述 30 行复现的第一组动态输入通过前向和两项梯度比较，第二组
 `(3, 16, 256, 256)` 在 `aten.convolution_backward` lowering 出现
 `ValueRangeError: Invalid ranges [0:-1]`。静态模式两组输入均通过。
@@ -273,6 +363,8 @@ baseline 快照也记录该 Layout 静态方法，使用 `inspect.getattr_static
 
 ## range 拆分：兼容性拒绝必须抛出正确的异常类型
 
+涉及范围：同一 NFNet 训练小复现第四层，非 NFNet 整模型新增失败记录。
+
 stride 修复后，动态双 shape 训练复现最终数值通过，但第二个 shape 的初次 backward 编译出现
 `TypeError: CantSplit.__init__() missing 2 required positional arguments: expr and remaining`。
 AOTAutograd 随后重新编译成功；这不等于初次编译路径正确，仍需修复该新异常。
@@ -293,6 +385,9 @@ NPU 四个拒绝分支却使用无参 `raise CantSplit`，实际抛出 TypeError
 [`layout_checks_v8`](../../../artifacts/cicd/model_fixes_20261020/layout_checks_v8/)。
 
 ## TA masked indirect load：独立定界
+
+涉及模型关联：GPT2ForSequenceClassification、BERT_pytorch 的前向 embedding + norm。
+这是与 Inductor mask 问题并存的独立 TA 缺陷，模型通过后仍复现，不能标为模型修复后的下一层失败。
 
 独立复现脚本为
 [`masked_indirect_load.py`](../../../scripts/repro/cicd/model_fixes_20261020/masked_indirect_load.py)。
