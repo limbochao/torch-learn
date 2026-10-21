@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tarfile
@@ -84,7 +85,8 @@ def download(url, destination, sha256):
         return destination
     partial = destination.with_name(destination.name + ".part")
     print(f"Download: {url}", flush=True)
-    with urllib.request.urlopen(url, timeout=60) as response, partial.open("wb") as output:
+    context = ssl._create_unverified_context()
+    with urllib.request.urlopen(url, timeout=60, context=context) as response, partial.open("wb") as output:
         shutil.copyfileobj(response, output, length=1024 * 1024)
     if not file_sha256(partial).startswith(sha256):
         raise RuntimeError(f"SHA-256 mismatch: {partial}")
