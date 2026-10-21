@@ -33,7 +33,8 @@ timm `1.0.30`、transformers `4.36.0`、fastNLP `0.6.0`；device `Ascend950PR_95
 
 ## 验证结果
 
-矩阵仍在执行，最终结果待补齐。运行中的场景不记为通过，也不因整个模型编译较久记为单候选超时。
+13 个指定场景均已结束：7 项 PASS、6 项 FAIL。ConvNeXt 完成全部 8 项，5 项 PASS、3 项 FAIL。
+不因整个模型编译较久记为单候选超时。
 performance 通过要求进程正常退出、CSV 模型名正确且 speedup 大于 0；这不代表精度通过。
 accuracy 通过要求正常退出并产生 `pass_accuracy`。
 
@@ -47,9 +48,17 @@ accuracy 通过要求正常退出并产生 `pass_accuracy`。
 | convnextv2_nano.fcmae_ft_in22k_in1k | 静态推理 accuracy | FAIL：HF32 开启时整网输出未满足 `tol=0.001`；关闭 HF32 的诊断对照通过 | 8 |
 | convnextv2_nano.fcmae_ft_in22k_in1k | 静态训练 accuracy | FAIL：原生 GELU 的 channels-last 输出分配不支持，`fail_to_run` | 8 |
 | convnextv2_nano.fcmae_ft_in22k_in1k | 静态推理 performance | PASS；speedup `1.112756` | 128 |
-| convnextv2_nano.fcmae_ft_in22k_in1k | 静态训练 performance | RUNNING | 128 |
-| convnextv2_nano.fcmae_ft_in22k_in1k | 动态推理 performance/accuracy | RUNNING | 128/8 |
-| convnextv2_nano.fcmae_ft_in22k_in1k | 动态训练 performance/accuracy | RUNNING | 128/8 |
+| convnextv2_nano.fcmae_ft_in22k_in1k | 静态训练 performance | FAIL：同一原生 GELU 布局错误，warmup 非零退出 | 128 |
+| convnextv2_nano.fcmae_ft_in22k_in1k | 动态推理 performance | PASS；speedup `0.985131` | 128 |
+| convnextv2_nano.fcmae_ft_in22k_in1k | 动态推理 accuracy | PASS | 8 |
+| convnextv2_nano.fcmae_ft_in22k_in1k | 动态训练 performance | PASS；speedup `0.926512`，存在候选栈溢出后回退 | 128 |
+| convnextv2_nano.fcmae_ft_in22k_in1k | 动态训练 accuracy | PASS | 8 |
+
+动态训练 performance 正常退出并生成性能 CSV；1026 calls、2 graphs、9 次 graph break。
+编译延迟为 `29256.85 s`，包括多个图和候选，不能按单候选 60 分钟阈值判为超时。
+这个性能通过结果不代表训练过程全图捕获，也不表示所有候选均能执行。
+完整 CSV 字段与退出码见
+[`model_matrix.json`](../../../artifacts/cicd/three_model_boundary_20261021/model_matrix.json)。
 
 ## 问题层级与归属
 
@@ -61,9 +70,10 @@ accuracy 通过要求正常退出并产生 `pass_accuracy`。
 | mobilenetv2_100，动态训练 performance/accuracy | 第一层实际阻塞 | hardtanh 边界被生成为 FP64 标量参数，触发不受支持的 SIMT 转换 | Inductor NPU 参数类型适配；下层 BiSheng 同时存在不良错误处理 | 阻塞两个场景，未修复 |
 | fastNLP_Bert，动态推理 performance | 第一层实际阻塞 | 最大 word-piece 长度的输出未写入，读取未初始化标量后异常分配 HBM | Inductor NPU codegen | 阻塞该场景，未修复 |
 | fastNLP_Bert，同一长度图的 template 编译候选 | 并存发现，不续编号 | int64 间接索引的 `tensor<1xi64>` 转换失败 | Triton-Ascend 的 TritonToLinalg | 该候选失败后整网继续；不是最终 HBM 异常原因 |
-| convnextv2_nano.fcmae_ft_in22k_in1k，静态训练 accuracy | 第一层实际阻塞 | GELU 接收到 channels-last tensor，原生输出分配报错 | torch_npu 原生 tensor factory 的布局限制；Inductor fallback 的输入布局适配也需检查 | 阻塞该场景，未修复 |
+| convnextv2_nano.fcmae_ft_in22k_in1k，静态训练 performance/accuracy | 第一层实际阻塞 | GELU 接收到 channels-last tensor，原生输出分配报错 | torch_npu 原生 tensor factory 的布局限制；Inductor fallback 的输入布局适配也需检查 | 阻塞该场景，未修复 |
 | convnextv2_nano.fcmae_ft_in22k_in1k，静态推理 accuracy | 该场景首个精度失败 | FP32 舍入差异在 HF32 卷积下被放大，超过整网容差 | 当前证据指向 HF32 精度配置与验证标准；未发现生成 kernel 的独立计算错误 | 原配置仍 FAIL；对照通过不覆盖原结果 |
-| convnextv2_nano.fcmae_ft_in22k_in1k，动态推理 performance 的 template 候选 | 并存发现，不续编号 | `PlanMemory Traverse IR Failed` | BiShengIR 内存规划路径 | 候选失败后搜索继续，当前非终止错误 |
+| convnextv2_nano.fcmae_ft_in22k_in1k，动态推理 performance 的 template 候选 | 并存发现，不续编号 | `PlanMemory Traverse IR Failed` | BiShengIR 内存规划路径 | 候选失败后回退，整网该场景 PASS，非阻塞 |
+| convnextv2_nano.fcmae_ft_in22k_in1k，动态训练 performance 的 SIMT 候选 | 并存发现，不续编号 | 64 warps 候选执行时 SIMT 栈溢出 | 下层 SIMT 编译资源约束与运行期栈预算的匹配；不是 DSL 数学计算错误 | 候选失败后回退，整网该场景 PASS，非阻塞 |
 
 候选编译问题应标记为“候选失败已回退，当前非阻塞”，不能根据回退将其写成“修复后缺陷影响被屏蔽”。
 动态 accuracy 的 batch 4 通过，也不能证明 batch 1 的最大值输出缺陷消失。
@@ -250,7 +260,7 @@ attributes、num_warps、num_stages 和 multibuffer 均不变，结果 `COMPILE_
 
 ## ConvNeXt：训练 accuracy 的 GELU 布局错误
 
-静态训练 accuracy 的 forward 已编译完成，在执行生成 wrapper 时首次失败：
+静态训练 performance 与 accuracy 均出现同一问题。accuracy 的 forward 已编译完成，在执行生成 wrapper 时首次失败：
 
 ```python
 buf25 = empty_strided((8, 320, 56, 56), (1003520, 1, 17920, 320), device='npu', dtype=torch.float32)
@@ -284,6 +294,8 @@ NPU Inductor 也应约束输入布局，不能仅凭“原生报错”排除其�
 这里不将它归为 Triton/BiSheng 的 kernel 编译错误，也没有声称仅修复原生分配就能保证训练整网通过。
 
 简单入口为 `convnext_gelu_layout.py`，只有一个原生 GELU；`CONTIGUOUS=1` 执行对照。
+performance 也在 warmup 执行同一个 `buf25 → aten.gelu` 时失败，退出码 1，没有性能 CSV。
+两项是同一阻塞在不同 batch 的复现，不排列为第二层。
 原始 wrapper 片段、原生源码 guard、完整异常和小用例日志保存在 ConvNeXt artifacts 中。
 
 ## ConvNeXt：推理 accuracy 与 HF32 的精度边界
@@ -360,8 +372,83 @@ LLVM ERROR: PlanMemory Traverse IR Failed!
 没有改动编译器或过滤配置，也没有对该闭源 pass 的内部实现作进一步根因声明。
 
 该候选失败后，原进程继续编译 `_9` 等后续 kernel，说明它不是当时的终止错误。
-其状态为“独立候选缺陷未修复，搜索继续，当前非终止错误”；不是“修复后缺陷影响被屏蔽”。
+动态推理 performance 最终已 PASS，证明它没有阻塞这个场景完成。
+其状态为“独立候选缺陷未修复，候选失败后回退，当前模型验证非阻塞”；不是“修复后缺陷影响被屏蔽”。
 另一些候选明确报告 UB 容量超限，属于资源限制下的候选拒绝，不与此内部崩溃合并统计。
+
+## ConvNeXt：动态训练的 SIMT 候选栈溢出，整网最终通过
+
+动态训练 performance 的 forward kernel
+`triton_red_fused_add_native_layer_norm_permute_8` 计算 80 通道的均值、方差平方和及 rstd。
+原进程的 c87、c95 在候选预执行后的 `npuSynchronizeDevice` 报错：
+
+```text
+error code is 507035
+errcode:(354) errorStr: The VEC SIMT stack overflows.
+```
+
+c87 为 `XBLOCK=8`、`R0_BLOCK=128`、`simt_only`、64 warps、2 stages；
+`split_axis=(0,)`、`split_blocks=(16384,)`，runtime blocks 为空。
+c95 的 XBLOCK 为 4，其余日志配置相同。本次独立复现固定 c87，不混用 c95。
+修复基线的 `runtime/tile_generator.py:410` 明确枚举 `[8,16,32,64]` warps；
+`runtime/triton_heuristics.py:1496` 捕获候选执行异常，在允许继续搜索时排除失败候选、选择可执行候选。
+这两处源码片段见
+[`layernorm_stack_autotune_source.txt`](../../../artifacts/cicd/three_model_boundary_20261021/convnext/layernorm_stack_autotune_source.txt)。
+
+使用 `inductor-kernel-compile-debug` 的 prerun 模式，只加载 AST 抽出的单个 kernel，
+不执行包含整个模型的 wrapper。捕获 record 0 为编译 PASS、record 1 为
+`PRERUN_PYTHON_EXCEPTION`，input group 0，metadata 模式。
+缩到单候选后捕获编号为 c0，对应原模型 c87；编号变化不表示候选配置变化。
+metadata 保留全部 shape、stride、dtype、storage offset 和标量。
+这里没有间接索引，也不依赖输入值决定访存地址，因而可用合成 FP32 数据复现资源异常。
+
+直接入口为
+[`convnext_layernorm_stack.py`](../../../scripts/repro/cicd/three_model_boundary_20261021/convnext_layernorm_stack.py)，
+109 行，保留完整 kernel 函数体，AST 与原函数体一致。
+它只执行一次 `triton.compile` 和一次 compiled-kernel runner，不使用 Inductor 或 autotuner。
+signature 的四个指针为 `*fp32`，`ks0/ks1` 为 i64，两个 numel 为 i32；
+constexpr 为 `XBLOCK=8/R0_BLOCK=128`，指针及参数 7 保留 divisibility 16 attributes。
+target 为 `npu/Ascend950PR_9579/32`，grid 为 `(50176,1,1)`。
+输入为连续 `[128,80,56,56]`；三个输出逻辑 shape 均为 `[128,56,56,1]`。
+`ks0=3136`、`ks1=56`、`xnumel=401408`、`r0_numel=80`。
+
+| 独立入口对照，均使用原安装环境且不加载修复 overlay | 编译 | 执行、数值检查 |
+| --- | --- | --- |
+| 原配置，64 warps，默认栈 | PASS | 同一栈溢出，exit 1 |
+| 仅将 `NUM_WARPS=8` | PASS | 三个输出均匹配 eager，`rtol=atol=1e-4`，exit 0 |
+| 保留 64 warps，仅本进程使用 `simt_stack_size=8192` | PASS | 三个输出均匹配 eager，exit 0 |
+
+最后一项通过 `TORCH_ACL_INIT_CONFIG_PATH` 指定任务目录内的独立 JSON，
+没有修改安装包配置、原模型进程或任何框架代码。
+原安装配置不含 StackSize；实际 Triton 后端的 `get_simt_stack_limit()` 返回 1152，
+纯 SIMT 编译将其传为 `--simt-stack-limit=1152`，并传入 `--num-warps=64`。
+8192 Byte 对照沿用相同编译配置及缓存 binary，只增加运行期栈预算。
+
+**为什么不是 Inductor 生成了错误的数学公式或非法访存：**
+输出索引受 `xindex<401408` 保护；输入地址为
+`xindex%3136 + 3136*r + 80*3136*(xindex//3136)`，且 `r<80`，
+所以所有 load/store 都在相应 storage 范围内，输出之间没有 alias。
+两个循环分别计算均值及中心化平方和，最后求 `rsqrt(var/80+1e-6)`；
+相同 DSL 只改变线程资源或运行期栈预算即可得到正确结果。
+64 warps 对应 2048 threads，属于硬件支持范围，不能套用 CUDA 的 1024 线程限制判断候选非法。
+线程数上限与寄存器预算的关系见
+[Ascend C 线程架构](https://asc.gitcode.com/guide/programming_guide/programming_model/ai_core_simt_programming/thread_architecture.html)；
+默认每线程 1152 Byte 栈及线程数增大可能导致 register spilling 的说明见
+[Ascend C 内存层级](https://asc.gitcode.com/guide/programming_guide/programming_model/ai_core_simt_programming/memory_hierarchy.html)。
+
+定界为该候选的 **SIMT 寄存器/栈资源不足及下层编译、运行期资源约束的匹配问题**。
+下层可以在编译阶段拒绝超预算候选，或生成满足运行期预算的代码；
+Inductor 的候选搜索也可以基于可靠资源信息减少此类候选。
+本轮没有读取闭源后端的实际 stack frame 报告，因此不将内部 spilling 指令或某个后端 pass 写成已确认根因。
+这是一项可独立复现的资源失败，不等同于模型终止错误。
+原矩阵在候选失败后继续执行后续图，最终 performance PASS，故标记为“候选回退、当前非阻塞”。
+这也不是“修复一个问题后另一个缺陷被掩盖”，因为本轮没有应用修复。
+
+自动 launch 导出在此版本将 Grid1D 的 constexpr XBLOCK 误当成 runtime block；
+独立入口改用上述显式 grid，且按照当前 Triton runner 的 Python 调用约定补齐两个 constexpr 位置。
+这是复现入口的适配，没有改动 kernel 或二进制 ABI。
+捕获 journal、原始 DSL、wrapper 调用片段、编译器源码分支、失败及两个通过对照均在 ConvNeXt artifacts 中。
+其中 journal 的异常文本只省略重复的逐核设备报告，保留失败类型、首次设备异常及输入、配置元数据。
 
 ## 复现与证据
 

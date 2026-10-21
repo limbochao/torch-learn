@@ -1,0 +1,59 @@
+1486:         _compile_option_list = get_common_bishengir_compile_options(metadata)
+1487:         if opt.is_pure_simt:
+1488:             _compile_option_list += ["--enable-hivm-compile=false"]
+1489:             _compile_option_list += ["--enable-triton-ir-compile"]
+1490:             _compile_option_list += ["--pure-simt"]
+1491:             _compile_option_list += [f"--num-warps={opt.num_warps}"]
+1492:             _compile_option_list += [f"--threads-per-warp={opt.warp_size}"]
+1493:             if opt.simt_optimization_mode != 0000000:
+1494:                 _compile_option_list += [f"--simt-optimization-mode={opt.simt_optimization_mode}"]
+1495:             _compile_option_list += [f"--simt-stack-limit={get_simt_stack_limit()}"]
+1496:             if opt.shared_mem_dynamic_size is not None:
+1497:                 _compile_option_list += [f"--shared-mem-dynamic-size={opt.shared_mem_dynamic_size}"]
+1498:             if opt.disable_fma:
+1499:                 _compile_option_list += [f"--disable-fma"]
+1500:             if opt.compile_on_910_95:
+1501:                 npu_utils = NPUUtils()
+1502:                 if npu_utils.has_device_limit():
+1503:                     _compile_option_list += [
+1504:                         f"--custom-aic-number={npu_utils.get_aicore_num()}",
+1505:                         f"--custom-aiv-number={npu_utils.get_aivector_core_num()}",
+1506:                     ]
+1507:
+1508:             bisheng_options = metadata["bisheng_options"]
+1509:             if bisheng_options is not None:
+1510:                 _compile_option_list += [f"--append-bisheng-options={bisheng_options}"]
+1511:
+1512:             if _is_auto_map_parallel_blocks_enabled() and not metadata.get("row_coalescing_applied", False):
+1513:                 _compile_option_list += ["--enable-auto-blockify-loop"]
+1514:                 if opt.superblock_factor > 1:
+1515:                     _compile_option_list += [f"--super-block-factor={opt.superblock_factor}"]
+1516:
+1517:         npu_compiler_path, env = _get_npucompiler_path()
+1518:         cmd_list = ([npu_compiler_path, src_path] + _compile_option_list + ["-o", bin_file])
+1519:         ret = subprocess.run(cmd_list, env=env, capture_output=True, check=True)
+1520:         if not Path(bin_path).exists():
+1521:             error_msg = ret.stderr.decode('utf-8')
+1522:             print(f"[DEBUG] {bin_path} is not found")
+1523:             print(f"[DEBUG] Stderr:\n{error_msg}")
+1524:             raise subprocess.CalledProcessError(ret.returncode, cmd_list, ret.stdout, ret.stderr)
+1525:         return Path(bin_path).read_bytes()
+1526:
+1527:
+1528: def get_simt_stack_limit():
+1529:     # simt_stack_limit resolution precedence:
+1530:     #  1. torch_npu's acl_default.json "StackSize":{"simt_stack_size":N}.
+1531:     #  2. The kernel-time default simt_stack_limit=1152.
+1532:     _simt_stack_limit = 1152
+1533:     try:
+1534:         import torch_npu
+1535:         torch_npu_basic_path = os.path.dirname(torch_npu.__file__)
+1536:         _acl_cfg_path = os.path.join(torch_npu_basic_path, "acl_default.json")
+1537:         with open(_acl_cfg_path, "r") as f:
+1538:             _acl_cfg = json.load(f)
+1539:         _cfg_stack = _acl_cfg.get("StackSize", {}).get("simt_stack_size", None)
+1540:         if isinstance(_cfg_stack, int) and not isinstance(_cfg_stack, bool) and _cfg_stack > 0:
+1541:             _simt_stack_limit = _cfg_stack
+1542:     except Exception as e:
+1543:         print(f"[DEBUG] read acl_default.json failed: {e}")
+1544:     return _simt_stack_limit

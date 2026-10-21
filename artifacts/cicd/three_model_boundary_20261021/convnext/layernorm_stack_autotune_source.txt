@@ -1,0 +1,74 @@
+5b18fac65380a14a404251de2eb6b89072c60911 torch_npu/_inductor/runtime/tile_generator.py
+410:     def tune_simt_num_warps(self, tune_num_warps_list=None):
+411:         num_warps_list = tune_num_warps_list if tune_num_warps_list else [8, 16, 32, 64]
+412:         configs_without_num_warps = copy.deepcopy(self.configs)
+413:         self.configs = []
+414:         for self_config in configs_without_num_warps:
+415:             for cfg_num_warps in num_warps_list:
+416:                 new_cfg = copy.deepcopy(self_config)
+417:                 new_cfg.num_warps = cfg_num_warps
+418:                 self.configs.append(new_cfg)
+419:
+420:     def add_extra_options(self):
+421:         if self.npu_kernel_type != NPUKernelType.SIMT_ONLY:
+422:             self.tune_multibuffer()
+423:         if self.npu_kernel_type == NPUKernelType.SIMT_ONLY:
+424:             self.tune_simt_num_warps()
+425:
+426:     def set_kernel_type(self, npu_kernel_type):
+427:         self.npu_kernel_type = npu_kernel_type
+428:         self._update_resource_limits()
+429:
+430:     def _update_resource_limits(self):
+431:         local_mem_size = 128 * 1024 if self.npu_kernel_type == NPUKernelType.SIMT_ONLY else config.ub_size
+
+5b18fac65380a14a404251de2eb6b89072c60911 torch_npu/_inductor/runtime/triton_heuristics.py
+1480:                         "candidate_id": candidate_id,
+1481:                         "launcher": launcher,
+1482:                         "runtime_blocks": runtime_blocks,
+1483:                         "prerun": prerun,
+1484:                     }
+1485:                 )
+1486:                 log.debug(
+1487:                     "PreRun [%s], candidate: %s\n"
+1488:                     " variant [%s] runtime_blocks [%s] "
+1489:                     "success, elapsed: %.3f ms",
+1490:                     self.fn.__name__,
+1491:                     candidate_id,
+1492:                     launcher.config,
+1493:                     runtime_blocks,
+1494:                     prerun_ms,
+1495:                 )
+1496:             except Exception as e:
+1497:                 prerun_log_str = (
+1498:                     f"PreRun [{self.fn.__name__}], candidate: {candidate_id}\n"
+1499:                     f" variant [{launcher.config}] runtime_blocks [{runtime_blocks}] \n err: {e}"
+1500:                 )
+1501:                 if autotune_continue_on_failure:
+1502:                     log.warning(prerun_log_str)
+1503:                 else:
+1504:                     raise RuntimeError(prerun_log_str) from e
+1505:
+1506:         selected_candidate_ids = _select_prerun_top_candidates(prerun_timings)
+1507:         selected_runnable_candidates = [
+1508:             entry
+1509:             for entry in runnable_candidates
+1510:             if entry["candidate_id"] in selected_candidate_ids
+1511:         ]
+1512:
+1513:         selected_total_ms = sum(
+1514:             prerun_ms
+1515:             for candidate_id, prerun_ms in prerun_timings
+1516:             if candidate_id in selected_candidate_ids
+1517:         )
+1518:         prerun_total_ms = sum(prerun_ms for _, prerun_ms in prerun_timings)
+1519:         log.info(
+1520:             "%s select %s candidates to %s, total candidate prerun time = %.3f ms, "
+1521:             "need rerun benchmark time = %.3f ms, saved benchmark time = %.3f ms",
+1522:             self.get_fn_name(),
+1523:             len(plan["candidate_entries"]),
+1524:             len(selected_runnable_candidates),
+1525:             prerun_total_ms,
+1526:             selected_total_ms,
+1527:             prerun_total_ms - selected_total_ms,
+1528:         )

@@ -90,7 +90,32 @@ skill 捕获 record 0 后导出、精简，保留完整 add/permute kernel、显
 自动导出及精简版均在 capture 目录之外复现；精简版还使用原安装环境验证。
 仅关闭 multibuffer 的编译对照仍报同一错误。
 
-这是独立候选异常。原矩阵还在搜索后续 kernel，静态推理 accuracy 的数值失败另行分析。
+这是独立候选异常。原矩阵的动态推理 performance 最终 PASS，候选失败已回退，当前非阻塞。
+静态推理 accuracy 的数值失败另行分析。
+
+## ConvNeXt 动态训练：SIMT 栈溢出候选
+
+```bash
+python convnext_layernorm_stack.py
+NUM_WARPS=8 python convnext_layernorm_stack.py
+```
+
+109 行，只保留一个 LayerNorm 统计量 kernel、完整函数体、显式输入及一次直接编译、执行。
+使用 skill 的 prerun metadata 捕获后整理，不加载模型、Inductor、autotuner、capture 文件或权重。
+原配置 `XBLOCK=8/R0_BLOCK=128`、64 warps、`simt_only` 编译成功，执行时栈溢出、exit 1。
+只改为 8 warps 后 exit 0，三个输出均通过 eager 对照，`rtol=atol=1e-4`。
+
+也可保留 64 warps，只给本进程增加运行期栈，复现资源预算对照：
+
+```bash
+printf '%s\n' '{"defaultDevice":{"default_device":"0"},"StackSize":{"simt_stack_size":8192}}' > stack8192.json
+TORCH_ACL_INIT_CONFIG_PATH="$PWD/stack8192.json" python convnext_layernorm_stack.py
+```
+
+此项实测 exit 0，三个输出对照均通过；不修改原安装配置。
+默认每线程栈为 1152 Byte，两个对照说明失败取决于线程及栈资源预算。
+原模型动态训练 performance 最终 PASS，故该失败候选标为“已回退、当前非阻塞”，不排列为下一层阻塞。
+入口在原安装环境、不加载框架修复 overlay、脱离捕获目录时验证。
 
 ## ConvNeXt 训练 GELU：原生布局复现
 
