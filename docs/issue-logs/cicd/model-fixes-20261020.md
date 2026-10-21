@@ -5,6 +5,9 @@ published: false
 
 # 四模型 Inductor 修复审查与复测
 
+八类修复的问题描述、修复前后 DSL/IR、修改逻辑及正确性依据，见
+[逐项 DSL 说明](model-fix-dsl-explained-20261021.md)。
+
 ## 范围和基线
 
 本轮针对 [四模型完整矩阵](four-model-matrix-20261020.md) 的精度与编译失败实施框架修复。
