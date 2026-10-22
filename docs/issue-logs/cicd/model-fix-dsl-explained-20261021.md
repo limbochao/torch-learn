@@ -1,9 +1,9 @@
 ---
-title: 已推送的八类 Inductor 修复：问题、前后 DSL 与正确性依据
+title: 已推送的八类 Inductor 修复：问题、前后 DSL、正确性与影响范围
 published: false
 ---
 
-# 已推送的八类 Inductor 修复：问题、前后 DSL 与正确性依据
+# 已推送的八类 Inductor 修复：问题、前后 DSL、正确性与影响范围
 
 本文补充[四模型修复记录](model-fixes-20261020.md)，逐项解释已经推送的八类修复。
 框架基线为 `0b4b636555`，整合分支为 `debug/cicd-all-fixes-20261020`、`5b18fac653`。
@@ -18,6 +18,13 @@ DSL 指 Inductor 生成、交给 Triton 编译的 kernel 程序；IR 是生成 k
 [独立 eager forward 用例](../../../scripts/repro/cicd/model_fixes_eager_20261022/README.md)：
 共九个可单文件运行的脚本，包含原 kernel 的 ATen 子图、输入 shape/stride 和 CUDA DSL 导出命令。
 其中三项编译前故障保留同一个双 shape 训练小图，并明确区分 IR 分析与最终成功路径的 DSL。
+第 7 项另有[符号 stride 的 CUDA 验证脚本及说明][stride-probe-readme]，
+分别检查纯表达式、当前安装的 Layout 方法和真实 CUDA 编译路径。
+
+以下各节的“影响范围与潜在回归”按整合提交的实际条件分析，不将“数学上保持语义”写成
+“不存在回归”。性能、编译耗时和未覆盖 layout 的风险属于源码审查结论，未注明实测时不代表已经发生。
+①–⑥、⑧修改 NPU 路径；⑦运行时替换社区公共 Layout 方法，安装后具有进程级影响。
+历史模型 PASS、针对性小图 PASS 和仅凭源码可推导的适用范围分别记录。
 
 ## 全局视角：问题在 Inductor 的哪个模块
 
@@ -137,6 +144,20 @@ mask 与 value 采用同一轴顺序、permute 和 reshape，不能把某个轴�
 证据：[原 DSL][mask-old]、[修复后完整 DSL][mask-new]、[补丁][mask-patch]。
 验证：mask 单元 4/4、静态/动态数值回归 22/22；GPT2 累计 8/8，BERT 前向恢复后还暴露下一项。
 
+**影响范围与潜在回归。** [补丁][mask-patch]同时修改 mask 生成、mask 消除和 reduction 中的
+mask 布局。常量 mask 消除仅适用于 `optimize_mask and persistent_reduction and node.is_reduction`
+且非 vectorized split 的轴，还要求长度为正、能被实际生成的 `BLOCK_SUB` 整除；
+无法证明时保留 mask。实际重屏蔽 value 的新增逻辑用于 persistent reduction，
+其中 `welford_reduce` 明确保留专用路径；mask 的 reshape/broadcast 重建还涉及多轴 reduction。
+因此不能把整个补丁的范围缩成“只有隐藏维 768 的 sum”，也不能声称它已修复 Welford 的所有尾块问题。
+
+单位元正确且 mask 与 value 对齐时，合法元素的数学结果保持；风险主要是轴顺序、broadcast、
+tuple reduction 和整数极值 dtype 的组合，以及额外 `where`/broadcast 带来的代码量、UB 占用或性能变化。
+已有回归覆盖 sum/prod/min/max/argmin/argmax、整数极值及静态/动态尾块，
+单元还检查 semantic mask 不被轴 mask 消除误删。它们不构成所有 dtype、NaN/Inf、极值并列位置及
+所有 tiling 的穷举证明；专用 Welford 路径和全模型性能仍需单独评估。
+GPT2/BERT 原失败是已捕获的数值错误，修复具有模型必要性证据，不能靠缩小 tile 的一般性说法替代。
+
 ## 2. 多轴归约：压平 reduction axes，保留输出 channel
 
 **模块归属：NPU Inductor 的 reduction 轴分析与 DSL layout 生成。**
@@ -180,6 +201,17 @@ reduction axes 放后面，只合并后者；沿合并后的 reduction dim 求�
 证据：[原 DSL][axes-old]、[修复后完整 DSL][axes-new]、[补丁][axes-patch]。
 验证：bias gradient/分离规约轴的静态和动态回归 4/4，BERT 静态训练 accuracy 恢复通过。
 此分支依赖 mask 修复；整合后的产物同时包含两项，不能把所有差异都归因于 axes。
+
+**影响范围与潜在回归。** [补丁][axes-patch]将多处条件从“多轴且 contiguous”扩展为
+`numof_reduction_axis() > 1`，影响 contiguous 和 non-contiguous 多轴归约的 packed shape、
+reduction dim、常量张量维数、broadcast 及 CSE shape 元数据；不是只对 BERT 的一个 bias gradient 生效。
+single-reduction 的主分支保留，但共享 CSE 元数据的消费方也需要关注。
+
+规则成立的前提是 `golden_var_list` 与当前 value 的实际轴顺序一致，且 preserved/reduction 轴分类正确。
+若某个尚未覆盖的 layout 元数据不满足此前提，可能产生错误 reshape、mask 广播或后续 store；
+增加 permute/布局转换也可能影响编译资源和性能。现有四项回归及 BERT 静态训练证明目标场景恢复，
+没有证明所有混合 broadcast、tuple reduction、动态多轴和 SIMD/SIMT 组合均无回归。
+该项修复的是已证实的输出 channel 被错误归约，属于目标模型正确性所需的修复。
 
 ## 3. 负索引：dump/check 开关不能取消 wrap
 
@@ -229,6 +261,16 @@ value = tl.load(table + wrapped * 16 + column)
 
 见[负索引完整 DSL][negative-dsl]。修复前没有留存同一回归的完整 kernel，
 旧行为以补丁删除的环境变量分支和上面的语义示意为证，没有将示意标成实测产物。
+
+**影响范围与潜在回归。** [补丁][negative-patch]只在间接索引的 bounds 可能为负时进入相关分支。
+它取消 dump/check 环境变量对 `wrap_neg` 的覆盖，并修复显式 `wrap_neg=False` 时的 bounds、dtype、shape
+传播；这不是对所有索引无条件加 size。bounds 已证明非负的路径不需要新增 wrap。
+
+合法负索引恢复调用方要求的语义；no-wrap 保留负范围可避免误删下界检查。
+潜在影响包括调试模式下新增原本被错误省掉的 wrap 指令、保守 bounds 保留更多检查，以及 dtype/shape
+传播影响后续 CSE。显式 no-wrap 调用方仍须遵守自身索引契约；该修复不使任意越界索引变得合法。
+现有六组静态/动态与调试开关对照、no-wrap 单元通过，不能据此覆盖全部符号 size、空维和非法索引行为。
+这项来自独立回归，没有证据表明四个历史模型通过必须依赖它。
 
 ## 4. Load 生存期：不要让 81 个输入 tile 同时存活
 
@@ -286,6 +328,31 @@ UB 估计不是精确编译器模型，最终仍需固定候选编译和数值�
 [固定候选数值结果][load-numeric]。deferred 静态 performance 对照最大差约 `3.66e-4/2.44e-4`，
 在 `atol=0.002、rtol=0.001` 下通过。Albert 四项训练失败还需要下一项提供合法 tile，
 不能声称仅重排 load 就独立解决整网所有候选。
+
+**影响范围与潜在回归。** [补丁][load-patch]将 `has_tmpmask or indirect_indexing` 的 load 放入 compute，
+此条件不限于 reduction；其后仍将可提升的循环公共 load 放入 prefix，再将其他 reduction 输入放入 compute。
+非 reduction 的普通 load 保留在 loads。permute 结果在 load 位于 compute 时也放入 compute；
+prefix load 的变换仍在 loads，保证定义在使用之前，不是所有变换都迁移到 prefix。
+
+源码没有修改 load 地址、mask 或梯度公式，但指令排布会影响编译器的存储复用、预取和访存计算重叠。
+缩短生存期有机会降低峰值 UB，也可能降低某些小融合的访存并行度；不能据此承诺普遍性能提升。
+“靠近消费者”是生成顺序上的安排，不保证下层编译器最终严格保持同一指令顺序。
+现有证据重点覆盖普通多输入 reduction，未单独证明新增 indirect 分支是 Albert 原失败的原因。
+
+固定 kernel 实验可以区分 load 重排和缩小 tile；`deferred` 只重排 load，`tile1` 保留计算体并设 X tile 为 1：
+
+| Albert 场景 | 原始配置 | 只设 X tile=1 | 只重排 load、保留原配置 |
+| --- | --- | --- | --- |
+| 静态训练 performance | X=1，编译失败 | 仍失败，需要 6,030,080 bits，只有 2,031,616 bits | 编译与数值通过 |
+| 静态训练 accuracy | X=16，编译失败 | 编译与数值通过 | 编译通过 |
+| 动态训练 performance | X=80、R=128，编译失败 | 编译与数值通过 | 仍编译失败 |
+| 动态训练 accuracy | X=8、R=512，编译失败 | 编译与数值通过 | 编译通过 |
+
+证据：[静态编译对照][load-static-ablation]、[动态编译对照][load-dynamic-ablation]、[数值对照][load-numeric]。
+静态 performance 的 R 在原 persistent DSL 中固定为 2048，X 已为 1；在这套拆分规则下，
+tile 搜索无法再缩小 X，重排 load 有直接必要性证据。改成可分段归约的其他 kernel 属于额外算法选择。
+尚未做最终整合版本“只撤销本提交”的完整模型对照，因此不能断言所有其他编译模式都不能替代它，
+也不能把这个提交中的三个改动分别说成模型 PASS 的必要条件。
 
 ## 5. Tiling：搜索必须覆盖设备能编译的较小 tile
 
@@ -349,6 +416,21 @@ Albert 第一层解决后又暴露动态 softmax 第二层：`rebuild_dynamic_ax
 [小 tile 数值通过][softmax-pass]。tiling 单元 3/3；Albert 累计 8/8、NFNet 推理恢复通过，
 后者动态训练继续暴露下一项。
 
+**影响范围与潜在回归。** [补丁][tile-patch]影响使用 `TileGenerator` 的 NPU 候选生成，
+包括 pointer 数量估计、kernel type 切换、每种 mode 的候选清空及最小 tile 保留。
+`rebuild_dynamic_axis()` 的新增 persistent 轴计数位于 `len(tiling_axis) > 3 and not no_loop_axis`
+的分支，不应概括为所有 kernel 都重新切分所有轴。persistent reduction/no-loop 轴仍不可继续切分。
+
+pointer 数量不等于同时存活的 tensor 数量，只是资源估计；更多输入可能使搜索偏向更小 tile，
+增加循环开销或漏掉原本高效的较大候选。恢复小候选也可能增加编译/autotune 时间；
+保留最小合法 tile 只保证尝试机会，不保证下层一定能编译。不同 tile 的浮点归约顺序可能变化，
+因此“算子数学公式不变”不等于逐 bit 相同或性能必然提高。
+
+现有三项候选单元、NFNet 选中配置及 softmax 独立数值对照证明目标路径可用，
+没有覆盖所有 dtype、mode、dynamic/no-loop 组合或稳定性能基准。
+tiling 确实能单独解决前表中的三个 Albert 候选及 softmax 大 tile 的 UB overflow；
+它不能在既有 persistent 拆分规则下替代静态 performance kernel 的 load 重排。
+
 ## 6. Scheduling：比较符号尺寸的数学值，而非表达式结构
 
 **模块归属：NPU Inductor 的融合节点调度与符号 group 匹配。**
@@ -394,12 +476,26 @@ sizevars.statically_known_equals(node_numel, numel * rnumel)
 ```
 
 **为什么可以这样修。** `A*(q²+2q+1)=Aq²+2Aq+A` 是恒等式，两个组的元素数确实相等。
-修复仅识别原本合法的尺寸关系，没有改变依赖顺序、归约循环开闭或融合策略。
+尺寸证明只接受原本合法的等价关系；调度 helper 内已有的依赖和归约循环开闭逻辑保留，
+但本提交也扩大了该 helper 的调用范围，具体边界见下文。
 生成后 `tmp26` 沿空间轴求和，再计算 sigmoid 梯度 epilogue，符合原 IR。
 
 证据：[原始完整调度 IR][schedule-ir]、[修复后完整 DSL][schedule-new]、[补丁][schedule-patch]。
 验证：等价组、非等价组拒绝及无新增 guard 的单元 2/2；NFNet dynamic training 两项通过。
 同一小图扩展到第二组动态 shape 后另暴露下一项，不能把第一组通过当成两组都通过。
+
+**影响范围与潜在回归。** [补丁][schedule-patch]的范围不止于替换一次 `==`：
+`NPUNoLinearTritonScheduling` 和 `NPUTritonScheduling` 均无条件使用 `_generate_npu_node_schedule()`，
+原先非 Welford/关闭 Welford 时调用社区父类的分支被删除。
+因此静态、动态、Welford 和非 Welford 的这两类 NPU 调度都在实现影响范围内。
+`NumelList` 按总元素数比较；结构相等快速返回，否则要求 `statically_known_equals` 证明相等，
+无法证明仍拒绝，不通过追加 guard 强行接受。
+
+潜在回归点是更广的调度路由、producer/reduction/epilogue 的依赖处理和循环切换，
+以及额外符号证明的编译成本。总元素数相同不代表任意 layout 都可融合，后续范围与布局兼容性检查仍需成立。
+现有测试覆盖两类 scheduler、Welford 开关、预期执行序列及不等组拒绝、无新增 guard；
+NFNet 两个动态训练场景通过，但未穷举 scan、多次相依 reduction 和所有融合拓扑。
+该项有整模型原始 `unexpected group` 到 PASS 的必要性证据，不能描述为所有场景均只改变比较开销。
 
 ## 7. Symbolic stride：整数整除证明不能引入倒数
 
@@ -434,8 +530,9 @@ Eq(PythonMod(left, right), 0)
 在 NPU `_sizevars.patch_simplify` 安装补丁并防止重复安装。
 baseline 保存/恢复使用 `inspect.getattr_static`，保留 staticmethod 描述符，避免恢复后错误绑定 self。
 
-**修复后 DSL 的变化。** 这项不改任何 Triton 计算或访存模板，修复的是生成之前能否证明布局合法。
-对先前已能编译的输入，没有需要替换的 DSL 表达式；对失败的第二组 shape，
+**修复后 DSL 的变化。** 这项不直接修改 Triton 计算或访存模板，修复的是生成之前能否证明布局合法。
+对仍然选中相同布局的输入，没有需要替换的 DSL 表达式；证明结果改变时则可能影响布局/copy 选择。
+对失败的第二组 shape，
 修复后才继续生成 convolution backward 等 kernel。已从实际 v8 缓存补充[双 shape 小图的反向 DSL][training-dsl]，它不使用前一项 NFNet 整网 v5 的产物。
 其中一个下游 kernel 的原始摘录为：
 
@@ -460,6 +557,48 @@ baseline 保存/恢复使用 `inspect.getattr_static`，保留 staticmethod 描�
 证据：[补丁及四项框架检查][stride-patch]、[旧版元数据异常][stride-old]、
 [最终 stride 检查][stride-new]、[双 shape 训练日志][training-new]。
 v8 静态/动态各两组 shape 的前向、输入梯度、权重梯度均通过；原 NFNet 模型矩阵没有观察到此新失败。
+
+**CUDA、版本与线性化的边界。** 同版本社区 CUDA 使用同一个 Layout 方法，仍写 `%`，
+并没有在该位置使用 `PythonMod`；这次修改保留判定语义，但不是照抄 CUDA 的同位置实现。
+该方法由上游 [98b772f8ab8 / PR #183840][stride-upstream-intro] 在 2.13 开发周期引入，
+用于加强符号 stride、特别是 unbacked size 的顺序判断。
+社区 2.7.1、2.10.0、2.11.0、2.12.0 的对应 Layout 直接比较相邻 stride 的大小，
+没有此取模分支；`PythonMod` 类在旧版本已存在。本地 NPU 2.7.1/2.10 分支的 `patch_simplify()`
+只有 expand/replacements，没有这个 Layout 替换；回补上游方法的维护分支应另行检查。
+源码对照：[2.7.1 Layout][stride-upstream271]、[2.10 Layout][stride-upstream210]、
+[2.13 Layout][stride-upstream213]。
+
+相同 `%` 不保证相同模型自动走到相同条件：实际 operand 的展开形式、ShapeEnv 约束、
+layout optimization 及 convolution backward 的布局选择都会影响是否进入该分支。
+现有证据不能归因成“CUDA 无缺陷，只有 NPU 非线性化造成问题”。
+2026-10-22 新增的纯社区 CPU 对照不导入 torch_npu，PyTorch 2.9.1+cpu / SymPy 1.14.0 中：
+`Eq(a % expand(a**2), 0)` 在 ShapeEnv 求值时也出现 `Invalid ranges [0:-1]`，
+`Eq(PythonMod(a, expand(a**2)), 0)` 返回 False；factored 形式在该环境正常。
+这证明底层表达式异常不需要 NPU 或非线性化；2.9.1 没有新 Layout helper，
+所以不能将这个结果写成“2.9.1 原 Layout 也会自然触发”。记录见[CPU 对照输出][stride-probe-cpu]。
+
+[独立脚本][stride-probe-script]提供三层验证：`percent_expr/pythonmod_expr` 直接观察 ShapeEnv，
+`native_layout` 调用当前安装的真实方法，`--mode compile` 执行原双 shape 小图的 CUDA 前向/反向，
+记录实际 Layout 调用及异常。没有 helper 时明确 SKIP，不伪造旧版本实现；
+`--patch-pythonmod` 只在该脚本进程的 compile 对照中安装候选，并在退出时恢复原描述符。
+详细命令和结果判读见[脚本说明][stride-probe-readme]。本地没有 CUDA，本轮没有 GPU PASS/FAIL 结论。
+
+**影响范围与潜在回归。** 对合法整数 stride、非零 right，取模为零的整除语义保持；
+right=0、left=0 和大小判断顺序均沿用原实现。因此没有依据认为替换本身会改变合法整数整除的数学真假。
+但“数学等价”不保证符号求解路径、guard、编译耗时和最终布局选择完全相同。
+若新表达式更难证明，可能保守拒绝某个合法布局、增加 copy，或产生不同的 guard；
+这些需要比较完整编译图、guard 和性能，不能由四个单元证明不存在。
+
+`PythonMod` 内部仍会尝试 `p/q` 和 `sympy.Mod(p,q)==0`；关键是不能化简时保留
+`PythonMod(p,q)` 节点，而非把含倒数的通用 Mod 化简结果直接返回给 ShapeEnv。
+它不是对所有符号有理式问题的全局修复。实现依据见社区已有的
+[PythonMod][stride-pythonmod-source]、[解释器映射][stride-interp-source]及[值域分析][stride-ranges-source]。
+
+安装位置虽在 NPU `_sizevars`，替换目标却是公共 `ir.Layout` 类，且没有 device 判断，
+同进程其他后端调用也可能受影响。必须关注重复安装、后端切换恢复、staticmethod 描述符，
+以及未来社区方法增加分支后这份复制实现是否同步。现有恢复测试验证幂等和描述符，
+不是全后端切换矩阵。补丁对方法不存在的旧版本直接跳过；原生 2.7.1/2.10 无需照搬此替换。
+该修复有双 shape 训练小图的必要性证据，没有原 NFNet 整网或 CUDA 模型的同等失败证据。
 
 ## 8. Range 拆分：合法拒绝应返回“不兼容”，不能变成 TypeError
 
@@ -507,6 +646,18 @@ if current_group >= len(remaining):
 v8 range 检查 3/3，双 shape 日志不再出现 CantSplit TypeError。
 原 NFNet 整网没有观察到这个新错误，因此不把它写成 NFNet 整网第四层失败。
 
+**影响范围与潜在回归。** [补丁][range-patch]修改四个拒绝分支的异常构造，
+并把 group 耗尽检查提前到 `remaining[current_group]` 读取之前；合法拆分的分配、整除判断和索引重建保留。
+`CantSplit(size, 0)` 的 0 是“没有剩余 group”的异常诊断参数，不会执行一次除零运算。
+`is_compatible()` 只捕获 CantSplit，这次修复恢复该协议，没有吞掉其他任意异常。
+
+不兼容候选原本应返回 False，现在可以继续调度，最终可能形成不同 fusion、更多 kernel，
+暴露后续编译问题或改变性能；这不能解释成“不兼容融合被强行接受”。
+仍需遵守依赖的 CantSplit 构造协议，已有算法末尾的其他 RuntimeError 检查也未被这项修复覆盖。
+三项测试覆盖四类不兼容输入、异常参数和合法三组索引重建，不是任意符号 range 的完整证明。
+小图实测触发的是无参 CantSplit 的 TypeError；检查位置导致的 IndexError 在专项输入
+`groups=(2,), lengths=([2,3],[])` 复现，未证实它单独阻塞了四个整模型。
+
 ## 验证范围与剩余问题
 
 四个历史模型累计 32/32 场景通过，但结果来自不同修复阶段，不能称为 v8 整套矩阵重新跑过。
@@ -518,6 +669,11 @@ TA masked indirect load 的 template 独立用例仍失败；上面的 Inductor 
 它没有被这些分支修复，模型 PASS 与缺陷仍存在分别记录。
 本轮 MobileNet、fastNLP BERT、ConvNeXt 新发现的问题也不属于这八个已修复条目，
 其状态和复现见[三模型定界记录](three-model-boundary-20261021.md)。
+
+2026-10-22 补充的八项影响范围来自整合分支补丁审查和已有验证记录，未重跑 NPU 模型矩阵，
+也未做八个提交逐项撤销的完整模型测试。新增 CPU 元数据对照验证公共符号表达式问题，
+不增加 CUDA 或 NPU 模型 PASS 数。风险评估支持在已验证范围内使用这些修复，
+不能据此承诺对全部模型、版本、性能和异常路径均无回归。
 
 [mask-old]: ../../../artifacts/cicd/four_model_matrix_20261020/kernel_sources/GPT2ForSequenceClassification/s_infer_acc/GPT2ForSequenceClassification__0_inference_0.0/triton_per_fused_add_addmm_arange_embedding_na_3.py
 [mask-new]: ../../../artifacts/cicd/model_fixes_20261020/generated/gpt2_embedding_norm.py
@@ -552,3 +708,15 @@ TA masked indirect load 的 template 独立用例仍失败；上面的 Inductor 
 
 [negative-dsl]: ../../../artifacts/cicd/model_fixes_20261020/explanation_20261021/negative_index_v8.py
 [training-dsl]: ../../../artifacts/cicd/model_fixes_20261020/explanation_20261021/training_backward_v8.py
+[load-static-ablation]: ../../../artifacts/cicd/four_model_matrix_20261020/analysis/Albert_configs/static_results.json
+[load-dynamic-ablation]: ../../../artifacts/cicd/four_model_matrix_20261020/analysis/Albert_configs/results.json
+[stride-probe-script]: ../../../scripts/repro/cicd/model_fixes_20261020/symbolic_stride_cuda_probe.py
+[stride-probe-readme]: ../../../scripts/repro/cicd/model_fixes_20261020/symbolic_stride_cuda_probe.md
+[stride-probe-cpu]: ../../../artifacts/cicd/model_fixes_20261020/final_checks/stride_cuda_probe_cpu_20261022.jsonl
+[stride-upstream-intro]: https://github.com/pytorch/pytorch/commit/98b772f8ab86176b8e0b572d88f4e09510c1b587
+[stride-upstream271]: https://github.com/pytorch/pytorch/blob/v2.7.1/torch/_inductor/ir.py
+[stride-upstream210]: https://github.com/pytorch/pytorch/blob/v2.10.0/torch/_inductor/ir.py
+[stride-upstream213]: https://github.com/pytorch/pytorch/blob/v2.13.0/torch/_inductor/ir.py
+[stride-pythonmod-source]: https://github.com/pytorch/pytorch/blob/v2.13.0/torch/utils/_sympy/functions.py
+[stride-interp-source]: https://github.com/pytorch/pytorch/blob/v2.13.0/torch/utils/_sympy/interp.py
+[stride-ranges-source]: https://github.com/pytorch/pytorch/blob/v2.13.0/torch/utils/_sympy/value_ranges.py

@@ -112,6 +112,10 @@ python scripts/tools/extract_triton_kernel.py output_code.py KERNEL_NAME \
 
 ## 每份用例需要比较什么
 
+第 7 项补充了[公共 symbolic stride 的分层验证](../model_fixes_20261020/symbolic_stride_cuda_probe.md)：
+无需 NPU，分别观察 ShapeEnv 表达式、当前安装的 Layout helper 和双 shape CUDA 编译路径，
+并支持只在脚本进程内安装 PythonMod 候选作对照。它与下列原图入口互补，不把元数据异常当作设备 kernel 失败。
+
 **01：embedding + residual + LayerNorm。** 输入隐藏维为 768，保留词表 `[50257,768]`、
 序列长度 1024、eps `1e-5`。查看 GPU 对 768 扩展为二次幂 tile 后，
 如何在计算均值和方差前屏蔽非法 lane（不属于原张量的 tile 元素）。
