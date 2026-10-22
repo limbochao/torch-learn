@@ -26,6 +26,29 @@ DSL 指 Inductor 生成、交给 Triton 编译的 kernel 程序；IR 是生成 k
 ①–⑥、⑧修改 NPU 路径；⑦运行时替换社区公共 Layout 方法，安装后具有进程级影响。
 历史模型 PASS、针对性小图 PASS 和仅凭源码可推导的适用范围分别记录。
 
+## 逐提交源码精读
+
+下面八篇从函数职责、输入输出和相关调用开始，按补丁解释为什么修改该函数、
+每处条件或元数据如何影响最终行为，并用具体数值走一遍修复前后的过程。
+不熟悉相关函数时，可先读对应精读，再回到本文查看模型 DSL 与影响范围。
+
+| 条目与整合提交 | 独立文档 | 重点解释的问题 |
+| --- | --- | --- |
+| ① `a514111f10` | [reduction mask](model-fix-01-reduction-mask-20261022.md) | mask 的生成、消除与归约前重屏蔽 |
+| ② `22b6b739eb` | [reduction axes](model-fix-02-reduction-axes-20261022.md) | 轴分析、reshape、dim 与 CSE shape |
+| ③ `c32818e10e` | [negative index](model-fix-03-negative-index-20261022.md) | 索引代理、wrap 与 bounds 检查 |
+| ④ `7381eb8188` | [load liveness](model-fix-04-load-liveness-20261022.md) | 生成顺序、生存期与 UB 峰值 |
+| ⑤ `2d147618bc` | [tiling resource](model-fix-05-tiling-resource-20261022.md) | 容量阈值、停止点与候选状态 |
+| ⑥ `e1429cc917` | [symbolic scheduling](model-fix-06-symbolic-scheduling-20261022.md) | group 等值证明与调度入口 |
+| ⑦ `c74c45c960` | [symbolic strides](model-fix-07-symbolic-strides-20261022.md) | Layout 证明与补丁安装/恢复 |
+| ⑧ `5b18fac653` | [range split](model-fix-08-range-split-20261022.md) | 索引重建、拒绝协议与检查顺序 |
+
+精读以每个整合提交相对其父提交的差异为范围，不把后续提交的效果算入前一项。
+完整补丁已在各篇链接；若要在框架仓库中阅读上下文，可执行
+`git show <完整提交 SHA>:<源码路径>`，或用 `git show <完整提交 SHA> -- <源码路径>` 查看差异。
+这避免本地当前分支不同、或多个提交修改同一函数时读错版本。
+示例代码会注明语义示意；历史实测结果与本次文档工作分开记录，本次未新增设备验证。
+
 ## 全局视角：问题在 Inductor 的哪个模块
 
 这八项涉及 Inductor 的五种职责：DSL 生成、tiling 候选生成、节点调度、Layout 符号证明、
