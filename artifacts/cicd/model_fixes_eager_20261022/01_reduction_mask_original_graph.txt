@@ -1,0 +1,20 @@
+%arg8_1 : Tensor "f32[768][1]npu:0" = PlaceHolder[target=arg8_1]
+%mm_default_35 : Tensor "f32[1024, 768][768, 1]npu:0" = PlaceHolder[target=mm_default_35]
+%arg0_1 : Tensor "i64[1, 1024][1024, 1]npu:0" = PlaceHolder[target=arg0_1]
+%arg1_1 : Tensor "f32[50257, 768][768, 1]npu:0" = PlaceHolder[target=arg1_1]
+%arg2_1 : Tensor "f32[1024, 768][768, 1]npu:0" = PlaceHolder[target=arg2_1]
+%add_1_replacement : Tensor "f32[1, 1024, 768][786432, 768, 1]npu:0" = PlaceHolder[target=add_1_replacement]
+%buf15 : Tensor "f32[1, 1024, 1][1024, 1, 1024]npu:0" = PlaceHolder[target=buf15]
+%buf16 : Tensor "f32[1, 1024, 1][1024, 1, 1024]npu:0" = PlaceHolder[target=buf16]
+%buf17 : Tensor "f32[1, 1024, 1][1024, 1, 1024]npu:0" = PlaceHolder[target=buf17]
+%arg10_1 : Tensor "f32[768][1]npu:0" = PlaceHolder[target=arg10_1]
+%arg11_1 : Tensor "f32[768][1]npu:0" = PlaceHolder[target=arg11_1]
+%embedding : Tensor "f32[1, 1024, 768][786432, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.embedding.default](args = (%arg1_1, %arg0_1), kwargs = {})
+%iota : Tensor "i32[1024][1]npu:0"[num_users=1] = call_function[target=torch.ops.prims.iota.default](args = (1024,), kwargs = {start: 0, step: 1, dtype: torch.int32, device: npu:0, requires_grad: False})
+%unsqueeze : Tensor "i32[1, 1024][1024, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%iota, 0), kwargs = {})
+%embedding_1 : Tensor "f32[1, 1024, 768][786432, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.embedding.default](args = (%arg2_1, %unsqueeze), kwargs = {})
+%add : Tensor "f32[1, 1024, 768][786432, 768, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.add.Tensor](args = (%embedding, %embedding_1), kwargs = {})
+%add_tensor_35 : Tensor "f32[1024, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg8_1, %mm_default_35), kwargs = {})
+%add_1_replacement : Tensor "f32[1, 1024, 768][786432, 768, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_tensor_35, %add), kwargs = {})
+%native_layer_norm_1 : [num_users=1] = call_function[target=torch.ops.aten.native_layer_norm.default](args = (%add_1_replacement, [768], %arg10_1, %arg11_1, 1e-05), kwargs = {})
+return %add_1_replacement,%buf15,%buf16,%buf17,%getitem_6

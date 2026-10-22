@@ -14,6 +14,11 @@ DSL 指 Inductor 生成、交给 Triton 编译的 kernel 程序；IR 是生成 k
 调度、stride 证明和 range 拆分的原失败发生在 DSL 生成之前，因此其“修复前 DSL”为未生成。
 这三项提供失败 IR/表达式、修复前后代码以及成功生成/执行的证据，不伪造一份失败 kernel。
 
+八类问题的 GPU 对照入口见
+[独立 eager forward 用例](../../../scripts/repro/cicd/model_fixes_eager_20261022/README.md)：
+共九个可单文件运行的脚本，包含原 kernel 的 ATen 子图、输入 shape/stride 和 CUDA DSL 导出命令。
+其中三项编译前故障保留同一个双 shape 训练小图，并明确区分 IR 分析与最终成功路径的 DSL。
+
 ## 修复覆盖与故障层级
 
 | 修复分支 | 涉及模型/用例 | 故障层级 | 整合提交 |

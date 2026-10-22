@@ -1,0 +1,18 @@
+%bmm : Tensor "f32[64*s87, s40, s40][s40**2, s40, 1]npu:0" = PlaceHolder[target=bmm]
+%any_dims_11 : Tensor "b8[s87, 64, s40, 1][64*s40, s40, 1, 1]npu:0" = PlaceHolder[target=any_dims_11]
+%amax_default_22 : Tensor "f32[s87, 64, s40, 1][64*s40, s40, 1, 64*s40*s87]npu:0" = PlaceHolder[target=amax_default_22]
+%amax_default_23 : Tensor "f32[s87, 64, s40, 1][64*s40, s40, 1, 64*s40*s87]npu:0" = PlaceHolder[target=amax_default_23]
+%sum_1 : Tensor "f32[s87, 64, s40, 1][64*s40, s40, 1, 64*s40*s87]npu:0" = PlaceHolder[target=sum_1]
+%view_13 : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%bmm, [%primals_1, 64, %primals_2, %primals_2]), kwargs = {})
+%div_tensor_22 : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.div.Tensor](args = (%view_13, 8.0), kwargs = {})
+%amax_default_22 : Tensor "f32[s87, 64, s40, 1][64*s40, s40, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.amax.default](args = (%view_13, [-1], True), kwargs = {})
+%sub_tensor_22 : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_13, %amax_default_22), kwargs = {})
+%div_tensor_23 : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%sub_tensor_22, 8.0), kwargs = {})
+%amax_default_23 : Tensor "f32[s87, 64, s40, 1][64*s40, s40, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.amax.default](args = (%div_tensor_22, [-1], True), kwargs = {})
+%sub_tensor_23 : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%div_tensor_22, %amax_default_23), kwargs = {})
+%logical_not_default_23 : Tensor "b8[s87, 64, s40, 1][64*s40, s40, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.logical_not.default](args = (%any_dims_11,), kwargs = {})
+%where_self_11 : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.where.self](args = (%logical_not_default_23, %div_tensor_23, %sub_tensor_23), kwargs = {})
+%exp : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.exp.default](args = (%where_self_11,), kwargs = {})
+%sum_1 : Tensor "f32[s87, 64, s40, 1][64*s40, s40, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%exp, [-1], True), kwargs = {})
+%div_1 : Tensor "f32[s87, 64, s40, s40][64*s40**2, s40**2, s40, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.div.Tensor](args = (%exp, %sum_1), kwargs = {})
+return %amax_default_22,%amax_default_23,%sum_1,%div_1

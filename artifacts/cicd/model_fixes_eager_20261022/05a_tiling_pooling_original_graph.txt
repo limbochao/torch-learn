@@ -1,0 +1,15 @@
+%mul_tensor_12 : Tensor "f32[s21, 256, (((s65 - 1)//4)) + 1, (((s65 - 1)//4)) + 1][256*((((s65 - 1)//4)) + 1)**2, ((((s65 - 1)//4)) + 1)**2, (((s65 - 1)//4)) + 1, 1]npu:0" = PlaceHolder[target=mul_tensor_12]
+%view_27 : Tensor "f32[1, 512, 256][131072, 256, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg47_1, [1, 512, -1]), kwargs = {})
+%var_mean_9 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_27, [0, 2]), kwargs = {correction: 0, keepdim: True})
+%avg_pool2d : Tensor "f32[s21, 256, (((s65 - 1)//8)) + 1, (((s65 - 1)//8)) + 1][256*((((s65 - 1)//8)) + 1)**2, ((((s65 - 1)//8)) + 1)**2, (((s65 - 1)//8)) + 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.avg_pool2d.default](args = (%mul_tensor_12, [2, 2], [2, 2], [0, 0], True, False), kwargs = {})
+%sub_102 : Tensor "f32[1, 512, 256][131072, 256, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_27, %getitem_19), kwargs = {})
+%add_198 : Tensor "f32[1, 512, 1][512, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_18, 1e-05), kwargs = {})
+%rsqrt_9 : Tensor "f32[1, 512, 1][512, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_198,), kwargs = {})
+%mul_266 : Tensor "f32[1, 512, 256][131072, 256, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_102, %rsqrt_9), kwargs = {})
+%mul_tensor_13 : Tensor "f32[512, 1, 1, 1][1, 1, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg48_1, %convert_element_type_default_27), kwargs = {})
+%view_28 : Tensor "f32[512][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_tensor_13, [-1]), kwargs = {})
+%unsqueeze_9 : Tensor "f32[512, 1][1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_28, -1), kwargs = {})
+%mul_267 : Tensor "f32[1, 512, 256][131072, 256, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_266, %unsqueeze_9), kwargs = {})
+%view_29 : Tensor "f32[512, 256, 1, 1][256, 1, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_267, [512, 256, 1, 1]), kwargs = {})
+%convolution_11 : Tensor "f32[s21, 512, (((s65 - 1)//8)) + 1, (((s65 - 1)//8)) + 1][512*((((s65 - 1)//8)) + 1)**2, ((((s65 - 1)//8)) + 1)**2, (((s65 - 1)//8)) + 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%avg_pool2d, %view_29, %arg50_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+return %buf276

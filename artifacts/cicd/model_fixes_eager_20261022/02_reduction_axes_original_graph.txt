@@ -1,0 +1,8 @@
+%bmm_25 : Tensor "f32[48, 128, 64][8192, 64, 1]npu:0" = PlaceHolder[target=bmm_25]
+%view_295 : Tensor "f32[512, 768][768, 1]npu:0" = PlaceHolder[target=view_295]
+%view_287 : Tensor "f32[4, 12, 128, 64][98304, 8192, 64, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%bmm_25, [4, 12, 128, 64]), kwargs = {})
+%permute_160 : Tensor "f32[4, 128, 12, 64][98304, 64, 8192, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.permute.default](args = (%view_287, [0, 2, 1, 3]), kwargs = {})
+%clone_114 : Tensor "f32[4, 128, 12, 64][98304, 768, 64, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.clone.default](args = (%permute_160,), kwargs = {memory_format: torch.contiguous_format})
+%view_295 : Tensor "f32[512, 768][768, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%clone_114, [512, 768]), kwargs = {})
+%sum_25 : Tensor "f32[1, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_295, [0], True), kwargs = {})
+return %view_295,%sum_25
