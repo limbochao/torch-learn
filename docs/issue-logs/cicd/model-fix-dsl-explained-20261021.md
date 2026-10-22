@@ -19,6 +19,54 @@ DSL 指 Inductor 生成、交给 Triton 编译的 kernel 程序；IR 是生成 k
 共九个可单文件运行的脚本，包含原 kernel 的 ATen 子图、输入 shape/stride 和 CUDA DSL 导出命令。
 其中三项编译前故障保留同一个双 shape 训练小图，并明确区分 IR 分析与最终成功路径的 DSL。
 
+## 全局视角：问题在 Inductor 的哪个模块
+
+这八项涉及 Inductor 的五种职责：DSL 生成、tiling 候选生成、节点调度、Layout 符号证明、
+迭代范围兼容性检查。修复均通过 `torch_npu/_inductor` 接入路径落地；
+其中第 7 项修改的是社区 `torch._inductor.ir.Layout` 方法的行为，由 NPU 侧安装补丁。
+因此需要同时看出错逻辑所属的模块与实际修复文件，不能仅凭补丁目录判断全部根因都在 NPU 专有代码中。
+这些定位也不等于已经在社区 CUDA 后端复现了相同缺陷，GPU 对照仍以实际运行和源码为准。
+
+下图按职责标出位置，编号对应本文八项问题。lowering 指把图中算子转换为 Inductor 内部表示；
+调度负责安排融合节点与归约前后的执行顺序；codegen 负责把这些表示写成 kernel 程序。
+范围兼容性检查可在调度选择候选时调用，图中的连线用于说明职责关系，不表示严格的单次串行调用栈。
+
+```mermaid
+flowchart TD
+    A["Dynamo / AOTAutograd：取得前向或反向图"] --> B["Inductor lowering / IR / Layout：⑦ stride 符号证明"]
+    B --> C["NPU scheduling：⑥ 符号 group 匹配"]
+    C --> D["NPU codegen 兼容性检查：⑧ range 拆分与拒绝协议"]
+    D --> E["NPU Triton DSL 生成：① mask、② axes、③ 负索引、④ load 生存期"]
+    E --> F["NPU tiling / autotune 候选生成：⑤ 资源估计与搜索范围"]
+    F --> G["Triton-Ascend / BiSheng：编译候选 kernel"]
+    G --> H["设备执行与数值验证"]
+```
+
+下表文件路径均相对于 `torch_npu/_inductor/`；“模块”按职责归类，完整入口见各节的“模块归属”。
+
+| 条目 | 主责模块与修复文件 | 定位要点 | 代码证据 |
+| --- | --- | --- | --- |
+| ① reduction mask | DSL 生成：`codegen/triton.py` | 待归约表达式的非法 lane 未重新屏蔽 | [补丁][mask-patch] |
+| ② reduction axes | DSL 生成：`codegen/kernel_analysis.py`、`codegen/triton.py` | 输出轴被错误压入归约轴 | [补丁][axes-patch] |
+| ③ negative index | 索引生成：`codegen/triton.py` | 调试开关取消 wrap，bounds 传播不一致 | [补丁][negative-patch] |
+| ④ load liveness | DSL 指令排布：`codegen/triton.py` | load 与消费计算分离，中间 tile 同时存活 | [补丁][load-patch] |
+| ⑤ tiling resource | 候选生成：`runtime/tile_generator.py` | 资源估计和搜索停止条件漏掉合法小 tile | [补丁][tile-patch] |
+| ⑥ symbolic groups | 节点调度：`codegen/scheduling.py` | 数学等价尺寸被按表达式结构判为不等 | [补丁][schedule-patch] |
+| ⑦ symbolic strides | Layout 符号证明：`codegen/_sizevars.py` | 社区 Layout 的取模化简引入倒数 | [补丁][stride-patch] |
+| ⑧ range split | 范围兼容性：`codegen/triton.py` | NPU 拒绝分支不符合 `CantSplit` 协议 | [补丁][range-patch] |
+
+按修复文件统计，`codegen/triton.py` 涉及五项，但第 8 项是在生成 DSL 前判断候选是否兼容，
+与第 1–4 项的 DSL 生成错误应分开理解。
+第 5 项虽然位于 `runtime/`，这里负责的是编译候选的 tiling 搜索，不是设备执行时的算子逻辑。
+第 7 项还涉及 `lowering_patch.py` 中社区方法的保存/恢复，属于补丁接入管理，
+触发原异常的主逻辑仍是 Layout/sizevars 的符号证明。
+
+**失败位置与责任模块也要分开。** 第 4、5 项表现为下层 kernel 编译资源不足，
+定位到的修复分别是 Inductor 的 load 排布和候选搜索；下层拒绝超容量候选本身不能证明编译器有 bug。
+另有独立的 TA masked indirect load 缺陷，仍标为“未修复、影响被屏蔽、不阻塞当前模型验证”，
+不能与第 1 项已经修复的 Inductor mask 生成问题合并。
+涉及模型与故障暴露顺序见下表；“第一层、第二层”等表示排障顺序，和本节的编译模块划分是两个维度。
+
 ## 修复覆盖与故障层级
 
 | 修复分支 | 涉及模型/用例 | 故障层级 | 整合提交 |
@@ -38,6 +86,11 @@ DSL 指 Inductor 生成、交给 Triton 编译的 kernel 程序；IR 是生成 k
 八份完整补丁保存在 [patches](../../../artifacts/cicd/model_fixes_20261020/patches/)。
 
 ## 1. Persistent reduction：计算后必须重新屏蔽无效 lane
+
+**模块归属：NPU Inductor 的 reduction/mask DSL 生成。**
+修复文件为 `torch_npu/_inductor/codegen/triton.py`，入口包括
+`IterationRangesEntryNPUIndex._codegen_mask()`、`NPUIndexTritonKernel.filter_masks()` 与 `reduction()`。
+问题在把合法元素范围写入归约代码的环节；具体改动见[mask 补丁][mask-patch]。
 
 **问题描述。** GPT2/BERT 的 embedding + norm 在隐藏维度 768 上计算均值、方差。
 实际 SIMT tile 扩到 1024；多出的 256 个 lane 不属于输入。
@@ -86,6 +139,12 @@ mask 与 value 采用同一轴顺序、permute 和 reshape，不能把某个轴�
 
 ## 2. 多轴归约：压平 reduction axes，保留输出 channel
 
+**模块归属：NPU Inductor 的 reduction 轴分析与 DSL layout 生成。**
+`torch_npu/_inductor/codegen/kernel_analysis.py` 中的
+`ReductionAnalysis.dense_post_reduction_list()`、`analyze_reduction_dim()` 决定压平后的形状与归约维；
+`torch_npu/_inductor/codegen/triton.py` 的 `NPUIndexTritonKernel.reduction()` 等入口写出对应变换。
+错误来自轴分析和生成布局不一致，具体改动见[axes 补丁][axes-patch]。
+
 **问题描述。** BERT 静态反向 bias gradient 应对两个批次/序列轴求和，保留 768 个 channel。
 原输入重排对应 `reshape(4,12,128,64).permute(0,2,1,3).reshape(512,768).sum(0)`。
 其中 X4=12、X5=64 是输出维，R2=4、R3=128 是规约维。
@@ -123,6 +182,11 @@ reduction axes 放后面，只合并后者；沿合并后的 reduction dim 求�
 此分支依赖 mask 修复；整合后的产物同时包含两项，不能把所有差异都归因于 axes。
 
 ## 3. 负索引：dump/check 开关不能取消 wrap
+
+**模块归属：NPU Inductor 的间接索引生成与数值范围传播。**
+修复文件为 `torch_npu/_inductor/codegen/triton.py`，具体是 NPU kernel 安装的
+`CSEProxy.indirect_indexing()`；它决定负索引回绕及后续边界检查可采用的 bounds。
+具体改动见[负索引补丁][negative-patch]。
 
 **问题描述。** 对长度 8 的 tensor，索引 -1 应访问第 7 个元素。
 旧 `CSEProxy.indirect_indexing()` 在设置 dump/check 环境变量时强制 `wrap_neg=False`，
@@ -167,6 +231,11 @@ value = tl.load(table + wrapped * 16 + column)
 旧行为以补丁删除的环境变量分支和上面的语义示意为证，没有将示意标成实测产物。
 
 ## 4. Load 生存期：不要让 81 个输入 tile 同时存活
+
+**模块归属：NPU Inductor 的 kernel 内 load/compute DSL 排布。**
+修复文件为 `torch_npu/_inductor/codegen/triton.py`，入口是 `NPUIndexTritonKernel.load()`。
+它选择把 load 和 layout transform 写入 `prefix`、`loads` 还是 `compute` buffer，
+区别于第 6 项对融合节点的调度；具体改动见[load 补丁][load-patch]。
 
 **问题描述。** Albert LayerNorm 参数梯度融合 12 路贡献，生成 81 次输入 load。
 旧 codegen 把 load 都放入 `self.loads`，把消费运算放入后续 compute buffer；
@@ -219,6 +288,12 @@ UB 估计不是精确编译器模型，最终仍需固定候选编译和数值�
 不能声称仅重排 load 就独立解决整网所有候选。
 
 ## 5. Tiling：搜索必须覆盖设备能编译的较小 tile
+
+**模块归属：NPU Inductor 的 tiling/autotune 候选生成与资源估计。**
+修复文件为 `torch_npu/_inductor/runtime/tile_generator.py`，入口包括
+`TileGenerator.__init__()`、`rebuild_dynamic_axis()`、`reset_configs()`、`set_kernel_type()`
+及新增的 `_update_resource_limits()`。它们决定交给编译器尝试哪些候选，
+不修改 pooling/softmax 的数学公式；具体改动见[tiling 补丁][tile-patch]。
 
 **问题描述。** NFNet dynamic pooling 的 SIMT 候选受到每 tile 8 KiB 的限制。
 FP32 对应最多 2048 个元素，而旧搜索在 4096 元素处已停止，未枚举任何合法 SIMT 小 tile。
@@ -276,6 +351,11 @@ Albert 第一层解决后又暴露动态 softmax 第二层：`rebuild_dynamic_ax
 
 ## 6. Scheduling：比较符号尺寸的数学值，而非表达式结构
 
+**模块归属：NPU Inductor 的融合节点调度与符号 group 匹配。**
+修复文件为 `torch_npu/_inductor/codegen/scheduling.py`，入口是 `_generate_npu_node_schedule()`；
+`NPUNoLinearTritonScheduling`、`NPUTritonScheduling` 的 `generate_node_schedule()` 统一调用它。
+这里决定 producer、reduction、epilogue 如何进入执行序列；具体改动见[调度补丁][schedule-patch]。
+
 **问题描述。** NFNet dynamic training 的融合组包含 pointwise producer、空间 sum、epilogue。
 令 `q=FloorDiv(H-1,32)`、`A=1536*batch`，真实调度 IR 可写为：
 
@@ -322,6 +402,13 @@ sizevars.statically_known_equals(node_numel, numel * rnumel)
 同一小图扩展到第二组动态 shape 后另暴露下一项，不能把第一组通过当成两组都通过。
 
 ## 7. Symbolic stride：整数整除证明不能引入倒数
+
+**模块归属：社区 Inductor IR/Layout 的符号 stride 比较，经 NPU 侧补丁修复。**
+出错入口为 `torch._inductor.ir.Layout._stride_expr_ge_or_false()`，依赖 sizevars/ShapeEnv 证明整数关系。
+实际修复落在 `torch_npu/_inductor/codegen/_sizevars.py` 的 `patch_simplify()`，
+并在 `torch_npu/_inductor/lowering_patch.py` 中维护方法的保存/恢复。
+应归类为 Layout/符号证明问题，不能因补丁文件位于 `codegen/` 就归成 Triton DSL 计算错误；
+具体改动见[stride 补丁][stride-patch]。
 
 **问题描述。** NFNet 派生训练小图第二组输入 `(3,16,256,256)` 在 convolution backward
 layout 证明时失败。实际 stride 为 `a=q+1`、`b=(q+1)²`，`q=FloorDiv(H-1,32)`、H≥33。
@@ -375,6 +462,12 @@ baseline 保存/恢复使用 `inspect.getattr_static`，保留 staticmethod 描�
 v8 静态/动态各两组 shape 的前向、输入梯度、权重梯度均通过；原 NFNet 模型矩阵没有观察到此新失败。
 
 ## 8. Range 拆分：合法拒绝应返回“不兼容”，不能变成 TypeError
+
+**模块归属：NPU Inductor 的迭代范围拆分及融合候选兼容性检查。**
+修复文件为 `torch_npu/_inductor/codegen/triton.py`，入口是
+`NPUIndexTritonKernel._split_iteration_ranges()`，调用方 `is_compatible()` 捕获 `CantSplit`。
+根因是 NPU 拒绝分支与社区异常构造协议不匹配，以及 group 耗尽检查晚于数组访问；
+属于生成 DSL 之前的候选检查错误，具体改动见[range 补丁][range-patch]。
 
 **问题描述。** 同一双 shape 小图在 stride 修复后最终能得到正确结果，
 但第二组初次 backward 编译仍报 `CantSplit.__init__()` 缺少 `expr/remaining`。
