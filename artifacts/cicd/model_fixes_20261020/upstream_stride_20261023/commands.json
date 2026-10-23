@@ -1,0 +1,26 @@
+{
+  "baseline": [
+    "<environment>",
+    "-c",
+    "\nimport runpy,sys\nimport torch_npu._inductor\nfrom torch._inductor.ir import Layout\noriginal=Layout._stride_expr_ge_or_false.__wrapped__\nLayout._stride_expr_ge_or_false=staticmethod(original)\nsys.argv=[sys.argv[1],'TestSymbolicStrideComparison.test_polynomial_stride_order','-v']\nrunpy.run_path(sys.argv[0],run_name='__main__')\n",
+    "<workspace>/source/test/_inductor/test_symbolic_stride_comparison.py"
+  ],
+  "unit": [
+    "<environment>",
+    "<workspace>/source/test/_inductor/test_symbolic_stride_comparison.py",
+    "-v"
+  ],
+  "dynamic": [
+    "<environment>",
+    "-c",
+    "\nimport inspect,json,runpy,sys\nimport torch_npu._inductor\nfrom torch._inductor.ir import Layout\nfrom torch._dynamo import config\nconfig.suppress_errors=False\ncompare=Layout._stride_expr_ge_or_false\nsource=' '.join(compare.__code__.co_names)\nassert '_statically_known_stride_multiple_of' in source and 'Mod' in source\ncounts={'calls':0,'errors':0}\ndef observed(left,right):\n    counts['calls']+=1\n    try:\n        return compare(left,right)\n    except Exception:\n        counts['errors']+=1\n        raise\nLayout._stride_expr_ge_or_false=staticmethod(observed)\nsys.argv=sys.argv[1:]\ntry:\n    runpy.run_path(sys.argv[0],run_name='__main__')\nfinally:\n    print('UPSTREAM_LAYOUT_COUNTS '+json.dumps(counts),flush=True)\nassert counts['calls']>0 and counts['errors']==0,counts\n",
+    "<workspace>/symbolic_group_training.py"
+  ],
+  "static": [
+    "<environment>",
+    "-c",
+    "\nimport inspect,json,runpy,sys\nimport torch_npu._inductor\nfrom torch._inductor.ir import Layout\nfrom torch._dynamo import config\nconfig.suppress_errors=False\ncompare=Layout._stride_expr_ge_or_false\nsource=' '.join(compare.__code__.co_names)\nassert '_statically_known_stride_multiple_of' in source and 'Mod' in source\ncounts={'calls':0,'errors':0}\ndef observed(left,right):\n    counts['calls']+=1\n    try:\n        return compare(left,right)\n    except Exception:\n        counts['errors']+=1\n        raise\nLayout._stride_expr_ge_or_false=staticmethod(observed)\nsys.argv=sys.argv[1:]\ntry:\n    runpy.run_path(sys.argv[0],run_name='__main__')\nfinally:\n    print('UPSTREAM_LAYOUT_COUNTS '+json.dumps(counts),flush=True)\nassert counts['calls']>0 and counts['errors']==0,counts\n",
+    "<workspace>/symbolic_group_training.py",
+    "--static"
+  ]
+}

@@ -1,0 +1,138 @@
+diff --git a/test/_inductor/test_symbolic_stride_comparison.py b/test/_inductor/test_symbolic_stride_comparison.py
+index 2800114843..a680effed7 100644
+--- a/test/_inductor/test_symbolic_stride_comparison.py
++++ b/test/_inductor/test_symbolic_stride_comparison.py
+@@ -1,17 +1,20 @@
+ import subprocess
+ import sys
+ from types import SimpleNamespace
++from unittest import mock
+ 
+ import sympy
++import torch
+ import torch_npu._inductor  # noqa: F401
+ from torch._dynamo.source import LocalSource
+-from torch._inductor.ir import Layout
++from torch._inductor.ir import FixedLayout, Layout
+ from torch._inductor.sizevars import SizeVarAllocator
+ from torch._inductor.virtualized import V
+ from torch.fx.experimental.symbolic_shapes import DimDynamic, ShapeEnv
+ from torch.testing._internal.common_utils import TestCase, run_tests
+ from torch.utils._sympy.functions import FloorDiv
+ from torch.utils._sympy.numbers import int_oo
++from torch.utils._sympy.printers import PythonPrinter
+ 
+ 
+ class TestSymbolicStrideComparison(TestCase):
+@@ -45,6 +48,41 @@ class TestSymbolicStrideComparison(TestCase):
+                 with self.subTest(left=left, right=right):
+                     self.assertEqual(Layout._stride_expr_ge_or_false(left, right), expected)
+ 
++    def test_unbacked_compound_stride_order(self):
++        # Regression from pytorch/pytorch@93879b11e3b5: a structural proof must
++        # work without extracting an optimization hint from an unbacked size.
++        env = ShapeEnv()
++        seq = env.create_unbacked_symint().node.expr
++        env.constrain_symbol_range(seq, 4, 1024)
++        half = FloorDiv(seq, 2)
++        reduced = FloorDiv(half**2, half)
++        left = 16 * reduced - 30
++        right = 16 * (64 * half * reduced - 120 * half - 120 * reduced + 225)
++        sizevars = SizeVarAllocator(env)
++        layout = FixedLayout(torch.device("npu"), torch.float32, size=[seq, 2], stride=[left, right])
++        with V.set_graph_handler(SimpleNamespace(sizevars=sizevars)):
++            with mock.patch.object(sizevars, "optimization_hint", side_effect=AssertionError("unexpected hint")):
++                self.assertTrue(layout.is_stride_ordered([0, 1]))
++
++    def test_fallback_guard_has_no_negative_powers(self):
++        env = ShapeEnv()
++        seq = env.create_unbacked_symint().node.expr
++        half = FloorDiv(seq, 2)
++        reduced = FloorDiv(half**2, half)
++        left = 16 * reduced - 30
++        right = 16 * (64 * half * reduced - 120 * half - 120 * reduced + 225)
++        sizevars = mock.Mock()
++        sizevars.guard_or_false.return_value = False
++        with mock.patch(
++            "torch_npu._inductor.codegen._sizevars._statically_known_stride_multiple_of", return_value=False
++        ) as prove_multiple:
++            with V.set_graph_handler(SimpleNamespace(sizevars=sizevars)):
++                self.assertFalse(Layout._stride_expr_ge_or_false(left, right))
++        prove_multiple.assert_called_once_with(sizevars, left, right)
++        guard = sizevars.guard_or_false.call_args.args[0]
++        self.assertEqual([power for power in guard.atoms(sympy.Pow) if power.exp.is_negative], [])
++        self.assertIn("%", PythonPrinter().doprint(guard))
++
+     def test_restore_preserves_staticmethod_descriptor(self):
+         # Baseline restoration changes process-wide registries. Keep that
+         # check isolated without re-registering unrelated decompositions.
+diff --git a/torch_npu/_inductor/codegen/_sizevars.py b/torch_npu/_inductor/codegen/_sizevars.py
+index 9443e0b945..7ce37f498f 100644
+--- a/torch_npu/_inductor/codegen/_sizevars.py
++++ b/torch_npu/_inductor/codegen/_sizevars.py
+@@ -4,7 +4,8 @@ import sympy
+ from sympy import Expr
+ from torch._inductor import ir, sizevars
+ from torch._inductor.virtualized import V
+-from torch.utils._sympy.functions import PythonMod
++from torch.fx.experimental.symbolic_shapes import free_symbols
++from torch.utils._sympy.functions import Mod, safe_gcd, simple_floordiv_gcd
+ 
+ 
+ def simplify(self, expr: Expr):
+@@ -12,6 +13,32 @@ def simplify(self, expr: Expr):
+         return [sympy.expand(s).xreplace(self.replacements) for s in expr]
+     return sympy.expand(expr).xreplace(self.replacements)
+ 
++
++def _statically_known_stride_multiple_of(allocator, numerator, denominator):
++    # The 2.13 allocator lacks the symbolic-denominator cancellation used by
++    # upstream 93879b11e3b5. Keep that dependency local to stride proofs.
++    if numerator is denominator or numerator == denominator:
++        return True
++    if isinstance(denominator, (int, sympy.Integer)):
++        return allocator.statically_known_multiple_of(numerator, denominator)
++    if numerator == 0:
++        return True
++    if len(free_symbols([numerator, denominator])) > sizevars._MAX_SYMBOLS_FOR_EXPENSIVE_SYMPY_OPS:
++        return False
++
++    def gcd_covers_denominator(gcd):
++        return gcd != 1 and (gcd == denominator or allocator.simplify(gcd - denominator) == 0)
++
++    try:
++        if gcd_covers_denominator(simple_floordiv_gcd(numerator, denominator)):
++            return True
++        if gcd_covers_denominator(safe_gcd(numerator, denominator)):
++            return True
++    except sympy.PolynomialError:
++        pass
++    return allocator.statically_known_true(sympy.Eq(Mod(numerator, denominator), 0))
++
++
+ def patch_simplify():
+     sizevars.SizeVarAllocator.simplify = simplify
+     original = getattr(ir.Layout, "_stride_expr_ge_or_false", None)
+@@ -20,16 +47,17 @@ def patch_simplify():
+ 
+     @functools.wraps(original)
+     def compare_strides(left, right):
+-        # Keep the upstream zero/order/divisibility proofs, but use integer
+-        # modulo: SymPy Mod can introduce rational expressions whose negative
+-        # powers are invalid for ShapeEnv's integer value-range analysis.
+         sizevars = V.graph.sizevars
+         if sizevars.guard_or_false(sympy.Eq(right, 0)):
+             return True
+         if sizevars.guard_or_false(sympy.Eq(left, 0)):
+             return False
+-        return sizevars.guard_or_false(sympy.Ge(left, right)) or sizevars.guard_or_false(
+-            sympy.Eq(PythonMod(left, right), 0)
++        # Backport pytorch/pytorch@93879b11e3b5: prove unbacked divisibility
++        # structurally, and avoid reciprocal powers in backed-symbol guards.
++        return (
++            sizevars.guard_or_false(sympy.Ge(left, right))
++            or _statically_known_stride_multiple_of(sizevars, left, right)
++            or sizevars.guard_or_false(sympy.Eq(Mod(left, right), 0))
+         )
+ 
+     compare_strides._torch_npu_integer_strides = True

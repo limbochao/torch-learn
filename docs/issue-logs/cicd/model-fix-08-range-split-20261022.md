@@ -11,6 +11,22 @@ published: false
 `NPUIndexTritonKernel._split_iteration_ranges()`，完整代码变化和三项单元见[补丁][patch]。
 八项关系见[总览][overview]。
 
+## 这个提交解决什么问题
+
+**解决不兼容的迭代范围本应被正常拒绝，却因异常构造错误或数组越界导致编译中断的问题。**
+
+- **触发场景**：调度器尝试把节点的迭代范围映射到候选 kernel，遇到不能整除或 group 已用完的情况。
+  正常行为应是报告 `CantSplit`，由兼容性检查返回 False，继续选择其他合法安排。
+- **修复前**：部分分支直接 `raise CantSplit`，但异常类要求两个参数，实际抛出的是 `TypeError`；
+  另一个分支先读取 `remaining[current_group]`，之后才检查下标是否越界，可能直接抛 `IndexError`。
+  这两种异常都无法按原有 `CantSplit` 拒绝流程处理。
+- **修复后**：为 `CantSplit` 提供失败时的操作数，并在访问数组前检查 group 是否耗尽，
+  让不兼容候选正常被拒绝；合法范围的拆分与索引重建公式继续沿用。
+
+两部分证据需要区分：双 shape 训练小图实际暴露了 `TypeError`；
+提前下标检查解决的 `IndexError` 由 `(2,), ([2,3],[])` 专项输入复现，尚未证明它单独阻塞原整模型。
+详见[旧版记录][old]、[新版检查][new]和[训练结果][training]。
+
 ## 为什么融合前还需要拆分 iteration ranges
 
 一个 kernel 和其中节点可能用不同方式描述同一迭代空间。

@@ -27,7 +27,6 @@ description: >-
 - [更新 Pull Request](https://docs.gitcode.com/docs/apis/patch-api-v-5-repos-owner-repo-pulls-number/)
 - [Pull Request 关联 Issue](https://docs.gitcode.com/docs/apis/post-api-v-5-repos-owner-repo-pulls-number-linked-issues/)
 - [获取项目 Pull Request 列表](https://docs.gitcode.com/docs/apis/get-api-v-5-repos-owner-repo-pulls/)
-- [Ascend/pytorch PR 模板](https://gitcode.com/Ascend/pytorch/blob/master/.gitcode/PULL_REQUEST_TEMPLATE.md)
 
 ## 默认目标
 
@@ -55,10 +54,13 @@ GitCode 同仓或用户 fork 中。
    - 如果 branch 尚未推送，不要静默 push。展示 remote、branch 和将执行的 push，取得用户授权后再推送。
 4. 搜索相同 source branch/base 或相同 title 的 open PR，避免重复创建。GitCode 项目 PR 列表接口不支持 `head` 参数时，使用
    `author`、`base` 获取候选列表，再按返回的 `source_branch` 和 source repo 精确过滤。
-5. 从 commits 和 diff 生成 title/body。用户没有指定格式时，正文使用 `1.`、`2.` 编号列出实际修改，每项同时说明“改了什么”和
+5. 从 commits 和 diff 生成 title/body。PR 标题默认使用英文，采用 `fix(inductor): ...` 等类型与作用域前缀，
+   用简洁英文概括实际修改；用户明确指定其他语言时遵从用户要求。正文语言按用户要求或当前对话语言确定。
+   用户没有指定格式时，正文必须使用 `1.`、`2.` 编号列出实际修改，每项同时说明“改了什么”和
    “为什么改”。生成 body 时，不要在自然语言段落或单个列表项中插入手动换行符，交由网页根据显示宽度自动换行；只有代码块中的
-   代码、命令或其他必须保持格式的内容才手动换行。不要写未纳入 PR 的方案、排查历史、无关验证过程或空模板章节。只有用户明确
-   要求或仓库强制要求时才使用 `assets/ascend-pytorch-pr-template.md`。
+   代码、命令或其他必须保持格式的内容才手动换行。不要写未纳入 PR 的方案、排查历史、验证过程、空模板章节或模板占位符。禁止使用
+   `assets/ascend-pytorch-pr-template.md` 及仓库 PR 模板生成正文，即使模板文件存在；只有用户明确要求引用模板中的特定字段时，才可将
+   相关信息改写为符合本规则的编号条目。
 6. 只描述有代码或验证证据支持的收益。不要编造 CI、UT、device validation 或 review 结论。
    默认不在 PR 正文中写验证结果、测试命令、CI 状态或未执行的测试；只有用户明确要求包含验证信息时，才加入真实且可追溯的验证结果。
 7. 做 sanitization：不得包含内部需求链接、内部问题单、token、个人路径、客户数据、内部 URL 或机器信息。社区 Issue 使用公开
@@ -117,7 +119,7 @@ python3 <skill-dir>/scripts/create_pr.py \
 - `--title`、`--head`：创建 PR 时必填；更新已有 PR 时可省略。
 - `--base`：默认 `master`。
 - `--update-number`：更新已有 PR 的序号；使用后不能再传 `--head` 或 `--fork-path`。
-- `--body` 或 `--body-file`：可选；实际向 `Ascend/pytorch` 创建时应提供完整模板正文。
+- `--body` 或 `--body-file`：可选；实际向 `Ascend/pytorch` 创建时应提供基于 commits 和 diff 的简洁编号正文，不使用 PR 模板章节。
 - `--fork-path`：跨仓 PR 的 source repository，格式 `owner/repo`。
 - `--issue`：一个或多个 Issue 编号，逗号分隔。脚本通过 linked-issues API 建立并验证结构化关联。
 - `--labels`：逗号分隔。

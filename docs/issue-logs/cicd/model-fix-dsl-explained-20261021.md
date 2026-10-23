@@ -9,6 +9,19 @@ published: false
 框架基线为 `0b4b636555`，整合分支为 `debug/cicd-all-fixes-20261020`、`5b18fac653`。
 这里只说明已有修改，不为[本轮三个模型定界](three-model-boundary-20261021.md)增加框架修复。
 
+2026-10-23 第 7 项已追加上游回移，整合分支更新到 `089231bede`。
+原 `c74c45c960` 的 PythonMod 补丁与历史验证保留；当前实现使用 PyTorch `Mod`，
+并补齐旧 2.13 缺少的符号整除证明依赖，见[第 7 项最新详解](model-fix-07-symbolic-strides-20261022.md)。
+NPU_A5 本轮六项符号检查、静态和动态双 shape 前向及两项梯度比较均通过。
+下面的八项提交表和原始 DSL 对照仍对应 `5b18fac653` 版本。
+
+同日后续整理提交历史后，整合分支更新为 `937cdf81e3`，并恢复为八个提交。
+第 1 项合入动态 cat 单测缺失的 `optimize_mask` 初始化，对应 `13cfa5a1d2`；
+第 7 项合入上游回移、证明依赖和配套单测，对应 `a4e9a7f975`。
+历史 NPU 验证仍对应实际加载的 `089231bede`；整理后没有新增设备验证。
+当前 PR 为 [Ascend/pytorch !48387](https://gitcode.com/Ascend/pytorch/pull/48387)，
+关联 [Issue #5625](https://gitcode.com/Ascend/pytorch/issues/5625)。
+
 DSL 指 Inductor 生成、交给 Triton 编译的 kernel 程序；IR 是生成 kernel 之前的图或调度表示。
 下面标为“原始摘录”的代码保留产物原文；标为“语义示意”的代码用于解释，不冒充捕获产物。
 调度、stride 证明和 range 拆分的原失败发生在 DSL 生成之前，因此其“修复前 DSL”为未生成。
