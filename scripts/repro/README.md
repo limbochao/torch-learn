@@ -11,6 +11,8 @@
 
 已归档脚本：
 
+- `max_pool2d_kernel_1_eager_repro.py`：从用户提供的 `_relu_1` kernel 抽取单个 MaxPool2d eager 子图，
+  固定 seed 构造原始 `[16,64,112,112]` 连续 NCHW 输入，默认在 NPU 执行 Inductor 编译和 eager 对比。
 - `emb_opt_bs400/`：embedding 模型 `bs=400` 的 NPU 动态 shape/group 与静态编译复现，详细用法见子目录 README。
 - `simt_template_fused_reduction_precision_repro.py`：融合 add、ReLU、exp、cos 和 sum 的 SIMT template reduction 精度问题复现。
 - `rms_norm_simd_multi_reduction_repro.py`：RMSNorm weight grad 的 SIMD 多 reduction 轴 codegen 复现脚本，默认使用原始大 shape。
