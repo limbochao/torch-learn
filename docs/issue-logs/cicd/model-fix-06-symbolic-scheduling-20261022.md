@@ -10,6 +10,11 @@ published: false
 生产修改在 `torch_npu/_inductor/codegen/scheduling.py`，
 完整范围和新增测试见[补丁][patch]，八项关系见[总览][overview]。
 
+2026-10-24 对融合与回退流程的进一步核对确认：index 接受的融合组重建为 no-linear 标量 group 后，
+需要重新执行目标 backend 的融合检查。独立方案见
+[no-linear 回退融合复核详解](model-fix-06-nolinear-fusion-recheck-20261024.md)，对应 PR !48469。
+本文继续记录 `e1429cc917` 的历史实现及验证，不代表新方案已通过设备验证。
+
 ## 这个提交解决什么问题
 
 **解决动态尺寸下数学上相同的迭代规模被误判为不同 group，导致调度阶段编译失败的问题。**
