@@ -11,6 +11,9 @@
 
 已归档脚本：
 
+- [cicd/load_order_fixed_20261023/](cicd/load_order_fixed_20261023/README.md)：04 load 重排的固定 tiling
+  DSL 对照，复制单个 `run.py` 即可比较集中 load 和就近 load 的 UB 编译结果，打印明确的 tiling，
+  可选直接启动并检查 eager 数值。
 - `max_pool2d_kernel_1_eager_repro.py`：从用户提供的 `_relu_1` kernel 抽取单个 MaxPool2d eager 子图，
   固定 seed 构造原始 `[16,64,112,112]` 连续 NCHW 输入，默认在 NPU 执行 Inductor 编译和 eager 对比。
 - `emb_opt_bs400/`：embedding 模型 `bs=400` 的 NPU 动态 shape/group 与静态编译复现，详细用法见子目录 README。
