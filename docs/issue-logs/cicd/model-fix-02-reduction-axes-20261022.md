@@ -118,6 +118,22 @@ flowchart TD
 下文按这些数据表示的依赖顺序讲修改。部分方案在初始化时就已计算，
 因此图中是解释数据如何变化，不表示 Python 源码逐行执行的时序。
 
+## 流程与实际修改对照：从这里进入各段 diff
+
+以下 A—F4 是本文的修改片段编号。每段直接嵌入 PR 的原始 diff，`-` 是删除行，`+` 是新增行，
+空格开头是定位上下文（空白上下文行省略空格标记）；`@@` 中分别是旧版和新版行号。讲解仍按数据流排列。
+这些片段合计覆盖本 PR 的 **49 行新增、47 行删除**，每条变更只出现一次。
+
+| 数据流阶段 | 是否有直接修改 | 对应源码片段 | 主例中改变了什么 |
+| --- | --- | --- | --- |
+| [1. 输入轴分析](#flow-1) | 有 | [A：is_contiguous_reduction](#diff-a) | 判断依据改成 value 的轴集合；主例 False 不变，地址含额外标量轴时可能改变 |
+| [2. 准备计算布局](#flow-2) | 有 | [B1：打包尺寸列表](#diff-b1)、[B2：尺寸文本](#diff-b2)、[B3：dim](#diff-b3)、[B4：rank](#diff-b4) | B1 返回不变；B2 的 [24]→[3,8]，B3 的 0→1，B4 的 1→2 |
+| [3. 输入广播](#flow-3) | 有 | [C1：F/P 局部变量](#diff-c1)、[C2：broadcast](#diff-c2) | 多轴缺轴输入的 broadcast 目标改用 F=[2,3,4] |
+| [4. 重排与打包](#flow-4) | 有 | [D1：放宽重排条件](#diff-d1)、[D2：重排路径 shape](#diff-d2)、[D3：直接 reshape 路径 shape](#diff-d3) | 分离归约轴也先 permute；两个路径都登记 P=[3,8] |
+| [5. mask 与累加](#flow-5) | mask 代码未直接改；累加器有改 | [E1：non-persistent accumulator](#diff-e1)；mask 间接使用 B2/D1 | mask 随 value 变换；累加器记录 P |
+| [6. 求和与恢复结果](#flow-6) | sum 拼接代码未直接改；helper 与结果元数据有改 | [F1：恢复表达式](#diff-f1)、[F2：result_shape](#diff-f2)、[F3：max/min 返回变量](#diff-f3)、[F4：普通归约返回变量](#diff-f4) | sum 消费 B3 的 dim=1；恢复并登记 Q=[1,3,1] |
+| [7. 后续消费与 store](#flow-7) | 无直接 diff | 消费 F1—F4 的结果 | 收到三个独立结果及对应元数据；不再收到一个全局总和 |
+
 ## 先分清函数“返回”与设备“计算结果”
 
 这些修改位于生成器里。Python 调用函数时，通常还没有执行设备求和。
@@ -152,9 +168,41 @@ flowchart TD
 下面源码均固定到 PR 提交 `66bed811b6`，见 [kernel_analysis.py][analysis-source]、[triton.py][triton-source]。
 每个阶段同时说明：函数作用、输入、旧返回或状态、新返回或状态、修改原因与后续影响。
 
-## 数据进入生成器：先确认哪些轴属于 value
+<a id="flow-1"></a>
+
+## 阶段 1：输入轴分析
 
 ### is_contiguous_reduction：分析的是 value 布局，还是地址里的全部轴
+
+<a id="diff-a"></a>
+
+**对应 PR 修改 A：`triton.py` → `NPUIndexTritonKernel.is_contiguous_reduction`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L3901) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L3901)。
+
+```diff
+@@ -3901,15 +3901,11 @@
+             return len(axis_set) == (max(axis_set) - min(axis_set) + 1)
+
+         if self.numof_reduction_axis() > 1:
+-            stride_sorted_var_list = self.parse_golden_from_load_store_index()
++            if not self.golden_var_list:
++                self.select_golden_varlist()
++            value_axis_list = list(self.golden_var_list or [])
+             reduction_dim_list = []
+-            if not stride_sorted_var_list:
+-                if not self.golden_var_list:
+-                    self.select_golden_varlist()
+-                stride_sorted_var_list = (
+-                    list(self.golden_var_list) if self.golden_var_list else []
+-                )
+-            for i, x in enumerate(reversed(stride_sorted_var_list)):
++            for i, x in enumerate(reversed(value_axis_list)):
+                 if x.name[0] == "r":
+                     reduction_dim_list.append(i)
+             return is_contiguous_axis(reduction_dim_list)
+```
+
+**这块代码改变的流程：** 先统一“用哪一组轴判断相邻性”；并不重排 value，也不执行求和。
 
 **函数作用与输入。** 没有显式参数，读取 kernel 中的轴元数据；
 输出 bool，回答“多个 r 轴在当前被分析的列表里是否相邻”。
@@ -187,6 +235,8 @@ kernel 的 `dense_size_list()` 也会调用它，选择返回完整还是打包�
 
 ### 两个 dense_size_list：同名，但返回值不能混用
 
+**本段无直接 diff。** 这是 A、C1、F2 所调用的已有接口，用于解释为何同一个 value_shape 不能贯穿所有阶段。
+
 这两个函数没有直接修改，却是理解新增 full_value_shape 的前提。
 
 | 方法及条件 | 返回什么 | 主例的返回值 |
@@ -199,9 +249,40 @@ kernel 的 `dense_size_list()` 也会调用它，选择返回完整还是打包�
 如果相邻性判断改变，包装方法的返回表示也可能改变。
 后面需要完整布局时，新代码直接调用 `self.reduce_analysis.dense_size_list()`，消除这层歧义。
 
-## 为数据准备计算布局：保留输出分组，合并归约轴
+<a id="flow-2"></a>
+
+## 阶段 2：准备打包布局、dim 与 rank
 
 ### dense_post_reduction_list：只描述目标打包形状
+
+<a id="diff-b1"></a>
+
+**对应 PR 修改 B1：`kernel_analysis.py` → `ReductionAnalysis.dense_post_reduction_list`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/kernel_analysis.py#L378) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/kernel_analysis.py#L378)。
+
+```diff
+@@ -378,11 +378,11 @@
+
+     def dense_post_reduction_list(self) -> List[str]:
+         reduction_list_str = f"{' * '.join(self.dense_reduction_list())}"
+-        no_reduction_list = []
+-        # ensure order
+-        for dense_size in self.dense_size_list():
+-            if dense_size not in self.dense_reduction_list():
+-                no_reduction_list.append(dense_size)
+-        no_reduction_list.append(reduction_list_str)
+-        return no_reduction_list
++        value_axes = list(reversed(self.kernel.golden_var_list))
++        kept_sizes = [
++            f"{axis.name.upper()}BLOCK_SUB"
++            for axis in value_axes
++            if axis.name[0] != "r"
++        ]
++        return kept_sizes + [reduction_list_str]
+
+```
+
+**这块代码改变的流程：** 按轴身份构造 P；主例的新旧返回值相同，这处主要明确选择保留轴的规则。
 
 **函数作用与输入。** 读取 golden 的轴顺序与 reduction_axis_list，返回尺寸字符串 list。
 用途是描述“哪些维度分别保留、哪些维度合成一个归约维”。名字虽含 post_reduction，
@@ -235,6 +316,31 @@ dense_reduction_list()         = ["R2BLOCK_SUB","R0BLOCK_SUB"]
 
 ### dense_size_str：决定 reshape 究竟写成 [24] 还是 [3,8]
 
+<a id="diff-b2"></a>
+
+**对应 PR 修改 B2：`kernel_analysis.py` → `ReductionAnalysis.dense_size_str`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/kernel_analysis.py#L389) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/kernel_analysis.py#L389)。
+
+```diff
+@@ -389,13 +389,8 @@
+     def dense_size_str(self):
+         sizes = self.dense_size_list()
+         num_red = self.numof_reduction_axis()
+-        is_contig = self.contiguous_reduction
+-
+         if num_red > 1:
+-            if is_contig:
+-                result = f"[{', '.join(self.dense_post_reduction_list())}]"
+-            else:
+-                result = f"[{'* '.join(sizes)}]"
++            result = f"[{', '.join(self.dense_post_reduction_list())}]"
+         else:
+             result = f"[{', '.join(sizes)}]"
+
+```
+
+**这块代码改变的流程：** 删除非相邻多轴的全轴乘积；主例实际目标从字符串 "[24]" 改成 "[3,8]"。
+
 **函数作用与输入。** analysis 方法读取完整尺寸、归约轴数和相邻性，返回可写进 DSL 的 shape 字符串。
 kernel 的同名方法对普通归约转调它。reduction 随后把字符串用于 reshape，
 non-persistent 分支也把它用于 tl.full 初始化。
@@ -257,6 +363,44 @@ non-persistent 分支也把它用于 tl.full 初始化。
 但 `[3,8]` 只描述尺寸，不保证元素分组正确，还必须在下面先 permute。
 
 ### analyze_reduction_dim：归约乘积放在最后，sum 就必须沿该维
+
+<a id="diff-b3"></a>
+
+**对应 PR 修改 B3：`kernel_analysis.py` → `ReductionAnalysis.analyze_reduction_dim`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/kernel_analysis.py#L409) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/kernel_analysis.py#L404)。
+
+```diff
+@@ -409,9 +404,12 @@
+
+     def analyze_reduction_dim(self):
+         if self.numof_reduction_axis() > 1:
+-            if not self.contiguous_reduction:
+-                self.reduced_dim = 0
+-                return 0
++            if not self.kernel.golden_var_list:
++                self.kernel.select_golden_varlist()
++            self.reduced_dim = sum(
++                1 for axis in self.kernel.golden_var_list if axis.name[0] != "r"
++            )
++            return self.reduced_dim
+
+         if self.numof_reduction_axis() == 1:
+             if not self.kernel.golden_var_list:
+@@ -429,11 +427,6 @@
+         if not reduction_layout_var_list:
+             raise RuntimeError("assert reduction_layout_var_list is not empty")
+
+-        if self.numof_reduction_axis() > 1 and self.contiguous_reduction:
+-            if not self.kernel.golden_var_list:
+-                self.kernel.select_golden_varlist()
+-            return sum(1 for x in self.kernel.golden_var_list if x.name[0] != 'r')
+-
+         dim = -1
+         for i, x in enumerate(reversed(reduction_layout_var_list)):
+             if x.name[0] == 'r':
+```
+
+**这块代码改变的流程：** 所有多轴统一按保留轴数取 dim；主例从 0 改为 1。下面第二段是同时删除的旧相邻专用分支。
 
 **函数作用与输入。** 读取归约轴数和 golden，返回 int。
 构造 ReductionAnalysis 时，返回值保存到 reduced_dim；
@@ -281,6 +425,29 @@ non-persistent 分支也把它用于 tl.full 初始化。
 
 ### triton_tensor_ndim：描述计算表示的 rank，不是原始输入 rank
 
+<a id="diff-b4"></a>
+
+**对应 PR 修改 B4：`triton.py` → `NPUIndexTritonKernel.triton_tensor_ndim`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L3054) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L3054)。
+
+```diff
+@@ -3054,9 +3054,9 @@
+     # for creat constant tensor, if have two axis, constant=tl.full([1,1]) else  tl.full([1])
+     def triton_tensor_ndim(self):
+         if self.numof_reduction_axis() > 1:
+-            if self.is_contiguous_reduction():
+-                return len(self.tiling_axis) - self.numof_reduction_axis() + 1
+-            return 1
++            if not self.golden_var_list:
++                self.select_golden_varlist()
++            return len(self.golden_var_list) - self.numof_reduction_axis() + 1
+
+         return len(self.tiling_axis)
+
+```
+
+**这块代码改变的流程：** 让 rank 描述新的 P；主例从 1 改为 2，后续恢复结果时不再误走一维提前返回。
+
 **函数作用与输入。** 读取完整轴数与归约轴数，返回 int。
 常量生成、索引 shape 推导和 reduction_resize 会消费这个值。
 
@@ -299,9 +466,34 @@ reduction_resize 仍会根据旧返回值 1 提前走标量结果路径，无法
 因此不能只将其解释为“常量多加一维”。
 影响的是使用该 helper 的元数据和生成分支；原始 load 在重排前依然是三维 F。
 
-## 数据真正进入计算：需要时先补齐广播
+<a id="flow-3"></a>
+
+## 阶段 3：输入广播
 
 ### reduction 的 full_value_shape 与 packed_value_shape 各管一个阶段
+
+<a id="diff-c1"></a>
+
+**对应 PR 修改 C1：`triton.py` → `NPUIndexTritonKernel.reduction：局部 shape 准备`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4115) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4107)。
+
+```diff
+@@ -4115,6 +4107,12 @@
+
+         dense_size_str = self.dense_size_str()
+         value_shape = tuple(self.dense_size_list())
++        full_value_shape = tuple(self.reduce_analysis.dense_size_list())
++        packed_value_shape = tuple(
++            self.reduce_analysis.dense_post_reduction_list()
++            if self.numof_reduction_axis() > 1
++            else self.dense_size_list()
++        )
+         permute_order = None
+         need_permute = False
+         axis_list = []
+```
+
+**这块代码改变的流程：** 新增 F/P 两种独立状态；下面 C2 广播用 F，D2/D3 重排后的元数据和 E1 累加器用 P。
 
 **所属函数与输入。** 这里开始都是 `reduction(..., value)` 的内部状态变化，
 不是新增了几个独立返回函数。value 是输入临时变量，最终仍由 reduction 返回结果 CSEVariable。
@@ -321,6 +513,36 @@ full 明确描述广播前的轴身份，packed 明确描述重排后的计算�
 创建 tuple 本身不会在设备上广播、重排或分配这两个 tensor。
 
 ### broadcast：先补齐 F，才能按照原轴身份重排
+
+<a id="diff-c2"></a>
+
+**对应 PR 修改 C2：`triton.py` → `NPUIndexTritonKernel.reduction：缺轴输入广播`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4124) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4122)。
+
+```diff
+@@ -4124,12 +4122,17 @@
+                     axis_list.append(axis)
+
+         if len(axis_list) < len(self.dense_size_list()):
++            broadcast_shape = (
++                f"[{', '.join(full_value_shape)}]"
++                if self.numof_reduction_axis() > 1
++                else dense_size_str
++            )
+             value = self._map_tuple_or_scalar(
+                 lambda v: self.cse.generate(
+                     self.compute,
+-                    f"tl.broadcast_to({v}, {dense_size_str})",
++                    f"tl.broadcast_to({v}, {broadcast_shape})",
+                     dtype=v.dtype,
+-                    shape=value_shape,
++                    shape=full_value_shape if self.numof_reduction_axis() > 1 else value_shape,
+                 ),
+                 value,
+             )
+```
+
+**这块代码改变的流程：** 进入该分支后，多轴输入先广播到 F；主例的目标从 [24] 改为 [2,3,4]，入口条件未改。
 
 这个分支仅在生成器判定 value 缺少轴时执行。
 为单独解释它，将同一计算的一个输入设为只依赖 x1，输入 shape 为 `[1,3,1]`，
@@ -344,9 +566,38 @@ full 明确描述广播前的轴身份，packed 明确描述重排后的计算�
 而且入口判据仍是 `len(axis_list) < len(self.dense_size_list())`，后者可能已是 packed rank。
 本 PR 改善的是“进入后广播到哪里”，没有证明所有缺轴输入都能被正确识别。
 
-## 让每组元素对应一个输出：permute 后才能 reshape
+<a id="flow-4"></a>
+
+## 阶段 4：重排与打包
 
 ### 放宽已有重排算法的条件
+
+<a id="diff-d1"></a>
+
+**对应 PR 修改 D1：`triton.py` → `NPUIndexTritonKernel.reduction：重排条件`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4160) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4163)。
+
+```diff
+@@ -4156,15 +4159,15 @@
+             )
+         elif (
+             len(dense_size_str) > 2
+             and (
+                 not self.persistent_reduction or self.numof_reduction_axis() != 1
+             )
+         ):
+-            if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
++            if self.numof_reduction_axis() > 1:
+                 value_order = list(reversed(self.golden_var_list))
+                 target_order = [x for x in value_order if x.name[0] != "r"] + [
+                     x for x in value_order if x.name[0] == "r"
+                 ]
+                 permute_order = [value_order.index(x) for x in target_order]
+                 current_order = list(range(len(value_order)))
+                 need_permute = permute_order != current_order
+```
+
+**这块代码改变的流程：** 原来只有相邻多轴计算重排方案，现在分离多轴也进入；主例才会得到 permute_order=[1,0,2]。
 
 这段属于 reduction，没有独立 Python return。
 输入是 F 布局的 value；输出是写入 compute buffer 的新临时量和相应 CSEVariable。
@@ -386,6 +637,52 @@ x1=2: [9,10,11,12,21,22,23,24]
 
 ### 两个 reshape 分支的 CSE shape 一起改
 
+<a id="diff-d2"></a>
+
+**对应 PR 修改 D2：`triton.py` → `NPUIndexTritonKernel.reduction：有 permute 的 reshape`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4175) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4178)。
+
+```diff
+@@ -4171,11 +4174,11 @@
+
+             if need_permute:
+                 value = self._map_tuple_or_scalar(
+                     lambda v: self.cse.generate(
+                         self.compute,
+                         f"tl.reshape({v}.permute({permute_order}), {dense_size_str})",
+                         dtype=v.dtype,
+-                        shape=value_shape,
++                        shape=packed_value_shape,
+                     ),
+                     value,
+                 )
+```
+
+**这块代码改变的流程：** 对已经生成的重排结果登记 P=[3,8]，替换原来可能仍为 F=[2,3,4] 的元数据。
+
+<a id="diff-d3"></a>
+
+**对应 PR 修改 D3：`triton.py` → `NPUIndexTritonKernel.reduction：无需 permute 的 reshape`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4185) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4188)。
+
+```diff
+@@ -4181,11 +4184,11 @@
+                 )
+             else:
+                 value = self._map_tuple_or_scalar(
+                     lambda v: self.cse.generate(
+                         self.compute,
+                         f"tl.reshape({v}, {dense_size_str})",
+                         dtype=v.dtype,
+-                        shape=value_shape,
++                        shape=packed_value_shape,
+                     ),
+                     value,
+                 )
+```
+
+**这块代码改变的流程：** 另一条 reshape 路径也登记 P；两条路径输出同一表示，不能只改其中一条。
+
 两条路径都得到 P，因此都将 `shape=value_shape` 改成 `shape=packed_value_shape`。
 这不是额外执行一次 reshape，而是登记上一步已经生成的 tensor 的形状。
 
@@ -399,9 +696,13 @@ x1=2: [9,10,11,12,21,22,23,24]
 旧版甚至可能生成一维 `[24]`，却记录三维 F。
 新版显式登记 P，使后续 mask、累加和 CSE shape 推导看到的表示与生成的 reshape 相符。
 
-## 同一布局中归约：先对齐 mask，需要时跨块累加
+<a id="flow-5"></a>
+
+## 阶段 5：mask 对齐与跨块累加
 
 ### mask 沿 value 的同一条变换路径走
+
+**本段无直接 diff。** 生成行为随 [B2 的目标尺寸](#diff-b2)和 [D1 启用的重排](#diff-d1)改变。
 
 mask 的主体逻辑已在基线中，本 PR 没有重新提交那项修复。
 但它使用同一个 need_permute、permute_order 和 dense_size_str，
@@ -413,6 +714,26 @@ mask 的主体逻辑已在基线中，本 PR 没有重新提交那项修复。
 因此第一个阶段的 shape 和排列修改也会影响已有 mask 代码的生成行为。
 
 ### accumulator：已有初始化用什么形状，元数据就应记什么
+
+<a id="diff-e1"></a>
+
+**对应 PR 修改 E1：`triton.py` → `NPUIndexTritonKernel.reduction：non-persistent 累加器`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4481) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4490)。
+
+```diff
+@@ -4481,8 +4490,8 @@
+         else:
+-            accumulator = self.cse.namedvar(f"_{result_var}", dtype=torch_acc_type, shape=tuple(self.dense_size_list()))
++            accumulator = self.cse.namedvar(f"_{result_var}", dtype=torch_acc_type, shape=packed_value_shape)
+             default = ir.Reduction.default_accumulator(reduction_type, src_dtype)
+             default = self._map_tuple_or_scalar(constant_repr, default)
+             if not isinstance(default, tuple):
+                 self.prefix.writeline(
+                     f"{accumulator} = tl.full({self.dense_size_str()}, {default}, {acc_type})"
+                 )
+```
+
+**这块代码改变的流程：** 累加器登记 P；其 tl.full 初始化文本没有直接修改，但尺寸随 B2 从 [24] 变成 [3,8]。
 
 仅 non-persistent 分支进入这里。它不是先得到一个最终和，
 而是为各 tile 对应位置保存部分累加，最后再沿合并归约维归约。
@@ -429,9 +750,39 @@ mask 的主体逻辑已在基线中，本 PR 没有重新提交那项修复。
 它确保“初始化实际形状、每轮 value 形状、累加器元数据”三者一致。
 对于单轴，packed_value_shape 仍取旧方法，这处取值不变。
 
-## 执行归约并恢复输出槽位
+<a id="flow-6"></a>
+
+## 阶段 6：求和、恢复槽位与登记结果
 
 ### final_reduction 与 reduction_resize 各做一半
+
+<a id="diff-f1"></a>
+
+**对应 PR 修改 F1：`triton.py` → `NPUIndexTritonKernel.reduction_resize`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L3937) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L3933)。
+
+```diff
+@@ -3936,16 +3932,12 @@
+         ndims = self.triton_tensor_ndim()
+         if ndims == 1:
+             return f"triton_helpers.promote_to_tensor({value})"
+
+-        if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
+-            if not self.golden_var_list:
+-                self.select_golden_varlist()
+-
++        if self.numof_reduction_axis() > 1:
+             dense_list = self.reduce_analysis.dense_size_list()
+             for i, axis in enumerate(reversed(self.golden_var_list)):
+                 if axis.name[0] == "r":
+                     dense_list[i] = "1"
+-
+             expand_str = ", ".join(dense_list)
+             return f"{value}.reshape({expand_str})"
+
+```
+
+**这块代码改变的流程：** 所有多轴都允许按原槽位恢复；结合 B4，主例从 promote_to_tensor(s) 改为 s.reshape(1,X1,1)。
 
 reduction 内的 final_reduction 负责拼出 `tl.sum(value, dim)` 等归约表达式，
 再调用 reduction_resize，为归约结果生成恢复布局的文本。
@@ -442,6 +793,17 @@ reduction 内的 final_reduction 负责拼出 `tl.sum(value, dim)` 等归约表�
 | 求和输入 | `[24]` | `[3,8]` |
 | dim | 0 | 1 |
 | 设备求和结果 | 一个标量 300 | 三个值 `[68,100,132]` |
+
+**sum 拼接位置没有直接修改。** 下面是 `reduction()` 内已有的调用，保留源码格式：
+
+```python
+            return self.reduction_resize(
+                f"{module}.{reduction_type}({value}, {dim})", dim
+            )
+```
+
+`dim` 消费 [B3](#diff-b3) 的返回值，求和后的表达式再交给本节 [F1](#diff-f1)。
+因此本 PR 虽然没有直接改 `tl.sum` 的拼接行，生成行为仍从沿 0 求和变为沿 1 求和并恢复 Q。
 
 **reduction_resize 的函数职责与输入。** value 参数是结果表达式或变量的名字，例如 `"s"`，
 dim 参数是归约维下标。函数返回一个 DSL 表达式字符串，不返回设备 tensor。
@@ -467,6 +829,33 @@ dim 参数是归约维下标。函数返回一个 DSL 表达式字符串，不�
 
 ### result_shape：登记的是恢复后的结果，不是输入 shape
 
+<a id="diff-f2"></a>
+
+**对应 PR 修改 F2：`triton.py` → `NPUIndexTritonKernel.reduction：结果占位变量的 shape`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4226) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4229)。
+
+```diff
+@@ -4226,8 +4229,14 @@
+         dim = self.reduction_dim()
+         acc_type = triton_acc_type(src_dtype)
+         torch_acc_type = upcast_acc_dtype(src_dtype)
+-        result_shape = list(self.dense_size_list())
+-        result_shape[dim] = "1"
++        if self.numof_reduction_axis() > 1:
++            result_shape = self.reduce_analysis.dense_size_list()
++            for i, axis in enumerate(reversed(self.golden_var_list)):
++                if axis.name[0] == "r":
++                    result_shape[i] = "1"
++        else:
++            result_shape = list(self.dense_size_list())
++            result_shape[dim] = "1"
+         result_var: Any = self.cse.newvar(dtype=torch_acc_type, shape=tuple(result_shape))
+         result_var.mask_vars = {var for var in masks if var[0] != "r"}  # noqa: set_linter
+         cond_expr = " & ".join(masks)
+```
+
+**这块代码改变的流程：** 不再拿 P 的 dim 修改 F 的某一个槽位，而是把 F 的所有 r 槽位置 1；主例得到 Q=[1,3,1]。
+
 这是 reduction 内的局部 list，随后传给 cse.newvar / cse.generate。
 它不独立返回，也不执行 reshape。
 
@@ -488,12 +877,48 @@ non-persistent 普通归约最终直接返回该变量；persistent 部分分支
 
 ### 最终返回变量：两处 shape 参数也从输入改成结果
 
-persistent 的 max/min 分支与其他普通分支各有一次：
+<a id="diff-f3"></a>
+
+**对应 PR 修改 F3：`triton.py` → `NPUIndexTritonKernel.reduction：persistent max/min 结果`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4337) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4346)。
 
 ```diff
--shape=masked_value.shape
-+shape=tuple(result_shape)
+@@ -4334,10 +4343,10 @@
+                     )
+                 elif reduction_type == "max" or reduction_type == "min":
+                     result_var = self.cse.generate(
+                         self.compute,
+                         final_reduction(masked_value),
+                         dtype=masked_value.dtype,
+-                        shape=masked_value.shape,
++                        shape=tuple(result_shape),
+                     )
+             elif reduction_type == "welford_reduce":
+                 acc_sum = f"{result_var}_acc_sum"
 ```
+
+**这块代码改变的流程：** 生成 max/min 结果变量时登记 Q，而非继承归约前 masked_value 的 shape。
+
+<a id="diff-f4"></a>
+
+**对应 PR 修改 F4：`triton.py` → `NPUIndexTritonKernel.reduction：persistent 普通归约结果`。**
+[修改前源码](https://gitcode.com/luqichao/pytorch_new/blob/955b98d43ba13cc824bef86a065deb2352f2783d/torch_npu/_inductor/codegen/triton.py#L4476) · [修改后源码](https://gitcode.com/luqichao/pytorch_new/blob/66bed811b6a06b2847f86980611f89d8ebdb06c7/torch_npu/_inductor/codegen/triton.py#L4485)。
+
+```diff
+@@ -4474,7 +4483,7 @@
+             else:
+                 result_var = self.cse.generate(
+                     self.compute,
+                     final_reduction(masked_value),
+                     dtype=masked_value.dtype,
+-                    shape=masked_value.shape,
++                    shape=tuple(result_shape),
+                 )
+```
+
+**这块代码改变的流程：** 普通 sum 等结果也登记 Q；这是另一处实际赋值，同样影响单轴结果元数据。
+
+persistent 的 max/min 分支与其他普通分支各有一次：
 
 masked_value 代表归约前输入；final_reduction(masked_value) 已求和并恢复为 Q。
 这两行修改决定的是新生成的结果 CSEVariable 身上的 shape，不改变已拼出的求和表达式。
@@ -511,7 +936,11 @@ masked_value 代表归约前输入；final_reduction(masked_value) 已求和并�
 但最终元数据会从 `[R0,X1]` 改为 `[1,X1]`。因此单轴结果的后续消费也要回归。
 argmin/argmax、Welford 有独立结果处理，不能把这两处描述为所有类型的统一实现。
 
-## 数据离开归约：为什么后续消费也在影响范围内
+<a id="flow-7"></a>
+
+## 阶段 7：后续消费与写回
+
+**本段无直接 diff。** 消费方收到的是 [F1—F4](#diff-f1) 生成的新结果和结果 shape。
 
 reduction 最终把结果变量写入 reduction_cache，并返回 CSEVariable；
 后续融合表达式通过变量名字使用真实结果，通过变量的 shape 做元数据传播。
@@ -646,13 +1075,15 @@ permute 是否形成真实搬运、是否增加 UB 由下游编译决定，不�
 
 PR 仅含两个生产文件，没有独立回归测试文件。
 创建 PR 时的语法、diff 与离线轴排列检查也不替代设备回归。
+正文的 15 个 diff 片段已逐行与父提交、PR 提交核对，完整覆盖 49 行新增和 47 行删除；
+这项检查只确认文档与实际补丁对应，不增加运行正确性的证明。
 本次文档更新未运行远程设备测试。
 
 ## 会议顺序与追问回答
 
 1. 用原 DSL 的 flatten、标量 sum、向量 store 解释错误，再给 `[10,100,1000]` 的例子。
 2. 用 [2,3,4] 的输入完整推导 [3,8] 的计算布局、dim=1、[1,3,1] 的结果布局。
-3. 沿输入轴分析 → 广播 → 重排和打包 → 累加及求和 → 恢复输出 → 消费结果讲代码，每步先展示新旧返回值。
+3. 按流程对照表依次展开 A → B1—B4 → C1/C2 → D1—D3 → E1 → F1—F4，先展示每段实际 diff，再代入主例。
 4. 展示修复后 permute → reshape → sum → 恢复槽位的完整闭环。
 5. 主动交代影响面、全归约问题和验证缺口，再讨论合入前的修正与回归。
 
