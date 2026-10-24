@@ -1,13 +1,13 @@
 ---
-title: 修复 ② 检视说明：多轴归约的逐处修改、影响范围与未解决边界
+title: 修复 ② 检视说明：沿数据流理解多轴归约的函数、返回值与修改原因
 published: false
 ---
 
-# 修复 ② 检视说明：多轴归约的逐处修改、影响范围与未解决边界
+# 修复 ② 检视说明：沿数据流理解多轴归约的函数、返回值与修改原因
 
 检视对象：[PR !48471][pr]，关联 [Issue #5625][issue]。
 基线为 `955b98d43b`，修复提交为 `66bed811b6`，两个文件增加 49 行、删除 47 行。
-本文按实际 diff 解释；mask 修复已经在基线中，本 PR 只提交轴与 shape 的修改。
+本文按输入、布局变换、归约、结果消费的数据流解释实际 diff。mask 修复已在基线中，本 PR 只提交轴与 shape 的修改。
 
 **BERT 的错误归约有直接证据，修复方向明确；影响范围覆盖 NPU 此 codegen 路径的多轴归约，
 另有两处改变单轴归约的共享元数据，不能承诺无回归。
@@ -66,345 +66,486 @@ block 为 8 时旧实现失败，最大绝对误差为 187.436218。
 修改 DSL 后同一 block 为 8 的对照通过，最大绝对误差约 `9.54e-6`。
 这是历史 DSL 实验，不能标为当前 PR head 的设备实测。
 
-## 阅读代码前：五个概念和三种 shape
+## 沿数据流理解：先固定同一个输入
 
-**axis 与槽位。** axis 是 r2、x5 这样的逻辑轴；槽位是它在当前 Triton tensor 中的维度下标。
-本路径用名字首字符 r 判定归约轴，其余视为保留轴。这是已有命名约定。
-
-**golden_var_list。** codegen 选定的轴顺序。`ReductionAnalysis.dense_size_list()`
-最终反转该列表，因此 value 的槽位顺序是 `reversed(golden_var_list)`。
-BERT tile 的 value 顺序为 `[r2,r3,x5]`，golden 相应为 `[x5,r3,r2]`。
-外层标量轴可能参与地址计算，却不占 value 的向量维度。
-
-**contiguous reduction。** 这里表示归约轴在所分析的列表中相邻，
-不等于输入 tensor 的 `is_contiguous()`，也不表示所有维度都可以归约。
-`[R0,R1,X]` 中 r 轴相邻，X 仍必须保留；`[R0,X,R1]` 则需先重排。
-
-**CSE shape。** CSE 是公共子表达式消除机制，临时变量还携带 dtype 和 shape。
-`cse.generate(..., shape=...)` 的 shape 是 Python 侧记录，**不会替 tensor 执行 reshape**。
-真实形状由生成字符串中的 broadcast、permute、reshape 和归约决定。
-后续表达式的 shape 传播会读取这些元数据，所以二者必须一致。
-
-**persistent 与 non-persistent。** 两条路径的块内归约和跨块累加方式不同。
-non-persistent 会创建 accumulator，跨归约 tile 累积，再在 `post_loop_combine` 生成最终归约。
-二者共用前面的分析与打包逻辑，均在检视范围内。
-
-普通多轴归约的目标约定如下：
-
-| 阶段 | BERT 示例 | 用途 |
-| --- | --- | --- |
-| 完整 value shape | `[R2,R3,X5]` | 原布局中的输入和 mask 广播 |
-| 重排后 | `[X5,R2,R3]` | 将每个输出对应的元素放在一起 |
-| packed shape | `[X5,R2*R3]` | 块内归约或累加 |
-| 归约 dim | 1 | 等于保留轴数量 |
-| 恢复后的结果 shape | `[1,1,X5]` | 对应原槽位，便于后续广播和写回 |
-
-```mermaid
-flowchart LR
-    A[完整布局 R2,R3,X5] --> B[在原布局补齐广播]
-    B --> C[permute 为 X5,R2,R3]
-    C --> D[reshape 为 X5,R2×R3]
-    D --> E[沿 dim=1 求和]
-    E --> F[恢复为 1,1,X5]
-```
-
-下面行号均对应 `66bed811b6`，完整源码见 [kernel_analysis.py][analysis-source] 和 [triton.py][triton-source]。
-
-## 逐处 diff：kernel_analysis.py
-
-### 1. L379–387：dense_post_reduction_list 构造 packed shape
-
-旧实现遍历 `dense_size_list()` 的尺寸字符串，排除出现在 `dense_reduction_list()` 中的字符串，
-再在末尾添加归约长度乘积。新实现为：
+下面用一个分离归约轴的小例子贯穿所有函数，避免每处换 shape。
+这是一组说明生成规则的输入，不冒充 BERT 的设备 trace。
 
 ```python
-reduction_list_str = f"{' * '.join(self.dense_reduction_list())}"
-value_axes = list(reversed(self.kernel.golden_var_list))
-kept_sizes = [
-    f"{axis.name.upper()}BLOCK_SUB"
-    for axis in value_axes
-    if axis.name[0] != "r"
-]
-return kept_sizes + [reduction_list_str]
+# PyTorch 语义
+value.shape == (2, 3, 4)
+result = value.sum((0, 2))
 ```
 
-| 代码 | 具体含义与原因 |
-| --- | --- |
-| `reduction_list_str = ...` | 原有代码，构造 `R3BLOCK_SUB * R2BLOCK_SUB` 文本，此时没有执行乘法。 |
-| `reversed(golden_var_list)` | 转到 value 槽位顺序，与后续 permute 使用同一依据。 |
-| `for axis in value_axes` | 按 value 顺序遍历，保留轴之间的相对顺序不变。 |
-| `if axis.name[0] != "r"` | 根据轴身份选择保留轴，取代尺寸字符串过滤。 |
-| `axis.name.upper()` 和 `BLOCK_SUB` | 将 x5 转成 DSL 中的块长度变量 `X5BLOCK_SUB`。 |
-| `kept_sizes + [reduction_list_str]` | 保留轴各占一维，归约轴合成最后一维。BERT 得到 `[X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]`。 |
+| value 槽位 | 逻辑轴 | 块长度 | 求和后的职责 |
+| --- | --- | --- | --- |
+| 0 | r0 | 2 | 消去 |
+| 1 | x1 | 3 | 保留三个独立结果 |
+| 2 | r2 | 4 | 消去 |
 
-函数名中的 post_reduction 容易误导：返回值仍含归约乘积，是归约前的打包形状。
-常规 `inside_reduction=True` 时，旧筛选通常也能得到相同结果。
-**这部分主要明确轴身份和顺序；不能把每行都说成独立修复 BERT 数值错误的必要条件。**
-实际去掉错误 flatten 分支的是下一处。
-
-### 2. L389–397：dense_size_str 删除全轴 flatten 分支
-
-```diff
--is_contig = self.contiguous_reduction
- if num_red > 1:
--    if is_contig:
--        result = f"[{', '.join(self.dense_post_reduction_list())}]"
--    else:
--        result = f"[{'* '.join(sizes)}]"
-+    result = f"[{', '.join(self.dense_post_reduction_list())}]"
-```
-
-旧 else 将保留轴也乘进唯一维度，随后 `sum(...,0)` 会连输出一起消去。
-删除后，多轴统一使用“保留轴 + 归约乘积”。`is_contig` 不再参与决策，因此删除。
-单轴仍返回原始尺寸列表。
-
-这还需要第 9 处配套：`[R0,X,R1]` 不能直接 reshape 为 `[X,R0*R1]`，必须先重排元素。
-
-### 3. L405–412：analyze_reduction_dim 改用保留轴数量
-
-```diff
- if self.numof_reduction_axis() > 1:
--    if not self.contiguous_reduction:
--        self.reduced_dim = 0
--        return 0
-+    if not self.kernel.golden_var_list:
-+        self.kernel.select_golden_varlist()
-+    self.reduced_dim = sum(
-+        1 for axis in self.kernel.golden_var_list if axis.name[0] != "r"
-+    )
-+    return self.reduced_dim
-```
-
-`if not ...` 确保 golden 已初始化；`sum(1 for ...)` 统计保留轴数 K。
-packed shape 的前 K 维是保留轴，第 K 维是归约乘积，因此 dim=K。
-这里不必反转 golden：计数与顺序无关，构造 shape 与 permute 才依赖顺序。
-
-BERT 的 dim=1；`[X,Y,R0*R1]` 的 dim=2；没有保留轴时 dim=0。
-函数后面旧的“多轴且 contiguous 返回保留轴数”分支删除，因为多轴已统一在开头返回。
-单轴 dim 推导保留。
-
-## 逐处 diff：triton.py 的三个 helper
-
-### 4. L3055–3061：triton_tensor_ndim 返回 packed rank
-
-```diff
- if self.numof_reduction_axis() > 1:
--    if self.is_contiguous_reduction():
--        return len(self.tiling_axis) - self.numof_reduction_axis() + 1
--    return 1
-+    if not self.golden_var_list:
-+        self.select_golden_varlist()
-+    return len(self.golden_var_list) - self.numof_reduction_axis() + 1
-```
-
-新公式是“完整轴数 − 归约轴数 + 一个合并归约维”，即 K+1。
-旧的非相邻多轴返回 1，对应已删除的全轴 flatten 约定。
-改用 golden 的长度，使 rank 与实际选定的 value 轴集合一致；前两行确保该列表存在。
-
-该方法还影响常量和索引表达式的 shape 推导，例如常量生成使用 `tl.full([1] * ndim, ...)`。
-它不只影响某一行 sum，也不表示重排前 load 的 value 只有 K+1 维。
-
-### 5. L3898–3912：is_contiguous_reduction 使用 golden
-
-旧代码先调用 `parse_golden_from_load_store_index()`，没有结果才退回 golden。
-新代码先确保 golden 存在，再执行：
-
-```python
-value_axis_list = list(self.golden_var_list or [])
-reduction_dim_list = []
-for i, x in enumerate(reversed(value_axis_list)):
-    if x.name[0] == "r":
-        reduction_dim_list.append(i)
-return is_contiguous_axis(reduction_dim_list)
-```
-
-`list(... or [])` 构造列表；反转后的 i 是 value 槽位；循环只收集 r 轴的位置。
-最后的相邻性检查没有修改。
-
-为什么改来源？地址解析按 stride 排序，其轴集合来自 `range_tree_nodes` 和 removed nodes，
-可能含外层标量轴。`IndexAnalysis.var_list` 则筛选 tiling 轴，golden 正常选取也围绕此布局进行。
-两份列表的成员和顺序不必相同。
-
-例如 BERT load 的 stride 为 `x5:1, r3:64, x4:8192, r2:98304`。
-**仅按该 load 重建**的升序列表是 `[x5,r3,x4,r2]`，反转后 `[r2,x4,r3,x5]`，
-r2、r3 被标量 x4 隔开；实际 tile 为 `[r2,r3,x5]`，r2、r3 相邻。
-这是源码和地址推导的示例，不是历史完整 load/store 列表的日志快照。
-
-即使第 2 处已取消相邻性限制，这个 helper 仍被 kernel 的 `dense_size_list()` 使用，
-决定返回 packed 还是完整 shape，所以这处仍有实际影响。
-
-### 6. L3924–3942：reduction_resize 恢复所有原始归约槽位
-
-```diff
--if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
--    if not self.golden_var_list:
--        self.select_golden_varlist()
-+if self.numof_reduction_axis() > 1:
-     dense_list = self.reduce_analysis.dense_size_list()
-     for i, axis in enumerate(reversed(self.golden_var_list)):
-         if axis.name[0] == "r":
-             dense_list[i] = "1"
-```
-
-去掉 contiguous，让分离归约轴也恢复；删除局部初始化，是因为前面的 `triton_tensor_ndim()`
-已对多轴确保 golden 存在。
-
-必须用 analysis 的 `dense_size_list()` 取得完整槽位，不能用可能已返回 packed shape 的 kernel 同名方法。
-循环找到每个原始 r 槽位并置 1，再用已有代码生成 reshape：
+原始值设为按行排列的 1–24：
 
 ```text
-[R2,R3,X5] → 求和后 [X5] → reshape(1,1,X5)
-[R0,X,R1]  → 求和后 [X]  → reshape(1,X,1)
+value[0,:,:] = [[1,2,3,4],    [5,6,7,8],     [9,10,11,12]]
+value[1,:,:] = [[13,14,15,16],[17,18,19,20], [21,22,23,24]]
+
+预期结果 = [68, 100, 132]
 ```
 
-singleton 维度用于广播，不会重新物化原归约域。
-注意函数前面的 `ndims == 1` 仍提前返回 promote_to_tensor；全归约会命中这个边界，见后文。
+为什么是三个和？固定一个 x1，累加两个 r0 位置、四个 r2 位置，共 8 个数。
+例如 x1=0 对应 `[1,2,3,4,13,14,15,16]`，和为 68。
+旧逻辑把所有 24 个数合成一个总和 300，已经无法表达三个独立结果。
 
-## 逐处 diff：reduction 主流程
+后文用三个名字标记数据表示，**这些都是本例的具体尺寸，不是新的代码接口**：
 
-### 7. L4109–4114：区分 full 与 packed shape
+| 名称 | 轴顺序 | 代入本例后的尺寸 | codegen 中的尺寸列表 |
+| --- | --- | --- | --- |
+| F：完整布局 | `[r0,x1,r2]` | `[2,3,4]` | `["R0BLOCK_SUB", "X1BLOCK_SUB", "R2BLOCK_SUB"]` |
+| P：打包布局 | `[x1,r0*r2]` | `[3,8]` | `["X1BLOCK_SUB", "R2BLOCK_SUB * R0BLOCK_SUB"]` |
+| Q：恢复后的结果布局 | `[r0槽位,x1,r2槽位]` | `[1,3,1]` | `["1", "X1BLOCK_SUB", "1"]` |
 
-```python
-value_shape = tuple(self.dense_size_list())
-full_value_shape = tuple(self.reduce_analysis.dense_size_list())
-packed_value_shape = tuple(
-    self.reduce_analysis.dense_post_reduction_list()
-    if self.numof_reduction_axis() > 1
-    else self.dense_size_list()
-)
+```mermaid
+flowchart TD
+    A[输入：2×3×4；消去 r0,r2，保留 x1] --> B[确认 value 的轴顺序，形成 F/P/dim 方案]
+    B --> C[需要时先广播到完整布局 F]
+    C --> D[permute 成 x1,r0,r2，再 reshape 为 P：3×8]
+    D --> E[mask 与 value 对齐；需要跨块时使用 3×8 累加器]
+    E --> F[沿 dim=1 求和，得到 68,100,132]
+    F --> G[恢复 Q：1×3×1；CSE 记录相同 shape]
+    G --> H[后续逐点广播或写回三个输出位置]
 ```
 
-第一行原有。kernel 包装方法会根据 contiguous 返回不同表示，不能假定 value_shape 总是完整形状。
-新增 full 直接调用 analysis，取得 `[R2,R3,X5]`；tuple 用于元数据记录。
-新增 packed 对多轴明确取 `[X5,R3*R2]`，单轴仍调用原方法。
-这两个变量分别服务于重排前后，不能混用。
+下文按这些数据表示的依赖顺序讲修改。部分方案在初始化时就已计算，
+因此图中是解释数据如何变化，不表示 Python 源码逐行执行的时序。
 
-### 8. L4124–4137：broadcast 先到完整布局
+## 先分清函数“返回”与设备“计算结果”
 
-```python
-broadcast_shape = (
-    f"[{', '.join(full_value_shape)}]"
-    if self.numof_reduction_axis() > 1
-    else dense_size_str
-)
+这些修改位于生成器里。Python 调用函数时，通常还没有执行设备求和。
+
+| 下文术语 | 本文中的具体含义 |
+| --- | --- |
+| DSL | 生成出来的 Triton 代码，例如 `tl.reshape`、`tl.sum`；随后才交给编译器执行 |
+| rank / 槽位 | rank 是维数；槽位是维度的位置，例如 `[2,3,4]` 有三个槽位，x1 占槽位 1 |
+| golden_var_list | 生成器选出的参考轴顺序；这里反转它，才是 value 的维度顺序，不是全部地址符号的列表 |
+| CSE / CSEVariable | 公共子表达式消除及其临时变量对象；这里关注对象登记的 shape 是否与生成值相同 |
+| persistent | 此处一次处理完整归约块的分支；non-persistent 则循环处理多个归约块，并保留累加器 |
+
+| 函数 | 职责 | Python 返回类型 | 谁消费返回值 |
+| --- | --- | --- | --- |
+| `is_contiguous_reduction()` | 判断归约轴在选定布局中是否相邻 | bool | ReductionAnalysis 初始化、kernel 的 dense_size_list |
+| `ReductionAnalysis.dense_size_list()` | 描述完整槽位及其长度 | 尺寸字符串 list | 广播、mask、结果恢复；本 PR 未改其实现 |
+| `dense_post_reduction_list()` | 描述保留轴在前、归约轴合并在后的尺寸 | 尺寸字符串 list | dense_size_str、packed_value_shape，以及 kernel 包装方法 |
+| `dense_size_str()` | 将归约计算所需尺寸写成可插入 DSL 的文本 | str | 生成 reshape、部分 broadcast 和 accumulator 初始化 |
+| `analyze_reduction_dim()` | 决定在打包张量的哪个维度执行归约 | int | 初始化 reduced_dim，随后经 reduction_dim 取出 |
+| `triton_tensor_ndim()` | 给出归约计算表示使用的 rank | int | 常量、索引 shape 推导及 reduction_resize |
+| `reduction_resize(value, dim)` | 为归约结果生成恢复布局的表达式 | str | final_reduction 等将该表达式写入 DSL |
+| `reduction(dtype, src_dtype, reduction_type, value)` | 编排整个归约，写 DSL 并登记结果元数据 | 普通归约返回 CSEVariable，部分统计分支返回 tuple | 后续融合表达式和 store 使用这个临时结果 |
+
+例如 `dense_size_str()` 返回字符串 `"[X1BLOCK_SUB, R2BLOCK_SUB * R0BLOCK_SUB]"`，
+并不返回一个真正的 3×8 tensor。
+`reduction_resize("s", 1)` 返回 `"s.reshape(1, X1BLOCK_SUB, 1)"`，
+并不在 Python 中 reshape 一个设备 tensor。
+
+`reduction()` 的 value 则是代表已生成临时值的 CSEVariable，包含名字、dtype、shape。
+返回值仍是“代表归约结果的变量”；`[68,100,132]` 是生成的 kernel 在设备上执行后应得到的数值。
+
+下面源码均固定到 PR 提交 `66bed811b6`，见 [kernel_analysis.py][analysis-source]、[triton.py][triton-source]。
+每个阶段同时说明：函数作用、输入、旧返回或状态、新返回或状态、修改原因与后续影响。
+
+## 数据进入生成器：先确认哪些轴属于 value
+
+### is_contiguous_reduction：分析的是 value 布局，还是地址里的全部轴
+
+**函数作用与输入。** 没有显式参数，读取 kernel 中的轴元数据；
+输出 bool，回答“多个 r 轴在当前被分析的列表里是否相邻”。
+它不回答 tensor 是否整体 contiguous，也不回答哪些轴该求和。
+`ReductionAnalysis.__init__()` 会用它初始化 contiguous_reduction。
+kernel 的 `dense_size_list()` 也会调用它，选择返回完整还是打包尺寸。
+
+原实现优先分析 `parse_golden_from_load_store_index()` 的结果；
+新实现确保 golden 已选定，然后分析 `reversed(golden_var_list)`。
+
+| 同一输入条件 | 修改前返回 | 修改后返回 |
+| --- | --- | --- |
+| 主例：解析顺序和 value 都是 `[r0,x1,r2]` | False，r 槽位为 0、2 | False，仍为 0、2 |
+| 构造的 BERT 式情况：解析列表含标量 x4，value 不含 | False，见下方推导 | True，value 中两个 r 轴实际相邻 |
+
+**为何要改。** 地址里的符号不一定都占一个 value 维度。
+以 BERT 那条 load 地址为例，stride 为 `x5:1, r3:64, x4:8192, r2:98304`。
+仅按这条 load 的 stride 排序再反转，得到 `[r2,x4,r3,x5]`，两个 r 轴被 x4 隔开。
+但 x4 是外层标量循环，tile 是 `[r2,r3,x5]`，两个 r 轴相邻。
+拿前者判断后者，会把一个无向量槽位的轴也算入相邻性。
+
+新逻辑按 value 轴顺序遍历，记录 r 轴的下标，仍用原来的相邻性公式；
+改变的是判断依据，不是把相邻性强行设为 True。
+上面的 BERT 式列表是根据源码和地址构造的示例，探针也显式标注为构造输入，
+不冒充历史完整 load/store 元数据快照。
+
+**修改影响。** 主例中的 False 不变，因此后续正确处理非相邻归约仍需要其他修改。
+列表确实不一致时，bool 可能改变，进而改变 kernel 包装方法的返回值。
+该 helper 统一判断对象，却不能单独修好旧的全轴 flatten 算法。
+
+### 两个 dense_size_list：同名，但返回值不能混用
+
+这两个函数没有直接修改，却是理解新增 full_value_shape 的前提。
+
+| 方法及条件 | 返回什么 | 主例的返回值 |
+| --- | --- | --- |
+| analysis 的 dense_size_list，inside_reduction=True | 原始 value 槽位的全部尺寸 | F，即 `["R0BLOCK_SUB","X1BLOCK_SUB","R2BLOCK_SUB"]` |
+| kernel 的 dense_size_list，存在归约且 contiguous=False | 转调上一个方法 | F |
+| kernel 的 dense_size_list，存在归约且 contiguous=True | 转调 dense_post_reduction_list | P |
+
+因此 `self.dense_size_list()` 不保证永远描述原始 value。
+如果相邻性判断改变，包装方法的返回表示也可能改变。
+后面需要完整布局时，新代码直接调用 `self.reduce_analysis.dense_size_list()`，消除这层歧义。
+
+## 为数据准备计算布局：保留输出分组，合并归约轴
+
+### dense_post_reduction_list：只描述目标打包形状
+
+**函数作用与输入。** 读取 golden 的轴顺序与 reduction_axis_list，返回尺寸字符串 list。
+用途是描述“哪些维度分别保留、哪些维度合成一个归约维”。名字虽含 post_reduction，
+返回值仍含归约长度乘积，不是求和后的结果尺寸。
+调用者是 dense_size_str 和 reduction 内的 packed_value_shape；包装方法也可能调用它。
+
+主例的输入与计算：
+
+```text
+golden_var_list                 = [r2,x1,r0]
+reversed(golden_var_list)       = [r0,x1,r2]
+dense_reduction_list()         = ["R2BLOCK_SUB","R0BLOCK_SUB"]
+拼接的 reduction_list_str      = "R2BLOCK_SUB * R0BLOCK_SUB"
 ```
 
-对多轴拼出完整尺寸的 DSL 文本；单轴保留旧目标。随后两处参数同步修改：
+| 比较项 | 修改前 | 修改后 |
+| --- | --- | --- |
+| 选择保留尺寸的方法 | 遍历完整尺寸，排除归约尺寸字符串 | 遍历 value 轴，保留名字不以 r 开头的轴 |
+| 本例实际返回 | `["X1BLOCK_SUB","R2BLOCK_SUB * R0BLOCK_SUB"]` | 同左，仍是 P |
+| 代入长度后的意义 | `[3,8]` | `[3,8]` |
+
+**这些表达式为什么这样写。** `reversed(golden_var_list)` 使筛选顺序与 value 一致；
+`axis.name[0] != "r"` 按身份选输出轴；`axis.name.upper()` 加 BLOCK_SUB 生成该轴的尺寸名字；
+`kept_sizes + [reduction_list_str]` 让各输出轴独立，归约乘积放最后。
+最后一个维度的 8 表示“每个输出要汇总八个元素”，不是八个输出。
+
+**修改原因与影响。** 这处把同一规则改为直接按轴身份表达，避免再从尺寸文本反推轴身份。
+对本例以及常规归约内路径，旧算法本来就返回 P，不能说这里从 `[24]` 改成 `[3,8]`。
+旧字符串含轴名，不能以“两轴数值长度相等”作为旧算法会混淆它们的证据。
+这部分主要明确布局规则，评审时应与真正改变行为的下一处区分。
+
+### dense_size_str：决定 reshape 究竟写成 [24] 还是 [3,8]
+
+**函数作用与输入。** analysis 方法读取完整尺寸、归约轴数和相邻性，返回可写进 DSL 的 shape 字符串。
+kernel 的同名方法对普通归约转调它。reduction 随后把字符串用于 reshape，
+non-persistent 分支也把它用于 tl.full 初始化。
+
+| 主例：两个 r 轴被 x1 隔开 | 修改前返回 | 修改后返回 |
+| --- | --- | --- |
+| Python 字符串 | `"[R0BLOCK_SUB* X1BLOCK_SUB* R2BLOCK_SUB]"` | `"[X1BLOCK_SUB, R2BLOCK_SUB * R0BLOCK_SUB]"` |
+| 代入 2、3、4 | `"[24]"` | `"[3,8]"` |
+| 表示什么 | 全部元素只有一组 | 三个 x1 分组，每组八个归约元素 |
+
+旧算法把非相邻多轴作为特殊分支，将所有尺寸相乘。
+新算法删除这个分支，对所有多轴统一调用已经能返回 P 的 helper。
+`is_contig` 不再决定目标形状，所以其局部变量随之删除。
+
+**为什么必须改。** 一旦只有一组，后面的普通 sum 无法知道三个输出分别对应哪些元素。
+错误在 reshape 阶段已经发生，单改 sum 的 dim 无法恢复分组。
+
+**后续影响。** value 的 reshape、mask 的 reshape 和累加器初始化会使用新的目标形状。
+非相邻多轴行为改变；原本相邻多轴仍用打包表示；单轴仍返回原来的完整尺寸文本。
+但 `[3,8]` 只描述尺寸，不保证元素分组正确，还必须在下面先 permute。
+
+### analyze_reduction_dim：归约乘积放在最后，sum 就必须沿该维
+
+**函数作用与输入。** 读取归约轴数和 golden，返回 int。
+构造 ReductionAnalysis 时，返回值保存到 reduced_dim；
+`kernel.reduction_dim()` 取出它，最终用于生成 tl.sum 等运算的 axis 参数。
+
+| 主例 | 修改前 | 修改后 |
+| --- | --- | --- |
+| 计算依据 | 非相邻多轴已全部 flatten，唯一维度为 0 | P 中有一个保留维，归约乘积在维度 1 |
+| Python 返回值 | `0` | `1` |
+| 后面生成的求和 | `tl.sum(value, 0)` | `tl.sum(value, 1)` |
+
+**为什么是统计保留轴。** P 把 K 个保留轴放在前面，最后追加一个合并归约维，
+因此合并维的下标就是 K。主例 K=1；若输出还有两个独立维度，则 K=2。
+这里无需反转 golden，因为计数不依赖顺序。
+
+新代码先初始化 golden，再统计非 r 轴并立即返回。
+旧的“多轴且相邻”专用返回分支被合并到这里，所以删除；单轴推导保留。
+
+**后续影响。** 它与 dense_size_str 必须配套：`[24]` 只有 dim=0，`[3,8]` 必须沿 dim=1。
+这个返回值还被 kernel 初始化中的 persistent 决策读取，因此改变 dim 不只影响一行 sum。
+索引归约另有 axis 取值逻辑，也需要检视，不能由 sum 正确推定其正确。
+
+### triton_tensor_ndim：描述计算表示的 rank，不是原始输入 rank
+
+**函数作用与输入。** 读取完整轴数与归约轴数，返回 int。
+常量生成、索引 shape 推导和 reduction_resize 会消费这个值。
+
+| 主例 | 修改前 | 修改后 |
+| --- | --- | --- |
+| Python 返回值 | `1` | `3 - 2 + 1 = 2` |
+| 对应表示 | 一维 `[24]` | 二维 P=`[3,8]` |
+| 例如常量生成 | `tl.full([1], ...)` | `tl.full([1,1], ...)` |
+| reduction_resize 的分支 | 认为是一维，提前 promote_to_tensor | 可以继续恢复原始输出槽位 |
+
+新公式为“完整轴数 − 多个归约轴 + 一个合并归约维”。
+改用 golden 的长度，使它与上述打包方案使用同一个轴集合；前面的初始化保证列表存在。
+
+**为什么必须同步。** 即使广播可能容忍不同 rank 的全 1 常量，
+reduction_resize 仍会根据旧返回值 1 提前走标量结果路径，无法恢复 `[1,3,1]`。
+因此不能只将其解释为“常量多加一维”。
+影响的是使用该 helper 的元数据和生成分支；原始 load 在重排前依然是三维 F。
+
+## 数据真正进入计算：需要时先补齐广播
+
+### reduction 的 full_value_shape 与 packed_value_shape 各管一个阶段
+
+**所属函数与输入。** 这里开始都是 `reduction(..., value)` 的内部状态变化，
+不是新增了几个独立返回函数。value 是输入临时变量，最终仍由 reduction 返回结果 CSEVariable。
+新增局部变量只是记录不同阶段所需的尺寸。
+
+| 局部状态 | 修改前 | 修改后，主例 |
+| --- | --- | --- |
+| value_shape | 由 kernel 包装方法取得，本例是 tuple(F) | 仍存在，本例仍是 tuple(F) |
+| full_value_shape | 无独立变量 | analysis 直接提供 tuple(F)，即 `(R0,X1,R2)` 对应的尺寸字符串 |
+| packed_value_shape | 无独立变量 | 多轴取 tuple(P)，即 `(X1,R2*R0)` 对应的尺寸字符串 |
+
+为什么保留原变量同时新增两份？包装方法可能因相邻性返回 F，也可能返回 P，
+不能再把它当作所有阶段通用的 shape。
+full 明确描述广播前的轴身份，packed 明确描述重排后的计算表示；单轴 packed 仍取旧方法。
+
+**后续影响。** full 交给下面的 broadcast，packed 交给 reshape 的元数据和 accumulator。
+创建 tuple 本身不会在设备上广播、重排或分配这两个 tensor。
+
+### broadcast：先补齐 F，才能按照原轴身份重排
+
+这个分支仅在生成器判定 value 缺少轴时执行。
+为单独解释它，将同一计算的一个输入设为只依赖 x1，输入 shape 为 `[1,3,1]`，
+需要在完整计算域 `[2,3,4]` 上使用。
+
+| 分支内的值 | 修改前 | 修改后 |
+| --- | --- | --- |
+| broadcast 目标 | dense_size_str，即 `[24]` | full_value_shape，即 F=`[2,3,4]` |
+| 生成文本 | `tl.broadcast_to(input, [R0BLOCK_SUB* X1BLOCK_SUB* R2BLOCK_SUB])` | `tl.broadcast_to(input, [R0BLOCK_SUB, X1BLOCK_SUB, R2BLOCK_SUB])` |
+| 给该临时量记录的 CSE shape | value_shape，本例为 tuple(F) | full_value_shape，本例也是 tuple(F) |
+
+**旧值为什么不成立。** `[1,3,1]` 的三个轴还保留原槽位身份，不能直接广播成一维 `[24]`。
+此时也不能直接广播成 P=`[3,8]`：x1 还没有移动到前面。
+应先得到 F，再执行下一阶段的重排。
+
+这处同时替换生成文本和 shape 参数，是让设备表示与元数据对应；
+本例的元数据数值恰好没变，主要变化发生在实际 broadcast 目标。
+在包装方法原来返回 P 的布局中，元数据也会从 P 改为 F。
+
+**影响边界。** 主例输入已经完整时，这段不执行。
+而且入口判据仍是 `len(axis_list) < len(self.dense_size_list())`，后者可能已是 packed rank。
+本 PR 改善的是“进入后广播到哪里”，没有证明所有缺轴输入都能被正确识别。
+
+## 让每组元素对应一个输出：permute 后才能 reshape
+
+### 放宽已有重排算法的条件
+
+这段属于 reduction，没有独立 Python return。
+输入是 F 布局的 value；输出是写入 compute buffer 的新临时量和相应 CSEVariable。
+PR 将已有算法的门控从“多轴且相邻”改为“多轴”。
+
+| 主例中的局部值或行为 | 修改前 | 修改后 |
+| --- | --- | --- |
+| 是否进入计算 permute 的分支 | 否，r0/r2 不相邻 | 是，因为归约轴数为 2 |
+| need_permute | 保持初值 False | True |
+| permute_order | 保持初值 None | `[1,0,2]` |
+| 实际生成 | `tl.reshape(input, [R0BLOCK_SUB* X1BLOCK_SUB* R2BLOCK_SUB])` | `tl.reshape(input.permute([1,0,2]), [X1BLOCK_SUB, R2BLOCK_SUB * R0BLOCK_SUB])` |
+| 设备数据表示 | 一维 24 个数 | 二维 3 行，每行 8 个数 |
+
+已有算法按下面的依赖计算：
+
+```text
+value_order   = [r0,x1,r2]
+target_order  = [x1,r0,r2]     # 保留轴在前，归约轴在后；各组内部顺序保持
+permute_order = [1,0,2]       # 目标中的三个轴分别在原始第 1、0、2 槽位
+```
+
+对 1–24 的输入，新 value 的三行恰好是：
+
+```text
+x1=0: [1,2,3,4,13,14,15,16]
+x1=1: [5,6,7,8,17,18,19,20]
+x1=2: [9,10,11,12,21,22,23,24]
+```
+
+**为什么不能只 reshape。** 直接把原始存放顺序切成三个长度为 8 的片段，
+第一行会是 `[1,2,3,4,5,6,7,8]`，混入 x1=1 的值，并不等于 x1=0 应求和的那组。
+修改的核心是保留每个输出对应的元素集合，元素总数不变并不足以证明正确。
+
+**影响。** 分离多轴现在也会真正进入该算法。
+输入已是 `[x1,r0,r2]` 时，目标顺序与原顺序相同，need_permute=False，仍只 reshape。
+是否产生实际搬运以及性能代价，取决于下游编译，不能仅凭这个 Python 条件下结论。
+
+### 两个 reshape 分支的 CSE shape 一起改
+
+两条路径都得到 P，因此都将 `shape=value_shape` 改成 `shape=packed_value_shape`。
+这不是额外执行一次 reshape，而是登记上一步已经生成的 tensor 的形状。
+
+| 路径与示例 | 修改前记录的 shape | 修改后记录的 shape |
+| --- | --- | --- |
+| 主例 `[r0,x1,r2]`，本次启用 permute | tuple(F)，尺寸 `[2,3,4]` | tuple(P)，尺寸 `[3,8]` |
+| 已是 `[x1,r0,r2]`，不需要 permute，且包装方法已返回 P | tuple(P) | tuple(P)，取值不变 |
+| 其他不需要 permute 的情况 | 取决于包装方法是否返回 P | 显式使用 P |
+
+**为什么要改。** dense_size_str 是生成文本的目标；value_shape 来自另一个可能返回 F 的接口。
+旧版甚至可能生成一维 `[24]`，却记录三维 F。
+新版显式登记 P，使后续 mask、累加和 CSE shape 推导看到的表示与生成的 reshape 相符。
+
+## 同一布局中归约：先对齐 mask，需要时跨块累加
+
+### mask 沿 value 的同一条变换路径走
+
+mask 的主体逻辑已在基线中，本 PR 没有重新提交那项修复。
+但它使用同一个 need_permute、permute_order 和 dense_size_str，
+所以这些值改变后，mask 也会按 F → 重排 → P 变换。
+
+以只保留部分 x1 的 mask 为例，它先在 x1 槽位形成 `[1,3,1]`，广播到 F，
+再按 `[1,0,2]` 重排并 reshape 为 `[3,8]`，与 value 的每行逐元素对应。
+如果 value 改布局而 mask 不改，同一个 True/False 位置会作用到另一组元素。
+因此第一个阶段的 shape 和排列修改也会影响已有 mask 代码的生成行为。
+
+### accumulator：已有初始化用什么形状，元数据就应记什么
+
+仅 non-persistent 分支进入这里。它不是先得到一个最终和，
+而是为各 tile 对应位置保存部分累加，最后再沿合并归约维归约。
+输入 value 已是 P，accumulator 必须与之对齐。
+
+| 主例，non-persistent | 修改前 | 修改后 |
+| --- | --- | --- |
+| 初始化生成的目标 shape | dense_size_str，即 `[24]` | dense_size_str，即 P=`[3,8]` |
+| namedvar 登记的 accumulator shape | tuple(F)，即 `[2,3,4]` | packed_value_shape，即 `[3,8]` |
+| 每轮 value 的计算布局 | 全轴 flatten | 保留 x1 的三行布局 |
+
+本处具体 diff 将 namedvar 的 shape 参数换为 packed_value_shape；
+初始化文本随前面的 dense_size_str 一起变化，不是在这里又改了一遍初始化算法。
+它确保“初始化实际形状、每轮 value 形状、累加器元数据”三者一致。
+对于单轴，packed_value_shape 仍取旧方法，这处取值不变。
+
+## 执行归约并恢复输出槽位
+
+### final_reduction 与 reduction_resize 各做一半
+
+reduction 内的 final_reduction 负责拼出 `tl.sum(value, dim)` 等归约表达式，
+再调用 reduction_resize，为归约结果生成恢复布局的文本。
+前者使用已分析好的 dim；后者依据完整轴身份恢复 singleton 槽位。
+
+| 主例的计算阶段 | 修改前 | 修改后 |
+| --- | --- | --- |
+| 求和输入 | `[24]` | `[3,8]` |
+| dim | 0 | 1 |
+| 设备求和结果 | 一个标量 300 | 三个值 `[68,100,132]` |
+
+**reduction_resize 的函数职责与输入。** value 参数是结果表达式或变量的名字，例如 `"s"`，
+dim 参数是归约维下标。函数返回一个 DSL 表达式字符串，不返回设备 tensor。
+
+| 同样调用 reduction_resize("s", 当前 dim) | 修改前返回 | 修改后返回 |
+| --- | --- | --- |
+| 主例 | `"triton_helpers.promote_to_tensor(s)"` | `"s.reshape(1, X1BLOCK_SUB, 1)"` |
+| 返回表达式执行后的形状 | `[1]` | `[1,3,1]` |
+
+**原因。** 旧 ndim=1，函数在开头认为只需把标量提升为一个元素的 tensor。
+新 ndim=2，不再提前返回；同时多轴恢复分支去掉了 contiguous 限制，
+因此能按完整 F 遍历，将每个 r 槽位置 1，得到 Q。
+取 analysis 的完整 shape 是为了知道 r0 和 r2 原来分别在哪个槽位，不能用 P 代替。
+
+**为什么需要 Q，而不只保留 `[3]`。** 后续与 F=`[2,3,4]` 逐点计算时，
+`[1,3,1]` 明确沿中间 x1 维对应；直接拿 `[3]` 进行常规尾维对齐，会尝试对到最右侧 r2=4，
+不符合原来的轴语义。
+新增的 1 只是广播槽位，不是复制出原归约域的数据。
+
+本例最终文本由 `promote_to_tensor(tl.sum(value,0))`，
+变为 `tl.sum(value,1).reshape(1,X1BLOCK_SUB,1)`。
+全归约无保留轴时仍会命中提前返回，这个未解决边界保留在后面的风险章节。
+
+### result_shape：登记的是恢复后的结果，不是输入 shape
+
+这是 reduction 内的局部 list，随后传给 cse.newvar / cse.generate。
+它不独立返回，也不执行 reshape。
+
+| 主例 | 修改前 | 修改后 |
+| --- | --- | --- |
+| 起点 | kernel 的尺寸列表 F | analysis 的完整尺寸列表 F |
+| 修改规则 | 只把 packed dim 对应的一个槽位置 1 | 按轴身份把所有 r 槽位置 1 |
+| 局部 result_shape | `["1","X1BLOCK_SUB","R2BLOCK_SUB"]` | `["1","X1BLOCK_SUB","1"]` |
+| 代入长度 | `[1,3,4]` | Q=`[1,3,1]` |
+
+旧版只处理 dim=0 对应的槽位，没有表示第二个归约轴已经消去。
+若只改 dim=1 却保留旧的赋值方式，更会把中间 x1 槽位改成 1。
+原因是 dim 属于 P，而恢复布局属于 F，二者下标不能混用。
+新逻辑按原轴身份生成 Q，与 reduction_resize 的真实输出保持一致。
+
+**影响。** 这个局部值先用于创建结果占位变量。
+non-persistent 普通归约最终直接返回该变量；persistent 部分分支还会重新调用 cse.generate，
+所以修好这个局部值还不够，必须看接下来的两处赋值。
+
+### 最终返回变量：两处 shape 参数也从输入改成结果
+
+persistent 的 max/min 分支与其他普通分支各有一次：
 
 ```diff
--f"tl.broadcast_to({v}, {dense_size_str})"
-+f"tl.broadcast_to({v}, {broadcast_shape})"
--shape=value_shape
-+shape=full_value_shape if self.numof_reduction_axis() > 1 else value_shape
-```
-
-第一处改实际 DSL，第二处改其 CSE shape。
-例如 `[1,1,X5]` 的输入应先补齐为 `[R2,R3,X5]`，再重排与打包；
-不能直接广播到 `[X5,R2*R3]`，此时轴尚未重排。
-
-**入口判据没有改：** 仍是 `len(axis_list) < len(self.dense_size_list())`，
-后者可能已经返回 packed rank。PR 改的是进入分支之后的目标，
-并未证明所有需要广播的输入都能正确进入分支，混合广播仍需专项验证。
-
-### 9. L4166–4174：非相邻多轴也计算 permute_order
-
-```diff
--if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
-+if self.numof_reduction_axis() > 1:
-```
-
-实际修改是这个条件；后面的稳定分组算法原来已存在：
-
-```python
-value_order = list(reversed(self.golden_var_list))
-target_order = [x for x in value_order if x.name[0] != "r"] + [
-    x for x in value_order if x.name[0] == "r"
-]
-permute_order = [value_order.index(x) for x in target_order]
-current_order = list(range(len(value_order)))
-need_permute = permute_order != current_order
-```
-
-逐行是：取 value 顺序；保留轴在前、归约轴在后，组内顺序保持；查每个目标轴原槽位；
-构造原槽位编号；比较是否真的需要 permute。
-BERT 得到 `[r2,r3,x5] → [x5,r2,r3]`，下标 `[2,0,1]`。
-已是目标顺序时不会额外生成 permute。
-
-只改 shape 不放宽这里的条件，会使 `[R0,X,R1]` 直接 reshape，混淆各 X 的元素集合。
-这与第 2 处必须配套。
-
-### 10、11. L4181 与 L4191：两条 reshape 分支都记录 packed shape
-
-```diff
- # need_permute=True，生成 tl.reshape(v.permute(...), dense_size_str)
--shape=value_shape
-+shape=packed_value_shape
-
- # need_permute=False，生成 tl.reshape(v, dense_size_str)
--shape=value_shape
-+shape=packed_value_shape
-```
-
-实际 reshape 使用 dense_size_str，已遵守 packed 约定，因此元数据也必须 packed。
-两条都改，避免正确性取决于原轴顺序。这两行本身不会新增另一遍数据搬运。
-
-### 12. L4232–4240：result_shape 按原始轴身份置 1
-
-```diff
--result_shape = list(self.dense_size_list())
--result_shape[dim] = "1"
-+if self.numof_reduction_axis() > 1:
-+    result_shape = self.reduce_analysis.dense_size_list()
-+    for i, axis in enumerate(reversed(self.golden_var_list)):
-+        if axis.name[0] == "r":
-+            result_shape[i] = "1"
-+else:
-+    result_shape = list(self.dense_size_list())
-+    result_shape[dim] = "1"
-```
-
-dim 是 packed tensor 的下标，不能拿它只修改完整布局的一个槽位。
-新多轴分支取完整布局，把每个 r 槽位置 1；单轴仍保留旧逻辑。
-例如 `[R0,X,R1]` 的 packed dim=1，若只做 `result_shape[1]=1`，会错误消去 X。
-按轴身份处理才能得到 `[1,X,1]`。
-
-这里描述的是 final_reduction 已经调用 reduction_resize 后的结果，
-不是 tl.sum 刚结束时的中间 shape。它必须与第 6 处一致，全归约边界当前尚未满足。
-
-### 13、14. L4349 与 L4488：最终结果不再继承输入 shape
-
-```diff
- # persistent 的 max/min 分支
 -shape=masked_value.shape
 +shape=tuple(result_shape)
-
- # persistent 的其他普通归约分支，例如 sum
--shape=masked_value.shape
-+shape=tuple(result_shape)
 ```
 
-masked_value 是归约前输入，例如 `[X5,R2*R3]`；final_reduction 已求和并恢复为 `[1,1,X5]`。
-沿用输入 shape 会让后续传播仍以为归约维存在。tuple(result_shape) 改为记录恢复后的形状。
+masked_value 代表归约前输入；final_reduction(masked_value) 已求和并恢复为 Q。
+这两行修改决定的是新生成的结果 CSEVariable 身上的 shape，不改变已拼出的求和表达式。
 
-**两处没有多轴条件限制。** 单轴 `[R,X]` 会生成 `sum(...,0).reshape(1,X)`，
-元数据从旧 `[R,X]` 改为 `[1,X]`。方向是纠正旧元数据，但仍属于单轴行为变化，需要回归。
-argmin/argmax 走 final_argreduce，Welford 有专用分支，不能说所有类型都经过这两行。
+| 主例、persistent 普通归约 | 修改前 | 修改后 |
+| --- | --- | --- |
+| 输入 masked_value 的元数据 | 旧 reshape 记录的 tuple(F) | 新 reshape 记录的 tuple(P) |
+| 最终结果变量的 shape 来源 | 继承 masked_value.shape | 使用 tuple(result_shape) |
+| 最终返回变量记录的尺寸 | `[2,3,4]` | Q=`[1,3,1]` |
 
-### 15. L4491：non-persistent 累加器使用 packed shape
+**为什么要配套。** 如果只改输入布局而不改这两处，最终结果会继承新的 P=`[3,8]`，
+仍错误地声称归约维存在。即使设备已算出三个正确值，后续生成器看到的也会是归约前尺寸。
 
-```diff
--accumulator = self.cse.namedvar(f"_{result_var}", dtype=torch_acc_type, shape=tuple(self.dense_size_list()))
-+accumulator = self.cse.namedvar(f"_{result_var}", dtype=torch_acc_type, shape=packed_value_shape)
+**影响不止多轴。** 这两处没有多轴条件，单轴 `[R0,X1]` 的求和仍生成 `.reshape(1,X1)`，
+但最终元数据会从 `[R0,X1]` 改为 `[1,X1]`。因此单轴结果的后续消费也要回归。
+argmin/argmax、Welford 有独立结果处理，不能把这两处描述为所有类型的统一实现。
+
+## 数据离开归约：为什么后续消费也在影响范围内
+
+reduction 最终把结果变量写入 reduction_cache，并返回 CSEVariable；
+后续融合表达式通过变量名字使用真实结果，通过变量的 shape 做元数据传播。
+
+用本例说明一个消费者：
+
+```text
+原输入 F：                    [2,3,4]
+本次归约得到的设备值：         [68,100,132]
+恢复后的实际 tensor 与元数据： [1,3,1]
+后续逐点使用时的广播：         每个 x1 使用自己的那个和，扩展到对应 r0/r2 位置
 ```
 
-随后实际初始化仍生成 `tl.full(self.dense_size_str(), default, acc_type)`。
-初始化与每轮 value 都是 packed shape，累加器元数据也应相同；
-原包装方法可能返回完整 shape，显式 packed 变量消除此歧义。
-单轴的 packed_value_shape 本来就取旧方法，这里的单轴取值保持原样。
+旧值若是单个 300，广播无法恢复三个 channel 的差别；
+新数值正确而元数据仍是 P，生成器又会错误保留一个已经消去的归约维。
+因此整个修改的因果链是：**先保证分组，再保证求和维度，最后保证真实结果与记录的布局相同。**
 
-## 将源码修改对应回修复后 DSL
+并非每个结果都先与原输入广播；有些直接 store。
+但无论是后续逐点计算还是写回地址，三个输出位置都必须对应各自结果，不能共享一个全局和。
 
-[历史修复后 kernel][dsl]中：
+## 回到真实 BERT：同一条数据流如何对应已捕获 DSL
+
+主例是 `[R0,X1,R2]`。BERT 实际 tile 为 `[R2,R3,X5]`，对应的完整链是：
+
+```text
+F=[R2,R3,X5]
+→ 目标轴顺序 [X5,R2,R3]，permute 下标 [2,0,1]
+→ P=[X5,R3*R2]
+→ dim=1，每个 X5 独立求和
+→ Q=[1,1,X5]
+→ 每个 x5 写入自己的输出位置；外层 x4 覆盖 12 组
+```
+
+[历史修复后 kernel][dsl]保持原文：
 
 ```python
                 tmp1 = tl.reshape(tmp0.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
@@ -413,16 +554,9 @@ argmin/argmax 走 final_argreduce，Welford 有专用分支，不能说所有类
                 tl.store(out_ptr1 + (x5 + 64*x4 ), tmp4, x5_mask)
 ```
 
-| 生成行为 | 对应修改 |
-| --- | --- |
-| permute 将 channel 放到前面 | 第 9 处门控与已有分组算法 |
-| reshape 为 `[X5,R3*R2]` | 第 1、2 处 shape；第 10、11 处元数据 |
-| mask 与 value 同样排列和打包 | 基线已有逻辑复用 need_permute、permute_order、dense_size_str |
-| sum 沿 dim=1 | 第 3 处计算 dim |
-| 恢复为 `[1,1,X5]` | 第 6 处实际 reshape；第 12–14 处结果元数据 |
+这四行分别对应布局变换、mask 对齐、归约与结果恢复、写回。
+历史产物同时包含 mask 修复，不能把 tl.where 本身全部归因于本 PR。
 
-历史产物同时含 mask 修复，不能将 tl.where 全归因于本 PR。
-对普通求和，关键是 packed 的每一行仅含同一 X5 的 R2×R3 个元素，因此 channel 之间仍独立。
 
 ## 影响范围：两处文件不代表只影响一个模型
 
@@ -491,8 +625,8 @@ non-persistent 这条构造路径则从原来一致的 `[1]` 变为不一致。
 
 | 项目 | 具体依据 | 需要验证什么 |
 | --- | --- | --- |
-| 单轴结果消费 | 第 13、14 处没有多轴限制 | 单轴归约后继续逐点计算、广播和索引消费 |
-| 混合广播 | 第 8 处入口判据仍用可能已 packed 的 rank | 输入缺少归约轴、缺少保留轴、多个输入各缺不同轴 |
+| 单轴结果消费 | 最终结果的两处 CSE shape 修改没有多轴限制 | 单轴归约后继续逐点计算、广播和索引消费 |
+| 混合广播 | broadcast 入口判据仍用可能已 packed 的 rank | 输入缺少归约轴、缺少保留轴、多个输入各缺不同轴 |
 | 位置索引归约 | get_reduction_axis 用 packed dim 索引原始 golden，二者未必指向同一个轴 | 先确定多轴 argreduce 能否到达，再比较索引及 tie 情况 |
 | Welford 专用布局 | vectorized 分支单独重排，向量轴可能不在 golden 内 | 开关启用时检查专用 DSL、元数据、统计量和后续广播 |
 | 资源及性能 | 更多多轴布局实际生成 permute | 原本正确场景的编译资源与耗时、设备耗时是否回退 |
@@ -508,7 +642,7 @@ permute 是否形成真实搬运、是否增加 UB 由下游编译决定，不�
 | 历史同输入 kernel 对照 | X5 block=8 的错误通过改 DSL 恢复 | DSL 诊断实验 |
 | [静态][static-results]、[动态][dynamic-results]回归 | bias gradient、separated axes，两类函数 × 静态/动态共四组通过 | 主要是 sum；历史整合版本，不穷举类型、布局和配置 |
 | [模型矩阵][matrix] | 历史修复组合下 BERT 静态训练 accuracy 通过 | 不能标为独立 PR 在当前 master 的设备回归 |
-| 本次源码探针 | 比较父提交与 PR 的结果元数据，确认全归约边界 | 使用环境替身，不证明 lowering 可达性、编译与设备数值 |
+| 本次源码探针 | 10 组输入分别执行父提交与 PR，共 20 条记录；核对函数返回值、生成文本和元数据，确认全归约边界 | 使用环境替身，不证明 lowering 可达性、编译与设备数值 |
 
 PR 仅含两个生产文件，没有独立回归测试文件。
 创建 PR 时的语法、diff 与离线轴排列检查也不替代设备回归。
@@ -517,8 +651,8 @@ PR 仅含两个生产文件，没有独立回归测试文件。
 ## 会议顺序与追问回答
 
 1. 用原 DSL 的 flatten、标量 sum、向量 store 解释错误，再给 `[10,100,1000]` 的例子。
-2. 展示 full、packed、result 三种 shape，说明 dim 为何等于保留轴数。
-3. 按第 1–15 处看 diff，区分生成行为变化与元数据同步，指出已有代码与新门控。
+2. 用 [2,3,4] 的输入完整推导 [3,8] 的计算布局、dim=1、[1,3,1] 的结果布局。
+3. 沿输入轴分析 → 广播 → 重排和打包 → 累加及求和 → 恢复输出 → 消费结果讲代码，每步先展示新旧返回值。
 4. 展示修复后 permute → reshape → sum → 恢复槽位的完整闭环。
 5. 主动交代影响面、全归约问题和验证缺口，再讨论合入前的修正与回归。
 
