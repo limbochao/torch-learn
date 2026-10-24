@@ -10,6 +10,10 @@ published: false
 生产修改集中在 `torch_npu/_inductor/runtime/tile_generator.py`，
 另新增三个资源相关单元方法，见[完整补丁][patch]。八项关系见[总览][overview]。
 
+2026-10-24 新增的独立方案改为在整轮候选全部 UB overflow 后追加小 tile，
+其入参、起点选择、容量估算和逐轴下降规则见
+[UB overflow retry config 生成详解](ub-overflow-retry-config-search-20261024.md)。
+
 ## 这个提交解决什么问题
 
 **解决存在可运行的小 tile，但搜索规则遗漏或过滤掉这些候选，最终找不到可用配置的问题。**
