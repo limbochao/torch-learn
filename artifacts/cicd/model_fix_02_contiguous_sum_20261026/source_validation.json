@@ -1,0 +1,1333 @@
+{
+  "recorded_date": "2026-10-26",
+  "validation_kind": "Local source-extracted checks; no device execution",
+  "producer": "scripts/repro/cicd/model_fixes_20261020/review_contiguous_sum_layout.py",
+  "summary": {
+    "base": "0c3f556423d8a5aa1fec77d93ee17ccb6327aef1",
+    "candidate_commit": "7c7c20c21af250cca6344ec554e1e604f84e103f",
+    "scope": "Source-extracted emitter checks with synthetic CSE, dtype, schedule and axis objects; masks empty; no real graph lowering, Triton compilation or device execution.",
+    "source_extracted_unit_methods": 7,
+    "comparisons": 696,
+    "non_target_identical": 576,
+    "target_shape_checks": 120,
+    "outside_reduction_helper_comparisons": 696,
+    "npu_tests": "Not run: local host has no torch/NPU; eight device cases added to test file."
+  },
+  "selected_records": [
+    {
+      "example": "address_scalar_splits_r_axes",
+      "axes": [
+        "r0",
+        "r1",
+        "x2"
+      ],
+      "persistent": true,
+      "broadcast": false,
+      "reduction_types": [
+        "sum"
+      ],
+      "parsed_axes": [
+        "r0",
+        "x9",
+        "r1",
+        "x2"
+      ],
+      "target": true,
+      "old": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": false,
+          "triton_tensor_ndim": 1,
+          "reduction_resize_s": "triton_helpers.promote_to_tensor(s)"
+        },
+        "packed_shape": "[R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB]",
+        "reduction_dim": 0,
+        "initial_result_metadata": [
+          "1",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "triton_helpers.promote_to_tensor(tl.sum(tmp3, 0))",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input, [R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "triton_helpers.promote_to_tensor(tl.sum(tmp3, 0))",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "new": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": true,
+          "triton_tensor_ndim": 2,
+          "reduction_resize_s": "s.reshape(1, 1, X2BLOCK_SUB)"
+        },
+        "packed_shape": "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+        "reduction_dim": 1,
+        "initial_result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "tl.sum(tmp3, 1).reshape(1, 1, X2BLOCK_SUB)",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input.permute([2, 0, 1]), [X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB])",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "tl.sum(tmp3, 1).reshape(1, 1, X2BLOCK_SUB)",
+            "shape": [
+              "1",
+              "1",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "outside_reduction_helpers": [
+        [
+          [
+            "1",
+            "1",
+            "X2BLOCK_SUB"
+          ],
+          "[1* 1* X2BLOCK_SUB]",
+          1
+        ],
+        [
+          [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+          2
+        ]
+      ]
+    },
+    {
+      "example": "broadcast_before_packing",
+      "axes": [
+        "r0",
+        "r1",
+        "x2"
+      ],
+      "persistent": true,
+      "broadcast": true,
+      "reduction_types": [
+        "sum"
+      ],
+      "parsed_axes": [
+        "r0",
+        "x9",
+        "r1",
+        "x2"
+      ],
+      "target": true,
+      "old": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": true,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": false,
+          "triton_tensor_ndim": 1,
+          "reduction_resize_s": "triton_helpers.promote_to_tensor(s)"
+        },
+        "packed_shape": "[R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB]",
+        "reduction_dim": 0,
+        "initial_result_metadata": [
+          "1",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "triton_helpers.promote_to_tensor(tl.sum(tmp4, 0))",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.broadcast_to(input, [R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp2",
+            "expression": "tl.reshape(tmp1, [R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "tmp2",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp5",
+            "expression": "triton_helpers.promote_to_tensor(tl.sum(tmp4, 0))",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "new": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": true,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": true,
+          "triton_tensor_ndim": 2,
+          "reduction_resize_s": "s.reshape(1, 1, X2BLOCK_SUB)"
+        },
+        "packed_shape": "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+        "reduction_dim": 1,
+        "initial_result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "tl.sum(tmp4, 1).reshape(1, 1, X2BLOCK_SUB)",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.broadcast_to(input, [R0BLOCK_SUB, R1BLOCK_SUB, X2BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp2",
+            "expression": "tl.reshape(tmp1.permute([2, 0, 1]), [X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB])",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "tmp2",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp5",
+            "expression": "tl.sum(tmp4, 1).reshape(1, 1, X2BLOCK_SUB)",
+            "shape": [
+              "1",
+              "1",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "outside_reduction_helpers": [
+        [
+          [
+            "1",
+            "1",
+            "X2BLOCK_SUB"
+          ],
+          "[1* 1* X2BLOCK_SUB]",
+          1
+        ],
+        [
+          [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+          2
+        ]
+      ]
+    },
+    {
+      "example": "nonpersistent_accumulator",
+      "axes": [
+        "r0",
+        "r1",
+        "x2"
+      ],
+      "persistent": false,
+      "broadcast": false,
+      "reduction_types": [
+        "sum"
+      ],
+      "parsed_axes": [
+        "r0",
+        "x9",
+        "r1",
+        "x2"
+      ],
+      "target": true,
+      "old": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": false,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": false,
+          "triton_tensor_ndim": 1,
+          "reduction_resize_s": "triton_helpers.promote_to_tensor(s)"
+        },
+        "packed_shape": "[R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB]",
+        "reduction_dim": 0,
+        "initial_result_metadata": [
+          "1",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "1",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "tmp2 = triton_helpers.promote_to_tensor(tl.sum(_tmp2, 0))",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input, [R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [
+          {
+            "name": "_tmp2",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "prefix": [
+          "_tmp2 = tl.full([R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB], 0, tl.float32)"
+        ],
+        "post_loop_combine": [
+          "tmp2 = triton_helpers.promote_to_tensor(tl.sum(_tmp2, 0))"
+        ]
+      },
+      "new": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": false,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": true,
+          "triton_tensor_ndim": 2,
+          "reduction_resize_s": "s.reshape(1, 1, X2BLOCK_SUB)"
+        },
+        "packed_shape": "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+        "reduction_dim": 1,
+        "initial_result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "tmp2 = tl.sum(_tmp2, 1).reshape(1, 1, X2BLOCK_SUB)",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input.permute([2, 0, 1]), [X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB])",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [
+          {
+            "name": "_tmp2",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          }
+        ],
+        "prefix": [
+          "_tmp2 = tl.full([X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB], 0, tl.float32)"
+        ],
+        "post_loop_combine": [
+          "tmp2 = tl.sum(_tmp2, 1).reshape(1, 1, X2BLOCK_SUB)"
+        ]
+      },
+      "outside_reduction_helpers": [
+        [
+          [
+            "1",
+            "1",
+            "X2BLOCK_SUB"
+          ],
+          "[1* 1* X2BLOCK_SUB]",
+          1
+        ],
+        [
+          [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+          2
+        ]
+      ]
+    },
+    {
+      "example": "already_contiguous_sum",
+      "axes": [
+        "r0",
+        "r1",
+        "x2"
+      ],
+      "persistent": true,
+      "broadcast": false,
+      "reduction_types": [
+        "sum"
+      ],
+      "parsed_axes": [
+        "r0",
+        "r1",
+        "x2"
+      ],
+      "target": true,
+      "old": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": true,
+          "triton_tensor_ndim": 2,
+          "reduction_resize_s": "s.reshape(1, 1, X2BLOCK_SUB)"
+        },
+        "packed_shape": "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+        "reduction_dim": 1,
+        "initial_result_metadata": [
+          "X2BLOCK_SUB",
+          "1"
+        ],
+        "result_metadata": [
+          "X2BLOCK_SUB",
+          "R1BLOCK_SUB * R0BLOCK_SUB"
+        ],
+        "emitted_final": "tl.sum(tmp3, 1).reshape(1, 1, X2BLOCK_SUB)",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input.permute([2, 0, 1]), [X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB])",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "tl.sum(tmp3, 1).reshape(1, 1, X2BLOCK_SUB)",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "new": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": true,
+          "triton_tensor_ndim": 2,
+          "reduction_resize_s": "s.reshape(1, 1, X2BLOCK_SUB)"
+        },
+        "packed_shape": "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+        "reduction_dim": 1,
+        "initial_result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "1",
+          "1",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "tl.sum(tmp3, 1).reshape(1, 1, X2BLOCK_SUB)",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input.permute([2, 0, 1]), [X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB])",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB * R0BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "tl.sum(tmp3, 1).reshape(1, 1, X2BLOCK_SUB)",
+            "shape": [
+              "1",
+              "1",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "outside_reduction_helpers": [
+        [
+          [
+            "1",
+            "1",
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "[1, 1, X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+          2
+        ],
+        [
+          [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "[X2BLOCK_SUB, R1BLOCK_SUB * R0BLOCK_SUB]",
+          2
+        ]
+      ]
+    },
+    {
+      "example": "separated_r_axes_unchanged",
+      "axes": [
+        "r0",
+        "x2",
+        "r1",
+        "x3"
+      ],
+      "persistent": true,
+      "broadcast": false,
+      "reduction_types": [
+        "sum"
+      ],
+      "parsed_axes": [
+        "r0",
+        "x2",
+        "r1",
+        "x3"
+      ],
+      "target": false,
+      "old": {
+        "axes": [
+          "r0",
+          "x2",
+          "r1",
+          "x3"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x2",
+          "r1",
+          "x3"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "X2BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X3BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X3BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "R0BLOCK_SUB",
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X3BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "X3BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": false,
+          "triton_tensor_ndim": 1,
+          "reduction_resize_s": "triton_helpers.promote_to_tensor(s)"
+        },
+        "packed_shape": "[R0BLOCK_SUB* X2BLOCK_SUB* R1BLOCK_SUB* X3BLOCK_SUB]",
+        "reduction_dim": 0,
+        "initial_result_metadata": [
+          "1",
+          "X2BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X3BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "R0BLOCK_SUB",
+          "X2BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X3BLOCK_SUB"
+        ],
+        "emitted_final": "triton_helpers.promote_to_tensor(tl.sum(tmp3, 0))",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input, [R0BLOCK_SUB* X2BLOCK_SUB* R1BLOCK_SUB* X3BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X3BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "R0BLOCK_SUB",
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X3BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "triton_helpers.promote_to_tensor(tl.sum(tmp3, 0))",
+            "shape": [
+              "R0BLOCK_SUB",
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X3BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "new": {
+        "axes": [
+          "r0",
+          "x2",
+          "r1",
+          "x3"
+        ],
+        "persistent": true,
+        "reduction_type": "sum",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x2",
+          "r1",
+          "x3"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "X2BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X3BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X3BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "R0BLOCK_SUB",
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X3BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "X3BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": false,
+          "triton_tensor_ndim": 1,
+          "reduction_resize_s": "triton_helpers.promote_to_tensor(s)"
+        },
+        "packed_shape": "[R0BLOCK_SUB* X2BLOCK_SUB* R1BLOCK_SUB* X3BLOCK_SUB]",
+        "reduction_dim": 0,
+        "initial_result_metadata": [
+          "1",
+          "X2BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X3BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "R0BLOCK_SUB",
+          "X2BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X3BLOCK_SUB"
+        ],
+        "emitted_final": "triton_helpers.promote_to_tensor(tl.sum(tmp3, 0))",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input, [R0BLOCK_SUB* X2BLOCK_SUB* R1BLOCK_SUB* X3BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X3BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "R0BLOCK_SUB",
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X3BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "triton_helpers.promote_to_tensor(tl.sum(tmp3, 0))",
+            "shape": [
+              "R0BLOCK_SUB",
+              "X2BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X3BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "outside_reduction_helpers": [
+        [
+          [
+            "1",
+            "X2BLOCK_SUB",
+            "1",
+            "X3BLOCK_SUB"
+          ],
+          "[1* X2BLOCK_SUB* 1* X3BLOCK_SUB]",
+          1
+        ],
+        [
+          [
+            "1",
+            "X2BLOCK_SUB",
+            "1",
+            "X3BLOCK_SUB"
+          ],
+          "[1* X2BLOCK_SUB* 1* X3BLOCK_SUB]",
+          1
+        ]
+      ]
+    },
+    {
+      "example": "max_unchanged",
+      "axes": [
+        "r0",
+        "r1",
+        "x2"
+      ],
+      "persistent": true,
+      "broadcast": false,
+      "reduction_types": [
+        "max"
+      ],
+      "parsed_axes": [
+        "r0",
+        "x9",
+        "r1",
+        "x2"
+      ],
+      "target": false,
+      "old": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "max",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": false,
+          "triton_tensor_ndim": 1,
+          "reduction_resize_s": "triton_helpers.promote_to_tensor(s)"
+        },
+        "packed_shape": "[R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB]",
+        "reduction_dim": 0,
+        "initial_result_metadata": [
+          "1",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "triton_helpers.promote_to_tensor(tl.max(tmp3, 0, propagate_nan=True))",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input, [R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "triton_helpers.promote_to_tensor(tl.max(tmp3, 0, propagate_nan=True))",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "new": {
+        "axes": [
+          "r0",
+          "r1",
+          "x2"
+        ],
+        "persistent": true,
+        "reduction_type": "max",
+        "broadcast": false,
+        "parsed_value_axes": [
+          "r0",
+          "x9",
+          "r1",
+          "x2"
+        ],
+        "input_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "helper_returns": {
+          "analysis_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "kernel_dense_size_list": [
+            "R0BLOCK_SUB",
+            "R1BLOCK_SUB",
+            "X2BLOCK_SUB"
+          ],
+          "dense_reduction_list": [
+            "R1BLOCK_SUB",
+            "R0BLOCK_SUB"
+          ],
+          "dense_post_reduction_list": [
+            "X2BLOCK_SUB",
+            "R1BLOCK_SUB * R0BLOCK_SUB"
+          ],
+          "is_contiguous_reduction": false,
+          "triton_tensor_ndim": 1,
+          "reduction_resize_s": "triton_helpers.promote_to_tensor(s)"
+        },
+        "packed_shape": "[R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB]",
+        "reduction_dim": 0,
+        "initial_result_metadata": [
+          "1",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "result_metadata": [
+          "R0BLOCK_SUB",
+          "R1BLOCK_SUB",
+          "X2BLOCK_SUB"
+        ],
+        "emitted_final": "triton_helpers.promote_to_tensor(tl.max(tmp3, 0, propagate_nan=True))",
+        "statements": [
+          {
+            "name": "tmp1",
+            "expression": "tl.reshape(input, [R0BLOCK_SUB* R1BLOCK_SUB* X2BLOCK_SUB])",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp3",
+            "expression": "tmp1",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          },
+          {
+            "name": "tmp4",
+            "expression": "triton_helpers.promote_to_tensor(tl.max(tmp3, 0, propagate_nan=True))",
+            "shape": [
+              "R0BLOCK_SUB",
+              "R1BLOCK_SUB",
+              "X2BLOCK_SUB"
+            ]
+          }
+        ],
+        "accumulators": [],
+        "prefix": [],
+        "post_loop_combine": []
+      },
+      "outside_reduction_helpers": [
+        [
+          [
+            "1",
+            "1",
+            "X2BLOCK_SUB"
+          ],
+          "[1* 1* X2BLOCK_SUB]",
+          1
+        ],
+        [
+          [
+            "1",
+            "1",
+            "X2BLOCK_SUB"
+          ],
+          "[1* 1* X2BLOCK_SUB]",
+          1
+        ]
+      ]
+    }
+  ]
+}
