@@ -1,4 +1,13 @@
-"""04_load_liveness: extracted kernel ATen graph; see README.md for provenance and comparison points."""
+"""Albert LayerNorm parameter-gradient subgraph for eager and fresh Inductor compilation.
+
+Source: static training performance kernel
+triton_per_fused_add_native_layer_norm_backwar_14 (R=2048, X=4096).
+The extracted backward ATen operations run directly as eager_forward; no backward() is needed.
+Preserves 81 input layouts, 12 contributions, reduction/add order, and two final outputs.
+Inputs are seeded synthetic tensors with positive rstd, rather than captured model values.
+See README.md and artifacts/cicd/model_fixes_eager_20261022/extraction_manifest.json for provenance.
+The file can be copied and run alone; those provenance files are not runtime dependencies.
+"""
 import torch
 
 
@@ -439,14 +448,24 @@ def main():
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--compile", action="store_true", help="compile the extracted ATen graph with Inductor")
     parser.add_argument("--dynamic", action=argparse.BooleanOptionalAction, default=DEFAULT_DYNAMIC)
+    parser.add_argument(
+        "--persistent",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="enable/disable the persistent reduction heuristic; default uses the installed compiler setting",
+    )
     args = parser.parse_args()
+    # Register the NPU device before asking torch.device to parse its name.
+    if args.device.split(":", 1)[0] == "npu":
+        import torch_npu
+        print(f"torch_npu={torch_npu.__version__}", flush=True)
+    device = torch.device(args.device)
     torch.manual_seed(0)
-    if torch.device(args.device).type == "npu":
-        import torch_npu  # noqa: F401
     print(f"torch={torch.__version__} cuda={torch.version.cuda} device={args.device} dynamic={args.dynamic}")
-    if torch.device(args.device).type == "cuda":
+    if device.type in ("cuda", "npu"):
         import triton
-        print(f"gpu={torch.cuda.get_device_name()} triton={triton.__version__}")
+        device_api = getattr(torch, device.type)
+        print(f"hardware={device_api.get_device_name(device)} triton={triton.__version__}", flush=True)
     inputs = make_inputs(args.device)
     for name, value in zip(INPUT_NAMES, inputs):
         print(f"input={name} shape={tuple(value.shape)} stride={value.stride()} dtype={value.dtype}")
@@ -456,10 +475,20 @@ def main():
         assert torch.isfinite(value).all().item(), "non-finite eager result"
     print(f"PASS eager outputs={[tuple(value.shape) for value in leaves]}", flush=True)
     if args.compile:
-        compiled = torch.compile(eager_forward, backend="inductor", fullgraph=True, dynamic=args.dynamic)
-        actual = compiled(*inputs)
+        from torch._inductor import config
+
+        overrides = {}
+        if args.persistent is not None:
+            overrides["triton.persistent_reductions"] = args.persistent
+        with config.patch(overrides):
+            print(f"persistent_reductions={config.triton.persistent_reductions}", flush=True)
+            compiled = torch.compile(eager_forward, backend="inductor", fullgraph=True, dynamic=args.dynamic)
+            actual = compiled(*inputs)
+            if device.type in ("cuda", "npu"):
+                device_api.synchronize(device)
         torch.testing.assert_close(actual, expected, rtol=2e-3, atol=2e-3)
-        print("PASS compiled_vs_eager", flush=True)
+        errors = [(a - b).abs().max().item() for a, b in zip(actual, expected)]
+        print(f"PASS compiled_vs_eager max_abs={errors} rtol=0.002 atol=0.002", flush=True)
 
 
 if __name__ == "__main__":

@@ -71,6 +71,44 @@ done
 05a/05b 支持缩小输入，例如 `--batch 2 --height 224`、`--batch 1 --sequence 512`；
 缩小后的结果只代表该 shape。
 
+## 04：在 NPU 上重新编译与 persistent 对照
+
+在已加载 CANN、安装匹配 torch/torch_npu/Triton 的环境执行。脚本默认只跑 eager，
+`--compile` 会从 ATen 图重新生成代码并与同一组输入的 eager 结果比较。
+默认静态 shape，保留原始 `R=2048、X=4096`；不需要模型、权重，也不需要额外调用 backward。
+
+```bash
+python 04_load_liveness.py --device npu:0
+
+run_dir=$(mktemp -d "$PWD/albert_load_liveness.XXXXXX")
+TORCH_COMPILE_DEBUG=1 \
+TORCH_COMPILE_DEBUG_DIR="$run_dir/debug" \
+TORCHINDUCTOR_CACHE_DIR="$run_dir/inductor_cache" \
+TRITON_CACHE_DIR="$run_dir/triton_cache" \
+python 04_load_liveness.py --device npu:0 --compile
+```
+
+每次重新执行 `mktemp` 获得新的缓存目录，便于在修改编译器后重新生成 DSL。
+`--no-persistent` 可禁用 persistent reduction，作为带归约循环路径的对照；
+对照时使用另一组新的缓存目录：
+
+```bash
+run_dir=$(mktemp -d "$PWD/albert_load_liveness_looped.XXXXXX")
+TORCH_COMPILE_DEBUG=1 \
+TORCH_COMPILE_DEBUG_DIR="$run_dir/debug" \
+TORCHINDUCTOR_CACHE_DIR="$run_dir/inductor_cache" \
+TRITON_CACHE_DIR="$run_dir/triton_cache" \
+python 04_load_liveness.py --device npu:0 --compile --no-persistent
+```
+
+不传 persistent 参数会保留安装环境的设置；`--persistent` 只是启用其选择规则，不强制所有 kernel
+使用 persistent。禁用整个脚本的 persistent 也不等同于实现“仅多 load 时将阈值降到 1024”。
+修改该判定后应运行默认命令，并检查 generated DSL 的归约循环、R tile 及实际 fusion 边界。
+重新编译是否得到原来的单个融合 kernel 取决于当前 scheduler/codegen，脚本数值通过本身不证明
+命中了历史失败配置。本次入口补充已在独立目录以原始完整规模通过 CPU eager 和
+`torch.compile --no-persistent` 数值对照（torch 2.9.1+cpu，rtol/atol 均为 0.002），
+未执行 NPU/CUDA 验证。
+
 ## 抽取方法与输入边界
 
 01–05b 使用仓库的 [extract_triton_kernel.py](../../../tools/extract_triton_kernel.py)
