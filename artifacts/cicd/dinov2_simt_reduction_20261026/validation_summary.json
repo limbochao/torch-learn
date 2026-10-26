@@ -1,0 +1,134 @@
+{
+  "baseline": "848e9feaa86f1cefe82ea1307c62c2d8b89bfc6f",
+  "branch": "bugfix/cicd_issue_fix",
+  "baseline_modified": false,
+  "model": "vit_base_patch14_dinov2.lvd142m",
+  "training": true,
+  "dtype": "float32",
+  "batch_size": 16,
+  "dynamic_compile": true,
+  "tested_shapes": [
+    [
+      16,
+      3,
+      518,
+      518
+    ]
+  ],
+  "backend": "inductor",
+  "npu_backend": "triton",
+  "aclgraph": false,
+  "optimizer": "SGD(momentum=0, foreach=False)",
+  "lr": 0.01,
+  "loss": "prediction.sum()/prediction.numel()",
+  "official_cases": {
+    "5": {
+      "result": "pass_accuracy",
+      "prediction_max_abs": 0.0026097298,
+      "grads_max_abs": 0.0059481296,
+      "params_max_abs": 0.00025949255
+    },
+    "50": {
+      "result": "fail_accuracy",
+      "prediction_max_abs": 8.038147,
+      "grads_max_abs": 1.2610393,
+      "grads_failed_tensors": 81,
+      "grad_tensors": 174,
+      "params_max_abs": 0.013924126,
+      "params_failed_tensors": 0
+    }
+  },
+  "eager_repeat_check": "passed tol=0",
+  "analysis_status": "COMPLETE: deterministic SIMT reduction defect plus independently verified training-trajectory sensitivity; full 50-step accuracy remains FAIL",
+  "golden_caveat": "NPU reports double cast falling back to float; not a verified FP64 reference",
+  "confirmed_kernel_defect": {
+    "kernel": "triton_red_fused_native_layer_norm_backward_select_backward_0",
+    "mode": "simt_only",
+    "config": {
+      "XBLOCK": 32,
+      "R0_BLOCK": 64,
+      "num_warps": 8,
+      "num_stages": 2
+    },
+    "beta_expected": 0.0013020833333333333,
+    "beta_actual": 0.0004069010610692203,
+    "retained_batch_indices": [
+      0,
+      3,
+      5,
+      10,
+      15
+    ],
+    "relative_missing_fraction": 0.6875,
+    "pure_triton_reproduced": true,
+    "dsl_semantics": "covers all 16 contributions",
+    "component_scope": "Triton-Ascend SIMT compile/execution path; exact lowering pass not identified"
+  },
+  "kernel_mode_control": {
+    "iterations": 50,
+    "result": "fail_accuracy",
+    "only_change": "target kernel replayed using original DSL with simd_simt_template and tile 32x64"
+  },
+  "corrected_trajectory": {
+    "first_failures": {
+      "prediction": 8,
+      "grads": 12,
+      "loss": 15
+    },
+    "step50": {
+      "prediction_max_abs": 5.372543811798096,
+      "grads_max_abs": 1.0161488056182861,
+      "same_weights_grads_max_abs": 8.399365469813347e-06
+    }
+  },
+  "eager_ulp_control": {
+    "iterations": 50,
+    "compiled": false,
+    "perturbed_parameter": "norm.weight",
+    "perturbation": "nextafter toward +inf, one ULP per element",
+    "max_initial_difference": 9.5367431640625e-07,
+    "first_failures": {
+      "prediction": 10,
+      "grads": 12,
+      "loss": 15
+    },
+    "step50": {
+      "prediction_max_abs": 5.819385528564453,
+      "grads_max_abs": 1.1838219165802002,
+      "same_weights_grads_max_abs": 0.0
+    }
+  },
+  "baseline_integrity": {
+    "checked_python_files": 1009,
+    "modified_files": []
+  },
+  "full_model_fix_status": "not fixed; no baseline changes requested or made",
+  "kernel_tiling_control": {
+    "iterations": 50,
+    "result": "fail_accuracy",
+    "only_change": "target original DSL replayed with XBLOCK=8, R0_BLOCK=64, num_warps=8, num_stages=2, compile_mode=simt_only, multibuffer=False, grid=(96,)",
+    "target_first_actual_input_check": {
+      "input_kind": "actual first model kernel invocation",
+      "XBLOCK": 8,
+      "R0_BLOCK": 64,
+      "num_warps": 8,
+      "num_stages": 2,
+      "compile_mode": "simt_only",
+      "grid": [
+        96
+      ],
+      "gamma_max_abs": 4.656612873077393e-10,
+      "beta_max_abs": 0.0,
+      "gamma_allclose_1e_6": true,
+      "beta_allclose_1e_6": true
+    },
+    "prediction_max_abs": 5.3725438,
+    "loss_abs_diff": 0.0028128624,
+    "grads_max_abs": 1.0161488,
+    "grads_failed_tensors": 71,
+    "grad_tensors": 174,
+    "params_max_abs": 0.021697961,
+    "params_failed_tensors": 0,
+    "single_step_same_weights_diagnostic": "previous template control, not rerun for this tiling; final model summary agrees with previous template control"
+  }
+}

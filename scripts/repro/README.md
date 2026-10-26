@@ -11,6 +11,8 @@
 
 已归档脚本：
 
+- [cicd/dinov2_simt_reduction_20261026/](cicd/dinov2_simt_reduction_20261026/README.md)：DINOv2 最终 LayerNorm 参数梯度的原始完整 kernel、简化归约和固定配置对照；原 32×64 SIMT 配置漏算贡献。
+
 - [cicd/load_order_fixed_20261023/](cicd/load_order_fixed_20261023/README.md)：04 load 重排的固定 tiling
   DSL 对照，复制单个 `run.py` 即可比较集中 load 和就近 load 的 UB 编译结果，打印明确的 tiling，
   可选直接启动并检查 eager 数值。
