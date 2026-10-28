@@ -167,6 +167,16 @@ metadata模式保留布局，使用seed=0合成数值，没有保存用户tensor
 第21项比较融合GEMM与同输入、同tile的未融合GEMM加CPU epilogue。
 该脚本是待验证的定界实验，不能代替原方法的完整复测，也尚未证明下层编译器存在缺陷。
 
+在原测试环境激活后，从torch-learn快照根目录运行以下命令；`--case 18`切换到BMM双输出对照，
+`--fp-fusion-off`仅作为额外编译选项对照，不属于原方法修复。
+
+```bash
+PYTHONPATH="$PWD/scripts/tests/npu_inductor_213/bootstrap${PYTHONPATH:+:$PYTHONPATH}" \
+BOUNDARY_CANDIDATE_DIR="$PWD/artifacts/npu-inductor-boundary-20261028/candidate" \
+BOUNDARY_NATIVE_DRIVER=1 python scripts/repro/probe_template_roundtrip_precision.py \
+  --case 21 --output <test-workspace>/precision-roundtrip-21
+```
+
 2026-10-29北京时间00:05后，目标SSH在密钥交换前持续关闭，导致剩余设备实验无法启动。
 已完成的本地语法/提取结构检查不计为NPU验证。恢复连接后需执行上述固定模板对照，
 补取第9项eager探针和第34项事件探针的日志，并验证实际CANN上下文及binary loader上下文恢复候选。

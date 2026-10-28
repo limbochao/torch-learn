@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import sys
 
 
 def load_template(path, output, label):
@@ -50,6 +51,7 @@ def load_template(path, output, label):
                     destination.write_text(extracted)
                     spec = importlib.util.spec_from_file_location(f'roundtrip_{label}', destination)
                     module = importlib.util.module_from_spec(spec)
+                    sys.modules[spec.name] = module
                     spec.loader.exec_module(module)
                     return getattr(module, node.name), signature, attrs, options, {
                         'source': path.name, 'source_sha256': hashlib.sha256(text.encode()).hexdigest(),
