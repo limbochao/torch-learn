@@ -1,0 +1,27 @@
+--- a/torch_npu/_inductor/codegen/npu_combined_scheduling.py
++++ b/torch_npu/_inductor/codegen/npu_combined_scheduling.py
+@@ -2,6 +2,7 @@
+ 
+ from typing import TYPE_CHECKING
+ 
++from torch._inductor import metrics
+ from torch._inductor.codegen.cuda_combined_scheduling import CUDACombinedScheduling
+ from torch._inductor.codegen.triton import TritonScheduling
+ from torch._inductor.scheduler import (
+@@ -163,6 +164,7 @@
+             scheduler.completed_operations.update(group.get_operation_names())
+ 
+     def codegen_node(self, node: FusedSchedulerNode | SchedulerNode):
++        generated_kernel_count = metrics.generated_kernel_count
+         removed_buffers = V.graph.removed_buffers.copy()
+         inplaced_to_remove = V.graph.inplaced_to_remove.copy()
+         try:
+@@ -173,6 +175,8 @@
+                 node,
+                 exc_info=True,
+             )
++        # Failed index-codegen attempts did not emit a runnable kernel.
++        metrics.generated_kernel_count = generated_kernel_count
+         # A failed fused kernel may have marked intermediates as kernel-local.
+         # Split fallback kernels need those buffers to be materialized again.
+         V.graph.removed_buffers.clear()
