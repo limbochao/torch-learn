@@ -25,8 +25,8 @@ def attempt(name, function):
 def rightshift():
     a = torch.arange(128, dtype=torch.uint8).reshape(1, 4, 1, 32)
     b = torch.tensor([0, 1], dtype=torch.uint8).reshape(1, 1, 2, 1)
-    expected = torch.bitwise_right_shift(a, b)
-    actual = torch.bitwise_right_shift(a.npu(), b.npu())
+    expected = a >> b
+    actual = a.npu() >> b.npu()
     torch.testing.assert_close(actual.cpu(), expected)
     return {'expected_shape': list(expected.shape), 'actual_shape': list(actual.shape)}
 

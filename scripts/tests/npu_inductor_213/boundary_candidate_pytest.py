@@ -40,6 +40,9 @@ def replace_body(relative, module_name, function, class_name=None):
 
 replace_body('torch/_inductor/cudagraph_utils.py', 'torch._inductor.cudagraph_utils',
              'check_caching_allocator_for_cudagraphs')
+if os.environ.get('BOUNDARY_NATIVE_DRIVER') == '1':
+    replace_body('torch/_inductor/runtime/triton_helpers.py', 'torch._inductor.runtime.triton_helpers',
+                 '_is_backend_active')
 if os.environ.get('BOUNDARY_FUSION_METADATA') == '1':
     replace_body('torch_npu/_inductor/codegen/scheduling.py', 'torch_npu._inductor.codegen.scheduling',
                  'codegen_template', 'NPUTritonScheduling')
