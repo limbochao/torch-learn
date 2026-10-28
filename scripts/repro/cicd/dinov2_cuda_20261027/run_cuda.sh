@@ -7,6 +7,7 @@ case_name="${mode}_${iterations}_$(date +%Y%m%d_%H%M%S)"
 out="$PWD/results/$case_name"
 mkdir -p "$out"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 export CUBLAS_WORKSPACE_CONFIG=:4096:8
 export TORCH_DEVICE_BACKEND_AUTOLOAD=0
 export TORCHINDUCTOR_CACHE_DIR="$out/inductor_cache"

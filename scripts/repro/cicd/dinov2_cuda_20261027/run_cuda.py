@@ -9,6 +9,7 @@ import sys
 os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 os.environ.setdefault('TORCHINDUCTOR_EMULATE_PRECISION_CASTS', '0')
 os.environ.setdefault('TORCH_DEVICE_BACKEND_AUTOLOAD', '0')
+os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
 
 
 def configure_hf_download():
@@ -37,6 +38,7 @@ def configure_hf_download():
           file=sys.stderr, flush=True)
 
 
+print(f"HF_ENDPOINT={os.environ['HF_ENDPOINT']}", flush=True)
 configure_hf_download()
 
 import torch

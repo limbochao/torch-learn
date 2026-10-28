@@ -18,7 +18,9 @@ python -m pip install -r requirements.txt
 python -c 'import torch; print(torch.__version__, torch.version.git_version, torch.version.cuda); print(torch.cuda.is_available())'
 ```
 
-下载模型受网络限制时，可根据所在网络设置 HF_ENDPOINT，例如 `https://hf-mirror.com`。
+`run_cuda.sh` 和 `run_cuda.py` 默认使用 `HF_ENDPOINT=https://hf-mirror.com`，
+并在日志中打印生效端点。显式设置的 `HF_ENDPOINT` 会覆盖默认值。
+切换端点与关闭证书校验是独立设置；镜像证书能正常校验时无需设置 `HF_DOWNLOAD_INSECURE`。
 驱动低于要求时应先选择兼容的环境，不能直接套用上述 cu130 命令。
 已有 Python 3.12 环境可直接安装依赖，或将 conda 命令中的 `python=3.11` 改为 `python=3.12`。
 
@@ -47,6 +49,8 @@ HF_DOWNLOAD_INSECURE=1 CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh trajectory 50
 不会修改系统证书或训练逻辑，也不会关闭后续未设置开关的进程的校验。
 `HF_DOWNLOAD_INSECURE` 是本复现包定义的开关，直接运行原 `timm_models.py` 不会读取它。
 不要用 `PYTHONHTTPSVERIFY=0` 代替：它不能覆盖本日志中的 Rust hf-xet 下载客户端。
+启用绕过后，urllib3 的 `InsecureRequestWarning: Unverified HTTPS request` 是预期提示，
+表示请求未验证服务端证书，本身不表示下载失败，也不能证明下载已经完成。
 
 实现依据：
 - https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhubdisablexet
@@ -70,7 +74,8 @@ CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 50
 相当于运行原 runner 的以下命令；使用本包的 common.py 对齐 SGD foreach 设置：
 
 ```bash
-python timm_models.py --device cuda --accuracy --training --float32 --backend inductor \
+HF_ENDPOINT=https://hf-mirror.com python timm_models.py \
+  --device cuda --accuracy --training --float32 --backend inductor \
   --disable-aclgraph --only vit_base_patch14_dinov2.lvd142m --dynamic-shapes \
   --batch-size 16 --iterations 50 --accu-summary --output benchmark.csv
 ```
