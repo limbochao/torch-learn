@@ -9,6 +9,9 @@ published: false
 `PENDING`、`RUNNING` 和超时均不算通过；同一方法的全部参数实例完成后才更新终态。
 历史问题说明只用于确定测试范围，当前结论以本次记录为准。
 
+当前26个方法完整通过（含适配后的明确负向检查）；其余17项保留实际失败或能力/规格结论。
+第18、21项的后续低精度错误及第34项的事件/上下文错误尚未完成根因闭环，不能将本报告视为全部调查完成。
+
 ## 环境与执行范围
 
 2026-10-28，Docker 内独立 conda 环境，Ascend950PR_9579，torch `2.13.0+cpu`、
@@ -86,7 +89,7 @@ torch_npu `2.13.0.dev20261028`、Triton `3.6.0`，CANN 9.1.0、driver 25.7.rc1�
 - [CUDA allocator 检查候选](../../../artifacts/npu-inductor-boundary-20261028/cudagraph-device-check.patch)
 - [Triton driver 原生构建检查候选](../../../artifacts/npu-inductor-boundary-20261028/triton-native-backend-check.patch)
 - [子进程 HigherOrderOperator fallback 候选](../../../artifacts/npu-inductor-boundary-20261028/subprocess-hop-fallback.patch)
-- [GEMM epilogue metadata 候选，尚待复测](../../../artifacts/npu-inductor-boundary-20261028/template-fusion-metadata.patch)
+- [GEMM epilogue metadata 候选，原代码检查通过但精度未完全修复](../../../artifacts/npu-inductor-boundary-20261028/template-fusion-metadata.patch)
 
 测试适配分支为 `Community-Use-Case-Testing:codex/inductor-boundary-20261028`；
 调试脚本和候选存于 `torch-learn:codex/npu-inductor-boundary-20261028`。
