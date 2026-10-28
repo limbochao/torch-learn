@@ -356,7 +356,8 @@ def check_caching_allocator_for_cudagraphs() -> str | None:
     check_memory_pool in cudagraph_trees.py), surfacing as 'storage data
     ptrs not allocated in pool ...' at replay time."""
     if (
-        torch.cuda.is_available()
+        (torch.version.cuda is not None or torch.version.hip is not None)
+        and torch.cuda.is_available()
         # pyrefly: ignore [missing-attribute]
         and not torch._C._cuda_cudaCachingAllocator_is_enabled()
     ):
@@ -371,8 +372,8 @@ def check_lowering_disable_cudagraph(
     device_node_mapping: dict[torch.device, torch.fx.Node],
 ) -> str | None:
     return (
-        check_multiple_devices_or_any_cpu_nodes(device_node_mapping)
-        or check_caching_allocator_for_cudagraphs()
+        check_caching_allocator_for_cudagraphs()
+        or check_multiple_devices_or_any_cpu_nodes(device_node_mapping)
     )
 
 

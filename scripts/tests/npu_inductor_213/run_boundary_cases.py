@@ -18,11 +18,14 @@ def main():
     parser.add_argument('--runner', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=420)
+    parser.add_argument('--physical-devices', default='3')
     parser.add_argument('--rows', type=int, nargs='*')
     args = parser.parse_args()
     assert Path('/.dockerenv').exists(), 'Run inside the target Docker container'
     assert Path.cwd().name == 'inductor_npu', 'Run from the authorized test directory'
-    assert os.environ.get('ASCEND_RT_VISIBLE_DEVICES') == '3', 'This run reserves physical NPU 3 only'
+    devices = [int(value) for value in args.physical_devices.split(',')]
+    assert set(devices) <= {1, 2, 3}, 'Use checked, unrestricted physical devices 1, 2, or 3'
+    assert os.environ.get('ASCEND_RT_VISIBLE_DEVICES') == args.physical_devices
     args.output.mkdir(parents=True, exist_ok=True)
     cases = [line.split('\t')[:2] for line in args.manifest.read_text().splitlines() if line]
     for row, (filename, case) in enumerate(cases, 1):
@@ -41,11 +44,12 @@ def main():
         env.update(TORCH_TRANSFER_TO_NPU='1', TORCH_NPU_DEVICE_CAPABILITY='8.0',
                    TORCHINDUCTOR_COMPILE_THREADS='2', TORCHNPU_PRECOMPILE_THREADS='2',
                    TORCHINDUCTOR_CACHE_DIR=str(cache), TMPDIR=str(args.output),
+                   TRITON_CACHE_DIR=str(args.output / 'triton_cache'),
                    PYTHONUNBUFFERED='1')
         command = [sys.executable, str(args.runner), '--case-names', '--precompile-workers', '2',
                    '--output', str(output), f'{filename}::{case}']
         record = {'row': row, 'file': filename, 'case': case, 'command': command,
-                  'start': now.isoformat(), 'physical_device': 3, 'timeout_seconds': args.timeout}
+                  'start': now.isoformat(), 'physical_devices': devices, 'timeout_seconds': args.timeout}
         print('START', row, filename, case, flush=True)
         started = time.monotonic()
         with output.with_suffix('.log').open('w') as log:
