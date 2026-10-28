@@ -25,7 +25,8 @@ def main(root):
         torch = SimpleNamespace(version=SimpleNamespace(cuda=cuda, hip=hip),
                                 cuda=SimpleNamespace(is_available=lambda: True),
                                 _C=SimpleNamespace(_cuda_cudaCachingAllocator_is_enabled=allocator))
-        fn = extract(root / 'cudagraph_utils.py', 'check_caching_allocator_for_cudagraphs', {'torch': torch})
+        fn = extract(root / 'cudagraph_utils.py', 'check_caching_allocator_for_cudagraphs',
+                     {'torch': torch, 'format_default_skip_message': lambda value: value})
         actual = fn()
         expected_rejection = (cuda is not None or hip is not None) and not allocator_enabled
         ok = bool(actual) == expected_rejection and allocator.call_count == int(cuda is not None or hip is not None)
