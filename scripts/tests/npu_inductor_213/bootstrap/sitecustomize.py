@@ -16,6 +16,9 @@ if os.environ.get('BOUNDARY_FUSION_METADATA') == '1':
 if os.environ.get('BOUNDARY_HOP_FALLBACK') == '1':
     modules['torch._inductor.lowering'] = 'torch/_inductor/lowering.py'
 
+if os.environ.get('BOUNDARY_GATHER_META') == '1':
+    modules['torch_npu.op_plugin.meta._meta_registrations'] = 'torch_npu/op_plugin/meta/_meta_registrations.py'
+
 
 class CandidateFinder(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):

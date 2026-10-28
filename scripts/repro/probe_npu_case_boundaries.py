@@ -64,11 +64,14 @@ def gather(backend, initialize_inductor=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument('--initialize-inductor', action='store_true')
+    parser.add_argument('--sparse-invariants', action='store_true')
     parser.add_argument('probe', choices=['rightshift', 'floorzero', 'gather'])
     parser.add_argument('--backend', default='inductor',
                         choices=['eager', 'aot_eager', 'aot_eager_decomp_partition', 'inductor'])
     args = parser.parse_args()
     torch.npu.set_device(0)
+    if args.sparse_invariants:
+        torch.sparse.check_sparse_tensor_invariants.enable()
     if args.probe == 'gather':
         attempt('gather_' + args.backend, lambda: gather(args.backend, args.initialize_inductor))
     else:
