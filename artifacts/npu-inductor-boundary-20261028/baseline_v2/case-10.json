@@ -1,0 +1,95 @@
+{
+  "requested": [
+    "test_inplace_padding.py::test_pad_non_zero"
+  ],
+  "environment": {
+    "transfer_sha256": "6a71b6bf25e88a1228c965e1a673b3b2934825d41262633986a4d15bbafd2e6a",
+    "transfer_pr_head": null,
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "0",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0.dev20261028",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "3",
+    "device_count": 1,
+    "default_device": 0,
+    "compile_threads": 2,
+    "npu_precompile_threads": 2,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_inplace_padding.py": "08c953ee4566e30a2344d94d74f2c98334e5a1f8cd1860db0f74d9a8fc8de633"
+    }
+  },
+  "selected": [
+    "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero"
+  ],
+  "resolved_nodeids": {
+    "test_inplace_padding.py::test_pad_non_zero": [
+      "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0003148620016872883,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 74.61645794801007,
+      "longrepr": "self = <inductor_npu.test_inplace_padding.InplacePaddingTest testMethod=test_pad_non_zero>\n\n    def test_pad_non_zero(self):\n        def f(x):\n            x = x + 1\n            x = aten.constant_pad_nd(x, (0, 1, 0, 0), 12345.0)\n    \n            return x @ x\n    \n        # 'odd' shape on purpose to pad intermediate buffer's strides\n        x = torch.randn(2048, 2047, device=GPU_TYPE)\n    \n        ref = f(x)\n        act, (code,) = run_and_get_code(torch.compile(f), x)\n    \n        # When we allocate the 2048x2047 tensor for the output of 'x + 1'\n        # Instead of doing\n        #   empty_strided_cuda((2048, 2047), (2048, 1), torch.float32)\n        # (note the stride is already padded)\n        # We do\n        #   empty_strided_cuda((2048, 2048), (2048, 1), torch.float32).\n        #     as_strided((2048, 2047), (2048, 1))\n        # . This will allocate an extra item for the last row so that\n        # inplace padding would be safe without accessing out of bound\n        # memory.\n        FileCheck().check_regex(\n            r\"empty_strided.*\\(\\(2048, 2048\\), \\(2048, 1\\), torch.float32\\).\"\n            r\"as_strided\\(\\(2048, 2047\\), \\(2048, 1\\)\\)\"\n>       ).run(code)\nE       RuntimeError: Expected to find regex \"empty_strided.*\\\\(\\\\(2048, 2048\\\\), \\\\(2048, 1\\\\), torch.float32\\\\).as_strided\\\\(\\\\(2048, 2047\\\\), \\\\(2048, 1\\\\)\\\\)\" but did not find it\nE       Searched string:\nE       From CHECK-REGEX: empty_strided.*\\(\\(2048, 2048\\), \\(2048, 1\\), torch.float32\\).as_strided\\(\\(2048, 2047\\), \\(2048, 1\\)\\)\nE       \nE       \nE       To execute this test, run the following from the base repo dir:\nE           python test_inplace_padding.py InplacePaddingTest.test_pad_non_zero\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\ntest_inplace_padding.py:117: RuntimeError",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.00017606400069780648,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_inplace_padding.py::test_pad_non_zero": {
+      "scope": "host_or_explicit_device",
+      "source_method": "test_pad_non_zero",
+      "candidates": [
+        {
+          "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+          "device": null
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_inplace_padding.py::test_pad_non_zero": {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero",
+      "nodeids": [
+        "test_inplace_padding.py::InplacePaddingTest::test_pad_non_zero"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

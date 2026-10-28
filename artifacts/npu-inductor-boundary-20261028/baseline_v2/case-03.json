@@ -1,0 +1,99 @@
+{
+  "requested": [
+    "test_alignment.py::test_Q4_K_dequantization"
+  ],
+  "environment": {
+    "transfer_sha256": "6a71b6bf25e88a1228c965e1a673b3b2934825d41262633986a4d15bbafd2e6a",
+    "transfer_pr_head": null,
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "0",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0.dev20261028",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "3",
+    "device_count": 1,
+    "default_device": 0,
+    "compile_threads": 2,
+    "npu_precompile_threads": 2,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_alignment.py": "67b907e8bfb98501d61df7ad6599605d1c1b9fbf45f088317b1a8def78ec692b"
+    }
+  },
+  "selected": [
+    "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu"
+  ],
+  "resolved_nodeids": {
+    "test_alignment.py::test_Q4_K_dequantization": [
+      "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0004140509990975261,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 0.23071224500017706,
+      "longrepr": "self = <inductor_npu.test_alignment.NPUTests testMethod=test_Q4_K_dequantization_npu>\nvalue = <function CommonTemplate.test_Q4_K_dequantization at 0x7f46ec3118a0>\n\n    @functools.wraps(value)\n    def new_test(self, value=value):\n>       return value(self)\n\ntest_torchinductor.py:18443: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <inductor_npu.test_alignment.NPUTests testMethod=test_Q4_K_dequantization_npu>\n\n    def test_Q4_K_dequantization(self):\n        \"\"\"\n        Test the alignment issue for Q4_K dequantization.\n        \"\"\"\n    \n        QK_K = 256\n        K_SCALE_SIZE = 12\n    \n        def get_scale_min(scales):\n            n_blocks = scales.shape[0]\n            scales = scales.view(torch.uint8)\n            scales = scales.reshape((n_blocks, 3, 4))\n    \n            d, m, m_d = torch.split(scales, scales.shape[-2] // 3, dim=-2)\n    \n            sc = torch.cat([d & 0x3F, (m_d & 0x0F) | ((d >> 2) & 0x30)], dim=-1)\n            min = torch.cat([m & 0x3F, (m_d >> 4) | ((m >> 2) & 0x30)], dim=-1)\n    \n            return (sc.reshape((n_blocks, 8)), min.reshape((n_blocks, 8)))\n    \n        def split_block_dims(blocks, *args):\n            n_max = blocks.shape[1]\n            dims = list(args) + [n_max - sum(args)]\n            return torch.split(blocks, dims, dim=1)\n    \n        def dequantize_blocks_Q4_K(blocks, block_size, type_size):\n            n_blocks = blocks.shape[0]\n    \n            d, dmin, scales, qs = split_block_dims(blocks, 2, 2, K_SCALE_SIZE)\n            d = d.view(torch.float16)\n            dmin = dmin.view(torch.float16)\n    \n            sc, m = get_scale_min(scales)\n    \n            d = (d * sc).reshape((n_blocks, -1, 1))\n            dm = (dmin * m).reshape((n_blocks, -1, 1))\n    \n            qs = qs.reshape((n_blocks, -1, 1, 32)) >> torch.tensor(\n                [0, 4], device=d.device, dtype=torch.uint8\n            ).reshape((1, 1, 2, 1))\n            qs = (qs & 0x0F).reshape((n_blocks, -1, 32))\n    \n            return (d * qs - dm).reshape((n_blocks, QK_K))\n    \n        data = torch.randint(\n            0, 16, (18432, 1728), device=self.device, dtype=torch.uint8\n        )\n    \n        def dequantize(data):\n            block_size, type_size = 256, 144\n            rows = data.reshape((-1, data.shape[-1])).view(torch.uint8)\n            n_blocks = rows.numel() // type_size\n            blocks = rows.reshape((n_blocks, type_size))\n            blocks = dequantize_blocks_Q4_K(blocks, block_size, type_size)\n            return blocks.reshape(18432, 3072)\n    \n>       self.common(dequantize, (data,), check_lowp=False, atol=1e-3, rtol=1e-3)\n\ntest_alignment.py:236: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nargs = (<inductor_npu.test_alignment.NPUTests testMethod=test_Q4_K_dequantization_npu>, <function CommonTemplate.test_Q4_K_de...\n        [ 8, 14, 15,  ...,  0, 12, 15],\n        [12,  2, 12,  ..., 14, 10,  6]], device='npu:0', dtype=torch.uint8),))\nkwds = {'atol': 0.001, 'check_lowp': False, 'rtol': 0.001}\n\n    @wraps(func)\n    def inner(*args, **kwds):\n        with self._recreate_cm():\n>           return func(*args, **kwds)\n\n../../../../<python-env>/lib/python3.11/contextlib.py:81: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <inductor_npu.test_alignment.NPUTests testMethod=test_Q4_K_dequantization_npu>\nmodel = <function CommonTemplate.test_Q4_K_dequantization.<locals>.dequantize at 0x7f468d605800>\nexample_inputs = (tensor([[ 8,  8,  7,  ...,  0,  4,  7],\n        [ 0,  1,  7,  ...,  3,  5,  8],\n        [15,  8, 10,  ..., 13,  6, 11...,\n        [ 8, 14, 15,  ...,  0, 12, 15],\n        [12,  2, 12,  ..., 14, 10,  6]], device='npu:0', dtype=torch.uint8),)\nkwargs = {}\n\n    @torch._inductor.config.patch(\"triton.cudagraphs\", False)\n    def check_model_gpu(\n        self: TestCase,\n        model,\n        example_inputs,\n        kwargs=None,\n        *,\n        atol=None,\n        rtol=None,\n        grad_atol=None,\n        grad_rtol=None,\n        check_lowp=True,\n        exact_dtype=True,\n        nopython=True,\n        copy_to_gpu=True,\n        reference_in_float=True,\n        assert_equal=True,\n        check_gradient=False,\n        check_has_compiled=True,\n        output_process_fn_grad=lambda x: x,\n        # TODO: enable this for all tests\n        exact_stride=False,\n    ):\n        kwargs = kwargs or {}\n        if hasattr(model, \"to\"):\n            model = model.to(device=GPU_TYPE)\n    \n        if copy_to_gpu:\n            example_inputs = tuple(\n                clone_preserve_strides_offset(x, device=GPU_TYPE) for x in example_inputs\n            )\n    \n>       check_model(\n            self,\n            model,\n            example_inputs,\n            kwargs,\n            atol=atol,\n            rtol=rtol,\n            grad_atol=grad_atol,\n            grad_rtol=grad_rtol,\n            exact_dtype=exact_dtype,\n            nopython=nopython,\n            reference_in_float=reference_in_float,\n            assert_equal=assert_equal,\n            check_gradient=check_gradient,\n            check_has_compiled=check_has_compiled,\n            output_process_fn_grad=output_process_fn_grad,\n            exact_stride=exact_stride,\n        )\n\ntest_torchinductor.py:938: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <inductor_npu.test_alignment.NPUTests testMethod=test_Q4_K_dequantization_npu>\nmodel = <function CommonTemplate.test_Q4_K_dequantization.<locals>.dequantize at 0x7f468d605800>\nexample_inputs = (tensor([[ 8,  8,  7,  ...,  0,  4,  7],\n        [ 0,  1,  7,  ...,  3,  5,  8],\n        [15,  8, 10,  ..., 13,  6, 11...,\n        [ 8, 14, 15,  ...,  0, 12, 15],\n        [12,  2, 12,  ..., 14, 10,  6]], device='npu:0', dtype=torch.uint8),)\nkwargs = {}\n\n    def check_model(\n        self: TestCase,\n        model,\n        example_inputs,\n        kwargs=None,\n        *,\n        atol=None,\n        rtol=None,\n        grad_atol=None,\n        grad_rtol=None,\n        check_lowp=True,\n        exact_dtype=True,\n        nopython=True,\n        copy_to_gpu=True,\n        reference_in_float=True,\n        assert_equal=True,\n        check_gradient=False,\n        check_has_compiled=True,\n        output_process_fn_grad=lambda x: x,\n        # TODO: enable this for all tests\n        exact_stride=False,\n    ):\n        kwargs = kwargs or {}\n        torch._dynamo.reset()\n    \n        ref_inputs = [clone_preserve_strides_offset(x) for x in example_inputs]\n        ref_kwargs = kwargs\n        has_lowp_args = False\n    \n        if reference_in_float and exact_dtype:\n            # Store expected dtypes so we can check actual result gives the correct types\n            torch.manual_seed(0)\n            try:\n                eager_result = model(*ref_inputs, **ref_kwargs)\n            except RuntimeError:\n                # Eager model may fail if the dtype is not supported\n                eager_result = None\n    \n            ref_inputs = [clone_preserve_strides_offset(x) for x in example_inputs]\n            expect_dtypes = [\n                x.dtype if isinstance(x, torch.Tensor) else None\n                for x in pytree.tree_leaves(eager_result)\n            ]\n            del eager_result\n    \n        ref_model = model\n        if reference_in_float:\n            # check_lowp is ignored here, it's kept just to be able to call `common` with extra arg\n            def upcast_fn(x):\n                nonlocal has_lowp_args\n                if isinstance(x, torch.Tensor) and (\n                    x.dtype == torch.float16 or x.dtype == torch.bfloat16\n                ):\n                    has_lowp_args = True\n                    # Preserve strides when casting\n                    result = torch.empty_strided(\n                        x.size(), x.stride(), device=x.device, dtype=torch.float\n                    )\n                    result.copy_(x)\n                    return result\n                else:\n                    return x\n    \n            # We previously call upcast_fn on example_inputs. It's incorrect\n            # if example_inputs is already fp32 and get inplace updated in the model.\n            # Call on the cloned tensors instead\n            ref_inputs = list(map(upcast_fn, ref_inputs))\n            ref_kwargs = {k: upcast_fn(v) for k, v in kwargs.items()}\n            if has_lowp_args and hasattr(model, \"to\"):\n                ref_model = copy.deepcopy(model).to(torch.float)\n    \n        torch.manual_seed(0)\n    \n>       correct = ref_model(*ref_inputs, **ref_kwargs)\n\ntest_torchinductor.py:683: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\ndata = tensor([[ 8,  8,  7,  ...,  0,  4,  7],\n        [ 0,  1,  7,  ...,  3,  5,  8],\n        [15,  8, 10,  ..., 13,  6, 11]...8],\n        [ 8, 14, 15,  ...,  0, 12, 15],\n        [12,  2, 12,  ..., 14, 10,  6]], device='npu:0', dtype=torch.uint8)\n\n    def dequantize(data):\n        block_size, type_size = 256, 144\n        rows = data.reshape((-1, data.shape[-1])).view(torch.uint8)\n        n_blocks = rows.numel() // type_size\n        blocks = rows.reshape((n_blocks, type_size))\n>       blocks = dequantize_blocks_Q4_K(blocks, block_size, type_size)\n\ntest_alignment.py:233: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nblocks = tensor([[ 8,  8,  7,  ...,  6,  1,  7],\n        [ 7,  0,  4,  ...,  9, 11,  7],\n        [ 7, 15,  2,  ..., 14,  7,  7]...1],\n        [12,  4, 13,  ...,  5,  7,  3],\n        [ 4,  7,  8,  ..., 14, 10,  6]], device='npu:0', dtype=torch.uint8)\nblock_size = 256, type_size = 144\n\n    def dequantize_blocks_Q4_K(blocks, block_size, type_size):\n        n_blocks = blocks.shape[0]\n    \n        d, dmin, scales, qs = split_block_dims(blocks, 2, 2, K_SCALE_SIZE)\n        d = d.view(torch.float16)\n        dmin = dmin.view(torch.float16)\n    \n        sc, m = get_scale_min(scales)\n    \n        d = (d * sc).reshape((n_blocks, -1, 1))\n        dm = (dmin * m).reshape((n_blocks, -1, 1))\n    \n>       qs = qs.reshape((n_blocks, -1, 1, 32)) >> torch.tensor(\n            [0, 4], device=d.device, dtype=torch.uint8\n        ).reshape((1, 1, 2, 1))\nE       RuntimeError: __rshift__:../third_party/op-plugin/op_plugin/ops/opapi/__Rshift__KernelNpuOpApi.cpp:26 NPU function error: call aclnnRightShift failed, error code is 161002\nE       [ERROR] 2026-10-28-18:08:41 (PID:<redacted>, Device:0, RankID:-1) ERR00100 PTA call acl api failed.\nE       [PID:<redacted>] 2026-10-28-18:08:41.827.396 AclNN_Parameter_Error(EZ1001): Shape of out should be [221184, 4, 2, 32], but current is [221184, 4, 1, 32].\nE       \nE       \nE       To execute this test, run the following from the base repo dir:\nE           python test_alignment.py NPUTests.test_Q4_K_dequantization_npu\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\ntest_alignment.py:217: RuntimeError",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.00027825700817629695,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_alignment.py::test_Q4_K_dequantization": {
+      "scope": "npu",
+      "source_method": "test_Q4_K_dequantization",
+      "candidates": [
+        {
+          "nodeid": "test_alignment.py::CpuTests::test_Q4_K_dequantization_cpu",
+          "device": "cpu"
+        },
+        {
+          "nodeid": "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu",
+          "device": "npu"
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_alignment.py::test_Q4_K_dequantization": {
+      "nodeid": "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu",
+      "nodeids": [
+        "test_alignment.py::NPUTests::test_Q4_K_dequantization_npu"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

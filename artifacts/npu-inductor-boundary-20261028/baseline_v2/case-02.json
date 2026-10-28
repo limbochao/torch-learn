@@ -1,0 +1,104 @@
+{
+  "requested": [
+    "test_alignment.py::test_incorrect_meta_for_custom_op_2d"
+  ],
+  "environment": {
+    "transfer_sha256": "6a71b6bf25e88a1228c965e1a673b3b2934825d41262633986a4d15bbafd2e6a",
+    "transfer_pr_head": null,
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "0",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0.dev20261028",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "3",
+    "device_count": 1,
+    "default_device": 0,
+    "compile_threads": 2,
+    "npu_precompile_threads": 2,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_alignment.py": "67b907e8bfb98501d61df7ad6599605d1c1b9fbf45f088317b1a8def78ec692b"
+    }
+  },
+  "selected": [
+    "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu"
+  ],
+  "resolved_nodeids": {
+    "test_alignment.py::test_incorrect_meta_for_custom_op_2d": [
+      "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.00046003999887034297,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 119.79462399201293,
+      "longrepr": "AssertionError: expected size 1024==1024, stride 1024==1040 at dim=0\nError in op: torch.ops.test.slice2d_incorrect_meta.default\nThis error most often comes from a incorrect fake (aka meta) kernel for a custom op.\nUse torch.library.opcheck to test your custom op.\nSee https://pytorch.org/docs/stable/library.html#torch.library.opcheck\n\nDuring handling of the above exception, another exception occurred:\n\nself = <inductor_npu.test_alignment.NPUTests testMethod=test_incorrect_meta_for_custom_op_2d_npu>\n\n    @config.patch(implicit_fallbacks=True, alignment_asserts=True)\n    @skip_if_cpp_wrapper(\n        \"Inductor does not generate alignment assertion for cpp_wrapper right now\"\n    )\n    def test_incorrect_meta_for_custom_op_2d(self):\n        def slice2d(x):\n            return (3 * x)[..., 1:-15]\n    \n        def slice2d_meta(x):\n            return torch.empty_like(x)[..., 0:-16]\n    \n        define_custom_op_for_test(\"slice2d_incorrect_meta\", slice2d, slice2d_meta)\n    \n        def fn(x):\n            a = torch.nn.functional.relu(x)\n            b = torch.ops.test.slice2d_incorrect_meta(a)\n            c = torch.cos(b)\n            return c\n    \n        x = torch.randn(1024, 1024 + 16, device=self.device)\n    \n        expected_error = \"Expect the tensor to be 16 bytes aligned. Fail due to storage_offset=1 itemsize=4\"\n>       with self.assertRaisesRegex(AssertionError, expected_error):\nE       AssertionError: \"Expect the tensor to be 16 bytes aligned. Fail due to storage_offset=1 itemsize=4\" does not match \"expected size 1024==1024, stride 1024==1040 at dim=0\nE       Error in op: torch.ops.test.slice2d_incorrect_meta.default\nE       This error most often comes from a incorrect fake (aka meta) kernel for a custom op.\nE       Use torch.library.opcheck to test your custom op.\nE       See https://pytorch.org/docs/stable/library.html#torch.library.opcheck\"\nE       \nE       To execute this test, run the following from the base repo dir:\nE           python test_alignment.py NPUTests.test_incorrect_meta_for_custom_op_2d_npu\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\ntest_alignment.py:137: AssertionError",
+      "wasxfail": null,
+      "sections": [
+        [
+          "Captured stderr call",
+          "[W1028 18:06:22.929073960 VariableFallbackKernel.cpp:230] Warning: CAUTION: The operator 'test::slice2d_incorrect_meta' is not currently supported on the NPU backend and will fall back to run on the CPU. This may have performance implications. (function npu_cpu_fallback)\nTimeout (0:02:00)!\nThread 0x00007fb79dc836c0 (most recent call first):\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 331 in wait\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 629 in wait\n  File \"<site-packages>/tqdm/_monitor.py\", line 69 in run\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1045 in _bootstrap_inner\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1002 in _bootstrap\n\nThread 0x00007fb830bef6c0 (most recent call first):\n  File \"<home>/<python-env>/lib/python3.11/concurrent/futures/thread.py\", line 81 in _worker\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 982 in run\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1045 in _bootstrap_inner\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1002 in _bootstrap\n\nThread 0x00007fb8313f06c0 (most recent call first):\n  File \"<home>/<python-env>/lib/python3.11/concurrent/futures/thread.py\", line 81 in _worker\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 982 in run\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1045 in _bootstrap_inner\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1002 in _bootstrap\n\nThread 0x00007fb831df16c0 (most recent call first):\n  File \"<site-packages>/torch/_inductor/compile_worker/subproc_pool.py\", line 76 in _recv_msg\n  File \"<site-packages>/torch/_inductor/compile_worker/subproc_pool.py\", line 271 in _read_thread\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 982 in run\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1045 in _bootstrap_inner\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 1002 in _bootstrap\n\nThread 0x00007fb9e37d3740 (most recent call first):\n  File \"<home>/<python-env>/lib/python3.11/threading.py\", line 327 in wait\n  File \"<home>/<python-env>/lib/python3.11/concurrent/futures/_base.py\", line 451 in result\n  File \"<site-packages>/torch/_inductor/async_compile.py\", line 498 in get_result\n  File \"<site-packages>/torch/_inductor/codecache.py\", line 5306 in result\n  File \"<site-packages>/torch/_inductor/async_compile.py\", line 848 in _wait_futures\n  File \"<site-packages>/torch/_inductor/async_compile.py\", line 818 in wait\n  File \"<test-repo>/boundary_20261028/baseline_v2/tmpbf15p8fg/ig/cig2vrtgs6lyk5y2fnehkvfqcgdvuv2zl6ai2lihme7au5sd42me.py\", line 160 in <module>\n  File \"<site-packages>/torch/_inductor/runtime/compile_tasks.py\", line 35 in _reload_python_module\n  File \"<site-packages>/torch/_inductor/codecache.py\", line 4622 in load_by_key_path\n  File \"<site-packages>/torch/_inductor/graph.py\", line 2754 in _compile_to_module_lines\n  File \"<site-packages>/torch/_inductor/graph.py\", line 2679 in _compile_to_module\n  File \"<site-packages>/torch/_inductor/graph.py\", line 2669 in compile_to_module\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 1608 in codegen_and_compile\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 1847 in fx_codegen_and_compile\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 1059 in _compile_fx_inner\n  File \"<site-packages>/torch/_dynamo/repro/after_aot.py\", line 317 in debug_wrapper\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 837 in compile_fx_inner\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 2537 in compile_fx_forward\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 2924 in fw_compiler_base\n  File \"<site-packages>/torch/_functorch/_aot_autograd/schemas.py\", line 1472 in __call__\n  File \"<site-packages>/torch/_functorch/_aot_autograd/graph_compile.py\", line 2800 in _aot_stage2b_compile_forward_or_inference\n  File \"<site-packages>/torch/_functorch/_aot_autograd/graph_compile.py\", line 415 in _aot_stage2b_inference_compile\n  File \"<site-packages>/torch/_functorch/_aot_autograd/graph_compile.py\", line 488 in aot_stage2_inference\n  File \"<site-packages>/torch/_functorch/_aot_autograd/graph_compile.py\", line 364 in aot_stage2_compile\n  File \"<site-packages>/torch/_functorch/aot_autograd.py\", line 1238 in aot_module_simplified\n  File \"<site-packages>/torch/_dynamo/backends/common.py\", line 123 in __call__\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 3061 in _compile_fx_main\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 2863 in _maybe_wrap_and_compile_fx_main\n  File \"<site-packages>/torch/_inductor/compile_fx.py\", line 2782 in compile_fx\n  File \"<test-repo>/v2.13.0/inductor_npu/test_torchinductor.py\", line 692 in compile_fx_wrapper\n  File \"<site-packages>/torch/__init__.py\", line 2568 in __call__\n  File \"<site-packages>/torch/_dynamo/repro/after_dynamo.py\", line 159 in __call__\n  File \"<site-packages>/torch/_dynamo/output_graph.py\", line 3119 in _call_user_compiler\n  File \"<site-packages>/torch/_dynamo/output_graph.py\", line 3057 in call_user_compiler\n  File \"<site-packages>/torch/_dynamo/output_graph.py\", line 2880 in compile_and_call_fx_graph\n  File \"<site-packages>/torch/_dynamo/output_graph.py\", line 2234 in compile_subgraph\n  File \"<site-packages>/torch/_dynamo/symbolic_convert.py\", line 5589 in _return\n  File \"<site-packages>/torch/_dynamo/symbolic_convert.py\", line 5616 in RETURN_VALUE\n  File \"<site-packages>/torch/_dynamo/symbolic_convert.py\", line 1603 in step\n  File \"<site-packages>/torch/_dynamo/symbolic_convert.py\", line 1950 in run\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 935 in run_tracer\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 954 in trace_frame\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 368 in _fn\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 1555 in transform\n  File \"<site-packages>/torch/_dynamo/bytecode_transformation.py\", line 1821 in transform_code_object\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 1584 in compile_frame\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 1747 in _compile_inner\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 1687 in compile_inner\n  File \"<site-packages>/torch/_utils_internal.py\", line 96 in wrapper_function\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 2102 in _compile\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 777 in __call__\n  File \"<site-packages>/torch/_dynamo/convert_frame.py\", line 2628 in __call__\n  File \"<site-packages>/torch/_dynamo/eval_frame.py\", line 1166 in compile_wrapper\n  File \"<test-repo>/v2.13.0/inductor_npu/test_torchinductor.py\", line 700 in check_model\n  File \"<test-repo>/v2.13.0/inductor_npu/test_torchinductor.py\", line 938 in check_model_gpu\n  File \"<home>/<python-env>/lib/python3.11/contextlib.py\", line 81 in inner\n  File \"<test-repo>/v2.13.0/inductor_npu/test_alignment.py\", line 138 in test_incorrect_meta_for_custom_op_2d\n  File \"<test-repo>/v2.13.0/inductor_npu/test_torchinductor.py\", line 1280 in wrapper\n  File \"<home>/<python-env>/lib/python3.11/contextlib.py\", line 81 in inner\n  File \"<test-repo>/v2.13.0/inductor_npu/test_torchinductor.py\", line 18443 in new_test\n  File \"<site-packages>/torch/testing/_internal/common_utils.py\", line 3553 in wrapper\n  File \"<home>/<python-env>/lib/python3.11/unittest/case.py\", line 579 in _callTestMethod\n  File \"<home>/<python-env>/lib/python3.11/unittest/case.py\", line 623 in run\n  File \"<site-packages>/torch/testing/_internal/common_utils.py\", line 3705 in _run_custom\n  File \"<site-packages>/torch/testing/_internal/common_utils.py\", line 3736 in run\n  File \"<home>/<python-env>/lib/python3.11/unittest/case.py\", line 678 in __call__\n  File \"<site-packages>/_pytest/unittest.py\", line 351 in runtest\n  File \"<site-packages>/_pytest/runner.py\", line 174 in pytest_runtest_call\n  File \"<site-packages>/pluggy/_callers.py\", line 121 in _multicall\n  File \"<site-packages>/pluggy/_manager.py\", line 120 in _hookexec\n  File \"<site-packages>/pluggy/_hooks.py\", line 512 in __call__\n  File \"<site-packages>/_pytest/runner.py\", line 242 in <lambda>\n  File \"<site-packages>/_pytest/runner.py\", line 341 in from_call\n  File \"<site-packages>/_pytest/runner.py\", line 241 in call_and_report\n  File \"<site-packages>/_pytest/runner.py\", line 132 in runtestprotocol\n  File \"<site-packages>/_pytest/runner.py\", line 113 in pytest_runtest_protocol\n  File \"<site-packages>/pluggy/_callers.py\", line 121 in _multicall\n  File \"<site-packages>/pluggy/_manager.py\", line 120 in _hookexec\n  File \"<site-packages>/pluggy/_hooks.py\", line 512 in __call__\n  File \"<site-packages>/_pytest/main.py\", line 362 in pytest_runtestloop\n  File \"<site-packages>/pluggy/_callers.py\", line 121 in _multicall\n  File \"<site-packages>/pluggy/_manager.py\", line 120 in _hookexec\n  File \"<site-packages>/pluggy/_hooks.py\", line 512 in __call__\n  File \"<site-packages>/_pytest/main.py\", line 337 in _main\n  File \"<site-packages>/_pytest/main.py\", line 283 in wrap_session\n  File \"<site-packages>/_pytest/main.py\", line 330 in pytest_cmdline_main\n  File \"<site-packages>/pluggy/_callers.py\", line 121 in _multicall\n  File \"<site-packages>/pluggy/_manager.py\", line 120 in _hookexec\n  File \"<site-packages>/pluggy/_hooks.py\", line 512 in __call__\n  File \"<site-packages>/_pytest/config/__init__.py\", line 175 in main\n  File \"<test-repo>/v2.13.0/inductor_npu/../../boundary_20261028/run_batch.py\", line 310 in main\n  File \"<test-repo>/v2.13.0/inductor_npu/../../boundary_20261028/run_batch.py\", line 317 in <module>\n  File \"<frozen runpy>\", line 88 in _run_code\n  File \"<frozen runpy>\", line 98 in _run_module_code\n  File \"<frozen runpy>\", line 291 in run_path\n  File \"<test-repo>/v2.13.0/inductor_npu/../../boundary_20261028/boundary_pytest.py\", line 16 in <module>\n"
+        ]
+      ]
+    },
+    {
+      "nodeid": "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.00022739100677426904,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_alignment.py::test_incorrect_meta_for_custom_op_2d": {
+      "scope": "npu",
+      "source_method": "test_incorrect_meta_for_custom_op_2d",
+      "candidates": [
+        {
+          "nodeid": "test_alignment.py::CpuTests::test_incorrect_meta_for_custom_op_2d_cpu",
+          "device": "cpu"
+        },
+        {
+          "nodeid": "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu",
+          "device": "npu"
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_alignment.py::test_incorrect_meta_for_custom_op_2d": {
+      "nodeid": "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu",
+      "nodeids": [
+        "test_alignment.py::NPUTests::test_incorrect_meta_for_custom_op_2d_npu"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

@@ -1,0 +1,95 @@
+{
+  "requested": [
+    "test_unbacked_symints.py::test_triton_kernel_with_unbacked_symint_fallback"
+  ],
+  "environment": {
+    "transfer_sha256": "6a71b6bf25e88a1228c965e1a673b3b2934825d41262633986a4d15bbafd2e6a",
+    "transfer_pr_head": null,
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "0",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0.dev20261028",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "2",
+    "device_count": 1,
+    "default_device": 0,
+    "compile_threads": 2,
+    "npu_precompile_threads": 2,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_unbacked_symints.py": "8ad6d566fbf065705e797bc94083426727872428d1e5358b73c3217b97039a29"
+    }
+  },
+  "selected": [
+    "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu"
+  ],
+  "resolved_nodeids": {
+    "test_unbacked_symints.py::test_triton_kernel_with_unbacked_symint_fallback": [
+      "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0004232250066706911,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 1.9783758980047423,
+      "longrepr": "torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode: Could not extract specialized integer from data-dependent expression u0 - 5 (unhinted: u0 - 5).  (Size-like symbols: u0)\n\n\nCaused by: indices = torch.tensor([1, u0 - 5], device=device)  # PTA_213/Community-Use-Case-Testing/v2.13.0/inductor_npu/test_unbacked_symints.py:685 in fn (torch_npu/contrib/transfer_to_npu.py:195 in decorated)\nFor more information, run with TORCH_LOGS=\"dynamic\"\nFor extended logs when we create symbols, also add TORCHDYNAMO_EXTENDED_DEBUG_CREATE_SYMBOL=\"u0\"\nIf you suspect the guard was triggered from C++, add TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nFor more debugging help, see https://docs.google.com/document/d/1HSuTTVvYH1pTew89Rtpeu84Ht3nQEFTYhAX3Ypa_xJs/edit?usp=sharing\n\nUser Stack (most recent call last):\n  (snipped, see stack below for prefix)\n  File \"<test-repo>/v2.13.0/inductor_npu/test_unbacked_symints.py\", line 685, in fn\n    indices = torch.tensor([1, u0 - 5], device=device)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nFor C++ stack trace, run with TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\n\nThe above exception was the direct cause of the following exception:\n\nself = <inductor_npu.test_unbacked_symints.TestUnbackedSymintsPRIVATEUSE1 testMethod=test_triton_kernel_with_unbacked_symint_fallback_npu>\ndevice = 'npu:0'\n\n    @skipGPUIf(not HAS_GPU, \"requires gpu and triton\")\n    @dynamo_config.patch({\"capture_dynamic_output_shape_ops\": True})\n    @inductor_config.patch({\"benchmark_kernel\": True})\n    def test_triton_kernel_with_unbacked_symint_fallback(self, device):\n        # The benchmark_kernel=True config exercises the codegen_kernel_benchmark code path\n        # Test isinstance(arg_sig, SizeArg) == True in the fallback path\n        def fn(x):\n            # Create unbacked SymInt\n            nz = torch.nonzero(x)\n            u0 = nz.size(0)\n            # Create indices for index_select operation\n            indices = torch.tensor([1, u0 - 5], device=device)\n            # Create SizeArg object\n            x = torch.index_select(x, 0, indices)\n            return x\n    \n        example_inputs = (torch.randn(32, device=device, dtype=torch.float16),)\n        torch._dynamo.mark_dynamic(example_inputs[0], 0)\n>       actual = torch.compile(fn, fullgraph=True)(*example_inputs)\n\ntest_unbacked_symints.py:692: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nargs = (tensor([-1.6162,  0.5684, -0.5103, -0.9111, -1.1553, -0.2262, -1.2891,  1.0654,\n        -0.7168, -0.5332,  0.2078, -0...  0.3835, -0.2091, -0.2407,  0.2274, -1.5869, -0.2703, -1.2520, -0.3003],\n       device='npu:0', dtype=torch.float16),)\nkwargs = {}, prior = None, prior_error_on_nested_compile = False\nfullgraph_count_enabled = True, tracing_context = None\ncleanups = [<function nothing at 0x7f84d38ae660>]\nprior_skip_guard_eval_unsafe = False, prior_isolate_recompiles_id = -1\nprior_error_on_graph_break = None\n\n    @functools.wraps(fn)\n    def compile_wrapper(*args: Any, **kwargs: Any) -> Any:\n        # NB: function calls here could change global state (e.g. random state)\n        # and that can result in different behavior between eager and compiled!\n        # In particular, we don't have control over internal functions like justknobs_check\n        # called in _maybe_set_eval_frame.\n        # Unlike in eval_frame_cpp.cpp/convert_frame.py, we don't attempt to restore global state\n        # due to additional overhead costs.\n        prior = set_eval_frame(None)\n        prior_error_on_nested_compile: bool | None = None\n        fullgraph_count_enabled = False\n        if self.fullgraph:\n            prior_error_on_nested_compile = set_fullgraph_error_on_nested_compile(\n                torch._dynamo.config.error_on_dynamo_callback_in_fullgraph_compiled_code\n            )\n            if not self.export:\n                fullgraph_count_enabled = set_fullgraph_compiled_frame_count(0) < 0\n                if fullgraph_count_enabled:\n                    reset_skip_reasons()\n        try:\n            # We shouldn't compile inside kernel invocation.\n            if tracing_context := torch._guards.TracingContext.try_get():\n                if (\n                    tracing_context.fake_mode is not None\n                    and tracing_context.fake_mode.in_kernel_invocation\n                ):\n                    return fn(*args, **kwargs)\n            # Skip nested compile during export (but not HOP internal compile)\n            # Only skip if there's an active TracingContext (nested), not for top-level export\n            if (\n                torch.compiler.is_exporting()\n                and not config.force_compile_during_fx_trace\n            ):\n                from torch._higher_order_ops.utils import _in_hop_compile\n    \n                if not _in_hop_compile():\n                    if torch._guards.TracingContext.try_get() is not None:\n                        return fn(*args, **kwargs)\n            # Skip nested compile - just inline the function\n            if (\n                is_fx_symbolic_tracing()\n                and not config.force_compile_during_fx_trace\n            ):\n                if config.error_on_nested_fx_trace:\n                    raise RuntimeError(\n                        \"Detected that you are using FX to symbolically trace \"\n                        \"a dynamo-optimized function. This is not supported at the moment.\"\n                    )\n                else:\n                    return fn(*args, **kwargs)\n    \n            if is_jit_tracing():\n                raise RuntimeError(\n                    \"Detected that you are using FX to torch.jit.trace \"\n                    \"a dynamo-optimized function. This is not supported at the moment.\"\n                )\n    \n            cleanups = [enter() for enter in self.enter_exit_hooks]\n            prior_skip_guard_eval_unsafe = set_skip_guard_eval_unsafe(\n                _is_skip_guard_eval_unsafe_stance()\n            )\n            prior_isolate_recompiles_id = set_eval_frame_isolate_recompiles_id(\n                self._isolate_recompiles_id\n            )\n            prior_error_on_graph_break = None\n            if not self.fullgraph and self.error_on_graph_break is not None:\n                current_error_on_graph_break = _get_error_on_graph_break()\n                if current_error_on_graph_break != self.error_on_graph_break:\n                    prior_error_on_graph_break = current_error_on_graph_break\n                    _set_error_on_graph_break(self.error_on_graph_break)\n    \n            # Ensure that if an assertion occurs after graph pushes\n            # something onto the DynamicLayerStack then we pop it off (the\n            # constructed graph code isn't guarded with try/finally).\n            #\n            # This used to be a context but putting a `with` here is a noticeable\n            # perf regression (#126293)\n            saved_dynamic_layer_stack_depth = (\n                torch._C._functorch.get_dynamic_layer_stack_depth()\n            )\n            saved_include_set = torch._C._dispatch_tls_local_include_set()\n            saved_exclude_set = torch._C._dispatch_tls_local_exclude_set()\n    \n            _maybe_set_eval_frame(_callback_from_stance(callback))\n    \n            with torch._C._ForceDispatchKeyGuard(\n                saved_include_set, saved_exclude_set\n            ):\n                call_succeeded = False\n                try:\n                    result = fn(*args, **kwargs)\n                    call_succeeded = True\n                except (Unsupported, UncapturedHigherOrderOpError, UserError) as e:\n                    if config.verbose:\n                        raise\n                    # strip internal tracebacks from causes\n                    cur_exn: BaseException = e\n                    while cur_exn.__cause__ is not None:\n                        cur_exn.__cause__.with_traceback(None)\n                        cur_exn = cur_exn.__cause__\n    \n>                   raise e.with_traceback(\n                        None\n                    ) from e.__cause__  # User compiler error\nE                   torch._dynamo.exc.UserError: Could not extract specialized integer from data-dependent expression u0 - 5 (unhinted: u0 - 5).  (Size-like symbols: u0)\nE                   \nE                   \nE                   Caused by: indices = torch.tensor([1, u0 - 5], device=device)  # PTA_213/Community-Use-Case-Testing/v2.13.0/inductor_npu/test_unbacked_symints.py:685 in fn (torch_npu/contrib/transfer_to_npu.py:195 in decorated)\nE                   For more information, run with TORCH_LOGS=\"dynamic\"\nE                   For extended logs when we create symbols, also add TORCHDYNAMO_EXTENDED_DEBUG_CREATE_SYMBOL=\"u0\"\nE                   If you suspect the guard was triggered from C++, add TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nE                   For more debugging help, see https://docs.google.com/document/d/1HSuTTVvYH1pTew89Rtpeu84Ht3nQEFTYhAX3Ypa_xJs/edit?usp=sharing\nE                   \nE                   User Stack (most recent call last):\nE                     (snipped, see stack below for prefix)\nE                     File \"<test-repo>/v2.13.0/inductor_npu/test_unbacked_symints.py\", line 685, in fn\nE                       indices = torch.tensor([1, u0 - 5], device=device)\nE                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE                   \nE                   For C++ stack trace, run with TORCHDYNAMO_EXTENDED_DEBUG_CPP=1\nE                   For more information about this error, see: https://pytorch.org/docs/main/generated/exportdb/index.html#constrain-as-size-example\nE                   \nE                   from user code:\nE                      File \"<test-repo>/v2.13.0/inductor_npu/test_unbacked_symints.py\", line 685, in fn\nE                       indices = torch.tensor([1, u0 - 5], device=device)\nE                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE                   \nE                   Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\nE                   \nE                   \nE                   To execute this test, run the following from the base repo dir:\nE                       python test_unbacked_symints.py TestUnbackedSymintsPRIVATEUSE1.test_triton_kernel_with_unbacked_symint_fallback_npu\nE                   \nE                   This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\n../../../../<python-env>/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:1177: UserError",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.0001721580047160387,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_unbacked_symints.py::test_triton_kernel_with_unbacked_symint_fallback": {
+      "scope": "npu",
+      "source_method": "test_triton_kernel_with_unbacked_symint_fallback",
+      "candidates": [
+        {
+          "nodeid": "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu",
+          "device": "npu"
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_unbacked_symints.py::test_triton_kernel_with_unbacked_symint_fallback": {
+      "nodeid": "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu",
+      "nodeids": [
+        "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_triton_kernel_with_unbacked_symint_fallback_npu"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

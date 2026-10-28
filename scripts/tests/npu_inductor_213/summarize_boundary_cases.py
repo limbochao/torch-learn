@@ -20,10 +20,14 @@ def sanitize(value):
     value = re.sub(r'/home/[^/\s]+/PTA_213/Community-Use-Case-Testing', '<test-repo>', value)
     value = re.sub(r'/home/[^/\s]+', '<home>', value)
     value = re.sub(r'miniforge3/envs/[^/\s]+', '<python-env>', value)
+    value = re.sub(r'torchinductor_[A-Za-z0-9_]+', 'torchinductor_<user>', value)
+    value = re.sub(r'profile_results/[^\s\"\']+', 'profile_results/<profile>', value)
+    value = re.sub(r'(\[(?:INFO|WARNING|ERROR|DEBUG)\] )\[\d+\]', r'\1[<pid>]', value)
+    value = re.sub(r'([EWI]\d{4} \d{2}:\d{2}:\d{2}\.\d+ )\d+( )', r'\1<pid>\2', value)
     value = re.sub(r'PID[:= ]+\d+', 'PID:<redacted>', value)
     value = re.sub(r'\bpid[:= ]+\d+', 'pid:<redacted>', value)
-    value = re.sub(r'backend_hash[\'\"]?\s*[:=]\s*[\'\"][^\'\"]+[\'\"]',
-                   'backend_hash=<redacted>', value)
+    value = re.sub(r'(backend_hash[\'\"]?\s*[:=]\s*[\'\"])[^\'\"]+([\'\"])',
+                   r'\1<redacted>\2', value)
     return value
 
 
@@ -58,11 +62,12 @@ def main():
         **{n: 'control_no_overlay' for n in [1, 2, 39]},
         **{n: 'adaptation' for n in [5, 6, 7, 8]},
         **{n: 'candidate_v2' for n in [4, 19, 22]},
-        **{n: 'candidate_v3' for n in [17, 41, 42]},
+        **{n: 'candidate_v3' for n in [17, 41]},
         **{n: 'adapted_extension' for n in [15, 16]},
-        **{n: 'long_budget' for n in [24, 25]},
-        **{n: 'multi_device' for n in [23, 34, 35]},
-        9: 'conv_precision', 14: 'padding_long', 18: 'layout_long', 21: 'fusion_metadata',
+        24: 'views_concurrency', 25: 'long_budget',
+        **{n: 'multi_device_v2' for n in [23, 34, 35]},
+        9: 'conv_concurrency', 14: 'padding_concurrency', 18: 'layout_adapted',
+        20: 'bmm_macro_disabled', 21: 'fusion_concurrency', 32: 'gather_meta', 42: 'sort_metric_rollback',
     }
     for index, (filename, case) in enumerate(cases, 1):
         baseline_folder = 'baseline_v2' if index <= 10 else 'baseline_main' if index <= 23 else 'baseline_tail'
@@ -90,7 +95,7 @@ def main():
         row['证据'] = f'{baseline_folder}/case-{index:02}.json'
         rows.append(row)
     with (args.output / 'results.csv').open('w', encoding='utf-8-sig', newline='') as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     (args.output / 'progress.json').write_text(json.dumps({

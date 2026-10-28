@@ -1,0 +1,100 @@
+{
+  "requested": [
+    "test_torchinductor_<user>.py::test_constant_fold_uniform_value_dynamic"
+  ],
+  "environment": {
+    "transfer_sha256": "6a71b6bf25e88a1228c965e1a673b3b2934825d41262633986a4d15bbafd2e6a",
+    "transfer_pr_head": null,
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "0",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0.dev20261028",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "2",
+    "device_count": 1,
+    "default_device": 0,
+    "compile_threads": 2,
+    "npu_precompile_threads": 2,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_torchinductor_<user>.py": "7cb97b454add47748f23bb6d495208f5726e0a42bc68e2b62ea5c1efe069fa11"
+    }
+  },
+  "selected": [
+    "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu"
+  ],
+  "resolved_nodeids": {
+    "test_torchinductor_<user>.py::test_constant_fold_uniform_value_dynamic": [
+      "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.0004695840034401044,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 0.6215157199912937,
+      "longrepr": "self = <inductor_npu.test_torchinductor_<user>.TestInductorDynamicPRIVATEUSE1 testMethod=test_constant_fold_uniform_value_dynamic_npu>\ndevice = 'npu:0'\n\n    def test_constant_fold_uniform_value_dynamic(self, device):\n        def full_add_zero(x):\n            a = torch.full(x.shape, 1, dtype=x.dtype, device=x.device)\n            b = a - 1\n            return x + b\n    \n        def full_mul_one(x):\n            a = torch.full(x.shape, -1, dtype=x.dtype, device=x.device)\n            b = 2 + a\n            return x * b\n    \n        def full_view_op(x):\n            a = torch.ones([1], dtype=x.dtype, device=x.device)\n            a = a[:, None]\n            return x * a\n    \n        def full_mul_symint(x):\n            a = torch.full(x.shape, -1, dtype=x.dtype, device=x.device)\n            b = 2 + a\n            return b * x.shape[0]\n    \n        fns = (full_add_zero, full_mul_one, full_view_op)\n    \n        x = torch.randn((2, 4), device=device)\n        y = torch.randn((3, 4), device=device)\n    \n        for dynamic in [False, True]:\n            torch._dynamo.reset()\n            for fn in fns:\n                ref = fn(x)\n                fn_c = torch.compile(fn, dynamic=dynamic)\n    \n                actual, source_codes = run_and_get_code(fn_c, x)\n    \n                if fn is not full_mul_symint:\n                    # due to constant folding, fn returns x directly.\n                    if device == \"cpu\":\n                        FileCheck().check_not(\"cpp_fused\").run(source_codes[0])\n                    else:\n>                       FileCheck().check_not(\"triton.jit\").run(source_codes[0])\nE                       IndexError: list index out of range\nE                       \nE                       To execute this test, run the following from the base repo dir:\nE                           python test_torchinductor_<user>.py TestInductorDynamicPRIVATEUSE1.test_constant_fold_uniform_value_dynamic_npu\nE                       \nE                       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\ntest_torchinductor_<user>.py:280: IndexError",
+      "wasxfail": null,
+      "sections": [
+        [
+          "Captured stdout call",
+          "You have not run this instance of FileCheck!\nFileCheck checks:\n\tCHECK-NOT: triton.jit\n"
+        ]
+      ]
+    },
+    {
+      "nodeid": "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.0002258280001115054,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_torchinductor_<user>.py::test_constant_fold_uniform_value_dynamic": {
+      "scope": "npu",
+      "source_method": "test_constant_fold_uniform_value_dynamic",
+      "candidates": [
+        {
+          "nodeid": "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu",
+          "device": "npu"
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_torchinductor_<user>.py::test_constant_fold_uniform_value_dynamic": {
+      "nodeid": "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu",
+      "nodeids": [
+        "test_torchinductor_<user>.py::TestInductorDynamicPRIVATEUSE1::test_constant_fold_uniform_value_dynamic_npu"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}

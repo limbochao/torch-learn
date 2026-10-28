@@ -1,0 +1,95 @@
+{
+  "requested": [
+    "test_inplace_padding.py::test_mutating_padding_input"
+  ],
+  "environment": {
+    "transfer_sha256": "6a71b6bf25e88a1228c965e1a673b3b2934825d41262633986a4d15bbafd2e6a",
+    "transfer_pr_head": null,
+    "npu_backend": "default",
+    "benchmark_default_device": "npu",
+    "slow_tests": "0",
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0.dev20261028",
+    "triton": "3.6.0",
+    "device": "Ascend950PR_9579",
+    "GPU_TYPE": "npu",
+    "HAS_GPU": true,
+    "HAS_TRITON": true,
+    "driver": "NPUDriver",
+    "visible_devices": "3",
+    "device_count": 1,
+    "default_device": 0,
+    "compile_threads": 2,
+    "npu_precompile_threads": 2,
+    "debug_disable_compile_counter": false,
+    "test_sha256": {
+      "test_inplace_padding.py": "08c953ee4566e30a2344d94d74f2c98334e5a1f8cd1860db0f74d9a8fc8de633"
+    }
+  },
+  "selected": [
+    "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input"
+  ],
+  "resolved_nodeids": {
+    "test_inplace_padding.py::test_mutating_padding_input": [
+      "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input"
+    ]
+  },
+  "reports": [
+    {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "when": "setup",
+      "outcome": "passed",
+      "duration": 0.00046556899906136096,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "when": "call",
+      "outcome": "failed",
+      "duration": 77.61036561999936,
+      "longrepr": "self = <inductor_npu.test_inplace_padding.InplacePaddingTest testMethod=test_mutating_padding_input>\n\n    @inductor_config.patch(can_inplace_pad_graph_input=True)\n    def test_mutating_padding_input(self):\n        \"\"\"\n        Even if `aten.constant_pad_nd` input get inplace updated,\n        doing inplace-padding still generates the correct result.\n        \"\"\"\n    \n        def f(x, y):\n            x2 = aten.constant_pad_nd(x, (0, 8, 0, 0), 12345.0)\n            x.add_(5)\n            return x2 @ y\n    \n        M, N = 2048, 2048\n        x = rand_strided((M, N + 10), (N + 10, 1), device=GPU_TYPE).as_strided(\n            (M, N), (N + 10, 1)\n        )\n        y = torch.randn(N + 8, M, device=GPU_TYPE)\n        check_model(self, f, (x, y), atol=1e-2, rtol=1e-2)\n    \n>       self.assertEqual(num_inplace_padding(), 1)\n\ntest_inplace_padding.py:200: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <inductor_npu.test_inplace_padding.InplacePaddingTest testMethod=test_mutating_padding_input>\nx = 0, y = 1, args = (), kwargs = {}\n\n    def assertEqual(self, x: Any, y: Any, *args: Any, **kwargs: Any) -> None:  # type: ignore[override]\n        if config.debug_disable_compile_counter:\n            if isinstance(x, utils.CompileCounterInt) or isinstance(\n                y, utils.CompileCounterInt\n            ):\n                return\n            # skip checks like self.assertEqual(len(counters[\"graph_break\"]), 1)\n            if (\n                (cur_frame := inspect.currentframe())\n                and (upper_frame := cur_frame.f_back)\n                and (upper_code := inspect.getframeinfo(upper_frame).code_context)\n                and \"counters\" in upper_code[0]\n            ):\n                return\n>       return super().assertEqual(x, y, *args, **kwargs)\nE       AssertionError: Scalars are not equal!\nE       \nE       Expected 1 but got 0.\nE       Absolute difference: 1\nE       Relative difference: 1.0\nE       \nE       To execute this test, run the following from the base repo dir:\nE           python test_inplace_padding.py InplacePaddingTest.test_mutating_padding_input\nE       \nE       This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n\n../../../../<python-env>/lib/python3.11/site-packages/torch/_dynamo/test_case.py:128: AssertionError",
+      "wasxfail": null,
+      "sections": []
+    },
+    {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "when": "teardown",
+      "outcome": "passed",
+      "duration": 0.00022791200899519026,
+      "longrepr": "",
+      "wasxfail": null,
+      "sections": []
+    }
+  ],
+  "collection_errors": [],
+  "selection_metadata": {
+    "test_inplace_padding.py::test_mutating_padding_input": {
+      "scope": "host_or_explicit_device",
+      "source_method": "test_mutating_padding_input",
+      "candidates": [
+        {
+          "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+          "device": null
+        }
+      ]
+    }
+  },
+  "case_results": {
+    "test_inplace_padding.py::test_mutating_padding_input": {
+      "nodeid": "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input",
+      "nodeids": [
+        "test_inplace_padding.py::InplacePaddingTest::test_mutating_padding_input"
+      ],
+      "status": "failed",
+      "call_outcomes": [
+        "failed"
+      ]
+    }
+  },
+  "summary": {
+    "failed": 1
+  },
+  "exitcode": 1
+}
