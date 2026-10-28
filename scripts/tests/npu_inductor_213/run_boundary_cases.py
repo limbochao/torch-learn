@@ -24,7 +24,6 @@ def main():
     assert Path('/.dockerenv').exists(), 'Run inside the target Docker container'
     assert Path.cwd().name == 'inductor_npu', 'Run from the authorized test directory'
     devices = [int(value) for value in args.physical_devices.split(',')]
-    assert set(devices) <= {1, 2, 3}, 'Use checked, unrestricted physical devices 1, 2, or 3'
     assert os.environ.get('ASCEND_RT_VISIBLE_DEVICES') == args.physical_devices
     args.output.mkdir(parents=True, exist_ok=True)
     cases = [line.split('\t')[:2] for line in args.manifest.read_text().splitlines() if line]
@@ -36,6 +35,10 @@ def main():
         if invocation.exists():
             continue
         now = datetime.now(ZoneInfo('Asia/Shanghai'))
+        allowed = {1, 2, 3}
+        if 9 <= now.hour < 22 and (22 * 3600 - now.hour * 3600 - now.minute * 60 - now.second) > args.timeout + 30:
+            allowed.update({4, 5, 7})
+        assert set(devices) <= allowed, 'Device restriction window must cover the complete case timeout'
         usage = subprocess.run(['npu-smi', 'info'], capture_output=True, text=True, check=True)
         (args.output / f'case-{row:02}-device.txt').write_text(usage.stdout)
         env = os.environ.copy()
