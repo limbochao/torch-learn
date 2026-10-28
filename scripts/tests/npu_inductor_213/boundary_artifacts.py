@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 
-@pytest.hookimpl(tryfirst=True)
+@pytest.hookimpl(trylast=True)
 def pytest_runtest_makereport(item, call):
     if call.excinfo is None or not os.environ.get('BOUNDARY_ARTIFACT_DIR'):
         return
