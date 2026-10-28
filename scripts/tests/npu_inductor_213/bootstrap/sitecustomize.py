@@ -13,6 +13,8 @@ if os.environ.get('BOUNDARY_NATIVE_DRIVER') == '1':
     modules['torch._inductor.runtime.triton_helpers'] = 'torch/_inductor/runtime/triton_helpers.py'
 if os.environ.get('BOUNDARY_FUSION_METADATA') == '1':
     modules['torch_npu._inductor.codegen.scheduling'] = 'torch_npu/_inductor/codegen/scheduling.py'
+if os.environ.get('BOUNDARY_BMM_MACRO') == '1':
+    modules['torch_npu._inductor.kernel.bmm'] = 'torch_npu/_inductor/kernel/bmm.py'
 if os.environ.get('BOUNDARY_HOP_FALLBACK') == '1':
     modules['torch._inductor.lowering'] = 'torch/_inductor/lowering.py'
 
