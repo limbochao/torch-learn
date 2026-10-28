@@ -48,6 +48,7 @@ def main():
                    TORCHINDUCTOR_COMPILE_THREADS='2', TORCHNPU_PRECOMPILE_THREADS='2',
                    TORCHINDUCTOR_CACHE_DIR=str(cache), TMPDIR=str(args.output),
                    TRITON_CACHE_DIR=str(args.output / 'triton_cache'),
+                   BOUNDARY_ARTIFACT_DIR=str(args.output / f'generated-{row:02}'),
                    PYTHONUNBUFFERED='1')
         command = [sys.executable, str(args.runner), '--case-names', '--precompile-workers', '2',
                    '--output', str(output), f'{filename}::{case}']

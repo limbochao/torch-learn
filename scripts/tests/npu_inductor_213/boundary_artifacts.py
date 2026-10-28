@@ -1,0 +1,35 @@
+"""Retain generated code visible in a failing pytest traceback without changing execution."""
+
+import hashlib
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_makereport(item, call):
+    if call.excinfo is None or not os.environ.get('BOUNDARY_ARTIFACT_DIR'):
+        return
+    output = Path(os.environ['BOUNDARY_ARTIFACT_DIR'])
+    output.mkdir(parents=True, exist_ok=True)
+    records = []
+    frame = call.excinfo.value.__traceback__
+    while frame is not None:
+        for name in ['code', 'code_unfused', 'source_codes', 'source_code']:
+            value = frame.tb_frame.f_locals.get(name)
+            values = [value] if isinstance(value, str) else value if isinstance(value, (tuple, list)) else []
+            for index, source in enumerate(values):
+                if not isinstance(source, str) or ('import triton' not in source and '# AOT ID:' not in source):
+                    continue
+                digest = hashlib.sha256(source.encode()).hexdigest()
+                filename = f'{digest[:16]}.py'
+                (output / filename).write_text(source)
+                records.append({'nodeid': item.nodeid, 'local': name, 'index': index,
+                                'file': filename, 'sha256': digest})
+        frame = frame.tb_next
+    if records:
+        manifest = output / 'manifest.json'
+        previous = json.loads(manifest.read_text()) if manifest.exists() else []
+        manifest.write_text(json.dumps(previous + records, indent=2) + '\n')

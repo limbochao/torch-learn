@@ -62,10 +62,11 @@ def gather(backend):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument('probe', choices=['rightshift', 'floorzero', 'gather'])
+    parser.add_argument('--backend', default='inductor',
+                        choices=['eager', 'aot_eager', 'aot_eager_decomp_partition', 'inductor'])
     args = parser.parse_args()
     torch.npu.set_device(0)
     if args.probe == 'gather':
-        for backend in ['eager', 'aot_eager', 'inductor']:
-            attempt('gather_' + backend, lambda backend=backend: gather(backend))
+        attempt('gather_' + args.backend, lambda: gather(args.backend))
     else:
         attempt(args.probe, globals()[args.probe])
