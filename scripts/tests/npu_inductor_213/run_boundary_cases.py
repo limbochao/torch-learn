@@ -20,6 +20,8 @@ def main():
     parser.add_argument('--timeout', type=int, default=420)
     parser.add_argument('--physical-devices', default='3')
     parser.add_argument('--rows', type=int, nargs='*')
+    parser.add_argument('--precompile-workers', type=int, default=2)
+    parser.add_argument('--compile-threads', type=int, default=2)
     args = parser.parse_args()
     assert Path('/.dockerenv').exists(), 'Run inside the target Docker container'
     assert Path.cwd().name == 'inductor_npu', 'Run from the authorized test directory'
@@ -45,12 +47,13 @@ def main():
         cache = args.output / f'cache-{row:02}'
         cache.mkdir(exist_ok=True)
         env.update(TORCH_TRANSFER_TO_NPU='1', TORCH_NPU_DEVICE_CAPABILITY='8.0',
-                   TORCHINDUCTOR_COMPILE_THREADS='2', TORCHNPU_PRECOMPILE_THREADS='2',
+                   TORCHINDUCTOR_COMPILE_THREADS=str(args.compile_threads),
+                   TORCHNPU_PRECOMPILE_THREADS=str(args.precompile_workers),
                    TORCHINDUCTOR_CACHE_DIR=str(cache), TMPDIR=str(args.output),
                    TRITON_CACHE_DIR=str(args.output / 'triton_cache'),
                    BOUNDARY_ARTIFACT_DIR=str(args.output / f'generated-{row:02}'),
                    PYTHONUNBUFFERED='1')
-        command = [sys.executable, str(args.runner), '--case-names', '--precompile-workers', '2',
+        command = [sys.executable, str(args.runner), '--case-names', '--precompile-workers', str(args.precompile_workers),
                    '--output', str(output), f'{filename}::{case}']
         record = {'row': row, 'file': filename, 'case': case, 'command': command,
                   'start': now.isoformat(), 'physical_devices': devices, 'timeout_seconds': args.timeout}
