@@ -11,6 +11,7 @@
 
 已归档脚本：
 
+- [cicd/dinov2_cuda_20261027/](cicd/dinov2_cuda_20261027/README.md)：DINOv2 CUDA 训练精度对照，复用 NPU 基线 runner，提供 5/50 轮 benchmark 与 FP32 逐轮误差收集；[下载测试包](cicd/dinov2_cuda_20261027.tar.gz)。尚未在 CUDA 上实测。
 - [cicd/dinov2_simt_reduction_20261026/](cicd/dinov2_simt_reduction_20261026/README.md)：DINOv2 最终 LayerNorm 参数梯度的原始完整 kernel、简化归约和固定配置对照；原 32×64 SIMT 配置漏算贡献。
 
 - [cicd/load_order_fixed_20261023/](cicd/load_order_fixed_20261023/README.md)：04 load 重排的固定 tiling
