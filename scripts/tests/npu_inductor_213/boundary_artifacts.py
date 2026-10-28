@@ -33,3 +33,23 @@ def pytest_runtest_makereport(item, call):
         manifest = output / 'manifest.json'
         previous = json.loads(manifest.read_text()) if manifest.exists() else []
         manifest.write_text(json.dumps(previous + records, indent=2) + '\n')
+
+
+def pytest_configure():
+    from torch._inductor.codecache import PyCodeCache
+
+    original = PyCodeCache.load.__func__
+
+    @classmethod
+    def load(cls, source_code, *args, **kwargs):
+        directory = os.environ.get('BOUNDARY_ARTIFACT_DIR')
+        if directory and isinstance(source_code, str) and (
+            'import triton' in source_code or '# AOT ID:' in source_code
+        ):
+            output = Path(directory)
+            output.mkdir(parents=True, exist_ok=True)
+            digest = hashlib.sha256(source_code.encode()).hexdigest()
+            (output / f'{digest[:16]}.py').write_text(source_code)
+        return original(cls, source_code, *args, **kwargs)
+
+    PyCodeCache.load = load

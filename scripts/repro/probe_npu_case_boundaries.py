@@ -44,7 +44,9 @@ def floorzero():
     return result
 
 
-def gather(backend):
+def gather(backend, initialize_inductor=False):
+    if initialize_inductor:
+        _dynamo._lazy_inductor_setup()
     torch.manual_seed(1234)
     a = torch.randn(4, 5, 10, 6, device='npu', requires_grad=True)
     b = torch.randint(5, (4, 5, 10, 1), device='npu', dtype=torch.int64)
@@ -61,12 +63,13 @@ def gather(backend):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__)
+    parser.add_argument('--initialize-inductor', action='store_true')
     parser.add_argument('probe', choices=['rightshift', 'floorzero', 'gather'])
     parser.add_argument('--backend', default='inductor',
                         choices=['eager', 'aot_eager', 'aot_eager_decomp_partition', 'inductor'])
     args = parser.parse_args()
     torch.npu.set_device(0)
     if args.probe == 'gather':
-        attempt('gather_' + args.backend, lambda: gather(args.backend))
+        attempt('gather_' + args.backend, lambda: gather(args.backend, args.initialize_inductor))
     else:
         attempt(args.probe, globals()[args.probe])
