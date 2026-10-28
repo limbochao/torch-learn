@@ -53,3 +53,20 @@ def pytest_configure():
         return original(cls, source_code, *args, **kwargs)
 
     PyCodeCache.load = load
+
+    original_by_key = PyCodeCache.load_by_key_path.__func__
+
+    @classmethod
+    def load_by_key_path(cls, key, path, *args, **kwargs):
+        directory = os.environ.get('BOUNDARY_ARTIFACT_DIR')
+        source_path = Path(path)
+        if directory and source_path.is_file():
+            source = source_path.read_text()
+            if 'async_compile.wait' in source:
+                output = Path(directory)
+                output.mkdir(parents=True, exist_ok=True)
+                digest = hashlib.sha256(source.encode()).hexdigest()
+                (output / f'wrapper-{digest[:16]}.py').write_text(source)
+        return original_by_key(cls, key, path, *args, **kwargs)
+
+    PyCodeCache.load_by_key_path = load_by_key_path
