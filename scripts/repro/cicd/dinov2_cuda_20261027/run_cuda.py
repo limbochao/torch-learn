@@ -10,6 +10,35 @@ os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 os.environ.setdefault('TORCHINDUCTOR_EMULATE_PRECISION_CASTS', '0')
 os.environ.setdefault('TORCH_DEVICE_BACKEND_AUTOLOAD', '0')
 
+
+def configure_hf_download():
+    """Opt in to a process-local certificate bypass for benchmark weight downloads."""
+    if os.environ.get('HF_DOWNLOAD_INSECURE') != '1':
+        return
+    # Set before importing the Hub: requests/httpx settings do not affect Rust hf-xet.
+    os.environ['HF_HUB_DISABLE_XET'] = '1'
+    os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
+    import huggingface_hub as hub
+
+    if hasattr(hub, 'set_client_factory'):
+        # Preserve the HTTP client type used by this installed Hub version.
+        client_type = type(hub.get_session())
+        hub.set_client_factory(lambda: client_type(verify=False, follow_redirects=True, timeout=60.0))
+    else:
+        import requests
+
+        def backend_factory():
+            session = requests.Session()
+            session.verify = False
+            return session
+
+        hub.configure_http_backend(backend_factory=backend_factory)
+    print('HF_DOWNLOAD_INSECURE=1: Hugging Face TLS verification disabled for this process; Xet disabled.',
+          file=sys.stderr, flush=True)
+
+
+configure_hf_download()
+
 import torch
 import common
 from trajectory_metrics import compare_model

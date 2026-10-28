@@ -5,7 +5,7 @@
 
 ## 环境准备
 
-以下命令面向 Linux x86_64、Python 3.11、支持 CUDA 13 的 NVIDIA GPU。
+以下命令面向 Linux x86_64、Python 3.11/3.12、支持 CUDA 13 的 NVIDIA GPU。
 先执行 `nvidia-smi` 检查驱动；CUDA 13.x 要求驱动至少 580，具体 GPU/驱动组合仍需兼容。
 机器需有可用的 C++ 编译器（如 g++）。不在 CUDA 环境安装 torch_npu。
 
@@ -20,6 +20,38 @@ python -c 'import torch; print(torch.__version__, torch.version.git_version, tor
 
 下载模型受网络限制时，可根据所在网络设置 HF_ENDPOINT，例如 `https://hf-mirror.com`。
 驱动低于要求时应先选择兼容的环境，不能直接套用上述 cu130 命令。
+已有 Python 3.12 环境可直接安装依赖，或将 conda 命令中的 `python=3.11` 改为 `python=3.12`。
+
+### 权重下载报 UnknownIssuer
+
+如果停在 `loading model`，日志出现 `CAS service error`、`InvalidCertificate(UnknownIssuer)`，
+说明 Hugging Face 的 hf-xet 下载未能验证服务端证书，还没有进入 CUDA 编译和精度测试。
+仅凭该日志无法区分缺少 CA 和代理证书未被信任。
+
+可以先禁用 Xet，保留普通 HTTP 下载的证书校验：
+
+```bash
+HF_HUB_DISABLE_XET=1 CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 5
+```
+
+需要临时绕过证书校验时使用本包的显式开关：
+
+```bash
+HF_DOWNLOAD_INSECURE=1 CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 5
+HF_DOWNLOAD_INSECURE=1 CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 50
+HF_DOWNLOAD_INSECURE=1 CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh trajectory 50
+```
+
+该开关在导入 Hub 之前禁用 Xet，并根据安装版本配置 requests 或 httpx 系列的 Hub 客户端，
+仅关闭当前 Python 进程内 Hub 下载的 TLS 证书验证。下载来源将不再经过证书认证；
+不会修改系统证书或训练逻辑，也不会关闭后续未设置开关的进程的校验。
+`HF_DOWNLOAD_INSECURE` 是本复现包定义的开关，直接运行原 `timm_models.py` 不会读取它。
+不要用 `PYTHONHTTPSVERIFY=0` 代替：它不能覆盖本日志中的 Rust hf-xet 下载客户端。
+
+实现依据：
+- https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfhubdisablexet
+- https://huggingface.co/docs/huggingface_hub/package_reference/utilities#configuring-the-http-backend
+- https://huggingface.co/docs/huggingface_hub/v0.34.6/package_reference/utilities#configure-http-backend
 
 版本依据：
 - https://download.pytorch.org/whl/cu130/torch/
@@ -88,5 +120,8 @@ FP32 eager 标杆，不生成 FP64 golden。它维护两个 eager 副本和一�
 - 官方 torch 2.13.0 wheel 与 NPU 使用的源码构建不保证同一 commit。该包用于快速 CUDA 定界，
   不能据此证明严格同源码、同输入的跨设备数值等价。
 - CUDA 使用自己的 codegen；未移植 NPU 的 layernorm fallback 或手动 GELU tiling。
-- 本包仅完成 Python/shell 语法检查、屏蔽 torch_npu 后的 CPU 导入与指标 smoke 检查。
+- 本包已完成 Python/shell 语法检查、屏蔽 torch_npu 后的 CPU 导入与指标 smoke 检查。
+  Python 3.12 下另用本地自签名 HTTPS 服务检查 Hub 0.34.6（requests）、1.33.0（httpx）和
+  2.x 客户端：显式开关可绕过下载证书校验，系统 TLS 校验仍正常拒绝同一自签名证书。
+  这些检查没有执行 GPU 运算，也没有验证用户环境的真实权重下载。
   尚未在 CUDA GPU 上执行；OOM、依赖或编译失败不属于已完成的精度验证。
