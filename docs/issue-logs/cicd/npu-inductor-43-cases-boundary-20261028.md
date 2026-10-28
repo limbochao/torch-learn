@@ -144,10 +144,32 @@ metadata模式保留布局，使用seed=0合成数值，没有保存用户tensor
 因此最初缺少截断语句。补齐metadata后，第21项全部代码检查通过，12个实例中4个FP32通过，
 8个FP16/BF16仍未通过融合与未融合的精确比较。当前候选没有完全修复精度问题。
 
+已保存同一失败实例的[融合代码](../../../artifacts/npu-inductor-boundary-20261028/precision-roundtrip/case21-fused.py)
+与[未融合代码](../../../artifacts/npu-inductor-boundary-20261028/precision-roundtrip/case21-unfused.py)。
+两者的GEMM均使用128×128×128 tile；融合代码在bias相加后先转BF16、再转FP32，随后执行relu/sub；
+未融合代码先将GEMM结果写入BF16缓冲，再由pointwise内核读取并执行relu/sub。
+因此，首个metadata缺陷修复后仍发生的差异，不能再仅用“生成代码缺少cast”解释。
+
 第18项的NPU生成代码保留宽度1490及行步长1490；CUDA测试设想的1536填充布局没有出现。
 测试适配检查真实步长并增加输出比较后，两个epilogue=False分支通过，
 两个True分支在BF16输出转FP32的结果上失败：主BF16结果比较通过，但FP32结果未保留BF16舍入。
 该新增精度证据保留为失败，不能仅凭布局检查通过就认定修复完成。
+
+该次运行保留的[BMM候选DSL](../../../artifacts/npu-inductor-boundary-20261028/precision-roundtrip/case18-bmm-candidate.py)
+同样包含 `acc.to(tl.bfloat16)` 再转FP32，并分别写入BF16和FP32输出；
+该文件尚无selected winner记录，不能直接认定它就是产生最终错误的配置。
+[源文件校验清单](../../../artifacts/npu-inductor-boundary-20261028/precision-roundtrip/manifest.json)
+区分原文件和去敏副本SHA。
+
+[固定模板精度对照脚本](../../../scripts/repro/probe_template_roundtrip_precision.py)
+保留DSL函数原文，直接调用Triton编译和launch，输出编译IR及误差JSON。
+第18项比较同次BMM的FP32结果与其BF16结果在CPU上扩展后的值；
+第21项比较融合GEMM与同输入、同tile的未融合GEMM加CPU epilogue。
+该脚本是待验证的定界实验，不能代替原方法的完整复测，也尚未证明下层编译器存在缺陷。
+
+2026-10-29北京时间00:05后，目标SSH在密钥交换前持续关闭，导致剩余设备实验无法启动。
+已完成的本地语法/提取结构检查不计为NPU验证。恢复连接后需执行上述固定模板对照，
+补取第9项eager探针和第34项事件探针的日志，并验证实际CANN上下文及binary loader上下文恢复候选。
 
 稀疏gather的递归来自Meta构造继承了测试全局开启的sparse invariants数据检查，
 并在meta tensor与CPU复制分解间重入。仅给Meta内三个 `sparse_coo_tensor` 构造传入
