@@ -1,7 +1,8 @@
 # DINOv2 CUDA 对照包
 
-用于快速比较 `vit_base_patch14_dinov2.lvd142m` 的 FP32、training、dynamic-shapes、batch size 16、
-5/50 轮精度。无需编译 PyTorch，无需准备 ImageNet；首次运行会下载 timm 的预训练权重。
+用于快速比较 `vit_base_patch14_dinov2.lvd142m` 的 FP32、training、dynamic-shapes 精度。
+`run_cuda.sh` 默认 batch size 为 4，支持通过第三个参数指定 16 等其它值，迭代次数默认仍为 50。
+无需编译 PyTorch，无需准备 ImageNet；首次运行会下载 timm 的预训练权重。
 
 ## 环境准备
 
@@ -67,17 +68,25 @@ HF_DOWNLOAD_INSECURE=1 CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh trajectory 50
 在本包目录执行，CUDA_VISIBLE_DEVICES 按机器实际空闲卡选择：
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 5
-CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 50
+# 参数顺序：模式、迭代次数、batch size（默认 4）
+CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 2 4
+CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 5 4
+CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 50 4
+# 重跑原来的 batch size 16 对照：
+CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh benchmark 50 16
 ```
 
-相当于运行原 runner 的以下命令；使用本包的 common.py 对齐 SGD foreach 设置：
+第三个参数会传给原 runner 的 `--batch-size`，结果目录名含 `bs4` 或 `bs16`。
+只更改 batch size；其它训练设置和精度阈值保持本包既有配置。
+2 步命令仅对齐迭代次数，并不代表完整复刻上游 CI 的全部配置。
+
+例如 batch size 4、50 步相当于运行原 runner 的以下命令；使用本包的 common.py 对齐 SGD foreach 设置：
 
 ```bash
 HF_ENDPOINT=https://hf-mirror.com python timm_models.py \
   --device cuda --accuracy --training --float32 --backend inductor \
   --disable-aclgraph --only vit_base_patch14_dinov2.lvd142m --dynamic-shapes \
-  --batch-size 16 --iterations 50 --accu-summary --output benchmark.csv
+  --batch-size 4 --iterations 50 --accu-summary --output benchmark.csv
 ```
 
 这个 runner 参数叫 `--disable-aclgraph`，在 CUDA 上也会关闭 cudagraphs/cudagraph_trees。
@@ -88,10 +97,10 @@ FP64 golden 失败后可能切换 cosine 比较，需要核对日志。
 ## 逐步收集误差
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh trajectory 5
-CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh trajectory 50
+CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh trajectory 5 4
+CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh trajectory 50 4
 # 仅执行原 runner 的 eager 检查，可选：
-CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh eager 50
+CUDA_VISIBLE_DEVICES=0 bash run_cuda.sh eager 50 4
 ```
 
 `trajectory` 调用同一 TimmRunner 的训练函数、loss 和 optimizer，但使用与本次 NPU 定位一致的
@@ -116,7 +125,7 @@ FP32 eager 标杆，不生成 FP64 golden。它维护两个 eager 副本和一�
 - `timm_models.py` 保留基线模型路径；`common.py` 只做两类 CUDA 兼容修改：
   为四处 torch.npu 可用性检查加保护；SGD foreach=False，与 NPU 保持一致。
   具体修改见 `cuda_compatibility.diff`，文件校验见 `manifest.json`。
-- 模型 pretrained=True、随机种子 1337、输入 16x3x518x518、SGD lr=0.01，
+- 模型 pretrained=True、随机种子 1337、输入 Bx3x518x518（shell 默认 B=4）、SGD lr=0.01，
   无 momentum/weight decay，loss 使用原 runner 的 reduce_to_scalar_loss。
 - accuracy 配置关闭 TF32、开启确定性；逐轮模式还记录实际生效值。
   默认 TORCHINDUCTOR_EMULATE_PRECISION_CASTS=0，可显式设置该环境变量做另外一组对照。

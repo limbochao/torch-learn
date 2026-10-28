@@ -70,7 +70,7 @@ def diagnose(self, name, model, example_inputs, optimize_ctx, experiment, tag):
     out = Path(self.args.output).resolve().parent
     out.mkdir(parents=True, exist_ok=True)
     base, inputs = self.maybe_cast(model, example_inputs)
-    assert tuple(inputs[0].shape) == (16, 3, 518, 518), inputs[0].shape
+    assert tuple(inputs[0].shape) == (self.args.batch_size, 3, 518, 518), inputs[0].shape
     raw = {key: self.deepcopy_and_maybe_ddp(base) for key in ['eager', 'eager_check', 'compiled']}
     optimizers = {}
     for key, mod in raw.items():
@@ -85,7 +85,7 @@ def diagnose(self, name, model, example_inputs, optimize_ctx, experiment, tag):
     common.reset_rng_state()
     rng = {key: rng_state() for key in models}
     report = dict(model=name, baseline='848e9feaa86f1cefe82ea1307c62c2d8b89bfc6f',
-                  iterations=self.args.iterations, input_shape=list(inputs[0].shape),
+                  iterations=self.args.iterations, batch_size=inputs[0].shape[0], input_shape=list(inputs[0].shape),
                   seed=1337, optimizer='SGD', lr=lr, foreach=False, tolerance=tolerance,
                   reference='same-input FP32 eager; no FP64 golden in trajectory mode',
                   first_failure={}, steps=[])
