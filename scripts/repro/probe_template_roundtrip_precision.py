@@ -94,7 +94,10 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--fp-fusion-off', action='store_true')
     parser.add_argument('--compiler-debug', action='store_true', help='Retain downstream compiler IR and temporary files')
+    parser.add_argument('--dtype', choices=('bfloat16', 'float16'), default='bfloat16')
     args = parser.parse_args()
+    if args.case == 18 and args.dtype != 'bfloat16':
+        parser.error('Case 18 only has a captured BF16 template')
     args.output.mkdir(parents=True, exist_ok=True)
     root = Path(__file__).resolve().parents[2] / 'artifacts/npu-inductor-boundary-20261028/precision-roundtrip'
 
@@ -115,22 +118,24 @@ def main():
         torch.npu.synchronize()
         result = {'case': 18, 'compiled': [record], 'roundtrip': compare(high, low.cpu().float())}
     else:
-        fused, fused_record = compile_template(root / 'case21-fused.py', args.output, 'fused',
+        prefix = 'case21-fp16' if args.dtype == 'float16' else 'case21'
+        dtype = getattr(torch, args.dtype)
+        fused, fused_record = compile_template(root / f'{prefix}-fused.py', args.output, 'fused',
                                                args.fp_fusion_off, args.compiler_debug)
-        unfused, unfused_record = compile_template(root / 'case21-unfused.py', args.output, 'unfused',
+        unfused, unfused_record = compile_template(root / f'{prefix}-unfused.py', args.output, 'unfused',
                                                    args.fp_fusion_off, args.compiler_debug)
-        bias = torch.randn((128,), device='npu', dtype=torch.bfloat16)
-        x = torch.randn((128, 128), device='npu', dtype=torch.bfloat16)
+        bias = torch.randn((128,), device='npu', dtype=dtype)
+        x = torch.randn((128, 128), device='npu', dtype=dtype)
         fused_out, gemm_out = torch.empty_like(x), torch.empty_like(x)
         fused[(1, 1, 1)](bias, x, fused_out, stream=stream)
         unfused[(1, 1, 1)](bias, x, gemm_out, stream=stream)
         torch.npu.synchronize()
-        expected = (gemm_out.cpu().float().relu() - 1).to(torch.bfloat16)
+        expected = (gemm_out.cpu().float().relu() - 1).to(dtype)
         result = {'case': 21, 'compiled': [fused_record, unfused_record],
                   'fused_vs_materialized': compare(fused_out, expected)}
     result['environment'] = {'torch': torch.__version__, 'torch_npu': torch_npu.__version__,
                              'device': torch.npu.get_device_name(0), 'seed': 1234,
-                             'fp_fusion_off': args.fp_fusion_off}
+                             'fp_fusion_off': args.fp_fusion_off, 'dtype': args.dtype}
     (args.output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result), flush=True)
 
