@@ -26,9 +26,15 @@ def pytest_configure():
         after = torch.npu.current_device()
         end.record()
         torch.npu.synchronize()
+        runtime.aclrtEventElapsedTime.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_void_p, ctypes.c_void_p]
+        raw_ms = ctypes.c_float()
+        raw_status = runtime.aclrtEventElapsedTime(ctypes.byref(raw_ms), ctypes.c_void_p(start.npu_event),
+                                                  ctypes.c_void_p(end.npu_event))
         record = {'before': before, 'after': after,
                   'start_device': str(start.device), 'end_device': str(end.device),
-                  'actual_before': actual_before, 'actual_after_sync': actual_device()}
+                  'actual_before': actual_before, 'actual_after_sync': actual_device(),
+                  'raw_elapsed_status': raw_status, 'raw_elapsed_ms': raw_ms.value,
+                  'start_complete': start.query(), 'end_complete': end.query()}
         path = Path(os.environ['BOUNDARY_ARTIFACT_DIR'])
         path.mkdir(parents=True, exist_ok=True)
         with (path / 'event-devices.jsonl').open('a') as stream:

@@ -2,11 +2,14 @@
 
 import ctypes
 import json
+import os
 from pathlib import Path
 import sys
 
 import torch
 import torch_npu  # noqa: F401
+if os.environ.get('BOUNDARY_EVENT_TRANSFER') == '1':
+    from torch_npu.contrib import transfer_to_npu  # noqa: F401
 
 
 def main():
@@ -21,7 +24,14 @@ def main():
         if stage == 'after_peer':
             peer = torch.ones(1024, device='npu:1')
         if stage == 'after_copy':
-            peer.copy_(x)
+            try:
+                peer = x.to('npu:1')
+                torch.npu.synchronize(1)
+            except RuntimeError as error:
+                records.append({'stage': 'eager_peer_copy', 'error': str(error)})
+                destination.write_text(json.dumps(records, indent=2) + '\n')
+                print(json.dumps(records[-1]), flush=True)
+                return
         torch.npu.set_device(0)
         start, end = torch.npu.Event(enable_timing=True), torch.npu.Event(enable_timing=True)
         start.record()
