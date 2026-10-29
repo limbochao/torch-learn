@@ -1,5 +1,10 @@
 # PTA 2.13 NPU Inductor 分批验证
 
+2026-10-28清单的43项定界见[顺序表与原因](../../../docs/issue-logs/cicd/npu-inductor-43-cases-boundary-20261028.md)
+和[机器可读结果](../../../artifacts/npu-inductor-boundary-20261028/results.csv)。26个方法完整通过，
+17项保留失败或能力/规格边界；实现bug的候选、实际加载SHA和复测结果均随证据保存。
+`cases_20261028.tsv`与`run_boundary_cases.py`对应这一轮，避免与下文历史清单混用。
+
 最新的 331 行清单已完成失败与跳过重跑，合并结果为 **225 PASS、89 FAIL、9 SKIP、3 XFAIL、
 2 MIXED、2 TIMEOUT、1 NOT_COLLECTED**。重跑 197 行、执行 228 次 pytest 调用，新增 98 行 PASS；
 未重跑项在总表中明确标记，原测试源码未修改。

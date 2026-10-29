@@ -1,0 +1,43 @@
+[
+  {
+    "file": "triton/backends/ascend/compiler.py",
+    "source": "actual installed package copied from target container",
+    "sha256": "791b7b51f9948161453078d5ff7091e939eb6dd100885478b1f7439fa1526efc",
+    "excerpts": [
+      {
+        "start_line": 653,
+        "end_line": 674,
+        "source": "        return (False, error_msg)\n    except Exception as e:\n        return (False, str(e))\n\n\ndef linalg_to_bin_enable_npu_compile_910_95(linalg: str, metadata, opt):\n    linalg, metadata = _parse_linalg_metadata(linalg, metadata)\n    _finalize_program_launch_policy(metadata, opt)\n    with tempfile.TemporaryDirectory() as tmpdir:\n        tmp_file_name = \"kernel.mlir\"\n        ttadapter_path = os.path.join(tmpdir, tmp_file_name)\n        Path(ttadapter_path).write_text(linalg)\n        bin_file = os.path.join(tmpdir, \"kernel\")\n        if _check_bishengir_api_change():\n            bin_file_with_ext = \"kernel.o\"\n        else:\n            bin_file_with_ext = \"kernel_reloc.o\"\n        bin_path = os.path.join(tmpdir, bin_file_with_ext)\n        callback_path = os.path.join(tmpdir, \"libkernel.so\")\n        _compile_option_list = get_common_bishengir_compile_options(metadata)\n\n        multibuffer_mode = metadata.get(\"multibuffer_mode\")"
+      },
+      {
+        "start_line": 820,
+        "end_line": 875,
+        "source": "        if npu_compiler_path.endswith(\"bishengir-compile\"):\n            _compile_option_list += [\n                \"--enable-hfusion-compile=true\",\n                \"--enable-triton-kernel-compile=true\",\n            ]\n            _compile_option_list += _full_row_copy_compile_options(metadata, npu_compiler_path)\n            # Temporary until the NPU compiler enables batch matmul by default in Q4.\n            if metadata.get(\"enable_hivm_batch_matmul\"):\n                _compile_option_list += [\"--enable-hivm-batch-matmul\"]\n            if metadata.get(\"enable_vf_stack_limit\"):\n                _compile_option_list += [\"--enable-vf-stack-limit\"]\n        bisheng_options = metadata[\"bisheng_options\"]\n        if bisheng_options is not None:\n            _compile_option_list += [f\"--append-bisheng-options={bisheng_options}\"]\n        if opt.debug:\n            _compile_option_list += [\"--mlir-print-ir-after-failure\"]\n            _compile_option_list += [\"--mlir-print-stacktrace-on-diagnostic\"]\n            _compile_option_list += [\"--bishengir-print-ir-after=hivm-graph-sync-solver\"]\n\n        vf_merge_level = metadata[\"vf_merge_level\"]\n        if vf_merge_level is not None:\n            _compile_option_list += [f\"--enable-vf-merge-level={vf_merge_level}\"]\n\n        hfusion_enable_multiple_consumer_fusion = metadata[\"hfusion_enable_multiple_consumer_fusion\"]\n        if hfusion_enable_multiple_consumer_fusion is not None:\n            _compile_option_list += [\n                f\"--hfusion-enable-multiple-consumer-fusion={hfusion_enable_multiple_consumer_fusion}\"\n            ]\n\n        plan_memory_strategy = metadata[\"plan_memory_strategy\"]\n        if plan_memory_strategy is not None:\n            _compile_option_list += [f\"--plan-memory-strategy={plan_memory_strategy}\"]\n\n        if opt.debug:\n            _compile_option_list += [f\"--save-temps={_get_save_temps_dir(metadata['hash'])}\"]\n\n        cmd_list = ([npu_compiler_path, ttadapter_path] + _compile_option_list + [\"-o\", bin_file])\n\n        if opt.debug or knobs.autotuning.print:\n            print_cmd_list = cmd_list.copy()\n            print_cmd_list[1], print_cmd_list[-1] = _get_dump_paths(metadata[\"hash\"], ttadapter_path, bin_path)\n            print(f\"[DEBUG] cmd_list: {shlex.join(print_cmd_list)}\")\n\n        try:\n            ret = subprocess.run(cmd_list, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)\n        except subprocess.CalledProcessError as e:\n            if opt.debug:\n                _save_npuir_debug_output(e.stdout, e.stderr, tmpdir, metadata[\"hash\"])\n            raise\n\n        if opt.debug:\n            _save_npuir_debug_output(ret.stdout, ret.stderr, tmpdir, metadata[\"hash\"])\n\n        stdout_str = ret.stdout.decode('utf-8') if ret.stdout else ''\n        match = re.search(r'UB\\s+size\\s*=\\s*(\\d+)\\s*bits', stdout_str)\n        if match:"
+      }
+    ]
+  },
+  {
+    "file": "triton/backends/ascend/driver.py",
+    "source": "actual installed package copied from target container",
+    "sha256": "1d5931895323d4521eb63bd63eeedf324f0a4ec4219751b5dd5f7185d262195b",
+    "excerpts": [
+      {
+        "start_line": 104,
+        "end_line": 105,
+        "source": "    def load_binary(self, name, kernel, shared, device, mix_mode):\n        return self._load_mod().load_kernel_binary(name, kernel, shared, device, mix_mode)"
+      }
+    ]
+  },
+  {
+    "file": "triton/backends/ascend/npu_utils.cpp",
+    "source": "actual installed package copied from target container",
+    "sha256": "526ac0cdebe69543afbb8427df1183948089cd500dfc86258ccf6572b54b4418",
+    "excerpts": [
+      {
+        "start_line": 183,
+        "end_line": 209,
+        "source": "           rtRet);\n    return {nullptr, nullptr};\n  }\n\n  return std::make_tuple(devbinHandle, func_stub_handle);\n}\n#endif\n\nstatic std::tuple<void *, void *> registerKernel(const char *name,\n                                                 const void *data,\n                                                 size_t data_size, int device,\n                                                 const char *kernel_mode_str) {\n  cann_error rtRet = cann_set_device(device);\n  if (rtRet != CANN_SUCCESS) {\n    printf(\"cann_set_device failed, 0x%x\\n\", rtRet);\n    return {nullptr, nullptr};\n  }\n  return cann_register_kernel(name, data, data_size, kernel_mode_str);\n}\n\nstatic PyObject *loadKernelBinary(PyObject *self, PyObject *args) {\n  const char *name;        // kernel name\n  const char *data;        // binary pointer\n  Py_ssize_t data_size;    // binary size\n  int shared;              // shared_memory(meaningless now)\n  int device;              // device ID\n  const char *kernel_mode; // kernel mode"
+      }
+    ]
+  }
+]

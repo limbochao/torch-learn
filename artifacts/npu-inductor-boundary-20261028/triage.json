@@ -180,10 +180,10 @@
     "修复尝试与结论": "multi_device_v2 在物理卡1、3完整通过；未删除 requires_multigpu 或修改目标设备索引。"
   },
   "34": {
-    "组件": "NPU Event运行时 / Inductor autotune计时",
-    "分类": "双卡运行时错误，定位中",
-    "原因": "双卡原方法在triton_poi_fused__to_copy_div_0候选预运行计时失败，aclrtEventElapsedTime报507000/event recorder null。生成wrapper含独立device0/1 guard和跨卡copy。事件探针记录start/end都为npu:0，尚无证据支持跨设备event假设。",
-    "修复尝试与结论": "已在物理卡1+3及2+3各复现一次；正在核对纯Event控制与真实CANN上下文，不能把跳过改为通过。"
+    "组件": "torch_npu eager跨卡复制 / CANN runtime与driver",
+    "分类": "其他组件跨卡复制实现/能力边界",
+    "原因": "异步运行首先暴露EventElapsedTime 507000，但Torch与CANN当前设备均为0，start/end同在npu:0。关闭任务队列的完整原方法在torch.compile之前的eager r.to(npu:1)即报507899，底层MemcpyAsync返回0x7020010并提示不支持该操作。",
+    "修复尝试与结论": "原4元素FP32 eager表达式独立复现16字节kind=3跨卡复制失败，默认队列及TASK_QUEUE_ENABLE=0均失败；不依赖Inductor。实际CANN设备探针排除已提出的跨设备event解释，binary-loader上下文恢复候选无效。保留双卡原方法失败；关闭队列仅用于暴露首错，没有通过关闭计时或CPU中转冒充修复。"
   },
   "35": {
     "组件": "多设备测试环境",
@@ -240,10 +240,10 @@
     "修复尝试与结论": "CPU Meta 四组合对照通过；局部给 Meta 内三个 sparse_coo_tensor 构造传 check_invariants=False，原 NPU 方法完整通过（158.5秒），保留真实输入的全局 sparse invariants 检查。"
   },
   "21": {
-    "组件": "NPU Inductor template fusion metadata / 生成名称适配",
-    "分类": "实现 bug，候选未完全修复",
-    "原因": "NPU codegen_template 在 render/store_output 前缺少上游 _compute_fusion_metadata，导致累加器截断指令不生成。纯 mm 路径的融合实际名称为 matmul，另有 CUDA 名称断言不适配。",
-    "修复尝试与结论": "53baa39名称适配和metadata候选完成全部12实例复测：4个fp32通过，8个fp16/bf16在融合/未融合精确比较失败。原代码检查已通过，说明首个缺失cast已修复；低精度截断仍需继续定位，候选未完全修复。"
+    "组件": "NPU Inductor fusion metadata / CANN BiShengIR 精度语义",
+    "分类": "Inductor实现 bug 已尝试修复；后续设备编译器实现 bug",
+    "原因": "NPU codegen_template未调用_compute_fusion_metadata，最初缺少累加器截断。补齐后全部代码检查通过；FP16/BF16融合模板的truncf/extf仍被下层编译器消去，relu/sub使用未舍入FP32累加结果。未融合GEMM先写低精度，保留舍入边界。",
+    "修复尝试与结论": "53baa39适配真实matmul名称；metadata候选完成12实例复测，4个FP32通过、8个FP16/BF16数值失败。固定同tile、同输入BF16融合/未融合模板绕过Inductor仍有1537/16384元素不符、max_abs=0.125。实际所选FP16模板直接重放1499/16384元素不符、max_abs=0.015625；两种dtype的TTadapter与下层IR证明舍入语义丢失。关闭enable_fp_fusion无效，不能把首个Inductor缺陷修复等同整项通过。"
   },
   "20": {
     "组件": "Triton Ascend batched-matmul lowering / NPU模板选择",
@@ -252,9 +252,9 @@
     "修复尝试与结论": "72932e5 所含 BMM 候选仅关闭 enable_hivm_batch_matmul，完整原方法通过（193.4秒）。此为编译选项规避，尚未修复编译器宏实现，需评估性能影响；原 shape/dtype/layout 和数值断言保留。"
   },
   "18": {
-    "组件": "延迟布局测试的 CUDA padding 假设 / NPU模板布局",
-    "分类": "用例适配后暴露epilogue精度bug",
-    "原因": "NPU 禁用 comprehensive_padding，实际 B 缓冲 (32,512,1490)、stride (762880,1490,1) 未补到1536。epilogue=False 原断言通过；True 选合法未补齐 Triton BMM，却被 CUDA 专属 check_not(triton_tem) 拒绝。",
-    "修复尝试与结论": "33da2f4的真实stride检查通过；结合metadata候选仍有两项epilogue=True失败，BF16主输出转FP32未保留BF16舍入，24377643/24412160元素不符。两项False通过。候选尚未修复此精度错误。"
+    "组件": "延迟布局测试适配 / CANN BiShengIR 精度语义",
+    "分类": "用例适配已验证；后续设备编译器实现 bug",
+    "原因": "NPU 禁用 comprehensive_padding，B 实际行步长1490而非CUDA假设1536。适配后实际所选BMM已生成FP32→BF16→FP32，但BiShengIR将该舍入边界消去，FP32输出直接使用累加结果。TTIR/TTadapter保留truncf/extf，下层NPU IR已丢失。",
+    "修复尝试与结论": "33da2f4保留真实stride与所有输出比较；完整4实例2通过、2精度失败。补取失败实例实际所选L1_COPIES=2模板，绕过Inductor直接启动仍有24411084/24412160元素不符、max_abs=0.25。初始L1_COPIES=0对照关闭enable_fp_fusion仍失败；metadata候选未能修复下层错误，整项保留失败。"
   }
 }
