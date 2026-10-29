@@ -60,7 +60,7 @@ def load_template(path, output, label):
     raise ValueError(f'No template definition in {path}')
 
 
-def compile_template(path, output, label, fp_fusion_off):
+def compile_template(path, output, label, fp_fusion_off, compiler_debug):
     import triton
     from triton.compiler.compiler import ASTSource
     from triton.runtime import driver
@@ -68,6 +68,7 @@ def compile_template(path, output, label, fp_fusion_off):
     function, signature, attrs, options, record = load_template(path, output, label)
     if fp_fusion_off:
         options['enable_fp_fusion'] = False
+    options['debug'] = compiler_debug
     binary = triton.compile(ASTSource(function, signature, {}, attrs),
                             target=driver.active.get_current_target(), options=options)
     for kind, value in binary.asm.items():
@@ -92,6 +93,7 @@ def main():
     parser.add_argument('--case', type=int, choices=(18, 21), required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--fp-fusion-off', action='store_true')
+    parser.add_argument('--compiler-debug', action='store_true', help='Retain downstream compiler IR and temporary files')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     root = Path(__file__).resolve().parents[2] / 'artifacts/npu-inductor-boundary-20261028/precision-roundtrip'
@@ -104,7 +106,7 @@ def main():
     stream = torch.npu.current_stream().npu_stream
     if args.case == 18:
         binary, record = compile_template(root / 'case18-bmm-candidate.py', args.output, 'bmm',
-                                          args.fp_fusion_off)
+                                          args.fp_fusion_off, args.compiler_debug)
         left = torch.randn((32, 512, 512), device='npu', dtype=torch.bfloat16)
         right = torch.randn((32, 512, 1490), device='npu', dtype=torch.bfloat16)
         low = torch.empty((32, 512, 1490), device='npu', dtype=torch.bfloat16)
@@ -114,9 +116,9 @@ def main():
         result = {'case': 18, 'compiled': [record], 'roundtrip': compare(high, low.cpu().float())}
     else:
         fused, fused_record = compile_template(root / 'case21-fused.py', args.output, 'fused',
-                                               args.fp_fusion_off)
+                                               args.fp_fusion_off, args.compiler_debug)
         unfused, unfused_record = compile_template(root / 'case21-unfused.py', args.output, 'unfused',
-                                                   args.fp_fusion_off)
+                                                   args.fp_fusion_off, args.compiler_debug)
         bias = torch.randn((128,), device='npu', dtype=torch.bfloat16)
         x = torch.randn((128, 128), device='npu', dtype=torch.bfloat16)
         fused_out, gemm_out = torch.empty_like(x), torch.empty_like(x)
