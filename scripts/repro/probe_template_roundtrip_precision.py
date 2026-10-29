@@ -105,7 +105,7 @@ def main():
     torch.manual_seed(1234)
     stream = torch.npu.current_stream().npu_stream
     if args.case == 18:
-        binary, record = compile_template(root / 'case18-bmm-candidate.py', args.output, 'bmm',
+        binary, record = compile_template(root / 'case18-selected.py', args.output, 'bmm',
                                           args.fp_fusion_off, args.compiler_debug)
         left = torch.randn((32, 512, 512), device='npu', dtype=torch.bfloat16)
         right = torch.randn((32, 512, 1490), device='npu', dtype=torch.bfloat16)
