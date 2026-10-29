@@ -70,7 +70,7 @@ torch_npu `2.13.0.dev20261028`、Triton `3.6.0`，CANN 9.1.0、driver 25.7.rc1�
 | 33 | `test_torchinductor.py`<br>`test_to_dtype` | 1 FAILED | — | NPU Triton/Inductor dtype 能力 / float64 kernel 未支持 | 原方法有 float64 输入及 b+1，DSL/MLIR 需要 f64 load；HIVM load verifier 的合法 element type 不含 f64。eager 参考路径先成功不代表 Triton arithmetic 支持。 | 原失败记录含完整生成 DSL 与 f64 MLIR verifier 文本；保留 float64 输入失败，未替换 dtype 或添加通用 fallback 冒充原项通过。 |
 | 34 | `test_torchinductor.py`<br>`test_multi_gpu_device` | 1 SKIPPED | 1 FAILED | torch_npu eager跨卡复制 / CANN runtime与driver / 其他组件跨卡复制实现/能力边界 | 异步运行首先暴露EventElapsedTime 507000，但Torch与CANN当前设备均为0，start/end同在npu:0。关闭任务队列的完整原方法在torch.compile之前的eager r.to(npu:1)即报507899，底层MemcpyAsync返回0x7020010并提示不支持该操作。 | 原4元素FP32 eager表达式独立复现16字节kind=3跨卡复制失败，默认队列及TASK_QUEUE_ENABLE=0均失败；不依赖Inductor。实际CANN设备探针排除已提出的跨设备event解释，binary-loader上下文恢复候选无效。保留双卡原方法失败；关闭队列仅用于暴露首错，没有通过关闭计时或CPU中转冒充修复。 |
 | 35 | `test_torchinductor.py`<br>`test_multi_gpu_recompile_on_index` | 1 SKIPPED | 1 PASSED | 多设备测试环境 / 单卡可见性限制；双卡原方法通过 | 初始 ASCEND_RT_VISIBLE_DEVICES 仅暴露一个设备，被 requires_multigpu 合法跳过。双卡暴露后执行真实多设备路径。 | multi_device_v2 在物理卡1、3完整通过；未删除 requires_multigpu 或修改目标设备索引。 |
-| 36 | `test_unbacked_symints.py`<br>`test_split_with_sizes` | 1 PASSED | — | 当前环境未复现历史失败 / 基线通过 | 原方法和原 dtype/动态参数完整通过；测试初始化前补齐 patch_has_triton，避免测试收集错误地缓存 CUDA-only 可用性。 | 不修改测试语义，保留当前通过记录。 |
+| 36 | `test_unbacked_symints.py`<br>`test_split_with_sizes` | 1 PASSED | — | NPU Inductor persistent reduction mask / 历史实现 bug，PR !48448 已修复并验证 | split sizes来自tolist，首段有效归约长度为7。旧codegen虽生成r0_mask，却从persistent reduction的load/归约中删掉该条件，尾部无效元素参与sum；不是普通浮点舍入误差。 | dd35816d26（!48448，2026-10-23）保留未证明恒真的归约mask，并在求和前用单位元屏蔽无效lane。同一当前环境仅替换该PR前后codegen/triton.py：父版本精确复现历史-5.140399→-6.655652错误，PR版本及当前安装版本均完整通过。 |
 | 37 | `test_unbacked_symints.py`<br>`test_triton_kernel_grid` | 1 PASSED | — | 当前环境未复现历史失败 / 基线通过 | 原方法和原 dtype/动态参数完整通过；测试初始化前补齐 patch_has_triton，避免测试收集错误地缓存 CUDA-only 可用性。 | 不修改测试语义，保留当前通过记录。 |
 | 38 | `test_unbacked_symints.py`<br>`test_triton_kernel_with_unbacked_symint_fallback` | 1 FAILED | — | transfer_to_npu / Dynamo 符号 tensor 构造 / 其他组件实现 bug | 在构造 torch.tensor([1, unbacked_symint], device=npu) 时 Dynamo 请求符号取实值而报 GuardOnDataDependentSymNode，尚未调用 Inductor。transfer 将 torch.tensor 替换为 Python 包装，影响基于函数身份的特殊处理。 | 保留原输入与动态符号；同类 CPU backend=eager 对照中原生 tensor 构造通过、启用 transfer 后失败，支持边界在迁移包装与 Dynamo 集成；不是 Triton codegen 错误。 |
 | 39 | `test_torchinductor_dynamic_shapes.py`<br>`test_constant_fold_uniform_value_dynamic` | 1 FAILED | 1 PASSED | 动态常量折叠测试代码 / 用例适配，已验证 | 完全折叠的图可返回输入而不生成 kernel，source_codes 为空；原检查无条件访问 source_codes[0]。 | 32609ed 将代码检查拼接全部 source_codes；保留实际输出比较、多输入尺寸和动态选项。control_no_overlay 完整方法通过。 |
@@ -254,3 +254,31 @@ python scripts/repro/probe_multi_device_copy.py <test-workspace>/eager-copy-off.
 稀疏gather的递归来自Meta构造继承了测试全局开启的sparse invariants数据检查，
 并在meta tensor与CPU复制分解间重入。仅给Meta内三个 `sparse_coo_tensor` 构造传入
 `check_invariants=False` 后，完整原NPU方法158.5秒通过；真实输入的全局检查继续启用。
+
+### 第36项历史精度错误的修复PR确认
+
+`test_split_with_sizes` 由 [PR !48448](https://gitcode.com/Ascend/pytorch/merge_requests/48448)
+中的persistent reduction mask修复恢复，合入提交为 `dd35816d26c7cb8721521ce9e6860dba8858f743`，
+合入时间2026-10-23 20:37（北京时间）。PR号与合入时间依据本地Ascend/pytorch合入提交记录。
+此前只记录10月28日基线通过；本次补上修复归因对照，未改写历史失败或通过记录。
+
+2026-10-29在同一NPU环境、同一测试源码和同一输入配置下，只以source loader替换
+`torch_npu._inductor.codegen.triton`；其余安装模块和native-build guards保持一致。
+不是在不同历史wheel之间进行完整版本回归。
+
+| 加载模块版本 | 完整原方法结果 |
+|---|---|
+| PR父提交版本 | FAIL，期望-5.14039945602417，实际-6.655652046203613，绝对差1.5152525901794434，与历史失败一致 |
+| PR合入版本 | PASS |
+| 当前安装版本 | PASS |
+
+[修复前完整wrapper](../../../artifacts/npu-inductor-boundary-20261028/pr48448-split-with-sizes/before/output_code.py)
+虽然生成 `r0_mask = r0 < r0_numel`，却执行无mask的 `tl.load(in_ptr0 + r0, None)`，
+随后直接 `tl.sum(tmp0, 0)`，将split首段边界之外的tile尾部纳入求和。
+[修复后完整wrapper](../../../artifacts/npu-inductor-boundary-20261028/pr48448-split-with-sizes/after/output_code.py)
+改为带 `r0_mask`、`other=0.0` 的load，并在归约前通过 `tl.where(mask, value, 0)` 再次屏蔽无效lane。
+因此该问题是归约边界mask缺失导致的计算错误，不是正常浮点误差，也不是测试初始化修复了数值。
+
+[对照汇总及范围](../../../artifacts/npu-inductor-boundary-20261028/pr48448-split-with-sizes/summary.json)、
+[前后源码commit与SHA](../../../artifacts/npu-inductor-boundary-20261028/pr48448-split-with-sizes/versions.json)
+及各次 `loaded-sources.txt` 保存实际加载版本；对应目录保存完整pytest结果和去敏生成代码。
