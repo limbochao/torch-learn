@@ -7,6 +7,7 @@
 - `codegen/`：generated DSL、lowering、reduction 和 codegen 问题。
 - `dynamic-shape/`：static/dynamic graph 与 kernel 行为差异。
 - `symbolic-group/`：symbolic group 分组、config 和性能现象。
+- [`cicd/performance/`](cicd/performance/index.md)：CICD 模型的性能对比、kernel 劣化与责任定位。
 
 ## 建议记录内容
 

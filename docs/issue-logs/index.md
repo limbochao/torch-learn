@@ -15,6 +15,18 @@ title: 问题定位日志
 </div>
 
 <div class="tl-card-grid tl-card-grid-two" markdown="1">
+<article class="tl-feature tl-card-accent-amber" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">CICD</span>
+  <span class="tl-badge">Performance</span>
+  <span class="tl-badge">NPU / GPU</span>
+</div>
+
+### [CICD 性能分析](cicd/performance/index.html)
+
+记录 Eager / Inductor 的提升比对比，明确劣化 kernel、耗时差距、责任模块和验证范围。
+</article>
+
 <article class="tl-feature tl-card-accent-rose" markdown="1">
 <div class="tl-meta">
   <span class="tl-badge">Codegen</span>

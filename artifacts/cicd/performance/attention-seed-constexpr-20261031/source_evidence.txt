@@ -1,0 +1,170 @@
+=== torch/_inductor/codegen/triton_utils.py:signature_of; installed source lines 61-92 ===
+61: def signature_of(arg: KernelArgType, *, size_dtype: str | None) -> str:
+62:     if isinstance(arg, TensorArg):
+63:         typ = _type_of(arg.dtype)
+64:         if should_unwrap_unspec_arg(arg.buffer):
+65:             # had unwrapped 0d tensor as scalar
+66:             new_typ = typ.lstrip("*")
+67:             if new_typ in ["fp16", "bf16"]:
+68:                 return "fp32"
+69:             else:
+70:                 return new_typ
+71:         elif use_uint8_triton_storage_for_cuda_float8_e4m3fn(arg.dtype, arg.name):
+72:             return "*u8"
+73:         else:
+74:             return typ
+75:     if isinstance(arg, SizeArg):
+76:         if arg.expr is None:
+77:             if triton_version_uses_attrs_dict():
+78:                 # In newer versions of Triton, the signature includes "None" args
+79:                 # and their type is marked as "constexpr"
+80:                 return "constexpr"
+81:             else:
+82:                 # In older versions of Triton...
+83:                 # From triton/runtime/jit.py
+84:                 # `None` is nullptr.  Implicitly convert to *i8.
+85:                 return "*i8"
+86:         elif _arg_equals_1(arg) and triton_version_uses_attrs_dict():
+87:             # In new versions of Triton, if we have an equal-to-1 arg that's marked as a constant,
+88:             # it should be marked as "constexpr" in the signature.
+89:             return "constexpr"
+90:         elif isinstance(arg.expr, (float, sympy.Float)):
+91:             # Python floats are natively fp64, so use fp64 to preserve precision
+92:             if config._use_fp64_for_unbacked_floats and device_supports_fp64(
+
+=== torch_npu/_inductor/codegen/triton.py:NPUIndexTritonKernel; installed source lines 2439-2492 ===
+2439:         argdefs, _, signature, _ = self.args.python_argdefs()
+2440:
+2441:         for i, arg in enumerate(signature):
+2442:             if isinstance(arg, SizeArg):
+2443:                 symbol = cast(sympy.Symbol, arg.expr)
+2444:                 if symbol in V.graph.sizevars.inv_precomputed_replacements:
+2445:                     signature[i] = SizeArg(
+2446:                         arg.name, V.graph.sizevars.inv_precomputed_replacements[symbol]
+2447:                     )
+2448:
+2449:         triton_meta_signature = signature_to_meta(
+2450:             signature, size_dtype=self.index_dtype, argdefs=argdefs
+2451:         )
+2452:
+2453:         triton_meta = {
+2454:             "signature": triton_meta_signature,
+2455:             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+2456:             "constants": {},
+2457:             # special config for NPU, specify compile target
+2458:             "mix_mode": "aiv",
+2459:         }
+2460:
+2461:         inductor_meta = self.create_inductor_meta()
+2462:         self.triton_meta = triton_meta
+2463:         self.inductor_meta = inductor_meta
+2464:         self._disable_grouped_autotune_if_unsupported(inductor_meta)
+2465:         num_gb = None
+2466:         if config.benchmark_kernel or config.profile_bandwidth:
+2467:             num_gb = self.estimate_kernel_num_bytes() / 1e9
+2468:             inductor_meta["kernel_num_gb"] = num_gb
+2469:
+2470:         self.gen_numel_args(signature, triton_meta, triton_meta_signature, argdefs)
+2471:         if self.is_unified_simt_kernel():
+2472:             triton_meta["configs"] = [config_of(signature)]
+2473:
+2474:         if inductor_meta.get("group_enabled", False):
+2475:             try:
+2476:                 inductor_meta.update(
+2477:                     self.build_grouped_benchmark_arg_specs(argdefs, signature)
+2478:                 )
+2479:                 inductor_meta.setdefault("extra_launcher_arg_specs", ())
+2480:                 self._disable_grouped_autotune_if_benchmark_too_large(
+2481:                     inductor_meta,
+2482:                     V.graph.get_current_device_or_throw(),
+2483:                 )
+2484:             except RuntimeError as exc:
+2485:                 self._disable_grouped_autotune(inductor_meta, str(exc))
+2486:
+2487:         self._record_legacy_auto_blockify_for_grouped_fallback(inductor_meta)
+2488:
+2489:         # add in tiling args
+2490:         self.add_autotune_args(argdefs, signature, triton_meta_signature)
+2491:         # for scalar codegen
+2492:         if len(self.range_tree_nodes) == 0:
+
+=== torch_npu/_inductor/codegen/npu_combined_scheduling.py:codegen_node; installed source lines 166-187 ===
+166:     def codegen_node(self, node: FusedSchedulerNode | SchedulerNode):
+167:         removed_buffers = V.graph.removed_buffers.copy()
+168:         inplaced_to_remove = V.graph.inplaced_to_remove.copy()
+169:         kernel_count = metrics.generated_kernel_count
+170:         try:
+171:             return self._triton_scheduling.codegen_node(node)
+172:         except Exception:
+173:             metrics.generated_kernel_count = kernel_count
+174:             log.debug(
+175:                 "index codegen for node %s failed, falling back to no-linear codegen",
+176:                 node,
+177:                 exc_info=True,
+178:             )
+179:         # A failed fused kernel may have marked intermediates as kernel-local.
+180:         # Split fallback kernels need those buffers to be materialized again.
+181:         V.graph.removed_buffers.clear()
+182:         V.graph.removed_buffers.update(removed_buffers)
+183:         V.graph.inplaced_to_remove.clear()
+184:         V.graph.inplaced_to_remove.update(inplaced_to_remove)
+185:         snodes = self._regroup_for_nolinear([node])
+186:         groups = self._split_nolinear_nodes(snodes)
+187:         return self._codegen_nolinear_groups(node, groups)
+
+=== torch_npu/_inductor/codegen/scheduling.py:make_ttir_for_check; installed source lines 247-268 ===
+247:         # 1. use triton_ as tmp kernel name
+248:         checker_src_code = src_code.replace(str(Placeholder.KERNEL_NAME),
+249:                                             "triton_")
+250:         # 2. find inductor_meta str
+251:         inductor_meta_str = next(
+252:             (line for line in checker_src_code.splitlines()
+253:                 if "inductor_meta" in line),
+254:             None,
+255:         )
+256:         inductor_meta = eval(inductor_meta_str.strip().split("=", 1)[1].rstrip(','))
+257:         # 3. disable cache and limit configs count for precompile
+258:         inductor_meta["force_disable_caches"] = True
+259:         checker_src_code = checker_src_code.replace(
+260:             inductor_meta_str, f"    inductor_meta={inductor_meta},")
+261:         mod = PyCodeCache.load(checker_src_code)
+262:         # 4. precompile for dsl check
+263:         mod.triton_._triton_make_ttir()
+264:         # 5. remove tmp compile cache
+265:         try:
+266:             assert mod.__file__
+267:             os.remove(mod.__file__)
+268:         except FileNotFoundError:
+
+=== torch_npu/_inductor/runtime/triton_heuristics.py:_make_ttir_module_from_cfg; installed source lines 795-816 ===
+795:         """Compile one config to TTIR module only (no backend lowering/launch)."""
+796:         compile_meta = copy.deepcopy(self.triton_meta)
+797:         cfg_kwargs = cfg.kwargs
+798:         constexpr_arg_names = {self.fn.arg_names[i] for i in self.fn.constexprs}
+799:         for k, v in cfg_kwargs.items():
+800:             if k not in constexpr_arg_names:
+801:                 continue
+802:             compile_meta["constants"][k] = v
+803:
+804:         for i in self.fn.constexprs:
+805:             arg_name = self.fn.arg_names[i]
+806:             if arg_name not in compile_meta["constants"] and (
+807:                 arg_name == "num_warps" or arg_name == "num_stages"
+808:             ):
+809:                 compile_meta["constants"][arg_name] = getattr(cfg, arg_name)
+810:         compile_meta["num_warps"] = cfg.num_warps
+811:         compile_meta["num_stages"] = cfg.num_stages
+812:         compile_meta["debug"] = (
+813:             os.getenv("INDUCTOR_ASCEND_DEBUG", 'false').lower() in ('true', '1')
+814:             and self.inductor_meta.get("assert_indirect_indexing", True)
+815:             and not self.inductor_meta.get("is_hip", False)
+816:         )
+
+=== torch/_inductor/codegen/triton.py:upstream constant handling ===
+6482:         # during launching the Inductor-compiled Triton kernel.
+6483:         # https://github.com/pytorch/pytorch/issues/120478#issuecomment-1962822307
+6484:         # https://github.com/triton-lang/triton/blob/231efe9ed2d200be0f69a07c298e4342b08efe3d/python/triton/runtime/jit.py#L384
+6485:         for arg_num in equal_1_arg_indices(signature):  # type: ignore[index]
+6486:             triton_meta["constants"][signature[arg_num].name] = 1  # type: ignore[index,union-attr]
+6487:
+6488:         self.triton_meta = triton_meta
