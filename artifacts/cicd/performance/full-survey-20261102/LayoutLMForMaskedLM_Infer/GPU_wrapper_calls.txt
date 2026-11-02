@@ -1,0 +1,1104 @@
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:895
+            buf0 = empty_strided_cuda((16, 512, 768), (393216, 768, 1), torch.float32)
+            buf4 = buf0; del buf0  # reuse
+            # Topologically Sorted Source Nodes: [inputs_embeds, position_embeddings, add, bbox, getitem_1, left_position_embeddings, add_1, getitem_2, upper_position_embeddings, add_2, getitem_3, right_position_embeddings, add_3, getitem_4, lower_position_embeddings, add_4, getitem_5, getitem_6, sub_1, h_position_embeddings, add_5, getitem_7, getitem_8, sub_2, w_position_embeddings, add_6, token_type_ids, token_type_embeddings, embeddings, embeddings_1], Original ATen: [aten.embedding, aten.add, aten.zeros, aten.select, aten.sub, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_embedding_native_layer_norm_select_sub_zeros_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_embedding_native_layer_norm_select_sub_zeros_0.run(buf4, arg0_1, arg1_1, arg2_1, arg3_1, arg4_1, arg5_1, arg6_1, arg7_1, arg8_1, arg9_1, arg10_1, 8192, 768, stream=raw_stream0)
+            del arg0_1
+            del arg10_1
+            del arg2_1
+            del arg3_1
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:923
+            assert_size_stride(arg12_1, (768, ), (1, ), 'input')
+            buf7 = empty_strided_cuda((16, 12, 512, 64), (393216, 32768, 64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, linear, view, query_states, matmul], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:4
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg12_1, buf5, buf7, 6291456, stream=raw_stream0)
+            del arg12_1
+            assert_size_stride(arg14_1, (768, ), (1, ), 'input')
+            buf8 = reinterpret_tensor(buf5, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf5  # reuse
+            # Topologically Sorted Source Nodes: [, linear_1, view_1, key_states, transpose_3, matmul], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:933
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:5
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg14_1, buf6, buf8, 12288, 512, stream=raw_stream0)
+            del arg14_1
+            buf9 = empty_strided_cuda((192, 512, 512), (262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, linear, view, query_states, matmul, linear_1, view_1, key_states, transpose_3], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:6
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:952
+            assert_size_stride(arg16_1, (768, ), (1, ), 'input')
+            buf16 = buf7; del buf7  # reuse
+            # Topologically Sorted Source Nodes: [, linear_2, view_2, value_states, attn_output], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:9
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg16_1, buf14, buf16, 6291456, stream=raw_stream0)
+            del arg16_1
+            buf17 = reinterpret_tensor(buf14, (192, 512, 64), (32768, 64, 1), 0); del buf14  # reuse
+            # Topologically Sorted Source Nodes: [matmul, , softmax, attn_output, linear_2, view_2, value_states], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:10
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:962
+            extern_kernels.bmm(reinterpret_tensor(buf15, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf16, (192, 512, 64), (32768, 64, 1), 0), out=buf17)
+            buf18 = reinterpret_tensor(buf16, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf16  # reuse
+            # Topologically Sorted Source Nodes: [attn_output, transpose_4, attn_output_1], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:11
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf17, buf18, 6291456, stream=raw_stream0)
+            assert_size_stride(arg17_1, (768, 768), (768, 1), 'input')
+            buf19 = reinterpret_tensor(buf17, (8192, 768), (768, 1), 0); del buf17  # reuse
+            # Topologically Sorted Source Nodes: [attn_output, transpose_4, attn_output_1, reshape, hidden_states, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:12
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:976
+            assert_size_stride(arg20_1, (768, ), (1, ), 'input')
+            buf23 = reinterpret_tensor(buf19, (16, 512, 768), (393216, 768, 1), 0); del buf19  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states, add_9, hidden_states_2], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:13
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf23, arg18_1, buf4, arg19_1, arg20_1, 8192, 768, stream=raw_stream0)
+            del arg18_1
+            del arg19_1
+            del arg20_1
+            assert_size_stride(arg21_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:991
+            assert_size_stride(arg22_1, (3072, ), (1, ), 'input')
+            buf25 = reinterpret_tensor(buf24, (16, 512, 3072), (1572864, 3072, 1), 0); del buf24  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_3, hidden_states_4], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:15
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf25, arg22_1, 25165824, stream=raw_stream0)
+            del arg22_1
+            assert_size_stride(arg23_1, (768, 3072), (3072, 1), 'input')
+            buf26 = reinterpret_tensor(buf4, (8192, 768), (768, 1), 0); del buf4  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_3, hidden_states_4, hidden_states_5], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1006
+            assert_size_stride(arg26_1, (768, ), (1, ), 'input')
+            buf30 = reinterpret_tensor(buf26, (16, 512, 768), (393216, 768, 1), 0); del buf26  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_5, add_10, hidden_states_7], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:17
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf30, arg24_1, buf23, arg25_1, arg26_1, 8192, 768, stream=raw_stream0)
+            del arg24_1
+            del arg25_1
+            del arg26_1
+            assert_size_stride(arg27_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1027
+            assert_size_stride(arg28_1, (768, ), (1, ), 'input')
+            buf33 = reinterpret_tensor(buf6, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf6  # reuse
+            # Topologically Sorted Source Nodes: [, linear_6, view_3, query_states_1, matmul_2], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:20
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg28_1, buf31, buf33, 6291456, stream=raw_stream0)
+            del arg28_1
+            assert_size_stride(arg30_1, (768, ), (1, ), 'input')
+            buf34 = reinterpret_tensor(buf31, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf31  # reuse
+            # Topologically Sorted Source Nodes: [, linear_7, view_4, key_states_1, transpose_8, matmul_2], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1037
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:21
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg30_1, buf32, buf34, 12288, 512, stream=raw_stream0)
+            del arg30_1
+            buf35 = reinterpret_tensor(buf15, (192, 512, 512), (262144, 512, 1), 0); del buf15  # reuse
+            # Topologically Sorted Source Nodes: [, linear_6, view_3, query_states_1, matmul_2, linear_7, view_4, key_states_1, transpose_8], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:22
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1056
+            assert_size_stride(arg32_1, (768, ), (1, ), 'input')
+            buf42 = buf33; del buf33  # reuse
+            # Topologically Sorted Source Nodes: [, linear_8, view_5, value_states_1, attn_output_3], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:25
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg32_1, buf40, buf42, 6291456, stream=raw_stream0)
+            del arg32_1
+            buf43 = reinterpret_tensor(buf40, (192, 512, 64), (32768, 64, 1), 0); del buf40  # reuse
+            # Topologically Sorted Source Nodes: [matmul_2, , softmax_1, attn_output_3, linear_8, view_5, value_states_1], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:26
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1066
+            extern_kernels.bmm(reinterpret_tensor(buf41, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf42, (192, 512, 64), (32768, 64, 1), 0), out=buf43)
+            buf44 = reinterpret_tensor(buf42, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf42  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_3, transpose_9, attn_output_4], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:27
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf43, buf44, 6291456, stream=raw_stream0)
+            assert_size_stride(arg33_1, (768, 768), (768, 1), 'input')
+            buf45 = reinterpret_tensor(buf43, (8192, 768), (768, 1), 0); del buf43  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_3, transpose_9, attn_output_4, reshape_1, hidden_states_8, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:28
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1080
+            assert_size_stride(arg36_1, (768, ), (1, ), 'input')
+            buf49 = reinterpret_tensor(buf45, (16, 512, 768), (393216, 768, 1), 0); del buf45  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_8, add_12, hidden_states_10], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:29
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf49, arg34_1, buf30, arg35_1, arg36_1, 8192, 768, stream=raw_stream0)
+            del arg34_1
+            del arg35_1
+            del arg36_1
+            assert_size_stride(arg37_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1095
+            assert_size_stride(arg38_1, (3072, ), (1, ), 'input')
+            buf51 = reinterpret_tensor(buf50, (16, 512, 3072), (1572864, 3072, 1), 0); del buf50  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_11, hidden_states_12], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:31
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf51, arg38_1, 25165824, stream=raw_stream0)
+            del arg38_1
+            assert_size_stride(arg39_1, (768, 3072), (3072, 1), 'input')
+            buf52 = reinterpret_tensor(buf30, (8192, 768), (768, 1), 0); del buf30  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_11, hidden_states_12, hidden_states_13], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1110
+            assert_size_stride(arg42_1, (768, ), (1, ), 'input')
+            buf56 = reinterpret_tensor(buf52, (16, 512, 768), (393216, 768, 1), 0); del buf52  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_13, add_13, hidden_states_15], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:33
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf56, arg40_1, buf49, arg41_1, arg42_1, 8192, 768, stream=raw_stream0)
+            del arg40_1
+            del arg41_1
+            del arg42_1
+            assert_size_stride(arg43_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1131
+            assert_size_stride(arg44_1, (768, ), (1, ), 'input')
+            buf59 = reinterpret_tensor(buf32, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf32  # reuse
+            # Topologically Sorted Source Nodes: [, linear_12, view_6, query_states_2, matmul_4], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:36
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg44_1, buf57, buf59, 6291456, stream=raw_stream0)
+            del arg44_1
+            assert_size_stride(arg46_1, (768, ), (1, ), 'input')
+            buf60 = reinterpret_tensor(buf57, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf57  # reuse
+            # Topologically Sorted Source Nodes: [, linear_13, view_7, key_states_2, transpose_13, matmul_4], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1141
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:37
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg46_1, buf58, buf60, 12288, 512, stream=raw_stream0)
+            del arg46_1
+            buf61 = reinterpret_tensor(buf41, (192, 512, 512), (262144, 512, 1), 0); del buf41  # reuse
+            # Topologically Sorted Source Nodes: [, linear_12, view_6, query_states_2, matmul_4, linear_13, view_7, key_states_2, transpose_13], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:38
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1160
+            assert_size_stride(arg48_1, (768, ), (1, ), 'input')
+            buf68 = buf59; del buf59  # reuse
+            # Topologically Sorted Source Nodes: [, linear_14, view_8, value_states_2, attn_output_6], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:41
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg48_1, buf66, buf68, 6291456, stream=raw_stream0)
+            del arg48_1
+            buf69 = reinterpret_tensor(buf66, (192, 512, 64), (32768, 64, 1), 0); del buf66  # reuse
+            # Topologically Sorted Source Nodes: [matmul_4, , softmax_2, attn_output_6, linear_14, view_8, value_states_2], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:42
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1170
+            extern_kernels.bmm(reinterpret_tensor(buf67, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf68, (192, 512, 64), (32768, 64, 1), 0), out=buf69)
+            buf70 = reinterpret_tensor(buf68, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf68  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_6, transpose_14, attn_output_7], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:43
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf69, buf70, 6291456, stream=raw_stream0)
+            assert_size_stride(arg49_1, (768, 768), (768, 1), 'input')
+            buf71 = reinterpret_tensor(buf69, (8192, 768), (768, 1), 0); del buf69  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_6, transpose_14, attn_output_7, reshape_2, hidden_states_16, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:44
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1184
+            assert_size_stride(arg52_1, (768, ), (1, ), 'input')
+            buf75 = reinterpret_tensor(buf71, (16, 512, 768), (393216, 768, 1), 0); del buf71  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_16, add_15, hidden_states_18], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:45
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf75, arg50_1, buf56, arg51_1, arg52_1, 8192, 768, stream=raw_stream0)
+            del arg50_1
+            del arg51_1
+            del arg52_1
+            assert_size_stride(arg53_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1199
+            assert_size_stride(arg54_1, (3072, ), (1, ), 'input')
+            buf77 = reinterpret_tensor(buf76, (16, 512, 3072), (1572864, 3072, 1), 0); del buf76  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_19, hidden_states_20], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:47
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf77, arg54_1, 25165824, stream=raw_stream0)
+            del arg54_1
+            assert_size_stride(arg55_1, (768, 3072), (3072, 1), 'input')
+            buf78 = reinterpret_tensor(buf56, (8192, 768), (768, 1), 0); del buf56  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_19, hidden_states_20, hidden_states_21], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1214
+            assert_size_stride(arg58_1, (768, ), (1, ), 'input')
+            buf82 = reinterpret_tensor(buf78, (16, 512, 768), (393216, 768, 1), 0); del buf78  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_21, add_16, hidden_states_23], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:49
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf82, arg56_1, buf75, arg57_1, arg58_1, 8192, 768, stream=raw_stream0)
+            del arg56_1
+            del arg57_1
+            del arg58_1
+            assert_size_stride(arg59_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1235
+            assert_size_stride(arg60_1, (768, ), (1, ), 'input')
+            buf85 = reinterpret_tensor(buf58, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf58  # reuse
+            # Topologically Sorted Source Nodes: [, linear_18, view_9, query_states_3, matmul_6], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:52
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg60_1, buf83, buf85, 6291456, stream=raw_stream0)
+            del arg60_1
+            assert_size_stride(arg62_1, (768, ), (1, ), 'input')
+            buf86 = reinterpret_tensor(buf83, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf83  # reuse
+            # Topologically Sorted Source Nodes: [, linear_19, view_10, key_states_3, transpose_18, matmul_6], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1245
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:53
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg62_1, buf84, buf86, 12288, 512, stream=raw_stream0)
+            del arg62_1
+            buf87 = reinterpret_tensor(buf67, (192, 512, 512), (262144, 512, 1), 0); del buf67  # reuse
+            # Topologically Sorted Source Nodes: [, linear_18, view_9, query_states_3, matmul_6, linear_19, view_10, key_states_3, transpose_18], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:54
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1264
+            assert_size_stride(arg64_1, (768, ), (1, ), 'input')
+            buf94 = buf85; del buf85  # reuse
+            # Topologically Sorted Source Nodes: [, linear_20, view_11, value_states_3, attn_output_9], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:57
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg64_1, buf92, buf94, 6291456, stream=raw_stream0)
+            del arg64_1
+            buf95 = reinterpret_tensor(buf92, (192, 512, 64), (32768, 64, 1), 0); del buf92  # reuse
+            # Topologically Sorted Source Nodes: [matmul_6, , softmax_3, attn_output_9, linear_20, view_11, value_states_3], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:58
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1274
+            extern_kernels.bmm(reinterpret_tensor(buf93, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf94, (192, 512, 64), (32768, 64, 1), 0), out=buf95)
+            buf96 = reinterpret_tensor(buf94, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf94  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_9, transpose_19, attn_output_10], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:59
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf95, buf96, 6291456, stream=raw_stream0)
+            assert_size_stride(arg65_1, (768, 768), (768, 1), 'input')
+            buf97 = reinterpret_tensor(buf95, (8192, 768), (768, 1), 0); del buf95  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_9, transpose_19, attn_output_10, reshape_3, hidden_states_24, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:60
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1288
+            assert_size_stride(arg68_1, (768, ), (1, ), 'input')
+            buf101 = reinterpret_tensor(buf97, (16, 512, 768), (393216, 768, 1), 0); del buf97  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_24, add_18, hidden_states_26], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:61
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf101, arg66_1, buf82, arg67_1, arg68_1, 8192, 768, stream=raw_stream0)
+            del arg66_1
+            del arg67_1
+            del arg68_1
+            assert_size_stride(arg69_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1303
+            assert_size_stride(arg70_1, (3072, ), (1, ), 'input')
+            buf103 = reinterpret_tensor(buf102, (16, 512, 3072), (1572864, 3072, 1), 0); del buf102  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_27, hidden_states_28], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:63
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf103, arg70_1, 25165824, stream=raw_stream0)
+            del arg70_1
+            assert_size_stride(arg71_1, (768, 3072), (3072, 1), 'input')
+            buf104 = reinterpret_tensor(buf82, (8192, 768), (768, 1), 0); del buf82  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_27, hidden_states_28, hidden_states_29], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1318
+            assert_size_stride(arg74_1, (768, ), (1, ), 'input')
+            buf108 = reinterpret_tensor(buf104, (16, 512, 768), (393216, 768, 1), 0); del buf104  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_29, add_19, hidden_states_31], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:65
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf108, arg72_1, buf101, arg73_1, arg74_1, 8192, 768, stream=raw_stream0)
+            del arg72_1
+            del arg73_1
+            del arg74_1
+            assert_size_stride(arg75_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1339
+            assert_size_stride(arg76_1, (768, ), (1, ), 'input')
+            buf111 = reinterpret_tensor(buf84, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf84  # reuse
+            # Topologically Sorted Source Nodes: [, linear_24, view_12, query_states_4, matmul_8], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:68
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg76_1, buf109, buf111, 6291456, stream=raw_stream0)
+            del arg76_1
+            assert_size_stride(arg78_1, (768, ), (1, ), 'input')
+            buf112 = reinterpret_tensor(buf109, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf109  # reuse
+            # Topologically Sorted Source Nodes: [, linear_25, view_13, key_states_4, transpose_23, matmul_8], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1349
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:69
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg78_1, buf110, buf112, 12288, 512, stream=raw_stream0)
+            del arg78_1
+            buf113 = reinterpret_tensor(buf93, (192, 512, 512), (262144, 512, 1), 0); del buf93  # reuse
+            # Topologically Sorted Source Nodes: [, linear_24, view_12, query_states_4, matmul_8, linear_25, view_13, key_states_4, transpose_23], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:70
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1368
+            assert_size_stride(arg80_1, (768, ), (1, ), 'input')
+            buf120 = buf111; del buf111  # reuse
+            # Topologically Sorted Source Nodes: [, linear_26, view_14, value_states_4, attn_output_12], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:73
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg80_1, buf118, buf120, 6291456, stream=raw_stream0)
+            del arg80_1
+            buf121 = reinterpret_tensor(buf118, (192, 512, 64), (32768, 64, 1), 0); del buf118  # reuse
+            # Topologically Sorted Source Nodes: [matmul_8, , softmax_4, attn_output_12, linear_26, view_14, value_states_4], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:74
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1378
+            extern_kernels.bmm(reinterpret_tensor(buf119, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf120, (192, 512, 64), (32768, 64, 1), 0), out=buf121)
+            buf122 = reinterpret_tensor(buf120, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf120  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_12, transpose_24, attn_output_13], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:75
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf121, buf122, 6291456, stream=raw_stream0)
+            assert_size_stride(arg81_1, (768, 768), (768, 1), 'input')
+            buf123 = reinterpret_tensor(buf121, (8192, 768), (768, 1), 0); del buf121  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_12, transpose_24, attn_output_13, reshape_4, hidden_states_32, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:76
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1392
+            assert_size_stride(arg84_1, (768, ), (1, ), 'input')
+            buf127 = reinterpret_tensor(buf123, (16, 512, 768), (393216, 768, 1), 0); del buf123  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_32, add_21, hidden_states_34], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:77
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf127, arg82_1, buf108, arg83_1, arg84_1, 8192, 768, stream=raw_stream0)
+            del arg82_1
+            del arg83_1
+            del arg84_1
+            assert_size_stride(arg85_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1407
+            assert_size_stride(arg86_1, (3072, ), (1, ), 'input')
+            buf129 = reinterpret_tensor(buf128, (16, 512, 3072), (1572864, 3072, 1), 0); del buf128  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_35, hidden_states_36], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:79
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf129, arg86_1, 25165824, stream=raw_stream0)
+            del arg86_1
+            assert_size_stride(arg87_1, (768, 3072), (3072, 1), 'input')
+            buf130 = reinterpret_tensor(buf108, (8192, 768), (768, 1), 0); del buf108  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_35, hidden_states_36, hidden_states_37], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1422
+            assert_size_stride(arg90_1, (768, ), (1, ), 'input')
+            buf134 = reinterpret_tensor(buf130, (16, 512, 768), (393216, 768, 1), 0); del buf130  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_37, add_22, hidden_states_39], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:81
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf134, arg88_1, buf127, arg89_1, arg90_1, 8192, 768, stream=raw_stream0)
+            del arg88_1
+            del arg89_1
+            del arg90_1
+            assert_size_stride(arg91_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1443
+            assert_size_stride(arg92_1, (768, ), (1, ), 'input')
+            buf137 = reinterpret_tensor(buf110, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf110  # reuse
+            # Topologically Sorted Source Nodes: [, linear_30, view_15, query_states_5, matmul_10], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:84
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg92_1, buf135, buf137, 6291456, stream=raw_stream0)
+            del arg92_1
+            assert_size_stride(arg94_1, (768, ), (1, ), 'input')
+            buf138 = reinterpret_tensor(buf135, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf135  # reuse
+            # Topologically Sorted Source Nodes: [, linear_31, view_16, key_states_5, transpose_28, matmul_10], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1453
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:85
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg94_1, buf136, buf138, 12288, 512, stream=raw_stream0)
+            del arg94_1
+            buf139 = reinterpret_tensor(buf119, (192, 512, 512), (262144, 512, 1), 0); del buf119  # reuse
+            # Topologically Sorted Source Nodes: [, linear_30, view_15, query_states_5, matmul_10, linear_31, view_16, key_states_5, transpose_28], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:86
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1472
+            assert_size_stride(arg96_1, (768, ), (1, ), 'input')
+            buf146 = buf137; del buf137  # reuse
+            # Topologically Sorted Source Nodes: [, linear_32, view_17, value_states_5, attn_output_15], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:89
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg96_1, buf144, buf146, 6291456, stream=raw_stream0)
+            del arg96_1
+            buf147 = reinterpret_tensor(buf144, (192, 512, 64), (32768, 64, 1), 0); del buf144  # reuse
+            # Topologically Sorted Source Nodes: [matmul_10, , softmax_5, attn_output_15, linear_32, view_17, value_states_5], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:90
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1482
+            extern_kernels.bmm(reinterpret_tensor(buf145, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf146, (192, 512, 64), (32768, 64, 1), 0), out=buf147)
+            buf148 = reinterpret_tensor(buf146, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf146  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_15, transpose_29, attn_output_16], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:91
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf147, buf148, 6291456, stream=raw_stream0)
+            assert_size_stride(arg97_1, (768, 768), (768, 1), 'input')
+            buf149 = reinterpret_tensor(buf147, (8192, 768), (768, 1), 0); del buf147  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_15, transpose_29, attn_output_16, reshape_5, hidden_states_40, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:92
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1496
+            assert_size_stride(arg100_1, (768, ), (1, ), 'input')
+            buf153 = reinterpret_tensor(buf149, (16, 512, 768), (393216, 768, 1), 0); del buf149  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_40, add_24, hidden_states_42], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:93
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf153, arg98_1, buf134, arg99_1, arg100_1, 8192, 768, stream=raw_stream0)
+            del arg100_1
+            del arg98_1
+            del arg99_1
+            assert_size_stride(arg101_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1511
+            assert_size_stride(arg102_1, (3072, ), (1, ), 'input')
+            buf155 = reinterpret_tensor(buf154, (16, 512, 3072), (1572864, 3072, 1), 0); del buf154  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_43, hidden_states_44], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:95
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf155, arg102_1, 25165824, stream=raw_stream0)
+            del arg102_1
+            assert_size_stride(arg103_1, (768, 3072), (3072, 1), 'input')
+            buf156 = reinterpret_tensor(buf134, (8192, 768), (768, 1), 0); del buf134  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_43, hidden_states_44, hidden_states_45], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1526
+            assert_size_stride(arg106_1, (768, ), (1, ), 'input')
+            buf160 = reinterpret_tensor(buf156, (16, 512, 768), (393216, 768, 1), 0); del buf156  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_45, add_25, hidden_states_47], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:97
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf160, arg104_1, buf153, arg105_1, arg106_1, 8192, 768, stream=raw_stream0)
+            del arg104_1
+            del arg105_1
+            del arg106_1
+            assert_size_stride(arg107_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1547
+            assert_size_stride(arg108_1, (768, ), (1, ), 'input')
+            buf163 = reinterpret_tensor(buf136, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf136  # reuse
+            # Topologically Sorted Source Nodes: [, linear_36, view_18, query_states_6, matmul_12], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:100
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg108_1, buf161, buf163, 6291456, stream=raw_stream0)
+            del arg108_1
+            assert_size_stride(arg110_1, (768, ), (1, ), 'input')
+            buf164 = reinterpret_tensor(buf161, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf161  # reuse
+            # Topologically Sorted Source Nodes: [, linear_37, view_19, key_states_6, transpose_33, matmul_12], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1557
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:101
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg110_1, buf162, buf164, 12288, 512, stream=raw_stream0)
+            del arg110_1
+            buf165 = reinterpret_tensor(buf145, (192, 512, 512), (262144, 512, 1), 0); del buf145  # reuse
+            # Topologically Sorted Source Nodes: [, linear_36, view_18, query_states_6, matmul_12, linear_37, view_19, key_states_6, transpose_33], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:102
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1576
+            assert_size_stride(arg112_1, (768, ), (1, ), 'input')
+            buf172 = buf163; del buf163  # reuse
+            # Topologically Sorted Source Nodes: [, linear_38, view_20, value_states_6, attn_output_18], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:105
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg112_1, buf170, buf172, 6291456, stream=raw_stream0)
+            del arg112_1
+            buf173 = reinterpret_tensor(buf170, (192, 512, 64), (32768, 64, 1), 0); del buf170  # reuse
+            # Topologically Sorted Source Nodes: [matmul_12, , softmax_6, attn_output_18, linear_38, view_20, value_states_6], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:106
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1586
+            extern_kernels.bmm(reinterpret_tensor(buf171, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf172, (192, 512, 64), (32768, 64, 1), 0), out=buf173)
+            buf174 = reinterpret_tensor(buf172, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf172  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_18, transpose_34, attn_output_19], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:107
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf173, buf174, 6291456, stream=raw_stream0)
+            assert_size_stride(arg113_1, (768, 768), (768, 1), 'input')
+            buf175 = reinterpret_tensor(buf173, (8192, 768), (768, 1), 0); del buf173  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_18, transpose_34, attn_output_19, reshape_6, hidden_states_48, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:108
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1600
+            assert_size_stride(arg116_1, (768, ), (1, ), 'input')
+            buf179 = reinterpret_tensor(buf175, (16, 512, 768), (393216, 768, 1), 0); del buf175  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_48, add_27, hidden_states_50], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:109
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf179, arg114_1, buf160, arg115_1, arg116_1, 8192, 768, stream=raw_stream0)
+            del arg114_1
+            del arg115_1
+            del arg116_1
+            assert_size_stride(arg117_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1615
+            assert_size_stride(arg118_1, (3072, ), (1, ), 'input')
+            buf181 = reinterpret_tensor(buf180, (16, 512, 3072), (1572864, 3072, 1), 0); del buf180  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_51, hidden_states_52], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:111
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf181, arg118_1, 25165824, stream=raw_stream0)
+            del arg118_1
+            assert_size_stride(arg119_1, (768, 3072), (3072, 1), 'input')
+            buf182 = reinterpret_tensor(buf160, (8192, 768), (768, 1), 0); del buf160  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_51, hidden_states_52, hidden_states_53], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1630
+            assert_size_stride(arg122_1, (768, ), (1, ), 'input')
+            buf186 = reinterpret_tensor(buf182, (16, 512, 768), (393216, 768, 1), 0); del buf182  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_53, add_28, hidden_states_55], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:113
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf186, arg120_1, buf179, arg121_1, arg122_1, 8192, 768, stream=raw_stream0)
+            del arg120_1
+            del arg121_1
+            del arg122_1
+            assert_size_stride(arg123_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1651
+            assert_size_stride(arg124_1, (768, ), (1, ), 'input')
+            buf189 = reinterpret_tensor(buf162, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf162  # reuse
+            # Topologically Sorted Source Nodes: [, linear_42, view_21, query_states_7, matmul_14], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:116
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg124_1, buf187, buf189, 6291456, stream=raw_stream0)
+            del arg124_1
+            assert_size_stride(arg126_1, (768, ), (1, ), 'input')
+            buf190 = reinterpret_tensor(buf187, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf187  # reuse
+            # Topologically Sorted Source Nodes: [, linear_43, view_22, key_states_7, transpose_38, matmul_14], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1661
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:117
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg126_1, buf188, buf190, 12288, 512, stream=raw_stream0)
+            del arg126_1
+            buf191 = reinterpret_tensor(buf171, (192, 512, 512), (262144, 512, 1), 0); del buf171  # reuse
+            # Topologically Sorted Source Nodes: [, linear_42, view_21, query_states_7, matmul_14, linear_43, view_22, key_states_7, transpose_38], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:118
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1680
+            assert_size_stride(arg128_1, (768, ), (1, ), 'input')
+            buf198 = buf189; del buf189  # reuse
+            # Topologically Sorted Source Nodes: [, linear_44, view_23, value_states_7, attn_output_21], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:121
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg128_1, buf196, buf198, 6291456, stream=raw_stream0)
+            del arg128_1
+            buf199 = reinterpret_tensor(buf196, (192, 512, 64), (32768, 64, 1), 0); del buf196  # reuse
+            # Topologically Sorted Source Nodes: [matmul_14, , softmax_7, attn_output_21, linear_44, view_23, value_states_7], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:122
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1690
+            extern_kernels.bmm(reinterpret_tensor(buf197, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf198, (192, 512, 64), (32768, 64, 1), 0), out=buf199)
+            buf200 = reinterpret_tensor(buf198, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf198  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_21, transpose_39, attn_output_22], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:123
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf199, buf200, 6291456, stream=raw_stream0)
+            assert_size_stride(arg129_1, (768, 768), (768, 1), 'input')
+            buf201 = reinterpret_tensor(buf199, (8192, 768), (768, 1), 0); del buf199  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_21, transpose_39, attn_output_22, reshape_7, hidden_states_56, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:124
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1704
+            assert_size_stride(arg132_1, (768, ), (1, ), 'input')
+            buf205 = reinterpret_tensor(buf201, (16, 512, 768), (393216, 768, 1), 0); del buf201  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_56, add_30, hidden_states_58], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:125
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf205, arg130_1, buf186, arg131_1, arg132_1, 8192, 768, stream=raw_stream0)
+            del arg130_1
+            del arg131_1
+            del arg132_1
+            assert_size_stride(arg133_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1719
+            assert_size_stride(arg134_1, (3072, ), (1, ), 'input')
+            buf207 = reinterpret_tensor(buf206, (16, 512, 3072), (1572864, 3072, 1), 0); del buf206  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_59, hidden_states_60], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:127
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf207, arg134_1, 25165824, stream=raw_stream0)
+            del arg134_1
+            assert_size_stride(arg135_1, (768, 3072), (3072, 1), 'input')
+            buf208 = reinterpret_tensor(buf186, (8192, 768), (768, 1), 0); del buf186  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_59, hidden_states_60, hidden_states_61], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1734
+            assert_size_stride(arg138_1, (768, ), (1, ), 'input')
+            buf212 = reinterpret_tensor(buf208, (16, 512, 768), (393216, 768, 1), 0); del buf208  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_61, add_31, hidden_states_63], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:129
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf212, arg136_1, buf205, arg137_1, arg138_1, 8192, 768, stream=raw_stream0)
+            del arg136_1
+            del arg137_1
+            del arg138_1
+            assert_size_stride(arg139_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1755
+            assert_size_stride(arg140_1, (768, ), (1, ), 'input')
+            buf215 = reinterpret_tensor(buf188, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf188  # reuse
+            # Topologically Sorted Source Nodes: [, linear_48, view_24, query_states_8, matmul_16], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:132
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg140_1, buf213, buf215, 6291456, stream=raw_stream0)
+            del arg140_1
+            assert_size_stride(arg142_1, (768, ), (1, ), 'input')
+            buf216 = reinterpret_tensor(buf213, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf213  # reuse
+            # Topologically Sorted Source Nodes: [, linear_49, view_25, key_states_8, transpose_43, matmul_16], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1765
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:133
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg142_1, buf214, buf216, 12288, 512, stream=raw_stream0)
+            del arg142_1
+            buf217 = reinterpret_tensor(buf197, (192, 512, 512), (262144, 512, 1), 0); del buf197  # reuse
+            # Topologically Sorted Source Nodes: [, linear_48, view_24, query_states_8, matmul_16, linear_49, view_25, key_states_8, transpose_43], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:134
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1784
+            assert_size_stride(arg144_1, (768, ), (1, ), 'input')
+            buf224 = buf215; del buf215  # reuse
+            # Topologically Sorted Source Nodes: [, linear_50, view_26, value_states_8, attn_output_24], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:137
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg144_1, buf222, buf224, 6291456, stream=raw_stream0)
+            del arg144_1
+            buf225 = reinterpret_tensor(buf222, (192, 512, 64), (32768, 64, 1), 0); del buf222  # reuse
+            # Topologically Sorted Source Nodes: [matmul_16, , softmax_8, attn_output_24, linear_50, view_26, value_states_8], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:138
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1794
+            extern_kernels.bmm(reinterpret_tensor(buf223, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf224, (192, 512, 64), (32768, 64, 1), 0), out=buf225)
+            buf226 = reinterpret_tensor(buf224, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf224  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_24, transpose_44, attn_output_25], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:139
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf225, buf226, 6291456, stream=raw_stream0)
+            assert_size_stride(arg145_1, (768, 768), (768, 1), 'input')
+            buf227 = reinterpret_tensor(buf225, (8192, 768), (768, 1), 0); del buf225  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_24, transpose_44, attn_output_25, reshape_8, hidden_states_64, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:140
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1808
+            assert_size_stride(arg148_1, (768, ), (1, ), 'input')
+            buf231 = reinterpret_tensor(buf227, (16, 512, 768), (393216, 768, 1), 0); del buf227  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_64, add_33, hidden_states_66], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:141
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf231, arg146_1, buf212, arg147_1, arg148_1, 8192, 768, stream=raw_stream0)
+            del arg146_1
+            del arg147_1
+            del arg148_1
+            assert_size_stride(arg149_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1823
+            assert_size_stride(arg150_1, (3072, ), (1, ), 'input')
+            buf233 = reinterpret_tensor(buf232, (16, 512, 3072), (1572864, 3072, 1), 0); del buf232  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_67, hidden_states_68], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:143
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf233, arg150_1, 25165824, stream=raw_stream0)
+            del arg150_1
+            assert_size_stride(arg151_1, (768, 3072), (3072, 1), 'input')
+            buf234 = reinterpret_tensor(buf212, (8192, 768), (768, 1), 0); del buf212  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_67, hidden_states_68, hidden_states_69], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1838
+            assert_size_stride(arg154_1, (768, ), (1, ), 'input')
+            buf238 = reinterpret_tensor(buf234, (16, 512, 768), (393216, 768, 1), 0); del buf234  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_69, add_34, hidden_states_71], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:145
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf238, arg152_1, buf231, arg153_1, arg154_1, 8192, 768, stream=raw_stream0)
+            del arg152_1
+            del arg153_1
+            del arg154_1
+            assert_size_stride(arg155_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1859
+            assert_size_stride(arg156_1, (768, ), (1, ), 'input')
+            buf241 = reinterpret_tensor(buf214, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf214  # reuse
+            # Topologically Sorted Source Nodes: [, linear_54, view_27, query_states_9, matmul_18], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:148
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg156_1, buf239, buf241, 6291456, stream=raw_stream0)
+            del arg156_1
+            assert_size_stride(arg158_1, (768, ), (1, ), 'input')
+            buf242 = reinterpret_tensor(buf239, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf239  # reuse
+            # Topologically Sorted Source Nodes: [, linear_55, view_28, key_states_9, transpose_48, matmul_18], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1869
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:149
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg158_1, buf240, buf242, 12288, 512, stream=raw_stream0)
+            del arg158_1
+            buf243 = reinterpret_tensor(buf223, (192, 512, 512), (262144, 512, 1), 0); del buf223  # reuse
+            # Topologically Sorted Source Nodes: [, linear_54, view_27, query_states_9, matmul_18, linear_55, view_28, key_states_9, transpose_48], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:150
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1888
+            assert_size_stride(arg160_1, (768, ), (1, ), 'input')
+            buf250 = buf241; del buf241  # reuse
+            # Topologically Sorted Source Nodes: [, linear_56, view_29, value_states_9, attn_output_27], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:153
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg160_1, buf248, buf250, 6291456, stream=raw_stream0)
+            del arg160_1
+            buf251 = reinterpret_tensor(buf248, (192, 512, 64), (32768, 64, 1), 0); del buf248  # reuse
+            # Topologically Sorted Source Nodes: [matmul_18, , softmax_9, attn_output_27, linear_56, view_29, value_states_9], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:154
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1898
+            extern_kernels.bmm(reinterpret_tensor(buf249, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf250, (192, 512, 64), (32768, 64, 1), 0), out=buf251)
+            buf252 = reinterpret_tensor(buf250, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf250  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_27, transpose_49, attn_output_28], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:155
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf251, buf252, 6291456, stream=raw_stream0)
+            assert_size_stride(arg161_1, (768, 768), (768, 1), 'input')
+            buf253 = reinterpret_tensor(buf251, (8192, 768), (768, 1), 0); del buf251  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_27, transpose_49, attn_output_28, reshape_9, hidden_states_72, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:156
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1912
+            assert_size_stride(arg164_1, (768, ), (1, ), 'input')
+            buf257 = reinterpret_tensor(buf253, (16, 512, 768), (393216, 768, 1), 0); del buf253  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_72, add_36, hidden_states_74], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:157
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf257, arg162_1, buf238, arg163_1, arg164_1, 8192, 768, stream=raw_stream0)
+            del arg162_1
+            del arg163_1
+            del arg164_1
+            assert_size_stride(arg165_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1927
+            assert_size_stride(arg166_1, (3072, ), (1, ), 'input')
+            buf259 = reinterpret_tensor(buf258, (16, 512, 3072), (1572864, 3072, 1), 0); del buf258  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_75, hidden_states_76], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:159
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf259, arg166_1, 25165824, stream=raw_stream0)
+            del arg166_1
+            assert_size_stride(arg167_1, (768, 3072), (3072, 1), 'input')
+            buf260 = reinterpret_tensor(buf238, (8192, 768), (768, 1), 0); del buf238  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_75, hidden_states_76, hidden_states_77], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1942
+            assert_size_stride(arg170_1, (768, ), (1, ), 'input')
+            buf264 = reinterpret_tensor(buf260, (16, 512, 768), (393216, 768, 1), 0); del buf260  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_77, add_37, hidden_states_79], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:161
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf264, arg168_1, buf257, arg169_1, arg170_1, 8192, 768, stream=raw_stream0)
+            del arg168_1
+            del arg169_1
+            del arg170_1
+            assert_size_stride(arg171_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1963
+            assert_size_stride(arg172_1, (768, ), (1, ), 'input')
+            buf267 = reinterpret_tensor(buf240, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf240  # reuse
+            # Topologically Sorted Source Nodes: [, linear_60, view_30, query_states_10, matmul_20], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:164
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg172_1, buf265, buf267, 6291456, stream=raw_stream0)
+            del arg172_1
+            assert_size_stride(arg174_1, (768, ), (1, ), 'input')
+            buf268 = reinterpret_tensor(buf265, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf265  # reuse
+            # Topologically Sorted Source Nodes: [, linear_61, view_31, key_states_10, transpose_53, matmul_20], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1973
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:165
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg174_1, buf266, buf268, 12288, 512, stream=raw_stream0)
+            del arg174_1
+            buf269 = reinterpret_tensor(buf249, (192, 512, 512), (262144, 512, 1), 0); del buf249  # reuse
+            # Topologically Sorted Source Nodes: [, linear_60, view_30, query_states_10, matmul_20, linear_61, view_31, key_states_10, transpose_53], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:166
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:1992
+            assert_size_stride(arg176_1, (768, ), (1, ), 'input')
+            buf276 = buf267; del buf267  # reuse
+            # Topologically Sorted Source Nodes: [, linear_62, view_32, value_states_10, attn_output_30], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:169
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg176_1, buf274, buf276, 6291456, stream=raw_stream0)
+            del arg176_1
+            buf277 = reinterpret_tensor(buf274, (192, 512, 64), (32768, 64, 1), 0); del buf274  # reuse
+            # Topologically Sorted Source Nodes: [matmul_20, , softmax_10, attn_output_30, linear_62, view_32, value_states_10], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:170
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2002
+            extern_kernels.bmm(reinterpret_tensor(buf275, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf276, (192, 512, 64), (32768, 64, 1), 0), out=buf277)
+            buf278 = reinterpret_tensor(buf276, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf276  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_30, transpose_54, attn_output_31], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:171
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf277, buf278, 6291456, stream=raw_stream0)
+            assert_size_stride(arg177_1, (768, 768), (768, 1), 'input')
+            buf279 = reinterpret_tensor(buf277, (8192, 768), (768, 1), 0); del buf277  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_30, transpose_54, attn_output_31, reshape_10, hidden_states_80, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:172
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2016
+            assert_size_stride(arg180_1, (768, ), (1, ), 'input')
+            buf283 = reinterpret_tensor(buf279, (16, 512, 768), (393216, 768, 1), 0); del buf279  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_80, add_39, hidden_states_82], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:173
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf283, arg178_1, buf264, arg179_1, arg180_1, 8192, 768, stream=raw_stream0)
+            del arg178_1
+            del arg179_1
+            del arg180_1
+            assert_size_stride(arg181_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2031
+            assert_size_stride(arg182_1, (3072, ), (1, ), 'input')
+            buf285 = reinterpret_tensor(buf284, (16, 512, 3072), (1572864, 3072, 1), 0); del buf284  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_83, hidden_states_84], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:175
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf285, arg182_1, 25165824, stream=raw_stream0)
+            del arg182_1
+            assert_size_stride(arg183_1, (768, 3072), (3072, 1), 'input')
+            buf286 = reinterpret_tensor(buf264, (8192, 768), (768, 1), 0); del buf264  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_83, hidden_states_84, hidden_states_85], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2046
+            assert_size_stride(arg186_1, (768, ), (1, ), 'input')
+            buf290 = reinterpret_tensor(buf286, (16, 512, 768), (393216, 768, 1), 0); del buf286  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_85, add_40, hidden_states_87], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:177
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf290, arg184_1, buf283, arg185_1, arg186_1, 8192, 768, stream=raw_stream0)
+            del arg184_1
+            del arg185_1
+            del arg186_1
+            assert_size_stride(arg187_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2067
+            assert_size_stride(arg188_1, (768, ), (1, ), 'input')
+            buf293 = reinterpret_tensor(buf266, (16, 12, 512, 64), (393216, 32768, 64, 1), 0); del buf266  # reuse
+            # Topologically Sorted Source Nodes: [, linear_66, view_33, query_states_11, matmul_22], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:180
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg188_1, buf291, buf293, 6291456, stream=raw_stream0)
+            del arg188_1
+            assert_size_stride(arg190_1, (768, ), (1, ), 'input')
+            buf294 = reinterpret_tensor(buf291, (16, 12, 64, 512), (393216, 32768, 512, 1), 0); del buf291  # reuse
+            # Topologically Sorted Source Nodes: [, linear_67, view_34, key_states_11, transpose_58, matmul_22], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2077
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:181
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg190_1, buf292, buf294, 12288, 512, stream=raw_stream0)
+            del arg190_1
+            del buf292
+            buf295 = reinterpret_tensor(buf275, (192, 512, 512), (262144, 512, 1), 0); del buf275  # reuse
+            # Topologically Sorted Source Nodes: [, linear_66, view_33, query_states_11, matmul_22, linear_67, view_34, key_states_11, transpose_58], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2097
+            assert_size_stride(arg192_1, (768, ), (1, ), 'input')
+            buf302 = buf293; del buf293  # reuse
+            # Topologically Sorted Source Nodes: [, linear_68, view_35, value_states_11, attn_output_33], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:185
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg192_1, buf300, buf302, 6291456, stream=raw_stream0)
+            del arg192_1
+            buf303 = reinterpret_tensor(buf300, (192, 512, 64), (32768, 64, 1), 0); del buf300  # reuse
+            # Topologically Sorted Source Nodes: [matmul_22, , softmax_11, attn_output_33, linear_68, view_35, value_states_11], Original ATen: [aten.view, aten.mul, aten.all, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:186
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2108
+            del buf301
+            buf304 = reinterpret_tensor(buf302, (16, 512, 12, 64), (393216, 768, 64, 1), 0); del buf302  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_33, transpose_59, attn_output_34], Original ATen: [aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_transpose_view_4:187
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_transpose_view_4.run(buf303, buf304, 6291456, stream=raw_stream0)
+            assert_size_stride(arg193_1, (768, 768), (768, 1), 'input')
+            buf305 = reinterpret_tensor(buf303, (8192, 768), (768, 1), 0); del buf303  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_33, transpose_59, attn_output_34, reshape_11, hidden_states_88, ], Original ATen: [aten.view, aten.transpose, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:188
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2123
+            assert_size_stride(arg196_1, (768, ), (1, ), 'input')
+            buf309 = reinterpret_tensor(buf305, (16, 512, 768), (393216, 768, 1), 0); del buf305  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_88, add_42, hidden_states_90], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:189
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf309, arg194_1, buf290, arg195_1, arg196_1, 8192, 768, stream=raw_stream0)
+            del arg194_1
+            del arg195_1
+            del arg196_1
+            assert_size_stride(arg197_1, (3072, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2138
+            assert_size_stride(arg198_1, (3072, ), (1, ), 'input')
+            buf311 = reinterpret_tensor(buf310, (16, 512, 3072), (1572864, 3072, 1), 0); del buf310  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_91, hidden_states_92], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:191
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf311, arg198_1, 25165824, stream=raw_stream0)
+            del arg198_1
+            assert_size_stride(arg199_1, (768, 3072), (3072, 1), 'input')
+            buf312 = reinterpret_tensor(buf290, (8192, 768), (768, 1), 0); del buf290  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_91, hidden_states_92, hidden_states_93], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2154
+            assert_size_stride(arg202_1, (768, ), (1, ), 'input')
+            buf316 = reinterpret_tensor(buf312, (16, 512, 768), (393216, 768, 1), 0); del buf312  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_93, add_43, hidden_states_95], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:193
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf316, arg200_1, buf309, arg201_1, arg202_1, 8192, 768, stream=raw_stream0)
+            del arg200_1
+            del arg201_1
+            del arg202_1
+            assert_size_stride(arg205_1, (768, 768), (768, 1), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2172
+            assert_size_stride(arg208_1, (768, ), (1, ), 'input')
+            buf321 = reinterpret_tensor(buf317, (16, 512, 768), (393216, 768, 1), 0); del buf317  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_96, hidden_states_97, hidden_states_98], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_addmm_gelu_native_layer_norm_view_7:195
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_addmm_gelu_native_layer_norm_view_7.run(buf321, arg206_1, arg207_1, arg208_1, 8192, 768, stream=raw_stream0)
+            del arg206_1
+            del arg207_1
+            del arg208_1
+            assert_size_stride(arg209_1, (30522, ), (1, ), 'input')
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2189
+            buf323 = empty_strided_cuda((8192, 1), (1, 8192), torch.float32)
+            buf324 = empty_strided_cuda((8192, 1), (1, 8192), torch.float32)
+            # Topologically Sorted Source Nodes: [hidden_states_99, view_36, ], Original ATen: [aten.view, prims.prepare_softmax_online]
+            # [Provenance debug handles] triton_red_fused_prepare_softmax_online_view_8:197
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_prepare_softmax_online_view_8.run(buf322, buf323, buf324, 8192, 30522, stream=raw_stream0)
+            assert_size_stride(arg210_1, (16, 512), (512, 1), 'input')
+            arg210_1 = copy_if_misaligned(arg210_1)
+            buf325 = empty_strided_cuda((), (), torch.float32)
+            buf327 = buf325; del buf325  # reuse
+
+
+# Source: LayoutLMForMaskedLM_Infer/GPU_g01_output_code.py:2199
+            # Topologically Sorted Source Nodes: [view_37, masked_lm_loss, hidden_states_99, view_36, ], Original ATen: [aten.view, aten.nll_loss_forward, aten._log_softmax]
+            # [Provenance debug handles] triton_red_fused__log_softmax_nll_loss_forward_view_9:198
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused__log_softmax_nll_loss_forward_view_9.run(buf327, arg210_1, buf322, buf323, buf324, 1, 8192, stream=raw_stream0)
+            del arg210_1
+            del buf323
+            del buf324
+        return (buf327, reinterpret_tensor(buf322, (16, 512, 30522), (15627264, 30522, 1), 0), )

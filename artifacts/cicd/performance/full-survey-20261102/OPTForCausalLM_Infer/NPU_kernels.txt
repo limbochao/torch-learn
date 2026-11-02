@@ -1,0 +1,417 @@
+# Source: OPTForCausalLM_Infer/NPU_g01_output_code.py:394
+# Topologically Sorted Source Nodes: [view_8, bool_1, expanded_attn_mask_1, mask_cond, add, view_1, lt, masked_fill_, mask, attn_weights_1, attn_weights_2, attn_weights_3, attn_weights_4], Original ATen: [aten.view, aten._to_copy, aten.masked_fill, aten.arange, aten.add, aten.lt, aten.full, aten.unsqueeze, aten.expand, aten.maximum, aten._softmax]
+# Source node to ATen node mapping:
+#   add => add
+#   attn_weights_1 => add_3
+#   attn_weights_2 => maximum
+#   attn_weights_3 => view_15
+#   attn_weights_4 => amax, div, exp, sub_2, sum_1
+#   bool_1 => full_default_2
+#   expanded_attn_mask_1 => expand_2, full_default_3, unsqueeze_7, unsqueeze_8, where_2
+#   lt => lt
+#   mask => full_default
+#   mask_cond => iota
+#   masked_fill_ => full_default_1, where
+#   view_1 => view_1
+#   view_8 => view_14
+# Graph fragment:
+#   %bmm : Tensor "f32[24, 2048, 2048][4194304, 2048, 1]npu:0" = PlaceHolder[target=bmm]
+#   %amax : Tensor "f32[24, 2048, 1][2048, 1, 49152]npu:0" = PlaceHolder[target=amax]
+#   %sum_1 : Tensor "f32[24, 2048, 1][2048, 1, 49152]npu:0" = PlaceHolder[target=sum_1]
+#   %view_14 : Tensor "f32[2, 12, 2048, 2048][50331648, 4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%bmm, [2, 12, 2048, 2048]), kwargs = {})
+#   %full_default_2 : Tensor "b8[2, 1, 2048, 2048][4194304, 4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.full.default](args = ([2, 1, 2048, 2048], False), kwargs = {dtype: torch.bool, layout: torch.strided, device: npu:0, pin_memory: False})
+#   %full_default_3 : Tensor "f32[][]npu:0"[num_users=13] = call_function[target=torch.ops.aten.full.default](args = ([], -3.4028234663852886e+38), kwargs = {dtype: torch.float32, layout: torch.strided, device: npu:0, pin_memory: False})
+#   %iota : Tensor "i32[2048][1]npu:0"[num_users=2] = call_function[target=torch.ops.prims.iota.default](args = (2048,), kwargs = {start: 0, step: 1, dtype: torch.int32, device: npu:0, requires_grad: False})
+#   %add : Tensor "i32[2048][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%iota, 1), kwargs = {})
+#   %view_1 : Tensor "i32[2048, 1][1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add, [2048, 1]), kwargs = {})
+#   %lt : Tensor "b8[2048, 2048][2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.lt.Tensor](args = (%iota, %view_1), kwargs = {})
+#   %full_default_1 : Tensor "f32[][]npu:0"[num_users=1] = call_function[target=torch.ops.aten.full.default](args = ([], 0.0), kwargs = {dtype: torch.float32, layout: torch.strided, device: npu:0, pin_memory: False})
+#   %full_default : Tensor "f32[2048, 2048][2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.full.default](args = ([2048, 2048], -3.4028234663852886e+38), kwargs = {dtype: torch.float32, layout: torch.strided, device: npu:0, pin_memory: False})
+#   %where : Tensor "f32[2048, 2048][2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.where.self](args = (%lt, %full_default_1, %full_default), kwargs = {})
+#   %unsqueeze_7 : Tensor "f32[1, 2048, 2048][4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%where, 0), kwargs = {})
+#   %unsqueeze_8 : Tensor "f32[1, 1, 2048, 2048][4194304, 4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%unsqueeze_7, 1), kwargs = {})
+#   %expand_2 : Tensor "f32[2, 1, 2048, 2048][0, 4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.expand.default](args = (%unsqueeze_8, [2, 1, 2048, 2048]), kwargs = {})
+#   %where_2 : Tensor "f32[2, 1, 2048, 2048][4194304, 4194304, 2048, 1]npu:0"[num_users=12] = call_function[target=torch.ops.aten.where.self](args = (%full_default_2, %full_default_3, %expand_2), kwargs = {})
+#   %add_3 : Tensor "f32[2, 12, 2048, 2048][50331648, 4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_14, %where_2), kwargs = {})
+#   %maximum : Tensor "f32[2, 12, 2048, 2048][50331648, 4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.maximum.default](args = (%add_3, %full_default_3), kwargs = {})
+#   %view_15 : Tensor "f32[24, 2048, 2048][4194304, 2048, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%maximum, [24, 2048, 2048]), kwargs = {})
+#   %amax : Tensor "f32[24, 2048, 1][2048, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.amax.default](args = (%view_15, [-1], True), kwargs = {})
+#   %sub_2 : Tensor "f32[24, 2048, 2048][4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_15, %amax), kwargs = {})
+#   %exp : Tensor "f32[24, 2048, 2048][4194304, 2048, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.exp.default](args = (%sub_2,), kwargs = {})
+#   %sum_1 : Tensor "f32[24, 2048, 1][2048, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%exp, [-1], True), kwargs = {})
+#   %div : Tensor "f32[24, 2048, 2048][4194304, 2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%exp, %sum_1), kwargs = {})
+#   return %amax,%sum_1,%div
+# SchedulerNodes: [SchedulerNode(name='op12'), SchedulerNode(name='op13'), SchedulerNode(name='op16')]
+
+triton_per_fused__softmax__to_copy_add_arange__4 = async_compile.triton('triton_per_fused__softmax__to_copy_add_arange__4', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.persistent_reduction(
+    size_hints={'y0': 24, 'x1': 2048, 'r2': 2048},
+    reduction_hint=ReductionHint.INNER,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'y0_numel': 'i32', 'x1_numel': 'i32', 'r2_numel': 'i32', 'Y0BLOCK': 'i32', 'X1BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_per_fused__softmax__to_copy_add_arange__4', 'mutated_arg_names': ['in_out_ptr0'], 'backend_hash': '<redacted>', 'split_axis': [0, 1], 'tiling_axis': [0, 1, 2], 'no_loop_axis': [], 'axis_names': ['y0', 'x1', 'r2'], 'axis_static_values': (('y0', 24), ('x1', 2048), ('r2', 2048)), 'low_dims': {2}, 'numof_reduction_axis': 1, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('Y0BLOCK', 'X1BLOCK'), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()}
+)
+@triton.jit
+def triton_per_fused__softmax__to_copy_add_arange__4(in_out_ptr0, y0_numel, x1_numel, r2_numel, Y0BLOCK, X1BLOCK, Y0BLOCK_SUB : tl.constexpr, X1BLOCK_SUB : tl.constexpr):
+    R2BLOCK_SUB: tl.constexpr = 2048
+    y0_offset = tl.program_id(0) * Y0BLOCK
+    base_y0= tl.arange(0, Y0BLOCK_SUB)
+    loops_y0 = (Y0BLOCK + Y0BLOCK_SUB - 1) // Y0BLOCK_SUB
+    x1_offset = tl.program_id(1) * X1BLOCK
+    base_x1= tl.arange(0, X1BLOCK_SUB)
+    loops_x1 = (X1BLOCK + X1BLOCK_SUB - 1) // X1BLOCK_SUB
+    base_r2= tl.arange(0, R2BLOCK_SUB)
+    loops_r2 = (r2_numel + R2BLOCK_SUB - 1) // R2BLOCK_SUB
+    for loop_y0 in range(loops_y0):
+        y0 = y0_offset + (loop_y0 * Y0BLOCK_SUB) + base_y0[:,None,None]
+        y0_mask = y0 < min(Y0BLOCK+y0_offset, y0_numel)
+        for loop_x1 in range(loops_x1):
+            x1 = x1_offset + (loop_x1 * X1BLOCK_SUB) + base_x1[None,:,None]
+            x1_mask = x1 < min(X1BLOCK+x1_offset, x1_numel)
+            r2 = base_r2[None,None,:]
+            r2_mask = True
+            tmp0 = tl.load(in_out_ptr0 + (r2 + 2048*x1 + 4194304*y0), x1_mask & y0_mask, other=0.0)
+            tmp1 = r2
+            tmp2 = 1 + x1
+            tmp3 = tmp1 < tmp2
+            tmp4 = tl.full([1, 1, 1], 0.0, tl.float32)
+            tmp5 = tl.full([1, 1, 1], -3.4028234663852886e+38, tl.float32)
+            tmp6 = tl.where(tmp3, tmp4, tmp5)
+            tmp7 = tl.full([1, 1, 1], False, tl.int1)
+            tmp8 = tl.where(tmp7, tmp5, tmp6)
+            tmp9 = tmp0 + tmp8
+            tmp10 = triton_helpers.maximum(tmp9, tmp5)
+            tmp12 = tl.where(tl.broadcast_to((y0_mask.reshape([Y0BLOCK_SUB, 1, 1]) & x1_mask.reshape([1, X1BLOCK_SUB, 1])), [Y0BLOCK_SUB, X1BLOCK_SUB, R2BLOCK_SUB]), tmp10, float("-inf"))
+            tmp13 = tl.max(tmp12, 2, propagate_nan=True).reshape(Y0BLOCK_SUB, X1BLOCK_SUB, 1)
+            tmp14 = tmp10 - tmp13
+            tmp15 = libdevice.exp(tmp14)
+            tmp17 = tl.where(tl.broadcast_to((y0_mask.reshape([Y0BLOCK_SUB, 1, 1]) & x1_mask.reshape([1, X1BLOCK_SUB, 1])), [Y0BLOCK_SUB, X1BLOCK_SUB, R2BLOCK_SUB]), tmp15, 0)
+            tmp18 = tl.sum(tmp17, 2).reshape(Y0BLOCK_SUB, X1BLOCK_SUB, 1)
+            tmp19 = (tmp15 / tmp18)
+            tl.store(in_out_ptr0 + (r2 + 2048*x1 + 4194304*y0), tmp19, x1_mask & y0_mask)
+''', device_str='npu')
+
+
+# Source: OPTForCausalLM_Infer/NPU_g01_output_code.py:718
+# Topologically Sorted Source Nodes: [, hidden_states_7], Original ATen: [aten.addmm, aten.relu]
+# Source node to ATen node mapping:
+#    => add_tensor_67
+#   hidden_states_7 => relu
+# Graph fragment:
+#   %arg16_1 : Tensor "f32[3072][1]npu:0" = PlaceHolder[target=arg16_1]
+#   %mm_default_67 : Tensor "f32[4096, 3072][3072, 1]npu:0" = PlaceHolder[target=mm_default_67]
+#   %add_tensor_67 : Tensor "f32[4096, 3072][3072, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg16_1, %mm_default_67), kwargs = {})
+#   %relu : Tensor "f32[4096, 3072][3072, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%add_tensor_67,), kwargs = {})
+#   return %relu
+# SchedulerNodes: [SchedulerNode(name='op26')]
+
+triton_poi_fused_addmm_relu_8 = async_compile.triton('triton_poi_fused_addmm_relu_8', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.pointwise(
+    size_hints={'y0': 4096, 'x1': 3072}, tile_hint=TileHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'y0_numel': 'i32', 'x1_numel': 'i32', 'Y0BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_poi_fused_addmm_relu_8', 'mutated_arg_names': ['in_out_ptr0'], 'backend_hash': '<redacted>', 'split_axis': [0], 'tiling_axis': [0, 1], 'no_loop_axis': [], 'axis_names': ['y0', 'x1'], 'axis_static_values': (('y0', 4096), ('x1', 3072)), 'low_dims': {1}, 'numof_reduction_axis': 0, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('Y0BLOCK',), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_addmm_relu_8(in_out_ptr0, in_ptr0, y0_numel, x1_numel, Y0BLOCK, Y0BLOCK_SUB : tl.constexpr, X1BLOCK_SUB : tl.constexpr):
+    y0_offset = tl.program_id(0) * Y0BLOCK
+    base_y0= tl.arange(0, Y0BLOCK_SUB)
+    loops_y0 = (Y0BLOCK + Y0BLOCK_SUB - 1) // Y0BLOCK_SUB
+    base_x1= tl.arange(0, X1BLOCK_SUB)
+    loops_x1 = (x1_numel + X1BLOCK_SUB - 1) // X1BLOCK_SUB
+    for loop_y0 in range(loops_y0):
+        y0 = y0_offset + (loop_y0 * Y0BLOCK_SUB) + base_y0[:,None]
+        y0_mask = y0 < min(Y0BLOCK+y0_offset, y0_numel)
+        for loop_x1 in range(loops_x1):
+            x1 = (loop_x1 * X1BLOCK_SUB) + base_x1[None,:]
+            x1_mask = x1 < x1_numel
+            tmp0 = tl.load(in_ptr0 + (x1), x1_mask)
+            tmp1 = tl.load(in_out_ptr0 + (x1 + 3072*y0), x1_mask & y0_mask)
+            tmp2 = tmp0 + tmp1
+            tmp3 = tl.full([1, 1], 0, tl.int32)
+            tmp4 = triton_helpers.maximum(tmp3, tmp2)
+            tl.store(in_out_ptr0 + (x1 + 3072*y0), tmp4, x1_mask & y0_mask)
+''', device_str='npu')
+
+
+# Source: OPTForCausalLM_Infer/NPU_g01_output_code.py:1020
+# Topologically Sorted Source Nodes: [inputs_embeds, , positions, add_1, pos_embeds, hidden_states, attn_output_4, hidden_states_3, hidden_states_4, add_5, hidden_states_10, attn_output_9, hidden_states_13, hidden_states_14, add_8, hidden_states_20, attn_output_14, hidden_states_23], Original ATen: [aten.embedding, aten.mul, aten.sub, aten.add, aten.addmm, aten.view]
+# Source node to ATen node mapping:
+#    => add_tensor_56, add_tensor_60, add_tensor_62, add_tensor_66, add_tensor_68, expand_default
+#   add_1 => add_1
+#   add_5 => add_5
+#   add_8 => add_8
+#   attn_output_14 => view_59
+#   attn_output_4 => view_19
+#   attn_output_9 => view_39
+#   hidden_states => add_2
+#   hidden_states_10 => view_21
+#   hidden_states_13 => add_7
+#   hidden_states_14 => view_40
+#   hidden_states_20 => view_41
+#   hidden_states_23 => add_10
+#   hidden_states_3 => add_4
+#   hidden_states_4 => view_20
+#   inputs_embeds => embedding
+#   pos_embeds => embedding_1
+#   positions => sub_1
+# Graph fragment:
+#   %add_7 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0" = PlaceHolder[target=add_7]
+#   %arg34_1 : Tensor "f32[768][1]npu:0" = PlaceHolder[target=arg34_1]
+#   %mm_default_60 : Tensor "f32[4096, 768][768, 1]npu:0" = PlaceHolder[target=mm_default_60]
+#   %arg44_1 : Tensor "f32[768][1]npu:0" = PlaceHolder[target=arg44_1]
+#   %mm_default_56 : Tensor "f32[4096, 768][768, 1]npu:0" = PlaceHolder[target=mm_default_56]
+#   %embedding : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.embedding.default](args = (%arg1_1, %arg0_1, 1), kwargs = {})
+#   %expand_default : Tensor "i64[2, 2048][0, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.expand.default](args = (%view_default, [2, 2048]), kwargs = {})
+#   %sub_1 : Tensor "i64[2, 2048][2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%expand_default, 1), kwargs = {})
+#   %add_1 : Tensor "i64[2, 2048][2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%sub_1, 2), kwargs = {})
+#   %embedding_1 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.embedding.default](args = (%arg2_1, %add_1), kwargs = {})
+#   %add_2 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.add.Tensor](args = (%embedding, %embedding_1), kwargs = {})
+#   %add_tensor_68 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg12_1, %mm_default_68), kwargs = {})
+#   %view_19 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_tensor_68, [2, 2048, 768]), kwargs = {})
+#   %add_4 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_2, %view_19), kwargs = {})
+#   %view_20 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%add_4, [-1, 768]), kwargs = {})
+#   %add_tensor_66 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg18_1, %mm_default_66), kwargs = {})
+#   %add_5 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_20, %add_tensor_66), kwargs = {})
+#   %view_21 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%add_5, [2, 2048, 768]), kwargs = {})
+#   %add_tensor_62 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg28_1, %mm_default_62), kwargs = {})
+#   %view_39 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_tensor_62, [2, 2048, 768]), kwargs = {})
+#   %add_7 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_21, %view_39), kwargs = {})
+#   %view_40 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%add_7, [-1, 768]), kwargs = {})
+#   %add_tensor_60 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg34_1, %mm_default_60), kwargs = {})
+#   %add_8 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_40, %add_tensor_60), kwargs = {})
+#   %view_41 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%add_8, [2, 2048, 768]), kwargs = {})
+#   %add_tensor_56 : Tensor "f32[4096, 768][768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg44_1, %mm_default_56), kwargs = {})
+#   %view_59 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_tensor_56, [2, 2048, 768]), kwargs = {})
+#   %add_10 : Tensor "f32[2, 2048, 768][1572864, 768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_41, %view_59), kwargs = {})
+#   return %add_10
+# SchedulerNodes: [SchedulerNode(name='op70')]
+
+triton_poi_fused_add_addmm_embedding_mul_sub_v_11 = async_compile.triton('triton_poi_fused_add_addmm_embedding_mul_sub_v_11', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.pointwise(
+    size_hints={'y0': 4096, 'x1': 768}, tile_hint=TileHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'y0_numel': 'i32', 'x1_numel': 'i32', 'Y0BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_poi_fused_add_addmm_embedding_mul_sub_v_11', 'mutated_arg_names': ['in_out_ptr0'], 'backend_hash': '<redacted>', 'split_axis': [0], 'tiling_axis': [0, 1], 'no_loop_axis': [1], 'axis_names': ['y0', 'x1'], 'axis_static_values': (('y0', 4096), ('x1', 768)), 'low_dims': {1}, 'numof_reduction_axis': 0, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('Y0BLOCK',), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_add_addmm_embedding_mul_sub_v_11(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, y0_numel, x1_numel, Y0BLOCK, Y0BLOCK_SUB : tl.constexpr):
+    x1_numel = 768
+    X1BLOCK_SUB: tl.constexpr = 768
+    y0_offset = tl.program_id(0) * Y0BLOCK
+    base_y0= tl.arange(0, Y0BLOCK_SUB)
+    loops_y0 = (Y0BLOCK + Y0BLOCK_SUB - 1) // Y0BLOCK_SUB
+    base_x1= tl.arange(0, X1BLOCK_SUB)
+    for loop_y0 in range(loops_y0):
+        y0 = y0_offset + (loop_y0 * Y0BLOCK_SUB) + base_y0[:,None]
+        y0_mask = y0 < min(Y0BLOCK+y0_offset, y0_numel)
+        x1 = base_x1[None,:]
+        tmp0 = tl.load(in_out_ptr0 + (x1 + 768*y0), y0_mask)
+        tmp1 = tl.load(in_ptr0 + (x1), None)
+        tmp2 = tl.load(in_ptr1 + (x1 + 768*y0), y0_mask)
+        tmp5 = tl.load(in_ptr2 + (x1), None)
+        tmp6 = tl.load(in_ptr3 + (x1 + 768*y0), y0_mask)
+        tmp3 = tmp1 + tmp2
+        tmp4 = tmp0 + tmp3
+        tmp7 = tmp5 + tmp6
+        tmp8 = tmp4 + tmp7
+        tl.store(in_out_ptr0 + (x1 + 768*y0), tmp8, y0_mask)
+''', device_str='npu')
+
+
+# Source: OPTForCausalLM_Infer/NPU_g01_output_code.py:1334
+# Topologically Sorted Source Nodes: [linear_72, getitem_3, shift_logits, view_122, loss], Original ATen: [aten.matmul, aten.slice, aten.clone, aten.view, aten._log_softmax]
+# Source node to ATen node mapping:
+#   getitem_3 => slice_1
+#   linear_72 => view_243
+#   loss => amax_12, exp_12, log, sub_14, sub_15, sum_13
+#   shift_logits => clone_84
+#   view_122 => view_244
+# Graph fragment:
+#   %mm : Tensor "f32[4096, 50272][50272, 1]npu:0" = PlaceHolder[target=mm]
+#   %amax_12 : Tensor "f32[4094, 1][1, 4094]npu:0" = PlaceHolder[target=amax_12]
+#   %sum_13 : Tensor "f32[4094, 1][1, 4094]npu:0" = PlaceHolder[target=sum_13]
+#   %view_243 : Tensor "f32[2, 2048, 50272][102957056, 50272, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm, [2, 2048, 50272]), kwargs = {})
+#   %slice_1 : Tensor "f32[2, 2047, 50272][102957056, 50272, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.slice.Tensor](args = (%view_243, 1, 0, -1), kwargs = {})
+#   %clone_84 : Tensor "f32[2, 2047, 50272][102906784, 50272, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.clone.default](args = (%slice_1,), kwargs = {memory_format: torch.contiguous_format})
+#   %view_244 : Tensor "f32[4094, 50272][50272, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%clone_84, [-1, 50272]), kwargs = {})
+#   %amax_12 : Tensor "f32[4094, 1][1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.amax.default](args = (%view_244, [1], True), kwargs = {})
+#   %sub_14 : Tensor "f32[4094, 50272][50272, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_244, %amax_12), kwargs = {})
+#   %exp_12 : Tensor "f32[4094, 50272][50272, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%sub_14,), kwargs = {})
+#   %sum_13 : Tensor "f32[4094, 1][1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%exp_12, [1], True), kwargs = {})
+#   %log : Tensor "f32[4094, 1][1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.log.default](args = (%sum_13,), kwargs = {})
+#   %sub_15 : Tensor "f32[4094, 50272][50272, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%sub_14, %log), kwargs = {})
+#   return %amax_12,%sum_13,%sub_15
+# SchedulerNodes: [SchedulerNode(name='op308'), SchedulerNode(name='op309'), SchedulerNode(name='op310')]
+
+triton_red_fused__log_softmax_clone_matmul_sli_13 = async_compile.triton('triton_red_fused__log_softmax_clone_matmul_sli_13', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.reduction(
+    size_hints={'x2': 2, 'x3': 2047, 'r1': 50272},
+    reduction_hint=ReductionHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'out_ptr0': '*fp32', 'out_ptr2': '*fp32', 'x2_numel': 'i32', 'x3_numel': 'i32', 'r1_numel': 'i32', 'X2BLOCK': 'i32', 'X3BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_red_fused__log_softmax_clone_matmul_sli_13', 'mutated_arg_names': [], 'backend_hash': '<redacted>', 'split_axis': [0, 1], 'tiling_axis': [0, 1, 2], 'no_loop_axis': [], 'axis_names': ['x2', 'x3', 'r1'], 'axis_static_values': (('x2', 2), ('x3', 2047), ('r1', 50272)), 'low_dims': {2}, 'numof_reduction_axis': 1, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('X2BLOCK', 'X3BLOCK'), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()}
+)
+@triton.jit
+def triton_red_fused__log_softmax_clone_matmul_sli_13(in_ptr0, out_ptr0, out_ptr2, x2_numel, x3_numel, r1_numel, X2BLOCK, X3BLOCK, X2BLOCK_SUB : tl.constexpr, X3BLOCK_SUB : tl.constexpr, R1BLOCK_SUB : tl.constexpr):
+    x2_offset = tl.program_id(0) * X2BLOCK
+    base_x2= tl.arange(0, X2BLOCK_SUB)
+    loops_x2 = (X2BLOCK + X2BLOCK_SUB - 1) // X2BLOCK_SUB
+    x3_offset = tl.program_id(1) * X3BLOCK
+    base_x3= tl.arange(0, X3BLOCK_SUB)
+    loops_x3 = (X3BLOCK + X3BLOCK_SUB - 1) // X3BLOCK_SUB
+    base_r1= tl.arange(0, R1BLOCK_SUB)
+    loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB
+    for loop_x2 in range(loops_x2):
+        x2 = x2_offset + (loop_x2 * X2BLOCK_SUB) + base_x2[:,None,None]
+        x2_mask = x2 < min(X2BLOCK+x2_offset, x2_numel)
+        for loop_x3 in range(loops_x3):
+            x3 = x3_offset + (loop_x3 * X3BLOCK_SUB) + base_x3[None,:,None]
+            x3_mask = x3 < min(X3BLOCK+x3_offset, x3_numel)
+            _tmp2 = tl.full([X2BLOCK_SUB, X3BLOCK_SUB, R1BLOCK_SUB], float("-inf"), tl.float32)
+            for loop_r1 in range(loops_r1):
+                r1 = (loop_r1 * R1BLOCK_SUB) + base_r1[None,None,:]
+                r1_mask = r1 < r1_numel
+                tmp0 = tl.load(in_ptr0 + (r1 + 50272*x3 + 102957056*x2), r1_mask & x2_mask & x3_mask, other=0.0)
+                tmp1 = tl.reshape(tmp0, [X2BLOCK_SUB, X3BLOCK_SUB, R1BLOCK_SUB])
+                tmp3 = triton_helpers.maximum(_tmp2, tmp1)
+                _tmp2 = tl.where(tl.reshape((r1_mask & x2_mask & x3_mask), [X2BLOCK_SUB, X3BLOCK_SUB, R1BLOCK_SUB]), tmp3, _tmp2)
+            tmp2 = tl.max(_tmp2, 2, propagate_nan=True).reshape(X2BLOCK_SUB, X3BLOCK_SUB, 1)
+            tl.store(out_ptr0 + (x3 + 2047*x2 ), tmp2, x2_mask & x3_mask)
+            _tmp8 = tl.full([X2BLOCK_SUB, X3BLOCK_SUB, R1BLOCK_SUB], 0, tl.float32)
+            for loop_r1 in range(loops_r1):
+                r1 = (loop_r1 * R1BLOCK_SUB) + base_r1[None,None,:]
+                r1_mask = r1 < r1_numel
+                tmp4 = tl.load(in_ptr0 + (r1 + 50272*x3 + 102957056*x2), r1_mask & x2_mask & x3_mask, other=0.0)
+                tmp5 = tmp4 - tmp2
+                tmp6 = libdevice.exp(tmp5)
+                tmp7 = tl.reshape(tmp6, [X2BLOCK_SUB, X3BLOCK_SUB, R1BLOCK_SUB])
+                tmp9 = _tmp8 + tmp7
+                _tmp8 = tl.where(tl.reshape((r1_mask & x2_mask & x3_mask), [X2BLOCK_SUB, X3BLOCK_SUB, R1BLOCK_SUB]), tmp9, _tmp8)
+            tmp8 = tl.sum(_tmp8, 2).reshape(X2BLOCK_SUB, X3BLOCK_SUB, 1)
+            tmp11 = tl.load(out_ptr0 + (x3 + 2047*x2), x2_mask & x3_mask)
+            for loop_r1 in range(loops_r1):
+                r1 = (loop_r1 * R1BLOCK_SUB) + base_r1[None,None,:]
+                r1_mask = r1 < r1_numel
+                tmp10 = tl.load(in_ptr0 + (r1 + 50272*x3 + 102957056*x2), r1_mask & x2_mask & x3_mask, other=0.0)
+                tmp12 = tmp10 - tmp11
+                tmp13 = tl_math.log(tmp8)
+                tmp14 = tmp12 - tmp13
+                tl.store(out_ptr2 + (r1 + 50272*x3 + 102906784*x2), tmp14, r1_mask & x2_mask & x3_mask)
+''', device_str='npu')
+
+
+# Source: OPTForCausalLM_Infer/NPU_g01_output_code.py:1418
+# Topologically Sorted Source Nodes: [getitem_4, shift_labels], Original ATen: [aten.slice, aten.clone]
+# Source node to ATen node mapping:
+#   getitem_4 => slice_2
+#   shift_labels => clone_85
+# Graph fragment:
+#   %arg197_1 : Tensor "i64[2, 2048][2048, 1]npu:0" = PlaceHolder[target=arg197_1]
+#   %slice_2 : Tensor "i64[2, 2047][2048, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.slice.Tensor](args = (%arg197_1, 1, 1, 9223372036854775807), kwargs = {})
+#   %clone_85 : Tensor "i64[2, 2047][2047, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.clone.default](args = (%slice_2,), kwargs = {memory_format: torch.contiguous_format})
+#   return %clone_85
+# SchedulerNodes: [SchedulerNode(name='op311')]
+
+triton_poi_fused_clone_slice_14 = async_compile.triton('triton_poi_fused_clone_slice_14', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.pointwise(
+    size_hints={'y0': 2, 'x1': 2047}, tile_hint=TileHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*i64', 'out_ptr0': '*i64', 'y0_numel': 'i32', 'x1_numel': 'i32', 'Y0BLOCK': 'i32', 'X1BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_poi_fused_clone_slice_14', 'mutated_arg_names': [], 'backend_hash': '<redacted>', 'split_axis': [0, 1], 'tiling_axis': [0, 1], 'no_loop_axis': [], 'axis_names': ['y0', 'x1'], 'axis_static_values': (('y0', 2), ('x1', 2047)), 'low_dims': {1}, 'numof_reduction_axis': 0, 'split_axis_dtype': torch.int64, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('Y0BLOCK', 'X1BLOCK'), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_clone_slice_14(in_ptr0, out_ptr0, y0_numel, x1_numel, Y0BLOCK, X1BLOCK, Y0BLOCK_SUB : tl.constexpr, X1BLOCK_SUB : tl.constexpr):
+    y0_offset = tl.program_id(0) * Y0BLOCK
+    base_y0= tl.arange(0, Y0BLOCK_SUB)
+    loops_y0 = (Y0BLOCK + Y0BLOCK_SUB - 1) // Y0BLOCK_SUB
+    x1_offset = tl.program_id(1) * X1BLOCK
+    base_x1= tl.arange(0, X1BLOCK_SUB)
+    loops_x1 = (X1BLOCK + X1BLOCK_SUB - 1) // X1BLOCK_SUB
+    for loop_y0 in range(loops_y0):
+        y0 = y0_offset + (loop_y0 * Y0BLOCK_SUB) + base_y0[:,None]
+        y0_mask = y0 < min(Y0BLOCK+y0_offset, y0_numel)
+        for loop_x1 in range(loops_x1):
+            x1 = x1_offset + (loop_x1 * X1BLOCK_SUB) + base_x1[None,:]
+            x1_mask = x1 < min(X1BLOCK+x1_offset, x1_numel)
+            tmp0 = tl.load(in_ptr0 + (1 + x1 + 2048*y0), x1_mask & y0_mask)
+            tl.store(out_ptr0 + (x1 + 2047*y0), tmp0, x1_mask & y0_mask)
+''', device_str='npu')

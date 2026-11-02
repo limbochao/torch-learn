@@ -1,0 +1,206 @@
+# Source: PLBartForCausalLM_Train/GPU_g03_output_code.py:204
+            arg0_1 = copy_if_misaligned(arg0_1)
+            buf1 = empty_strided_cuda((8, 1, 1024, 1024), (1048576, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [causal_mask_1, causal_mask, arange, reshape, gt, causal_mask_2, causal_mask_4, getitem_2, padding_mask, padding_mask_1, masked_fill, eq_1, all_1, invert, causal_mask_5], Original ATen: [aten.triu, aten.full, aten.arange, aten.view, aten.gt, aten.mul, aten.unsqueeze, aten.expand, aten.clone, aten.add, aten.eq, aten.masked_fill, aten.all, aten.bitwise_not]
+            # [Provenance debug handles] triton_red_fused_add_all_arange_bitwise_not_clone_eq_expand_full_gt_masked_fill_mul_triu_unsqueeze_view_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_add_all_arange_bitwise_not_clone_eq_expand_full_gt_masked_fill_mul_triu_unsqueeze_view_0.run(arg1_1, arg0_1, buf1, 8192, 1024, stream=raw_stream0)
+            del arg0_1
+            del arg1_1
+        return (buf1, )
+
+
+
+# Source: PLBartForCausalLM_Train/GPU_g05_output_code.py:138
+            primals_1 = copy_if_misaligned(primals_1)
+            buf0 = empty_strided_cuda((1, 1024), (1024, 1), torch.int64)
+            # Topologically Sorted Source Nodes: [position_ids, add], Original ATen: [aten.unsqueeze, aten.add]
+            # [Provenance debug handles] triton_poi_fused_add_unsqueeze_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_unsqueeze_0.run(primals_1, buf0, 1024, stream=raw_stream0)
+            del primals_1
+            assert_size_stride(primals_2, (1026, 768), (768, 1), 'input')
+            buf1 = empty_strided_cuda((1, 1024, 768), (786432, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [embedding], Original ATen: [aten.embedding]
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:775
+            torch.cuda.set_device(0)
+            buf18 = reinterpret_tensor(addmm_3, (8, 1024, 768), (786432, 768, 1), 0); del addmm_3  # reuse
+            # Topologically Sorted Source Nodes: [attn_output_3, hidden_states, hidden_states_1, hidden_states_2], Original ATen: [aten.view, aten.native_dropout, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_poi_fused_add_native_dropout_native_layer_norm_view_0:4
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_native_dropout_native_layer_norm_view_0.run(buf18, primals_1, gt, getitem_5, rsqrt, 6291456, stream=raw_stream0)
+            del getitem_5
+            assert_size_stride(tangents_1, (8, 1024, 768), (786432, 768, 1), 'input')
+            assert_size_stride(primals_17, (768, ), (1, ), 'input')
+            assert_size_stride(mul_9, (8, 1024, 768), (786432, 768, 1), 'input')
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:789
+            buf7 = empty_strided_cuda((8, 1024, 768), (786432, 768, 1), torch.float32)
+            # Call mix order reduction kernel
+            # Topologically Sorted Source Nodes: [mul_12, mul_13, sum_1, mul_14, sum_2, mul_15, sub_3, sub_4, mul_16, mul_17, sum_3, sum_4, convert_element_type, mul_18, clone_1], Original ATen: [aten.native_layer_norm_backward, aten.native_dropout_backward]
+            workspace_0 = empty_strided_cuda((786432, ), (1, ), torch.float32)
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_native_dropout_backward_native_layer_norm_backward_1.run(tangents_1, primals_17, mul_9, div, gt_1, buf2, buf7, workspace_0, 8192, 768, stream=raw_stream0)
+            buf4 = workspace_0[0 * (512) * (768) : (0 + 1) * (512) * (768)].view(512, 768).sum(dim=0).view([768])
+            buf6 = workspace_0[1 * (512) * (768) : (1 + 1) * (512) * (768)].view(512, 768).sum(dim=0).view([768])
+            del workspace_0
+            del div
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:808
+            del view_14
+            buf10 = empty_strided_cuda((1, 768, 64), (49152, 1, 768), torch.float32)
+            # Topologically Sorted Source Nodes: [convert_element_type, mul_18, clone_1, view_16, sum_5], Original ATen: [aten.native_dropout_backward, aten.view, aten.sum]
+            # [Provenance debug handles] triton_red_fused_native_dropout_backward_sum_view_2:6
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_native_dropout_backward_sum_view_2.run(buf7, buf10, 49152, 128, stream=raw_stream0)
+            buf11 = empty_strided_cuda((1, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [convert_element_type, mul_18, clone_1, view_16, sum_5], Original ATen: [aten.native_dropout_backward, aten.view, aten.sum]
+            # [Provenance debug handles] triton_per_fused_native_dropout_backward_sum_view_3:7
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:854
+            buf25 = empty_strided_cuda((8, 1024, 768), (786432, 768, 1), torch.float32)
+            # Call mix order reduction kernel
+            # Topologically Sorted Source Nodes: [view_21, add_9, mul_28, mul_29, sum_7, mul_30, sum_8, mul_31, sub_6, sub_7, div_1, mul_32, mul_33, sum_9, sum_10, convert_element_type_1, mul_34, clone_2], Original ATen: [aten.view, aten.add, aten.native_layer_norm_backward, aten.native_dropout_backward]
+            workspace_1 = empty_strided_cuda((786432, ), (1, ), torch.float32)
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_native_dropout_backward_native_layer_norm_backward_view_6.run(buf2, buf13, primals_11, buf18, rsqrt, gt, buf20, buf25, workspace_1, 8192, 768, stream=raw_stream0)
+            buf22 = workspace_1[0 * (512) * (768) : (0 + 1) * (512) * (768)].view(512, 768).sum(dim=0).view([768])
+            buf24 = workspace_1[1 * (512) * (768) : (1 + 1) * (512) * (768)].view(512, 768).sum(dim=0).view([768])
+            del workspace_1
+            del buf13
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:873
+            del buf15
+            buf28 = empty_strided_cuda((1, 768, 64), (49152, 1, 768), torch.float32)
+            # Topologically Sorted Source Nodes: [convert_element_type_1, mul_34, clone_2, view_22, sum_11], Original ATen: [aten.native_dropout_backward, aten.view, aten.sum]
+            # [Provenance debug handles] triton_red_fused_native_dropout_backward_sum_view_2:14
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_native_dropout_backward_sum_view_2.run(buf25, buf28, 49152, 128, stream=raw_stream0)
+            buf29 = empty_strided_cuda((1, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [convert_element_type_1, mul_34, clone_2, view_22, sum_11], Original ATen: [aten.native_dropout_backward, aten.view, aten.sum]
+            # [Provenance debug handles] triton_per_fused_native_dropout_backward_sum_view_3:15
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:900
+            assert_size_stride(getitem_1, (8, 12, 1024), (12288, 1024, 1), 'input')
+            assert_size_stride(getitem_2, (), (), 'input')
+            assert_size_stride(getitem_3, (), (), 'input')
+            # Topologically Sorted Source Nodes: [view_24, view_25, permute_22, attn_output, _scaled_dot_product_efficient_attention_backward], Original ATen: [aten.view, aten.transpose, aten.expand, aten._scaled_dot_product_efficient_attention_backward]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention_backward.default:18
+            buf30 = torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(reinterpret_tensor(buf26, (8, 12, 1024, 64), (786432, 64, 768, 1), 0), permute_1, permute_4, permute_5, reinterpret_tensor(primals_8, (8, 12, 1024, 1024), (1048576, 0, 1024, 1), 0), getitem, getitem_1, getitem_2, getitem_3, 0.1, [True, True, True, False], scale=0.125)
+            del getitem
+            del getitem_1
+            del getitem_2
+            del getitem_3
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:923
+            del buf30
+            buf36 = buf28; del buf28  # reuse
+            # Topologically Sorted Source Nodes: [permute_23, view_26, view_28, sum_12], Original ATen: [aten.transpose, aten.view, aten.sum]
+            # [Provenance debug handles] triton_red_fused_native_dropout_backward_sum_view_2:19
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_native_dropout_backward_sum_view_2.run(buf33, buf36, 49152, 128, stream=raw_stream0)
+            buf37 = empty_strided_cuda((1, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [permute_23, view_26, view_28, sum_12], Original ATen: [aten.transpose, aten.view, aten.sum]
+            # [Provenance debug handles] triton_per_fused_native_dropout_backward_sum_view_3:20
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:933
+            triton_per_fused_native_dropout_backward_sum_view_3.run(buf36, buf37, 768, 64, stream=raw_stream0)
+            buf40 = buf36; del buf36  # reuse
+            # Topologically Sorted Source Nodes: [permute_24, view_27, view_31, sum_13], Original ATen: [aten.transpose, aten.view, aten.sum]
+            # [Provenance debug handles] triton_red_fused_native_dropout_backward_sum_view_2:21
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_native_dropout_backward_sum_view_2.run(buf32, buf40, 49152, 128, stream=raw_stream0)
+            buf41 = empty_strided_cuda((1, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [permute_24, view_27, view_31, sum_13], Original ATen: [aten.transpose, aten.view, aten.sum]
+            # [Provenance debug handles] triton_per_fused_native_dropout_backward_sum_view_3:22
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:943
+            triton_per_fused_native_dropout_backward_sum_view_3.run(buf40, buf41, 768, 64, stream=raw_stream0)
+            buf44 = buf40; del buf40  # reuse
+            # Topologically Sorted Source Nodes: [permute_33, view_34, view_35, sum_14], Original ATen: [aten.transpose, aten.view, aten.sum]
+            # [Provenance debug handles] triton_red_fused_native_dropout_backward_sum_view_2:23
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_native_dropout_backward_sum_view_2.run(buf31, buf44, 49152, 128, stream=raw_stream0)
+            buf45 = empty_strided_cuda((1, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [permute_33, view_34, view_35, sum_14], Original ATen: [aten.transpose, aten.view, aten.sum]
+            # [Provenance debug handles] triton_per_fused_native_dropout_backward_sum_view_3:24
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: PLBartForCausalLM_Train/GPU_g06_output_code.py:986
+            del primals_2
+            buf46 = buf20; del buf20  # reuse
+            # Topologically Sorted Source Nodes: [view_30, add_10, view_33, add_11, view_37, add_12], Original ATen: [aten.view, aten.add]
+            # [Provenance debug handles] triton_poi_fused_add_view_8:31
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_view_8.run(buf46, buf34, buf38, buf42, 6291456, stream=raw_stream0)
+            del buf34
+            del buf38
+            del buf42
+        return (buf46, buf43, reinterpret_tensor(buf45, (768, ), (1, ), 0), buf39, reinterpret_tensor(buf41, (768, ), (1, ), 0), buf35, reinterpret_tensor(buf37, (768, ), (1, ), 0), None, buf27, reinterpret_tensor(buf29, (768, ), (1, ), 0), buf22, buf24, buf14, reinterpret_tensor(buf16, (3072, ), (1, ), 0), buf9, reinterpret_tensor(buf11, (768, ), (1, ), 0), buf4, buf6, )
+
+
+# Source: PLBartForCausalLM_Train/GPU_g07_output_code.py:354
+            del primals_7
+            assert_size_stride(primals_8, (8, 1, 1024, 1024), (1048576, 1048576, 1024, 1), 'input')
+            primals_8 = copy_if_misaligned(primals_8)
+            # Topologically Sorted Source Nodes: [linear, view, query_states, key_states, value_states, view_1, key_states_1, view_2, value_states_1, attn_output], Original ATen: [aten.view, aten.transpose, aten.expand, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:4
+            buf3 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf0, (8, 12, 1024, 64), (786432, 64, 768, 1), 0), reinterpret_tensor(buf1, (8, 12, 1024, 64), (786432, 64, 768, 1), 0), reinterpret_tensor(buf2, (8, 12, 1024, 64), (786432, 64, 768, 1), 0), reinterpret_tensor(primals_8, (8, 12, 1024, 1024), (1048576, 0, 1024, 1), 0), True, 0.1, scale=0.125)
+            buf4 = buf3[0]
+            assert_size_stride(buf4, (8, 12, 1024, 64), (786432, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf4, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            buf5 = buf3[1]
+
+
+# Source: PLBartForCausalLM_Train/GPU_g07_output_code.py:389
+            buf15 = reinterpret_tensor(buf13, (8, 1024, 1), (1024, 1, 1), 0); del buf13  # reuse
+            buf16 = empty_strided_cuda((8, 1024, 768), (786432, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attn_output_3, , hidden_states, hidden_states_1, hidden_states_2], Original ATen: [aten.view, aten.native_dropout, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_native_dropout_native_layer_norm_view_0:7
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_native_dropout_native_layer_norm_view_0.run(buf15, buf9, primals_1, buf8, primals_11, primals_12, buf11, buf12, buf16, 0, 8192, 768, stream=raw_stream0)
+            del primals_12
+            assert_size_stride(primals_14, (3072, ), (1, ), 'input')
+            assert_size_stride(primals_13, (3072, 768), (768, 1), 'input')
+            buf17 = empty_strided_cuda((8192, 3072), (3072, 1), torch.float32)
+
+
+# Source: PLBartForCausalLM_Train/GPU_g07_output_code.py:418
+            buf26 = empty_strided_cuda((8, 1024, 768), (786432, 768, 1), torch.float32)
+            buf27 = empty_strided_cuda((8, 1024, 1), (1024, 1, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, hidden_states_5, hidden_states_6, hidden_states_7, hidden_states_8, div], Original ATen: [aten.addmm, aten.view, aten.native_dropout, aten.add, aten.native_layer_norm, aten.native_layer_norm_backward]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_dropout_native_layer_norm_native_layer_norm_backward_view_2:11
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_dropout_native_layer_norm_native_layer_norm_backward_view_2.run(buf25, buf9, buf16, primals_16, primals_17, primals_18, buf21, buf26, buf27, 1, 8192, 768, stream=raw_stream0)
+            del buf9
+            del primals_16
+            del primals_18
+        return (buf26, primals_1, primals_2, primals_4, primals_6, primals_8, primals_9, primals_11, primals_13, primals_15, primals_17, reinterpret_tensor(buf0, (8, 12, 1024, 64), (786432, 64, 768, 1), 0), reinterpret_tensor(buf1, (8, 12, 1024, 64), (786432, 64, 768, 1), 0), reinterpret_tensor(buf2, (8, 12, 1024, 64), (786432, 64, 768, 1), 0), buf4, buf5, buf6, buf7, buf8, buf11, buf12, buf15, reinterpret_tensor(buf16, (8192, 768), (768, 1), 0), buf17, reinterpret_tensor(buf18, (8192, 3072), (3072, 1), 0), buf21, buf25, buf27, )
+
+
+# Source: PLBartForCausalLM_Train/GPU_g08_output_code.py:212
+            tangents_2 = copy_if_misaligned(tangents_2)
+            buf1 = empty_strided_cuda((8, 1024, 50005), (51216384, 50016, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [div_1, view_1, unsqueeze_1, ne_3, loss, where_2, , where_3, mul, view, exp_1, sum_4, mul_1, sub_2, view_4, add], Original ATen: [aten.nll_loss_backward, aten.view, aten.nll_loss_forward, aten.arange, aten.expand, aten.eq, aten.scalar_tensor, aten._log_softmax, aten._log_softmax_backward_data, aten.add]
+            # [Provenance debug handles] triton_red_fused__log_softmax__log_softmax_backward_data_add_arange_eq_expand_nll_loss_backward_nll_loss_forward_scalar_tensor_view_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused__log_softmax__log_softmax_backward_data_add_arange_eq_expand_nll_loss_backward_nll_loss_forward_scalar_tensor_view_0.run(primals_3, tangents_1, convert_element_type, tangents_2, view_1, amax, log, buf1, 8192, 50005, stream=raw_stream0)
+            del amax
+            del convert_element_type
+            del log
+            del primals_3

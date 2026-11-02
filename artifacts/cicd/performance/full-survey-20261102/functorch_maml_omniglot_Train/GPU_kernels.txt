@@ -1,0 +1,208 @@
+# Source: functorch_maml_omniglot_Train/GPU_g03_output_code.py:49
+# Topologically Sorted Source Nodes: [add_], Original ATen: [aten.add, aten.copy_]
+# Source node to ATen node mapping:
+#   add_ => add
+# Graph fragment:
+#   %copy_ : Tensor "f32[64, 1, 3, 3][9, 9, 3, 1]cuda:0" = PlaceHolder[target=copy_]
+#   %arg14_1 : Tensor "f32[64, 1, 3, 3][9, 9, 3, 1]cuda:0" = PlaceHolder[target=arg14_1]
+#   %add : Tensor "f32[64, 1, 3, 3][9, 576, 3, 1]cuda:0" = PlaceHolder[target=add]
+#   %add : Tensor "f32[64, 1, 3, 3][9, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg0_1, %arg14_1), kwargs = {alpha: -0.01})
+#   %copy_ : Tensor "f32[64, 1, 3, 3][9, 9, 3, 1]cuda:0"[num_users=0] = call_function[target=torch.ops.aten.copy_.default](args = (%arg0_1, %add), kwargs = {})
+#   return %add,%buf1
+triton_poi_fused_add_copy__0 = async_compile.triton('triton_poi_fused_add_copy__0', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 1024}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'out_ptr1': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused_add_copy__0', 'mutated_arg_names': ['in_ptr0', 'out_ptr1'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 2, 'num_store': 1, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 9216}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_add_copy__0(in_ptr0, in_ptr1, out_ptr1, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 576
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = xindex < xnumel
+    x0 = xindex
+    tmp0 = tl.load(in_ptr0 + (x0), xmask)
+    tmp1 = tl.load(in_ptr1 + (x0), xmask)
+    tmp2 = tl.full([1], -0.01, tl.float32)
+    tmp3 = tl.fma(tmp1, tmp2, tmp0)
+    tl.store(out_ptr1 + (x0), tmp3, xmask)
+''', device_str='cuda')
+
+
+# Source: functorch_maml_omniglot_Train/GPU_g03_output_code.py:91
+# Topologically Sorted Source Nodes: [add__1], Original ATen: [aten.add, aten.copy_]
+# Source node to ATen node mapping:
+#   add__1 => add_1
+# Graph fragment:
+#   %copy__1 : Tensor "f32[64][1]cuda:0" = PlaceHolder[target=copy__1]
+#   %arg15_1 : Tensor "f32[64][1]cuda:0" = PlaceHolder[target=arg15_1]
+#   %add_1 : Tensor "f32[64][1]cuda:0" = PlaceHolder[target=add_1]
+#   %add_1 : Tensor "f32[64][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg1_1, %arg15_1), kwargs = {alpha: -0.01})
+#   %copy__1 : Tensor "f32[64][1]cuda:0"[num_users=0] = call_function[target=torch.ops.aten.copy_.default](args = (%arg1_1, %add_1), kwargs = {})
+#   return %add_1,%buf3
+triton_poi_fused_add_copy__1 = async_compile.triton('triton_poi_fused_add_copy__1', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 64}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'out_ptr1': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused_add_copy__1', 'mutated_arg_names': ['in_ptr0', 'out_ptr1'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 2, 'num_store': 1, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 1024}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_add_copy__1(in_ptr0, in_ptr1, out_ptr1, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 64
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = xindex < xnumel
+    x0 = xindex
+    tmp0 = tl.load(in_ptr0 + (x0), xmask)
+    tmp1 = tl.load(in_ptr1 + (x0), xmask)
+    tmp2 = tl.full([1], -0.01, tl.float32)
+    tmp3 = tl.fma(tmp1, tmp2, tmp0)
+    tl.store(out_ptr1 + (x0), tmp3, xmask)
+''', device_str='cuda')
+
+
+# Source: functorch_maml_omniglot_Train/GPU_g03_output_code.py:133
+# Topologically Sorted Source Nodes: [add__4], Original ATen: [aten.add, aten.copy_]
+# Source node to ATen node mapping:
+#   add__4 => add_4
+# Graph fragment:
+#   %copy__4 : Tensor "f32[64, 64, 3, 3][576, 9, 3, 1]cuda:0" = PlaceHolder[target=copy__4]
+#   %arg18_1 : Tensor "f32[64, 64, 3, 3][576, 9, 3, 1]cuda:0" = PlaceHolder[target=arg18_1]
+#   %add_4 : Tensor "f32[64, 64, 3, 3][576, 9, 3, 1]cuda:0" = PlaceHolder[target=add_4]
+#   %add_4 : Tensor "f32[64, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg4_1, %arg18_1), kwargs = {alpha: -0.01})
+#   %copy__4 : Tensor "f32[64, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=0] = call_function[target=torch.ops.aten.copy_.default](args = (%arg4_1, %add_4), kwargs = {})
+#   return %add_4,%buf9
+triton_poi_fused_add_copy__2 = async_compile.triton('triton_poi_fused_add_copy__2', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 65536}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'out_ptr1': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused_add_copy__2', 'mutated_arg_names': ['in_ptr0', 'out_ptr1'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 2, 'num_store': 1, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 589824}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_add_copy__2(in_ptr0, in_ptr1, out_ptr1, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 36864
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x0 = xindex
+    tmp0 = tl.load(in_ptr0 + (x0), None)
+    tmp1 = tl.load(in_ptr1 + (x0), None)
+    tmp2 = tl.full([1], -0.01, tl.float32)
+    tmp3 = tl.fma(tmp1, tmp2, tmp0)
+    tl.store(out_ptr1 + (x0), tmp3, None)
+''', device_str='cuda')
+
+
+# Source: functorch_maml_omniglot_Train/GPU_g03_output_code.py:175
+# Topologically Sorted Source Nodes: [add__12], Original ATen: [aten.add, aten.copy_]
+# Source node to ATen node mapping:
+#   add__12 => add_12
+# Graph fragment:
+#   %copy__12 : Tensor "f32[5, 64][64, 1]cuda:0" = PlaceHolder[target=copy__12]
+#   %arg26_1 : Tensor "f32[5, 64][64, 1]cuda:0" = PlaceHolder[target=arg26_1]
+#   %add_12 : Tensor "f32[5, 64][64, 1]cuda:0" = PlaceHolder[target=add_12]
+#   %add_12 : Tensor "f32[5, 64][64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg12_1, %arg26_1), kwargs = {alpha: -0.01})
+#   %copy__12 : Tensor "f32[5, 64][64, 1]cuda:0"[num_users=0] = call_function[target=torch.ops.aten.copy_.default](args = (%arg12_1, %add_12), kwargs = {})
+#   return %add_12,%buf25
+triton_poi_fused_add_copy__3 = async_compile.triton('triton_poi_fused_add_copy__3', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 512}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'out_ptr1': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused_add_copy__3', 'mutated_arg_names': ['in_ptr0', 'out_ptr1'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 2, 'num_store': 1, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 5120}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_add_copy__3(in_ptr0, in_ptr1, out_ptr1, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 320
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = xindex < xnumel
+    x0 = xindex
+    tmp0 = tl.load(in_ptr0 + (x0), xmask)
+    tmp1 = tl.load(in_ptr1 + (x0), xmask)
+    tmp2 = tl.full([1], -0.01, tl.float32)
+    tmp3 = tl.fma(tmp1, tmp2, tmp0)
+    tl.store(out_ptr1 + (x0), tmp3, xmask)
+''', device_str='cuda')
+
+
+# Source: functorch_maml_omniglot_Train/GPU_g03_output_code.py:217
+# Topologically Sorted Source Nodes: [add__13], Original ATen: [aten.add, aten.copy_]
+# Source node to ATen node mapping:
+#   add__13 => add_13
+# Graph fragment:
+#   %copy__13 : Tensor "f32[5][1]cuda:0" = PlaceHolder[target=copy__13]
+#   %arg27_1 : Tensor "f32[5][1]cuda:0" = PlaceHolder[target=arg27_1]
+#   %add_13 : Tensor "f32[5][1]cuda:0" = PlaceHolder[target=add_13]
+#   %add_13 : Tensor "f32[5][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg13_1, %arg27_1), kwargs = {alpha: -0.01})
+#   %copy__13 : Tensor "f32[5][1]cuda:0"[num_users=0] = call_function[target=torch.ops.aten.copy_.default](args = (%arg13_1, %add_13), kwargs = {})
+#   return %add_13,%buf27
+triton_poi_fused_add_copy__4 = async_compile.triton('triton_poi_fused_add_copy__4', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 8}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'out_ptr1': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused_add_copy__4', 'mutated_arg_names': ['in_ptr0', 'out_ptr1'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 2, 'num_store': 1, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 50}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_add_copy__4(in_ptr0, in_ptr1, out_ptr1, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 5
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = xindex < xnumel
+    x0 = xindex
+    tmp0 = tl.load(in_ptr0 + (x0), xmask)
+    tmp1 = tl.load(in_ptr1 + (x0), xmask)
+    tmp2 = tl.full([1], -0.01, tl.float32)
+    tmp3 = tl.fma(tmp1, tmp2, tmp0)
+    tl.store(out_ptr1 + (x0), tmp3, xmask)
+''', device_str='cuda')

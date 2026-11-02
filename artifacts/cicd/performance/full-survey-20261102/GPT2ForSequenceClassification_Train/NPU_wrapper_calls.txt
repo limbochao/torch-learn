@@ -1,0 +1,782 @@
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1631
+        args.clear()
+        with torch.npu.utils.device(0):
+            torch.npu.set_device(0)
+            tangents_1 = copy_if_misaligned(tangents_1)
+            # Topologically Sorted Source Nodes: [nll_loss_backward], Original ATen: [aten.nll_loss_backward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_backward.default:1
+            buf0 = torch.ops.aten.nll_loss_backward.default(tangents_1, sub_14, primals_163, None, 1, -100, getitem_112)
+            del getitem_112
+            del primals_163
+            del tangents_1
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1641
+            buf1 = buf0
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1642
+            assert_size_stride(buf1, (4, 2), (2, 1), 'torch.ops.aten.nll_loss_backward.default')
+            assert_alignment(buf1, 16, 'torch.ops.aten.nll_loss_backward.default')
+            del buf0
+            # Topologically Sorted Source Nodes: [view_222], Original ATen: [aten._log_softmax_backward_data]
+            # [Provenance debug handles] torch.ops.aten._log_softmax_backward_data.default:2
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1647
+            buf2 = torch.ops.aten._log_softmax_backward_data.default(buf1, sub_14, 1, torch.float32)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1648
+            del buf1
+            del sub_14
+            buf3 = buf2
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1651
+            assert_size_stride(buf3, (4, 2), (2, 1), 'torch.ops.aten._log_softmax_backward_data.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1652
+            assert_alignment(buf3, 16, 'torch.ops.aten._log_softmax_backward_data.default')
+            del buf2
+            buf4 = empty_strided_npu((4, 1024, 2), (2048, 2, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full_24], Original ATen: [aten.new_zeros]
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1656
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1719
+            extern_kernels.mm(permute_67, reinterpret_tensor(buf17, (4096, 3072), (3072, 1), 0), out=buf19)
+            del permute_67
+            buf20 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_230, x_93, mul_44, mul_131, pow_12, mul_45, add_46, mul_46, tanh_11, add_47, mul_132, mul_133, sub_18, mul_134, mul_135, mul_136, pow_13, mul_137, mul_138, add_50, mul_139, add_51, view_231, sum_19], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf17, buf20, 3072, 4096, stream=raw_stream0)
+            del buf17
+            buf25 = buf10; del buf10  # reuse
+            buf26 = reinterpret_tensor(buf6, (4, 1024, 768), (786432, 768, 1), 0); del buf6  # reuse
+            # Topologically Sorted Source Nodes: [view_233, sub_19, mul_140, mul_141, mul_142, sum_20, mul_143, sum_21, mul_144, sub_20, sub_21, div_25, mul_145, add_52, convert_element_type_14, mul_147, clone_49], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1770
+            buf33 = reinterpret_tensor(buf31, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf31  # reuse
+            buf35 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            buf34 = empty_strided_npu((4, 12, 1024, 1), (12288, 1024, 1, 49152), torch.float32)
+            # Topologically Sorted Source Nodes: [view_240, convert_element_type_15, mul_149, clone_53, mul_151, sum_25, neg], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf33, gt_34, div_23, buf35, buf34, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_23
+            del gt_34
+            # Topologically Sorted Source Nodes: [neg, fma], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:13
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1780
+            buf36 = torch.ops.prims.fma.default(buf35, buf34, buf33)
+            del buf33
+            buf37 = buf36
+            assert_size_stride(buf37, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf37, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1829
+            extern_kernels.mm(permute_80, reinterpret_tensor(buf44, (4096, 2304), (2304, 1), 0), out=buf46)
+            del permute_80
+            buf47 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_253, sum_26], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf44, buf47, 2304, 4096, stream=raw_stream0)
+            buf52 = buf25; del buf25  # reuse
+            buf53 = reinterpret_tensor(buf40, (4, 1024, 768), (786432, 768, 1), 0); del buf40  # reuse
+            # Topologically Sorted Source Nodes: [view_255, sub_22, mul_152, mul_153, mul_154, sum_27, mul_155, sum_28, mul_156, sub_23, sub_24, div_27, mul_157, add_55, convert_element_type_16, mul_159, clone_57], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1877
+            extern_kernels.mm(permute_84, reinterpret_tensor(buf57, (4096, 3072), (3072, 1), 0), out=buf59)
+            del permute_84
+            buf60 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_258, x_85, mul_40, mul_161, pow_11, mul_41, add_42, mul_42, tanh_10, add_43, mul_162, mul_163, sub_25, mul_164, mul_165, mul_166, pow_14, mul_167, mul_168, add_56, mul_169, add_57, view_259, sum_32], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf57, buf60, 3072, 4096, stream=raw_stream0)
+            buf65 = buf52; del buf52  # reuse
+            buf66 = reinterpret_tensor(buf45, (4, 1024, 768), (786432, 768, 1), 0); del buf45  # reuse
+            # Topologically Sorted Source Nodes: [view_261, sub_26, mul_170, mul_171, mul_172, sum_33, mul_173, sum_34, mul_174, sub_27, sub_28, div_28, mul_175, add_58, convert_element_type_17, mul_177, clone_58], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1926
+            buf73 = reinterpret_tensor(buf71, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf71  # reuse
+            buf75 = buf35; del buf35  # reuse
+            buf74 = buf34; del buf34  # reuse
+            # Topologically Sorted Source Nodes: [view_268, convert_element_type_18, mul_179, clone_62, mul_181, sum_38, neg_1], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf73, gt_31, div_21, buf75, buf74, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_21
+            del gt_31
+            # Topologically Sorted Source Nodes: [neg_1, fma_1], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:26
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1936
+            buf76 = torch.ops.prims.fma.default(buf75, buf74, buf73)
+            del buf73
+            buf77 = buf76
+            assert_size_stride(buf77, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf77, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:1985
+            extern_kernels.mm(permute_97, reinterpret_tensor(buf84, (4096, 2304), (2304, 1), 0), out=buf86)
+            del permute_97
+            buf87 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_281, sum_39], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf84, buf87, 2304, 4096, stream=raw_stream0)
+            buf92 = buf65; del buf65  # reuse
+            buf93 = reinterpret_tensor(buf80, (4, 1024, 768), (786432, 768, 1), 0); del buf80  # reuse
+            # Topologically Sorted Source Nodes: [view_283, sub_29, mul_182, mul_183, mul_184, sum_40, mul_185, sum_41, mul_186, sub_30, sub_31, div_30, mul_187, add_61, convert_element_type_19, mul_189, clone_66], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2033
+            extern_kernels.mm(permute_101, reinterpret_tensor(buf97, (4096, 3072), (3072, 1), 0), out=buf99)
+            del permute_101
+            buf100 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_286, x_77, mul_36, mul_191, pow_10, mul_37, add_38, mul_38, tanh_9, add_39, mul_192, mul_193, sub_32, mul_194, mul_195, mul_196, pow_15, mul_197, mul_198, add_62, mul_199, add_63, view_287, sum_45], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf97, buf100, 3072, 4096, stream=raw_stream0)
+            buf105 = buf92; del buf92  # reuse
+            buf106 = reinterpret_tensor(buf85, (4, 1024, 768), (786432, 768, 1), 0); del buf85  # reuse
+            # Topologically Sorted Source Nodes: [view_289, sub_33, mul_200, mul_201, mul_202, sum_46, mul_203, sum_47, mul_204, sub_34, sub_35, div_31, mul_205, add_64, convert_element_type_20, mul_207, clone_67], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2082
+            buf113 = reinterpret_tensor(buf111, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf111  # reuse
+            buf115 = buf75; del buf75  # reuse
+            buf114 = buf74; del buf74  # reuse
+            # Topologically Sorted Source Nodes: [view_296, convert_element_type_21, mul_209, clone_71, mul_211, sum_51, neg_2], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf113, gt_28, div_19, buf115, buf114, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_19
+            del gt_28
+            # Topologically Sorted Source Nodes: [neg_2, fma_2], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:39
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2092
+            buf116 = torch.ops.prims.fma.default(buf115, buf114, buf113)
+            del buf113
+            buf117 = buf116
+            assert_size_stride(buf117, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf117, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2141
+            extern_kernels.mm(permute_114, reinterpret_tensor(buf124, (4096, 2304), (2304, 1), 0), out=buf126)
+            del permute_114
+            buf127 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_309, sum_52], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf124, buf127, 2304, 4096, stream=raw_stream0)
+            buf132 = buf105; del buf105  # reuse
+            buf133 = reinterpret_tensor(buf120, (4, 1024, 768), (786432, 768, 1), 0); del buf120  # reuse
+            # Topologically Sorted Source Nodes: [view_311, sub_36, mul_212, mul_213, mul_214, sum_53, mul_215, sum_54, mul_216, sub_37, sub_38, div_33, mul_217, add_67, convert_element_type_22, mul_219, clone_75], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2189
+            extern_kernels.mm(permute_118, reinterpret_tensor(buf137, (4096, 3072), (3072, 1), 0), out=buf139)
+            del permute_118
+            buf140 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_314, x_69, mul_32, mul_221, pow_9, mul_33, add_34, mul_34, tanh_8, add_35, mul_222, mul_223, sub_39, mul_224, mul_225, mul_226, pow_16, mul_227, mul_228, add_68, mul_229, add_69, view_315, sum_58], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf137, buf140, 3072, 4096, stream=raw_stream0)
+            buf145 = buf132; del buf132  # reuse
+            buf146 = reinterpret_tensor(buf125, (4, 1024, 768), (786432, 768, 1), 0); del buf125  # reuse
+            # Topologically Sorted Source Nodes: [view_317, sub_40, mul_230, mul_231, mul_232, sum_59, mul_233, sum_60, mul_234, sub_41, sub_42, div_34, mul_235, add_70, convert_element_type_23, mul_237, clone_76], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2238
+            buf153 = reinterpret_tensor(buf151, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf151  # reuse
+            buf155 = buf115; del buf115  # reuse
+            buf154 = buf114; del buf114  # reuse
+            # Topologically Sorted Source Nodes: [view_324, convert_element_type_24, mul_239, clone_80, mul_241, sum_64, neg_3], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf153, gt_25, div_17, buf155, buf154, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_17
+            del gt_25
+            # Topologically Sorted Source Nodes: [neg_3, fma_3], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:52
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2248
+            buf156 = torch.ops.prims.fma.default(buf155, buf154, buf153)
+            del buf153
+            buf157 = buf156
+            assert_size_stride(buf157, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf157, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2297
+            extern_kernels.mm(permute_131, reinterpret_tensor(buf164, (4096, 2304), (2304, 1), 0), out=buf166)
+            del permute_131
+            buf167 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_337, sum_65], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf164, buf167, 2304, 4096, stream=raw_stream0)
+            buf172 = buf145; del buf145  # reuse
+            buf173 = reinterpret_tensor(buf160, (4, 1024, 768), (786432, 768, 1), 0); del buf160  # reuse
+            # Topologically Sorted Source Nodes: [view_339, sub_43, mul_242, mul_243, mul_244, sum_66, mul_245, sum_67, mul_246, sub_44, sub_45, div_36, mul_247, add_73, convert_element_type_25, mul_249, clone_84], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2345
+            extern_kernels.mm(permute_135, reinterpret_tensor(buf177, (4096, 3072), (3072, 1), 0), out=buf179)
+            del permute_135
+            buf180 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_342, x_61, mul_28, mul_251, pow_8, mul_29, add_30, mul_30, tanh_7, add_31, mul_252, mul_253, sub_46, mul_254, mul_255, mul_256, pow_17, mul_257, mul_258, add_74, mul_259, add_75, view_343, sum_71], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf177, buf180, 3072, 4096, stream=raw_stream0)
+            buf185 = buf172; del buf172  # reuse
+            buf186 = reinterpret_tensor(buf165, (4, 1024, 768), (786432, 768, 1), 0); del buf165  # reuse
+            # Topologically Sorted Source Nodes: [view_345, sub_47, mul_260, mul_261, mul_262, sum_72, mul_263, sum_73, mul_264, sub_48, sub_49, div_37, mul_265, add_76, convert_element_type_26, mul_267, clone_85], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2394
+            buf193 = reinterpret_tensor(buf191, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf191  # reuse
+            buf195 = buf155; del buf155  # reuse
+            buf194 = buf154; del buf154  # reuse
+            # Topologically Sorted Source Nodes: [view_352, convert_element_type_27, mul_269, clone_89, mul_271, sum_77, neg_4], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf193, gt_22, div_15, buf195, buf194, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_15
+            del gt_22
+            # Topologically Sorted Source Nodes: [neg_4, fma_4], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:65
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2404
+            buf196 = torch.ops.prims.fma.default(buf195, buf194, buf193)
+            del buf193
+            buf197 = buf196
+            assert_size_stride(buf197, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf197, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2453
+            extern_kernels.mm(permute_148, reinterpret_tensor(buf204, (4096, 2304), (2304, 1), 0), out=buf206)
+            del permute_148
+            buf207 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_365, sum_78], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf204, buf207, 2304, 4096, stream=raw_stream0)
+            buf212 = buf185; del buf185  # reuse
+            buf213 = reinterpret_tensor(buf200, (4, 1024, 768), (786432, 768, 1), 0); del buf200  # reuse
+            # Topologically Sorted Source Nodes: [view_367, sub_50, mul_272, mul_273, mul_274, sum_79, mul_275, sum_80, mul_276, sub_51, sub_52, div_39, mul_277, add_79, convert_element_type_28, mul_279, clone_93], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2501
+            extern_kernels.mm(permute_152, reinterpret_tensor(buf217, (4096, 3072), (3072, 1), 0), out=buf219)
+            del permute_152
+            buf220 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_370, x_53, mul_24, mul_281, pow_7, mul_25, add_26, mul_26, tanh_6, add_27, mul_282, mul_283, sub_53, mul_284, mul_285, mul_286, pow_18, mul_287, mul_288, add_80, mul_289, add_81, view_371, sum_84], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf217, buf220, 3072, 4096, stream=raw_stream0)
+            buf225 = buf212; del buf212  # reuse
+            buf226 = reinterpret_tensor(buf205, (4, 1024, 768), (786432, 768, 1), 0); del buf205  # reuse
+            # Topologically Sorted Source Nodes: [view_373, sub_54, mul_290, mul_291, mul_292, sum_85, mul_293, sum_86, mul_294, sub_55, sub_56, div_40, mul_295, add_82, convert_element_type_29, mul_297, clone_94], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2550
+            buf233 = reinterpret_tensor(buf231, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf231  # reuse
+            buf235 = buf195; del buf195  # reuse
+            buf234 = buf194; del buf194  # reuse
+            # Topologically Sorted Source Nodes: [view_380, convert_element_type_30, mul_299, clone_98, mul_301, sum_90, neg_5], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf233, gt_19, div_13, buf235, buf234, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_13
+            del gt_19
+            # Topologically Sorted Source Nodes: [neg_5, fma_5], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:78
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2560
+            buf236 = torch.ops.prims.fma.default(buf235, buf234, buf233)
+            del buf233
+            buf237 = buf236
+            assert_size_stride(buf237, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf237, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2609
+            extern_kernels.mm(permute_165, reinterpret_tensor(buf244, (4096, 2304), (2304, 1), 0), out=buf246)
+            del permute_165
+            buf247 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_393, sum_91], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf244, buf247, 2304, 4096, stream=raw_stream0)
+            buf252 = buf225; del buf225  # reuse
+            buf253 = reinterpret_tensor(buf240, (4, 1024, 768), (786432, 768, 1), 0); del buf240  # reuse
+            # Topologically Sorted Source Nodes: [view_395, sub_57, mul_302, mul_303, mul_304, sum_92, mul_305, sum_93, mul_306, sub_58, sub_59, div_42, mul_307, add_85, convert_element_type_31, mul_309, clone_102], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2657
+            extern_kernels.mm(permute_169, reinterpret_tensor(buf257, (4096, 3072), (3072, 1), 0), out=buf259)
+            del permute_169
+            buf260 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_398, x_45, mul_20, mul_311, pow_6, mul_21, add_22, mul_22, tanh_5, add_23, mul_312, mul_313, sub_60, mul_314, mul_315, mul_316, pow_19, mul_317, mul_318, add_86, mul_319, add_87, view_399, sum_97], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf257, buf260, 3072, 4096, stream=raw_stream0)
+            buf265 = buf252; del buf252  # reuse
+            buf266 = reinterpret_tensor(buf245, (4, 1024, 768), (786432, 768, 1), 0); del buf245  # reuse
+            # Topologically Sorted Source Nodes: [view_401, sub_61, mul_320, mul_321, mul_322, sum_98, mul_323, sum_99, mul_324, sub_62, sub_63, div_43, mul_325, add_88, convert_element_type_32, mul_327, clone_103], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2706
+            buf273 = reinterpret_tensor(buf271, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf271  # reuse
+            buf275 = buf235; del buf235  # reuse
+            buf274 = buf234; del buf234  # reuse
+            # Topologically Sorted Source Nodes: [view_408, convert_element_type_33, mul_329, clone_107, mul_331, sum_103, neg_6], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf273, gt_16, div_11, buf275, buf274, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_11
+            del gt_16
+            # Topologically Sorted Source Nodes: [neg_6, fma_6], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:91
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2716
+            buf276 = torch.ops.prims.fma.default(buf275, buf274, buf273)
+            del buf273
+            buf277 = buf276
+            assert_size_stride(buf277, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf277, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2765
+            extern_kernels.mm(permute_182, reinterpret_tensor(buf284, (4096, 2304), (2304, 1), 0), out=buf286)
+            del permute_182
+            buf287 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_421, sum_104], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf284, buf287, 2304, 4096, stream=raw_stream0)
+            buf292 = buf265; del buf265  # reuse
+            buf293 = reinterpret_tensor(buf280, (4, 1024, 768), (786432, 768, 1), 0); del buf280  # reuse
+            # Topologically Sorted Source Nodes: [view_423, sub_64, mul_332, mul_333, mul_334, sum_105, mul_335, sum_106, mul_336, sub_65, sub_66, div_45, mul_337, add_91, convert_element_type_34, mul_339, clone_111], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2813
+            extern_kernels.mm(permute_186, reinterpret_tensor(buf297, (4096, 3072), (3072, 1), 0), out=buf299)
+            del permute_186
+            buf300 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_426, x_37, mul_16, mul_341, pow_5, mul_17, add_18, mul_18, tanh_4, add_19, mul_342, mul_343, sub_67, mul_344, mul_345, mul_346, pow_20, mul_347, mul_348, add_92, mul_349, add_93, view_427, sum_110], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf297, buf300, 3072, 4096, stream=raw_stream0)
+            buf305 = buf292; del buf292  # reuse
+            buf306 = reinterpret_tensor(buf285, (4, 1024, 768), (786432, 768, 1), 0); del buf285  # reuse
+            # Topologically Sorted Source Nodes: [view_429, sub_68, mul_350, mul_351, mul_352, sum_111, mul_353, sum_112, mul_354, sub_69, sub_70, div_46, mul_355, add_94, convert_element_type_35, mul_357, clone_112], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2862
+            buf313 = reinterpret_tensor(buf311, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf311  # reuse
+            buf315 = buf275; del buf275  # reuse
+            buf314 = buf274; del buf274  # reuse
+            # Topologically Sorted Source Nodes: [view_436, convert_element_type_36, mul_359, clone_116, mul_361, sum_116, neg_7], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf313, gt_13, div_9, buf315, buf314, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_9
+            del gt_13
+            # Topologically Sorted Source Nodes: [neg_7, fma_7], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:104
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2872
+            buf316 = torch.ops.prims.fma.default(buf315, buf314, buf313)
+            del buf313
+            buf317 = buf316
+            assert_size_stride(buf317, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf317, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2921
+            extern_kernels.mm(permute_199, reinterpret_tensor(buf324, (4096, 2304), (2304, 1), 0), out=buf326)
+            del permute_199
+            buf327 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_449, sum_117], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf324, buf327, 2304, 4096, stream=raw_stream0)
+            buf332 = buf305; del buf305  # reuse
+            buf333 = reinterpret_tensor(buf320, (4, 1024, 768), (786432, 768, 1), 0); del buf320  # reuse
+            # Topologically Sorted Source Nodes: [view_451, sub_71, mul_362, mul_363, mul_364, sum_118, mul_365, sum_119, mul_366, sub_72, sub_73, div_48, mul_367, add_97, convert_element_type_37, mul_369, clone_120], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:2969
+            extern_kernels.mm(permute_203, reinterpret_tensor(buf337, (4096, 3072), (3072, 1), 0), out=buf339)
+            del permute_203
+            buf340 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_454, x_29, mul_12, mul_371, pow_4, mul_13, add_14, mul_14, tanh_3, add_15, mul_372, mul_373, sub_74, mul_374, mul_375, mul_376, pow_21, mul_377, mul_378, add_98, mul_379, add_99, view_455, sum_123], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf337, buf340, 3072, 4096, stream=raw_stream0)
+            buf345 = buf332; del buf332  # reuse
+            buf346 = reinterpret_tensor(buf325, (4, 1024, 768), (786432, 768, 1), 0); del buf325  # reuse
+            # Topologically Sorted Source Nodes: [view_457, sub_75, mul_380, mul_381, mul_382, sum_124, mul_383, sum_125, mul_384, sub_76, sub_77, div_49, mul_385, add_100, convert_element_type_38, mul_387, clone_121], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3018
+            buf353 = reinterpret_tensor(buf351, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf351  # reuse
+            buf355 = buf315; del buf315  # reuse
+            buf354 = buf314; del buf314  # reuse
+            # Topologically Sorted Source Nodes: [view_464, convert_element_type_39, mul_389, clone_125, mul_391, sum_129, neg_8], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf353, gt_10, div_7, buf355, buf354, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_7
+            del gt_10
+            # Topologically Sorted Source Nodes: [neg_8, fma_8], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:117
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3028
+            buf356 = torch.ops.prims.fma.default(buf355, buf354, buf353)
+            del buf353
+            buf357 = buf356
+            assert_size_stride(buf357, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf357, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3077
+            extern_kernels.mm(permute_216, reinterpret_tensor(buf364, (4096, 2304), (2304, 1), 0), out=buf366)
+            del permute_216
+            buf367 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_477, sum_130], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf364, buf367, 2304, 4096, stream=raw_stream0)
+            buf372 = buf345; del buf345  # reuse
+            buf373 = reinterpret_tensor(buf360, (4, 1024, 768), (786432, 768, 1), 0); del buf360  # reuse
+            # Topologically Sorted Source Nodes: [view_479, sub_78, mul_392, mul_393, mul_394, sum_131, mul_395, sum_132, mul_396, sub_79, sub_80, div_51, mul_397, add_103, convert_element_type_40, mul_399, clone_129], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3125
+            extern_kernels.mm(permute_220, reinterpret_tensor(buf377, (4096, 3072), (3072, 1), 0), out=buf379)
+            del permute_220
+            buf380 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_482, x_21, mul_8, mul_401, pow_3, mul_9, add_10, mul_10, tanh_2, add_11, mul_402, mul_403, sub_81, mul_404, mul_405, mul_406, pow_22, mul_407, mul_408, add_104, mul_409, add_105, view_483, sum_136], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf377, buf380, 3072, 4096, stream=raw_stream0)
+            buf385 = buf372; del buf372  # reuse
+            buf386 = reinterpret_tensor(buf365, (4, 1024, 768), (786432, 768, 1), 0); del buf365  # reuse
+            # Topologically Sorted Source Nodes: [view_485, sub_82, mul_410, mul_411, mul_412, sum_137, mul_413, sum_138, mul_414, sub_83, sub_84, div_52, mul_415, add_106, convert_element_type_41, mul_417, clone_130], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3174
+            buf393 = reinterpret_tensor(buf391, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf391  # reuse
+            buf395 = buf355; del buf355  # reuse
+            buf394 = buf354; del buf354  # reuse
+            # Topologically Sorted Source Nodes: [view_492, convert_element_type_42, mul_419, clone_134, mul_421, sum_142, neg_9], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf393, gt_7, div_5, buf395, buf394, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_5
+            del gt_7
+            # Topologically Sorted Source Nodes: [neg_9, fma_9], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:130
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3184
+            buf396 = torch.ops.prims.fma.default(buf395, buf394, buf393)
+            del buf393
+            buf397 = buf396
+            assert_size_stride(buf397, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf397, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3233
+            extern_kernels.mm(permute_233, reinterpret_tensor(buf404, (4096, 2304), (2304, 1), 0), out=buf406)
+            del permute_233
+            buf407 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_505, sum_143], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf404, buf407, 2304, 4096, stream=raw_stream0)
+            buf412 = buf385; del buf385  # reuse
+            buf413 = reinterpret_tensor(buf400, (4, 1024, 768), (786432, 768, 1), 0); del buf400  # reuse
+            # Topologically Sorted Source Nodes: [view_507, sub_85, mul_422, mul_423, mul_424, sum_144, mul_425, sum_145, mul_426, sub_86, sub_87, div_54, mul_427, add_109, convert_element_type_43, mul_429, clone_138], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3281
+            extern_kernels.mm(permute_237, reinterpret_tensor(buf417, (4096, 3072), (3072, 1), 0), out=buf419)
+            del permute_237
+            buf420 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_510, x_13, mul_4, mul_431, pow_2, mul_5, add_6, mul_6, tanh_1, add_7, mul_432, mul_433, sub_88, mul_434, mul_435, mul_436, pow_23, mul_437, mul_438, add_110, mul_439, add_111, view_511, sum_149], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf417, buf420, 3072, 4096, stream=raw_stream0)
+            buf425 = buf412; del buf412  # reuse
+            buf426 = reinterpret_tensor(buf405, (4, 1024, 768), (786432, 768, 1), 0); del buf405  # reuse
+            # Topologically Sorted Source Nodes: [view_513, sub_89, mul_440, mul_441, mul_442, sum_150, mul_443, sum_151, mul_444, sub_90, sub_91, div_55, mul_445, add_112, convert_element_type_44, mul_447, clone_139], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3330
+            buf433 = reinterpret_tensor(buf431, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf431  # reuse
+            buf435 = buf395; del buf395  # reuse
+            buf434 = buf394; del buf394  # reuse
+            # Topologically Sorted Source Nodes: [view_520, convert_element_type_45, mul_449, clone_143, mul_451, sum_155, neg_10], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_matmul_9.run(buf433, gt_4, div_3, buf435, buf434, 4, 12, 1024, 1024, stream=raw_stream0)
+            del div_3
+            del gt_4
+            # Topologically Sorted Source Nodes: [neg_10, fma_10], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:143
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3340
+            buf436 = torch.ops.prims.fma.default(buf435, buf434, buf433)
+            del buf433
+            buf437 = buf436
+            assert_size_stride(buf437, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf437, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3389
+            extern_kernels.mm(permute_250, reinterpret_tensor(buf444, (4096, 2304), (2304, 1), 0), out=buf446)
+            del permute_250
+            buf447 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_533, sum_156], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf444, buf447, 2304, 4096, stream=raw_stream0)
+            buf452 = buf425; del buf425  # reuse
+            buf453 = reinterpret_tensor(buf440, (4, 1024, 768), (786432, 768, 1), 0); del buf440  # reuse
+            # Topologically Sorted Source Nodes: [view_535, sub_92, mul_452, mul_453, mul_454, sum_157, mul_455, sum_158, mul_456, sub_93, sub_94, div_57, mul_457, add_115, convert_element_type_46, mul_459, clone_147], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3437
+            extern_kernels.mm(permute_254, reinterpret_tensor(buf457, (4096, 3072), (3072, 1), 0), out=buf459)
+            del permute_254
+            buf460 = empty_strided_npu((1, 3072), (3072, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_538, x_5, mul, mul_461, pow_1, mul_1, add_2, mul_2, tanh, add_3, mul_462, mul_463, sub_95, mul_464, mul_465, mul_466, pow_24, mul_467, mul_468, add_116, mul_469, add_117, view_539, sum_162], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_6.run(buf457, buf460, 3072, 4096, stream=raw_stream0)
+            del buf457
+            buf465 = buf452; del buf452  # reuse
+            buf466 = reinterpret_tensor(buf445, (4, 1024, 768), (786432, 768, 1), 0); del buf445  # reuse
+            # Topologically Sorted Source Nodes: [view_541, sub_96, mul_470, mul_471, mul_472, sum_163, mul_473, sum_164, mul_474, sub_97, sub_98, div_58, mul_475, add_118, convert_element_type_47, mul_477, clone_148], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3494
+            del bmm
+            del gt_1
+            del sum_1
+            # Topologically Sorted Source Nodes: [full, , div, mask_value, attn_weights_2, attn_weights_3, neg_11, fma_11], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:156
+            buf476 = torch.ops.prims.fma.default(buf475, buf474, buf473)
+            del buf473
+            del buf474
+            del buf475
+            buf477 = buf476
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g01_output_code.py:3553
+            extern_kernels.mm(permute_267, reinterpret_tensor(buf484, (4096, 2304), (2304, 1), 0), out=buf486)
+            del permute_267
+            buf487 = empty_strided_npu((1, 2304), (2304, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_561, sum_169], Original ATen: [aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_view_14.run(buf484, buf487, 2304, 4096, stream=raw_stream0)
+            del buf484
+            buf492 = buf465; del buf465  # reuse
+            # Topologically Sorted Source Nodes: [view_563, sub_99, mul_482, mul_483, mul_484, sum_170, mul_485, sum_171, mul_486, sub_100, sub_101, div_60, mul_487, add_121, convert_element_type_49, mul_489, clone_156], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.add, aten.native_dropout_backward]
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:1608
+            buf53 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf51 = reinterpret_tensor(buf48, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf48  # reuse
+            buf54 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_2, attn_weights_8, attn_weights_9, attn_weights_11], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf51, primals_21, buf1, buf53, buf54, 4, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf55 = reinterpret_tensor(buf47, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf47  # reuse
+            # Topologically Sorted Source Nodes: [x_9, split_1, tensor_6, value_3, attn_output_3], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf45, buf55, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:1688
+            buf88 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf86 = reinterpret_tensor(buf83, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf83  # reuse
+            buf89 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_4, attn_weights_14, attn_weights_15, attn_weights_17], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf86, primals_34, buf1, buf88, buf89, 7, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf90 = reinterpret_tensor(buf82, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf82  # reuse
+            # Topologically Sorted Source Nodes: [x_17, split_2, tensor_10, value_5, attn_output_6], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf80, buf90, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:1768
+            buf123 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf121 = reinterpret_tensor(buf118, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf118  # reuse
+            buf124 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_6, attn_weights_20, attn_weights_21, attn_weights_23], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf121, primals_47, buf1, buf123, buf124, 10, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf125 = reinterpret_tensor(buf117, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf117  # reuse
+            # Topologically Sorted Source Nodes: [x_25, split_3, tensor_14, value_7, attn_output_9], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf115, buf125, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:1848
+            buf158 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf156 = reinterpret_tensor(buf153, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf153  # reuse
+            buf159 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_8, attn_weights_26, attn_weights_27, attn_weights_29], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf156, primals_60, buf1, buf158, buf159, 13, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf160 = reinterpret_tensor(buf152, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf152  # reuse
+            # Topologically Sorted Source Nodes: [x_33, split_4, tensor_18, value_9, attn_output_12], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf150, buf160, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:1928
+            buf193 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf191 = reinterpret_tensor(buf188, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf188  # reuse
+            buf194 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_10, attn_weights_32, attn_weights_33, attn_weights_35], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf191, primals_73, buf1, buf193, buf194, 16, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf195 = reinterpret_tensor(buf187, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf187  # reuse
+            # Topologically Sorted Source Nodes: [x_41, split_5, tensor_22, value_11, attn_output_15], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf185, buf195, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2008
+            buf228 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf226 = reinterpret_tensor(buf223, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf223  # reuse
+            buf229 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_12, attn_weights_38, attn_weights_39, attn_weights_41], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf226, primals_86, buf1, buf228, buf229, 19, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf230 = reinterpret_tensor(buf222, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf222  # reuse
+            # Topologically Sorted Source Nodes: [x_49, split_6, tensor_26, value_13, attn_output_18], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf220, buf230, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2088
+            buf263 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf261 = reinterpret_tensor(buf258, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf258  # reuse
+            buf264 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_14, attn_weights_44, attn_weights_45, attn_weights_47], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf261, primals_99, buf1, buf263, buf264, 22, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf265 = reinterpret_tensor(buf257, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf257  # reuse
+            # Topologically Sorted Source Nodes: [x_57, split_7, tensor_30, value_15, attn_output_21], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf255, buf265, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2168
+            buf298 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf296 = reinterpret_tensor(buf293, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf293  # reuse
+            buf299 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_16, attn_weights_50, attn_weights_51, attn_weights_53], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf296, primals_112, buf1, buf298, buf299, 25, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf300 = reinterpret_tensor(buf292, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf292  # reuse
+            # Topologically Sorted Source Nodes: [x_65, split_8, tensor_34, value_17, attn_output_24], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf290, buf300, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2248
+            buf333 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf331 = reinterpret_tensor(buf328, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf328  # reuse
+            buf334 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_18, attn_weights_56, attn_weights_57, attn_weights_59], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf331, primals_125, buf1, buf333, buf334, 28, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf335 = reinterpret_tensor(buf327, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf327  # reuse
+            # Topologically Sorted Source Nodes: [x_73, split_9, tensor_38, value_19, attn_output_27], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf325, buf335, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2328
+            buf368 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf366 = reinterpret_tensor(buf363, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf363  # reuse
+            buf369 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_20, attn_weights_62, attn_weights_63, attn_weights_65], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf366, primals_138, buf1, buf368, buf369, 31, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf370 = reinterpret_tensor(buf362, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf362  # reuse
+            # Topologically Sorted Source Nodes: [x_81, split_10, tensor_42, value_21, attn_output_30], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf360, buf370, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2408
+            buf403 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.bool)
+            buf401 = reinterpret_tensor(buf398, (4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), 0); del buf398  # reuse
+            buf404 = empty_strided_npu((4, 12, 1024, 1024), (12582912, 1048576, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [full, mask_value, , div_22, attn_weights_68, attn_weights_69, attn_weights_71], Original ATen: [aten.full, aten._to_copy, aten.where, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__to_copy_full_native_10.run(buf401, primals_151, buf1, buf403, buf404, 34, 4, 12, 1024, 1024, stream=raw_stream0)
+            buf405 = reinterpret_tensor(buf397, (4, 12, 1024, 64), (786432, 65536, 64, 1), 0); del buf397  # reuse
+            # Topologically Sorted Source Nodes: [x_89, split_11, tensor_46, value_23, attn_output_33], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_matmul_permute_split_view_5.run(buf395, buf405, 4, 12, 1024, 64, stream=raw_stream0)
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2488
+            # Topologically Sorted Source Nodes: [loss], Original ATen: [aten._log_softmax]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__log_softmax_14.run(buf433, buf434, 4, 2, stream=raw_stream0)
+            primals_163 = copy_if_misaligned(primals_163)
+            # Topologically Sorted Source Nodes: [loss], Original ATen: [aten.nll_loss_forward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_forward.default:76
+            buf435 = torch.ops.aten.nll_loss_forward.default(buf434, primals_163, None, 1, -100)
+            buf436 = buf435[0]
+            assert_size_stride(buf436, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf436, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2498
+            buf437 = buf435[1]
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2499
+            assert_size_stride(buf437, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf437, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2501
+            del buf435
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2502
+            buf438 = empty_strided_npu((4, 12, 64, 1024), (786432, 65536, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x_89, split_11, tensor_46, value_23, expand_49, clone_51], Original ATen: [aten.view, aten.split, aten.permute, aten.matmul_backward]
+
+
+# Source: GPT2ForSequenceClassification_Train/NPU_g02_output_code.py:2504
+            raw_stream0 = get_raw_stream(0)

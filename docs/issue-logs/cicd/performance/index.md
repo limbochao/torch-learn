@@ -4,17 +4,16 @@ title: CICD 性能分析
 
 # CICD 性能分析
 
-记录 CICD 模型在 NPU/GPU 上的 Eager、Inductor 性能对比。
-每篇分析明确具体 kernel、劣化幅度、比较边界、责任模块和验证范围。
+提升比采用 `(Eager 单步耗时 - Inductor 单步耗时) / Eager 单步耗时`。
+优化目标为 NPU 的编译提升比持平或超过 GPU。
+逐项比较同一语义计算的局部提升比，不用 NPU/GPU Inductor 绝对耗时差给问题排序，
+也不用整网 Eager 比例缩放单个 kernel。
 
-提升比统一采用 `(Eager 单步耗时 - Inductor 单步耗时) / Eager 单步耗时`，
-目标是 NPU 提升比持平或超过 GPU。问题排序直接比较 NPU Inductor 与 GPU Inductor 的对应计算，
-Eager 用于整步提升比目标计算，不作为性能问题的唯一筛选依据。
-
-| 日期 | 场景 | 当前结论 |
-| --- | --- | --- |
-| 2026-11-02 | [两个 Train 对 GPU Inductor 的差距][gpu-gap] | 分模型汇总首层、FMA、后续 attention 和矩阵乘的优化模块 |
-| 2026-10-31 | [Electra / LayoutLM Train 首层 attention][attention] | NPU Inductor 漏填 seed 常量，触发慢路径回退 |
-
-[gpu-gap]: electra-layoutlm-train-gpu-inductor-gap-20261102.md
-[attention]: electra-layoutlm-train-first-attention-20261031.md
+- [全量分析与共性问题：40 个模型、78 个场景](full-survey-20261102.md)：按模型分别记录 Infer / Train，
+  具体列出 kernel、代码边界、GPU 做法、优化模块、耗时占比与整网贡献预算。
+- [ElectraForCausalLM](models/ElectraForCausalLM.md)、[LayoutLMForMaskedLM](models/LayoutLMForMaskedLM.md)：
+  保留首层 attention 和 FMA 已定位点，补充符合新口径的具体问题。
+- [Train 首层 attention 的 constexpr/checker 根因](electra-layoutlm-train-first-attention-20261031.md)：
+  历史源码与 checker 定位证据。
+- [两模型绝对耗时差历史分析](electra-layoutlm-train-gpu-inductor-gap-20261102.md)：
+  已标记口径被替代，MM/AddMM 70.049 ms 不再作为编译优化依据。

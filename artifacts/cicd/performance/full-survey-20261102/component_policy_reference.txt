@@ -1,0 +1,56 @@
+Component policy evidence: reference only, not an identity claim for the profile build.
+=== installed-source capture 2026-11-02: torch_npu/_inductor/decomposition.py ===
+177:     DECOMPOSITION_OVERLOAD_OP = [
+178:         aten.nll_loss_forward,
+179:         aten.nll_loss_backward,
+180:         aten._log_softmax_backward_data,
+181:         aten.addmm,
+182:         aten.gelu,
+183:         aten.expm1,
+184:         aten.erfc,
+185:         aten.native_layer_norm,
+186:         aten.repeat_interleave.Tensor,  # perf issue
+187:         aten.slice_backward,
+188:         *(
+189:             [aten.embedding_dense_backward]
+190:             if not allow_embedding_dense_backward_lowering
+191:             else []
+192:         ),
+193:         aten.matmul.default,
+194:         aten.matmul_backward.default,
+195:     ]
+196: 
+197:     if is_ascend950:
+198:         DECOMPOSITION_OVERLOAD_OP.append(aten.max_pool2d_with_indices)
+199: 
+200:     def _register_npu_triton_decompositions():
+201:         overload_op_set = set()
+202:         add_overload(DECOMPOSITION_OVERLOAD_OP, overload_op_set)
+203: 
+204:         for op in overload_op_set:
+205:             if (op in decompositions):
+206:                 del decompositions[op]
+207: 
+
+=== local checkout reference 2026-11-02: lowering_fallback_list.py ===
+277:     aten.scatter_.value,
+278:     aten.scatter_.value_reduce,
+279:     aten.scatter_add,
+280:     aten.scatter_add.default,
+281:     aten.scatter_add.out,
+282:     aten.scatter_add_,
+283:     aten.scatter_add_.default,
+284:     aten.scatter_reduce,
+
+=== local checkout entry points, not proof that the profile ran this checkout ===
+torch_npu/_inductor/codegen/triton.py:989: def codegen_kernel(self, name=None):
+torch_npu/_inductor/codegen/triton.py:1277: def codegen_kernel(self, name=None):
+torch_npu/_inductor/codegen/triton.py:1531: class NPUIndexTritonKernel(TritonKernel):
+torch_npu/_inductor/codegen/triton.py:2978: def codegen_kernel(self, name=None):
+torch_npu/_inductor/codegen/triton.py:4762: def reduction(
+torch_npu/_inductor/codegen/triton.py:6128: def reduction(
+torch_npu/_inductor/runtime/triton_heuristics.py:1733: def autotune_to_one_config(self, *args, **kwargs):
+torch_npu/_inductor/runtime/triton_heuristics.py:3243: def triton_config_npu_index(
+torch_npu/_inductor/runtime/triton_heuristics.py:3860: def reduction(
+torch_npu/_inductor/codegen/scheduling.py:1000: def can_fuse(self, node1, node2):
+torch_npu/_inductor/codegen/scheduling.py:1154: def candidate_tilings(cls, node, numel, reduction_numel) -> list[CandidateTiling]:

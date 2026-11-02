@@ -1,0 +1,265 @@
+# Source: basic_gnn_gcn_Train/GPU_g01_output_code.py:140
+            arg0_1 = copy_if_misaligned(arg0_1)
+            buf0 = empty_strided_cuda((200000, ), (1, ), torch.bool)
+            # Topologically Sorted Source Nodes: [getitem, getitem_1, mask], Original ATen: [aten.select, aten.ne]
+            # [Provenance debug handles] triton_poi_fused_ne_select_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_ne_select_0.run(arg0_1, buf0, 200000, stream=raw_stream0)
+            del arg0_1
+            buf1 = empty_strided_cuda((2, 10000), (10000, 1), torch.int64)
+            # Topologically Sorted Source Nodes: [loop_index, unsqueeze, loop_index_1], Original ATen: [aten.arange, aten.unsqueeze, aten.repeat]
+            # [Provenance debug handles] triton_poi_fused_arange_repeat_unsqueeze_1:2
+
+
+# Source: basic_gnn_gcn_Train/GPU_g03_output_code.py:44
+#   new_zeros => full_default_1
+# Graph fragment:
+#   %full_default_1 : Tensor "f32[10000][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.full.default](args = ([10000], 0), kwargs = {dtype: torch.float32, layout: torch.strided, device: cuda:0, pin_memory: False})
+#   %select_1 : Tensor "i64[209975][1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.select.int](args = (%arg0_1, 0, 1), kwargs = {})
+#   %full_default : Tensor "f32[209975][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.full.default](args = ([209975], 1), kwargs = {dtype: torch.float32, layout: torch.strided, device: cuda:0, pin_memory: False})
+#   %scatter_add : Tensor "f32[10000][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.scatter_add.default](args = (%full_default_1, 0, %expand, %full_default), kwargs = {})
+#   return %scatter_add
+triton_poi_fused_new_zeros_ones_scatter_add_select_0 = async_compile.triton('triton_poi_fused_new_zeros_ones_scatter_add_select_0', '''
+import triton
+import triton.language as tl
+
+
+# Source: basic_gnn_gcn_Train/GPU_g03_output_code.py:87
+#   %arg0_1 : Tensor "i64[2, 209975][209975, 1]cuda:0" = PlaceHolder[target=arg0_1]
+#   %scatter_add : Tensor "f32[10000][1]cuda:0" = PlaceHolder[target=scatter_add]
+#   %full_default_1 : Tensor "f32[10000][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.full.default](args = ([10000], 0), kwargs = {dtype: torch.float32, layout: torch.strided, device: cuda:0, pin_memory: False})
+#   %select_1 : Tensor "i64[209975][1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.select.int](args = (%arg0_1, 0, 1), kwargs = {})
+#   %full_default : Tensor "f32[209975][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.full.default](args = ([209975], 1), kwargs = {dtype: torch.float32, layout: torch.strided, device: cuda:0, pin_memory: False})
+#   %scatter_add : Tensor "f32[10000][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.scatter_add.default](args = (%full_default_1, 0, %expand, %full_default), kwargs = {})
+#   return %buf1
+triton_poi_fused_new_zeros_ones_scatter_add_select_1 = async_compile.triton('triton_poi_fused_new_zeros_ones_scatter_add_select_1', '''
+import triton
+import triton.language as tl
+
+
+# Source: basic_gnn_gcn_Train/GPU_g03_output_code.py:215
+            torch.cuda.set_device(0)
+            buf0 = empty_strided_cuda((10000, ), (1, ), torch.float32)
+            # Topologically Sorted Source Nodes: [new_zeros, col, edge_weight, deg], Original ATen: [aten.new_zeros, aten.select, aten.ones, aten.scatter_add]
+            # [Provenance debug handles] triton_poi_fused_new_zeros_ones_scatter_add_select_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_new_zeros_ones_scatter_add_select_0.run(buf0, 10000, stream=raw_stream0)
+            assert_size_stride(arg0_1, (2, 209975), (209975, 1), 'input')
+            arg0_1 = copy_if_misaligned(arg0_1)
+            # Topologically Sorted Source Nodes: [new_zeros, col, edge_weight, deg], Original ATen: [aten.new_zeros, aten.select, aten.ones, aten.scatter_add]
+            # [Provenance debug handles] triton_poi_fused_new_zeros_ones_scatter_add_select_1:2
+
+
+# Source: basic_gnn_gcn_Train/GPU_g03_output_code.py:225
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_new_zeros_ones_scatter_add_select_1.run(arg0_1, buf0, 209975, stream=raw_stream0)
+            buf2 = empty_strided_cuda((209975, ), (1, ), torch.float32)
+            # Topologically Sorted Source Nodes: [col, deg_inv_sqrt, eq, masked_fill_, row, mul, getitem_3, edge_weight_1], Original ATen: [aten.select, aten.pow, aten.eq, aten.masked_fill, aten.mul, aten.index]
+            # [Provenance debug handles] triton_poi_fused_eq_index_masked_fill_mul_pow_select_2:3
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: basic_gnn_gcn_Train/GPU_g03_output_code.py:231
+            triton_poi_fused_eq_index_masked_fill_mul_pow_select_2.run(arg0_1, buf0, buf2, 209975, stream=raw_stream0)
+            del arg0_1
+            del buf0
+        return (buf2, )
+
+
+
+# Source: basic_gnn_gcn_Train/GPU_g04_output_code.py:280
+            tangents_1 = copy_if_misaligned(tangents_1)
+            buf0 = empty_strided_cuda((1, 64, 79), (5056, 1, 64), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_0:13
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_0.run(tangents_1, buf0, 5056, 127, stream=raw_stream0)
+            buf1 = empty_strided_cuda((1, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_1:14
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: basic_gnn_gcn_Train/GPU_g04_output_code.py:290
+            triton_red_fused_sum_1.run(buf0, buf1, 64, 79, stream=raw_stream0)
+            del buf0
+            assert_size_stride(full_default, (10000, 64), (64, 1), 'input')
+            buf2 = full_default; del full_default  # reuse
+            # Topologically Sorted Source Nodes: [edge_index_i, view_1, index_1, gather, view, mul_1, index, index_put], Original ATen: [aten.select, aten.view, aten.expand, aten.gather, aten.mul, aten.index_add]
+
+
+# Source: basic_gnn_gcn_Train/GPU_g04_output_code.py:295
+            # [Provenance debug handles] triton_poi_fused_expand_gather_index_add_mul_select_view_2:15
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_gather_index_add_mul_select_view_2.run(buf2, 640000, stream=raw_stream0)
+            assert_size_stride(primals_3, (2, 209975), (209975, 1), 'input')
+            assert_size_stride(primals_4, (209975, ), (1, ), 'input')
+            # Topologically Sorted Source Nodes: [edge_index_i, view_1, index_1, gather, view, mul_1, index, index_put], Original ATen: [aten.select, aten.view, aten.expand, aten.gather, aten.mul, aten.index_add]
+            # [Provenance debug handles] triton_poi_fused_expand_gather_index_add_mul_select_view_3:16
+
+
+# Source: basic_gnn_gcn_Train/GPU_g04_output_code.py:302
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_gather_index_add_mul_select_view_3.run(primals_3, tangents_1, primals_4, buf2, 13438400, stream=raw_stream0)
+            del primals_3
+            del primals_4
+            del tangents_1
+            assert_size_stride(primals_2, (10000, 64), (64, 1), 'input')
+
+
+# Source: basic_gnn_gcn_Train/GPU_g05_output_code.py:91
+#   %select_1 : Tensor "i64[209975][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.select.int](args = (%primals_3, 0, 1), kwargs = {})
+#   %view : Tensor "f32[209975, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%primals_4, [-1, 1]), kwargs = {})
+#   %mul : Tensor "f32[209975, 64][64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view, %index), kwargs = {})
+#   %view_1 : Tensor "i64[209975, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%select_1, [-1, 1]), kwargs = {})
+#   %expand : Tensor "i64[209975, 64][1, 0]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.expand.default](args = (%view_1, [209975, 64]), kwargs = {})
+#   %scatter_add : Tensor "f32[10000, 64][64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.scatter_add.default](args = (%full_default, 0, %expand, %mul), kwargs = {})
+#   return %buf3
+triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1 = async_compile.triton('triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1', '''
+import triton
+import triton.language as tl
+
+
+# Source: basic_gnn_gcn_Train/GPU_g05_output_code.py:215
+            primals_3 = copy_if_misaligned(primals_3)
+            primals_4 = copy_if_misaligned(primals_4)
+            # Topologically Sorted Source Nodes: [index, x_j, edge_index_i, view, out, view_1, index_1, out_1], Original ATen: [aten.select, aten.index_select, aten.view, aten.mul, aten.expand, aten.scatter_add]
+            # [Provenance debug handles] triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1:4
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1.run(primals_3, primals_4, buf0, buf2, 13438400, stream=raw_stream0)
+            assert_size_stride(primals_5, (64, ), (1, ), 'input')
+            buf4 = buf0; del buf0  # reuse
+            # Topologically Sorted Source Nodes: [out_2], Original ATen: [aten.add]
+            # [Provenance debug handles] triton_poi_fused_add_2:5
+
+
+# Source: basic_gnn_gcn_Train/GPU_g06_output_code.py:280
+            tangents_1 = copy_if_misaligned(tangents_1)
+            buf0 = empty_strided_cuda((1, 64, 79), (5056, 1, 64), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_0:7
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_0.run(tangents_1, buf0, 5056, 127, stream=raw_stream0)
+            buf1 = empty_strided_cuda((1, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_1:8
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: basic_gnn_gcn_Train/GPU_g06_output_code.py:290
+            triton_red_fused_sum_1.run(buf0, buf1, 64, 79, stream=raw_stream0)
+            del buf0
+            assert_size_stride(full_default, (10000, 64), (64, 1), 'input')
+            buf2 = full_default; del full_default  # reuse
+            # Topologically Sorted Source Nodes: [edge_index_i, view_1, index_1, gather, view, mul_1, index, index_put], Original ATen: [aten.select, aten.view, aten.expand, aten.gather, aten.mul, aten.index_add]
+
+
+# Source: basic_gnn_gcn_Train/GPU_g06_output_code.py:295
+            # [Provenance debug handles] triton_poi_fused_expand_gather_index_add_mul_select_view_2:9
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_gather_index_add_mul_select_view_2.run(buf2, 640000, stream=raw_stream0)
+            assert_size_stride(primals_3, (2, 209975), (209975, 1), 'input')
+            assert_size_stride(primals_4, (209975, ), (1, ), 'input')
+            # Topologically Sorted Source Nodes: [edge_index_i, view_1, index_1, gather, view, mul_1, index, index_put], Original ATen: [aten.select, aten.view, aten.expand, aten.gather, aten.mul, aten.index_add]
+            # [Provenance debug handles] triton_poi_fused_expand_gather_index_add_mul_select_view_3:10
+
+
+# Source: basic_gnn_gcn_Train/GPU_g06_output_code.py:302
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_gather_index_add_mul_select_view_3.run(primals_3, tangents_1, primals_4, buf2, 13438400, stream=raw_stream0)
+            del primals_3
+            del primals_4
+            del tangents_1
+            assert_size_stride(primals_2, (10000, 64), (64, 1), 'input')
+
+
+# Source: basic_gnn_gcn_Train/GPU_g07_output_code.py:91
+#   %select_1 : Tensor "i64[209975][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.select.int](args = (%primals_3, 0, 1), kwargs = {})
+#   %view : Tensor "f32[209975, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%primals_4, [-1, 1]), kwargs = {})
+#   %mul : Tensor "f32[209975, 64][64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view, %index), kwargs = {})
+#   %view_1 : Tensor "i64[209975, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%select_1, [-1, 1]), kwargs = {})
+#   %expand : Tensor "i64[209975, 64][1, 0]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.expand.default](args = (%view_1, [209975, 64]), kwargs = {})
+#   %scatter_add : Tensor "f32[10000, 64][64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.scatter_add.default](args = (%full_default, 0, %expand, %mul), kwargs = {})
+#   return %buf3
+triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1 = async_compile.triton('triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1', '''
+import triton
+import triton.language as tl
+
+
+# Source: basic_gnn_gcn_Train/GPU_g07_output_code.py:214
+            primals_3 = copy_if_misaligned(primals_3)
+            primals_4 = copy_if_misaligned(primals_4)
+            # Topologically Sorted Source Nodes: [index, x_j, edge_index_i, view, out, view_1, index_1, out_1], Original ATen: [aten.select, aten.index_select, aten.view, aten.mul, aten.expand, aten.scatter_add]
+            # [Provenance debug handles] triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1:4
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1.run(primals_3, primals_4, buf0, buf2, 13438400, stream=raw_stream0)
+            assert_size_stride(primals_5, (64, ), (1, ), 'input')
+            buf4 = buf0; del buf0  # reuse
+            # Topologically Sorted Source Nodes: [out_2], Original ATen: [aten.add]
+            # [Provenance debug handles] triton_poi_fused_add_2:5
+
+
+# Source: basic_gnn_gcn_Train/GPU_g08_output_code.py:280
+            tangents_1 = copy_if_misaligned(tangents_1)
+            buf0 = empty_strided_cuda((1, 64, 79), (5056, 1, 64), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_0.run(tangents_1, buf0, 5056, 127, stream=raw_stream0)
+            buf1 = empty_strided_cuda((1, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_1:2
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: basic_gnn_gcn_Train/GPU_g08_output_code.py:290
+            triton_red_fused_sum_1.run(buf0, buf1, 64, 79, stream=raw_stream0)
+            del buf0
+            assert_size_stride(full_default, (10000, 64), (64, 1), 'input')
+            buf2 = full_default; del full_default  # reuse
+            # Topologically Sorted Source Nodes: [edge_index_i, view_1, index_1, gather, view, mul_1, index, index_put], Original ATen: [aten.select, aten.view, aten.expand, aten.gather, aten.mul, aten.index_add]
+
+
+# Source: basic_gnn_gcn_Train/GPU_g08_output_code.py:295
+            # [Provenance debug handles] triton_poi_fused_expand_gather_index_add_mul_select_view_2:3
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_gather_index_add_mul_select_view_2.run(buf2, 640000, stream=raw_stream0)
+            assert_size_stride(primals_3, (2, 209975), (209975, 1), 'input')
+            assert_size_stride(primals_4, (209975, ), (1, ), 'input')
+            # Topologically Sorted Source Nodes: [edge_index_i, view_1, index_1, gather, view, mul_1, index, index_put], Original ATen: [aten.select, aten.view, aten.expand, aten.gather, aten.mul, aten.index_add]
+            # [Provenance debug handles] triton_poi_fused_expand_gather_index_add_mul_select_view_3:4
+
+
+# Source: basic_gnn_gcn_Train/GPU_g08_output_code.py:302
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_gather_index_add_mul_select_view_3.run(primals_3, tangents_1, primals_4, buf2, 13438400, stream=raw_stream0)
+            del primals_3
+            del primals_4
+            del tangents_1
+            assert_size_stride(primals_2, (10000, 64), (64, 1), 'input')
+
+
+# Source: basic_gnn_gcn_Train/GPU_g09_output_code.py:91
+#   %select_1 : Tensor "i64[209975][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.select.int](args = (%primals_3, 0, 1), kwargs = {})
+#   %view : Tensor "f32[209975, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%primals_4, [-1, 1]), kwargs = {})
+#   %mul : Tensor "f32[209975, 64][64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view, %index), kwargs = {})
+#   %view_1 : Tensor "i64[209975, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%select_1, [-1, 1]), kwargs = {})
+#   %expand : Tensor "i64[209975, 64][1, 0]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.expand.default](args = (%view_1, [209975, 64]), kwargs = {})
+#   %scatter_add : Tensor "f32[10000, 64][64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.scatter_add.default](args = (%full_default, 0, %expand, %mul), kwargs = {})
+#   return %buf3
+triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1 = async_compile.triton('triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1', '''
+import triton
+import triton.language as tl
+
+
+# Source: basic_gnn_gcn_Train/GPU_g09_output_code.py:214
+            primals_3 = copy_if_misaligned(primals_3)
+            primals_4 = copy_if_misaligned(primals_4)
+            # Topologically Sorted Source Nodes: [index, x_j, edge_index_i, view, out, view_1, index_1, out_1], Original ATen: [aten.select, aten.index_select, aten.view, aten.mul, aten.expand, aten.scatter_add]
+            # [Provenance debug handles] triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1:4
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_expand_index_select_mul_scatter_add_select_view_1.run(primals_3, primals_4, buf0, buf2, 13438400, stream=raw_stream0)
+            assert_size_stride(primals_5, (64, ), (1, ), 'input')
+            buf4 = buf0; del buf0  # reuse
+            # Topologically Sorted Source Nodes: [out_2], Original ATen: [aten.add]
+            # [Provenance debug handles] triton_poi_fused_add_2:5

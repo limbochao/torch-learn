@@ -1,0 +1,1212 @@
+# Source: AlbertForMaskedLM_Train/NPU_g01_output_code.py:1042
+# Topologically Sorted Source Nodes: [view_291, mul_92, sum_31, neg], Original ATen: [aten.matmul_backward, aten._softmax_backward_data]
+# Source node to ATen node mapping:
+#   mul_92 => mul_92
+#   neg => neg
+#   sum_31 => sum_31
+#   view_291 => view_291
+# Graph fragment:
+#   %bmm_24 : Tensor "f32[256, 512, 512][262144, 512, 1]npu:0" = PlaceHolder[target=bmm_24]
+#   %div_23 : Tensor "f32[4, 64, 512, 512][16777216, 262144, 512, 1]npu:0" = PlaceHolder[target=div_23]
+#   %mul_92 : Tensor "f32[4, 64, 512, 512][16777216, 262144, 512, 1]npu:0" = PlaceHolder[target=mul_92]
+#   %view_291 : Tensor "f32[4, 64, 512, 512][16777216, 262144, 512, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%bmm_24, [4, 64, 512, 512]), kwargs = {})
+#   %mul_92 : Tensor "f32[4, 64, 512, 512][16777216, 262144, 512, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_291, %div_23), kwargs = {})
+#   %sum_31 : Tensor "f32[4, 64, 512, 1][32768, 512, 1, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%mul_92, [-1], True), kwargs = {})
+#   %neg : Tensor "f32[4, 64, 512, 512][16777216, 262144, 512, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%div_23,), kwargs = {})
+#   return %mul_92,%neg,%sum_31
+# SchedulerNodes: [SchedulerNode(name='op39'), SchedulerNode(name='op41'), SchedulerNode(name='op40')]
+
+triton_per_fused__softmax_backward_data_matmul_10 = async_compile.triton('triton_per_fused__softmax_backward_data_matmul_10', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.persistent_reduction(
+    size_hints={'z0': 4, 'y1': 64, 'x2': 512, 'r3': 512},
+    reduction_hint=ReductionHint.INNER,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'out_ptr0': '*fp32', 'out_ptr1': '*fp32', 'z0_numel': 'i32', 'y1_numel': 'i32', 'x2_numel': 'i32', 'r3_numel': 'i32', 'Z0BLOCK': 'i32', 'Y1BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_per_fused__softmax_backward_data_matmul_10', 'mutated_arg_names': ['in_out_ptr0'], 'backend_hash': '<redacted>', 'split_axis': [0, 1], 'tiling_axis': [0, 1, 2, 3], 'no_loop_axis': [], 'axis_names': ['z0', 'y1', 'x2', 'r3'], 'axis_static_values': (('z0', 4), ('y1', 64), ('x2', 512), ('r3', 512)), 'low_dims': {3}, 'numof_reduction_axis': 1, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('Z0BLOCK', 'Y1BLOCK'), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()}
+)
+@triton.jit
+def triton_per_fused__softmax_backward_data_matmul_10(in_out_ptr0, in_ptr0, out_ptr0, out_ptr1, z0_numel, y1_numel, x2_numel, r3_numel, Z0BLOCK, Y1BLOCK, Z0BLOCK_SUB : tl.constexpr, Y1BLOCK_SUB : tl.constexpr, X2BLOCK_SUB : tl.constexpr):
+    R3BLOCK_SUB: tl.constexpr = 512
+    z0_offset = tl.program_id(0) * Z0BLOCK
+    base_z0= tl.arange(0, Z0BLOCK_SUB)
+    loops_z0 = (Z0BLOCK + Z0BLOCK_SUB - 1) // Z0BLOCK_SUB
+    y1_offset = tl.program_id(1) * Y1BLOCK
+    base_y1= tl.arange(0, Y1BLOCK_SUB)
+    loops_y1 = (Y1BLOCK + Y1BLOCK_SUB - 1) // Y1BLOCK_SUB
+    base_x2= tl.arange(0, X2BLOCK_SUB)
+    loops_x2 = (x2_numel + X2BLOCK_SUB - 1) // X2BLOCK_SUB
+    base_r3= tl.arange(0, R3BLOCK_SUB)
+    loops_r3 = (r3_numel + R3BLOCK_SUB - 1) // R3BLOCK_SUB
+    for loop_z0 in range(loops_z0):
+        z0 = z0_offset + (loop_z0 * Z0BLOCK_SUB) + base_z0[:,None,None,None]
+        z0_mask = z0 < min(Z0BLOCK+z0_offset, z0_numel)
+        for loop_y1 in range(loops_y1):
+            y1 = y1_offset + (loop_y1 * Y1BLOCK_SUB) + base_y1[None,:,None,None]
+            y1_mask = y1 < min(Y1BLOCK+y1_offset, y1_numel)
+            for loop_x2 in range(loops_x2):
+                x2 = (loop_x2 * X2BLOCK_SUB) + base_x2[None,None,:,None]
+                x2_mask = x2 < x2_numel
+                r3 = base_r3[None,None,None,:]
+                r3_mask = True
+                tmp0 = tl.load(in_out_ptr0 + (r3 + 512*x2 + 262144*y1 + 16777216*z0), x2_mask & y1_mask & z0_mask, other=0.0)
+                tmp1 = tl.load(in_ptr0 + (r3 + 512*x2 + 262144*y1 + 16777216*z0), x2_mask & y1_mask & z0_mask, other=0.0)
+                tmp2 = tmp0 * tmp1
+                tmp3 = -tmp1
+                tmp5 = tl.where(tl.broadcast_to((z0_mask.reshape([Z0BLOCK_SUB, 1, 1, 1]) & y1_mask.reshape([1, Y1BLOCK_SUB, 1, 1]) & x2_mask.reshape([1, 1, X2BLOCK_SUB, 1])), [Z0BLOCK_SUB, Y1BLOCK_SUB, X2BLOCK_SUB, R3BLOCK_SUB]), tmp2, 0)
+                tmp6 = tl.sum(tmp5, 3).reshape(Z0BLOCK_SUB, Y1BLOCK_SUB, X2BLOCK_SUB, 1)
+                tl.store(in_out_ptr0 + (r3 + 512*x2 + 262144*y1 + 16777216*z0), tmp2, x2_mask & y1_mask & z0_mask)
+                tl.store(out_ptr0 + (r3 + 512*x2 + 262144*y1 + 16777216*z0), tmp3, x2_mask & y1_mask & z0_mask)
+                tl.store(out_ptr1 + (x2 + 512*y1 + 32768*z0 ), tmp6, x2_mask & y1_mask & z0_mask)
+''', device_str='npu')
+
+
+# Source: AlbertForMaskedLM_Train/NPU_g01_output_code.py:2344
+# Topologically Sorted Source Nodes: [view_279, sum_24, view_280, view_313, sum_39, , add_75, view_347, sum_54, add_97, view_381, sum_69, add_119, view_415, sum_84, add_141, view_449, sum_99, add_163, view_483, sum_114, add_185, view_517, sum_129, add_207, view_551, sum_144, add_229, view_585, sum_159, add_251, view_619, sum_174, add_273, view_653, sum_189], Original ATen: [aten.view, aten.sum]
+# Source node to ATen node mapping:
+#    => add_119_replacement, add_141_replacement, add_163_replacement, add_185_replacement, add_207_replacement, add_229_replacement, add_251_replacement, add_273_replacement, add_295_replacement, add_75_replacement, add_97_replacement
+#   add_119 => view_382_replacement
+#   add_141 => view_416_replacement
+#   add_163 => view_450_replacement
+#   add_185 => view_484_replacement
+#   add_207 => view_518_replacement
+#   add_229 => view_552_replacement
+#   add_251 => view_586_replacement
+#   add_273 => view_620_replacement
+#   add_75 => view_314_replacement
+#   add_97 => view_348_replacement
+#   sum_114 => sum_114
+#   sum_129 => sum_129
+#   sum_144 => sum_144
+#   sum_159 => sum_159
+#   sum_174 => sum_174
+#   sum_189 => sum_189
+#   sum_24 => sum_24
+#   sum_39 => sum_39
+#   sum_54 => sum_54
+#   sum_69 => sum_69
+#   sum_84 => sum_84
+#   sum_99 => sum_99
+#   view_279 => view_279
+#   view_280 => view_280
+#   view_313 => view_313
+#   view_347 => view_347
+#   view_381 => view_381
+#   view_415 => view_415
+#   view_449 => view_449
+#   view_483 => view_483
+#   view_517 => view_517
+#   view_551 => view_551
+#   view_585 => view_585
+#   view_619 => view_619
+#   view_653 => view_653
+# Graph fragment:
+#   %mul_74 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_74]
+#   %mul_98 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_98]
+#   %mul_122 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_122]
+#   %mul_146 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_146]
+#   %mul_170 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_170]
+#   %mul_194 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_194]
+#   %mul_290 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_290]
+#   %mul_218 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_218]
+#   %mul_314 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_314]
+#   %mul_242 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_242]
+#   %mul_338 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_338]
+#   %mul_266 : Tensor "f32[4, 512, 4096][2097152, 4096, 1]npu:0" = PlaceHolder[target=mul_266]
+#   %sum_24 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_24]
+#   %sum_39 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_39]
+#   %sum_54 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_54]
+#   %sum_69 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_69]
+#   %sum_84 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_84]
+#   %sum_99 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_99]
+#   %sum_114 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_114]
+#   %sum_129 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_129]
+#   %sum_144 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_144]
+#   %add_229_replacement : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=add_229_replacement]
+#   %sum_159 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_159]
+#   %sum_174 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_174]
+#   %sum_189 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_189]
+#   %view_279 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_74, [2048, 4096]), kwargs = {})
+#   %sum_24 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_279, [0], True), kwargs = {})
+#   %view_280 : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%sum_24, [4096]), kwargs = {})
+#   %view_313 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_98, [2048, 4096]), kwargs = {})
+#   %sum_39 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_313, [0], True), kwargs = {})
+#   %add_75_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_280, %sum_39), kwargs = {})
+#   %view_314_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_75_replacement, [4096]), kwargs = {})
+#   %view_347 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_122, [2048, 4096]), kwargs = {})
+#   %sum_54 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_347, [0], True), kwargs = {})
+#   %add_97_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_314_replacement, %sum_54), kwargs = {})
+#   %view_348_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_97_replacement, [4096]), kwargs = {})
+#   %view_381 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_146, [2048, 4096]), kwargs = {})
+#   %sum_69 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_381, [0], True), kwargs = {})
+#   %add_119_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_348_replacement, %sum_69), kwargs = {})
+#   %view_382_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_119_replacement, [4096]), kwargs = {})
+#   %view_415 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_170, [2048, 4096]), kwargs = {})
+#   %sum_84 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_415, [0], True), kwargs = {})
+#   %add_141_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_382_replacement, %sum_84), kwargs = {})
+#   %view_416_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_141_replacement, [4096]), kwargs = {})
+#   %view_449 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_194, [2048, 4096]), kwargs = {})
+#   %sum_99 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_449, [0], True), kwargs = {})
+#   %add_163_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_416_replacement, %sum_99), kwargs = {})
+#   %view_450_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_163_replacement, [4096]), kwargs = {})
+#   %view_483 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_218, [2048, 4096]), kwargs = {})
+#   %sum_114 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_483, [0], True), kwargs = {})
+#   %add_185_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_450_replacement, %sum_114), kwargs = {})
+#   %view_484_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_185_replacement, [4096]), kwargs = {})
+#   %view_517 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_242, [2048, 4096]), kwargs = {})
+#   %sum_129 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_517, [0], True), kwargs = {})
+#   %add_207_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_484_replacement, %sum_129), kwargs = {})
+#   %view_518_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_207_replacement, [4096]), kwargs = {})
+#   %view_551 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_266, [2048, 4096]), kwargs = {})
+#   %sum_144 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_551, [0], True), kwargs = {})
+#   %add_229_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_518_replacement, %sum_144), kwargs = {})
+#   %view_552_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_229_replacement, [4096]), kwargs = {})
+#   %view_585 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_290, [2048, 4096]), kwargs = {})
+#   %sum_159 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_585, [0], True), kwargs = {})
+#   %add_251_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_552_replacement, %sum_159), kwargs = {})
+#   %view_586_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_251_replacement, [4096]), kwargs = {})
+#   %view_619 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_314, [2048, 4096]), kwargs = {})
+#   %sum_174 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_619, [0], True), kwargs = {})
+#   %add_273_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_586_replacement, %sum_174), kwargs = {})
+#   %view_620_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_273_replacement, [4096]), kwargs = {})
+#   %view_653 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_338, [2048, 4096]), kwargs = {})
+#   %sum_189 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_653, [0], True), kwargs = {})
+#   %add_295_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_620_replacement, %sum_189), kwargs = {})
+#   return %sum_24,%sum_39,%sum_54,%sum_69,%sum_84,%sum_99,%sum_159,%sum_114,%sum_174,%sum_129,%sum_189,%sum_144,%add_229_replacement,%add_295_replacement
+# SchedulerNodes: [SchedulerNode(name='op23'), SchedulerNode(name='op66'), SchedulerNode(name='op116'), SchedulerNode(name='op166'), SchedulerNode(name='op216'), SchedulerNode(name='op266'), SchedulerNode(name='op476'), SchedulerNode(name='op316'), SchedulerNode(name='op526'), SchedulerNode(name='op366'), SchedulerNode(name='op578'), SchedulerNode(name='op418'), SchedulerNode(name='op419'), SchedulerNode(name='op579')]
+
+triton_per_fused_sum_view_16 = async_compile.triton('triton_per_fused_sum_view_16', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.persistent_reduction(
+    size_hints={'x0': 4096, 'r1': 2048},
+    reduction_hint=ReductionHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'in_ptr4': '*fp32', 'in_ptr5': '*fp32', 'in_ptr6': '*fp32', 'in_ptr7': '*fp32', 'in_ptr8': '*fp32', 'in_ptr9': '*fp32', 'in_ptr10': '*fp32', 'in_ptr11': '*fp32', 'x0_numel': 'i32', 'r1_numel': 'i32', 'X0BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_per_fused_sum_view_16', 'mutated_arg_names': ['in_out_ptr0'], 'backend_hash': '<redacted>', 'split_axis': [0], 'tiling_axis': [0, 1], 'no_loop_axis': [], 'axis_names': ['x0', 'r1'], 'axis_static_values': (('x0', 4096), ('r1', 2048)), 'low_dims': {0}, 'numof_reduction_axis': 1, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('X0BLOCK',), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()}
+)
+@triton.jit
+def triton_per_fused_sum_view_16(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, in_ptr4, in_ptr5, in_ptr6, in_ptr7, in_ptr8, in_ptr9, in_ptr10, in_ptr11, x0_numel, r1_numel, X0BLOCK, X0BLOCK_SUB : tl.constexpr):
+    R1BLOCK_SUB: tl.constexpr = 2048
+    x0_offset = tl.program_id(0) * X0BLOCK
+    base_x0= tl.arange(0, X0BLOCK_SUB)
+    loops_x0 = (X0BLOCK + X0BLOCK_SUB - 1) // X0BLOCK_SUB
+    base_r1= tl.arange(0, R1BLOCK_SUB)
+    loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB
+    for loop_x0 in range(loops_x0):
+        x0 = x0_offset + (loop_x0 * X0BLOCK_SUB) + base_x0[None,:]
+        x0_mask = x0 < min(X0BLOCK+x0_offset, x0_numel)
+        r1 = base_r1[:,None]
+        r1_mask = True
+        tmp0 = tl.load(in_ptr0 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp4 = tl.load(in_ptr1 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp8 = tl.load(in_ptr2 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp12 = tl.load(in_ptr3 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp16 = tl.load(in_ptr4 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp20 = tl.load(in_ptr5 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp24 = tl.load(in_ptr6 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp28 = tl.load(in_ptr7 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp32 = tl.load(in_ptr8 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp36 = tl.load(in_ptr9 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp40 = tl.load(in_ptr10 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp44 = tl.load(in_ptr11 + (x0 + 4096*r1), x0_mask, other=0.0)
+        tmp2 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp0, 0)
+        tmp3 = tl.sum(tmp2, 0).reshape(1, X0BLOCK_SUB)
+        tmp6 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp4, 0)
+        tmp7 = tl.sum(tmp6, 0).reshape(1, X0BLOCK_SUB)
+        tmp10 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp8, 0)
+        tmp11 = tl.sum(tmp10, 0).reshape(1, X0BLOCK_SUB)
+        tmp14 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp12, 0)
+        tmp15 = tl.sum(tmp14, 0).reshape(1, X0BLOCK_SUB)
+        tmp18 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp16, 0)
+        tmp19 = tl.sum(tmp18, 0).reshape(1, X0BLOCK_SUB)
+        tmp22 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp20, 0)
+        tmp23 = tl.sum(tmp22, 0).reshape(1, X0BLOCK_SUB)
+        tmp26 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp24, 0)
+        tmp27 = tl.sum(tmp26, 0).reshape(1, X0BLOCK_SUB)
+        tmp30 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp28, 0)
+        tmp31 = tl.sum(tmp30, 0).reshape(1, X0BLOCK_SUB)
+        tmp34 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp32, 0)
+        tmp35 = tl.sum(tmp34, 0).reshape(1, X0BLOCK_SUB)
+        tmp38 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp36, 0)
+        tmp39 = tl.sum(tmp38, 0).reshape(1, X0BLOCK_SUB)
+        tmp42 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp40, 0)
+        tmp43 = tl.sum(tmp42, 0).reshape(1, X0BLOCK_SUB)
+        tmp46 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp44, 0)
+        tmp47 = tl.sum(tmp46, 0).reshape(1, X0BLOCK_SUB)
+        tmp48 = tmp3 + tmp7
+        tmp49 = tmp48 + tmp11
+        tmp50 = tmp49 + tmp15
+        tmp51 = tmp50 + tmp19
+        tmp52 = tmp51 + tmp23
+        tmp53 = tmp52 + tmp31
+        tmp54 = tmp53 + tmp39
+        tmp55 = tmp54 + tmp47
+        tmp56 = tmp55 + tmp27
+        tmp57 = tmp56 + tmp35
+        tmp58 = tmp57 + tmp43
+        tl.store(in_out_ptr0 + (x0), tmp58, x0_mask)
+''', device_str='npu')
+
+
+# Source: AlbertForMaskedLM_Train/NPU_g01_output_code.py:3073
+# Topologically Sorted Source Nodes: [view_281, ffn_output_33, mul_45, mul_76, pow_12, mul_46, add_58, mul_47, tanh_11, add_59, mul_77, mul_78, sub_22, mul_79, mul_80, mul_81, pow_15, mul_82, mul_83, add_67, mul_84, add_68, view_282, sum_25, view_283, view_315, ffn_output_30, mul_41, mul_100, pow_11, mul_42, add_53, mul_43, tanh_10, add_54, mul_101, mul_102, sub_29, mul_103, mul_104, mul_105, pow_16, mul_106, mul_107, add_77, mul_108, add_78, view_316, sum_40, , add_79, view_349, ffn_output_27, mul_37, mul_124, pow_10, mul_38, add_48, mul_39, tanh_9, add_49, mul_125, mul_126, sub_36, mul_127, mul_128, mul_129, pow_17, mul_130, mul_131, add_99, mul_132, add_100, view_350, sum_55, add_101, view_383, ffn_output_24, mul_33, mul_148, pow_9, mul_34, add_43, mul_35, tanh_8, add_44, mul_149, mul_150, sub_43, mul_151, mul_152, mul_153, pow_18, mul_154, mul_155, add_121, mul_156, add_122, view_384, sum_70, add_123, view_417, ffn_output_21, mul_29, mul_172, pow_8, mul_30, add_38, mul_31, tanh_7, add_39, mul_173, mul_174, sub_50, mul_175, mul_176, mul_177, pow_19, mul_178, mul_179, add_143, mul_180, add_144, view_418, sum_85, add_145, view_451, ffn_output_18, mul_25, mul_196, pow_7, mul_26, add_33, mul_27, tanh_6, add_34, mul_197, mul_198, sub_57, mul_199, mul_200, mul_201, pow_20, mul_202, mul_203, add_165, mul_204, add_166, view_452, sum_100, add_167, view_485, ffn_output_15, mul_21, mul_220, pow_6, mul_22, add_28, mul_23, tanh_5, add_29, mul_221, mul_222, sub_64, mul_223, mul_224, mul_225, pow_21, mul_226, mul_227, add_187, mul_228, add_188, view_486, sum_115, add_189, view_519, ffn_output_12, mul_17, mul_244, pow_5, mul_18, add_23, mul_19, tanh_4, add_24, mul_245, mul_246, sub_71, mul_247, mul_248, mul_249, pow_22, mul_250, mul_251, add_209, mul_252, add_210, view_520, sum_130, add_211, view_553, ffn_output_9, mul_13, mul_268, pow_4, mul_14, add_18, mul_15, tanh_3, add_19, mul_269, mul_270, sub_78, mul_271, mul_272, mul_273, pow_23, mul_274, mul_275, add_231, mul_276, add_232, view_554, sum_145, add_233, view_587, ffn_output_6, mul_9, mul_292, pow_3, mul_10, add_13, mul_11, tanh_2, add_14, mul_293, mul_294, sub_85, mul_295, mul_296, mul_297, pow_24, mul_298, mul_299, add_253, mul_300, add_254, view_588, sum_160, add_255, view_621, ffn_output_3, mul_5, mul_316, pow_2, mul_6, add_8, mul_7, tanh_1, add_9, mul_317, mul_318, sub_92, mul_319, mul_320, mul_321, pow_25, mul_322, mul_323, add_275, mul_324, add_276, view_622, sum_175, add_277, view_655, ffn_output, mul_1, mul_340, pow_1, mul_2, add_3, mul_3, tanh, add_4, mul_341, mul_342, sub_99, mul_343, mul_344, mul_345, pow_26, mul_346, mul_347, add_297, mul_348, add_298, view_656, sum_190], Original ATen: [aten.view, aten.mul, aten.pow, aten.add, aten.tanh, aten.tanh_backward, aten.sum]
+# Source node to ATen node mapping:
+#    => add_101_replacement, add_123_replacement, add_145_replacement, add_167_replacement, add_189_replacement, add_211_replacement, add_233_replacement, add_255_replacement, add_277_replacement, add_299_replacement, add_79_replacement
+#   add_100 => add_100
+#   add_101 => view_351_replacement
+#   add_121 => add_121
+#   add_122 => add_122
+#   add_123 => view_385_replacement
+#   add_13 => add_14
+#   add_14 => add_15
+#   add_143 => add_143
+#   add_144 => add_144
+#   add_145 => view_419_replacement
+#   add_165 => add_165
+#   add_166 => add_166
+#   add_167 => view_453_replacement
+#   add_18 => add_19
+#   add_187 => add_187
+#   add_188 => add_188
+#   add_189 => view_487_replacement
+#   add_19 => add_20
+#   add_209 => add_209
+#   add_210 => add_210
+#   add_211 => view_521_replacement
+#   add_23 => add_24
+#   add_231 => add_231
+#   add_232 => add_232
+#   add_233 => view_555_replacement
+#   add_24 => add_25
+#   add_253 => add_253
+#   add_254 => add_254
+#   add_255 => view_589_replacement
+#   add_275 => add_275
+#   add_276 => add_276
+#   add_277 => view_623_replacement
+#   add_28 => add_29
+#   add_29 => add_30
+#   add_297 => add_297
+#   add_298 => add_298
+#   add_3 => add_4
+#   add_33 => add_34
+#   add_34 => add_35
+#   add_38 => add_39
+#   add_39 => add_40
+#   add_4 => add_5
+#   add_43 => add_44
+#   add_44 => add_45
+#   add_48 => add_49
+#   add_49 => add_50
+#   add_53 => add_54
+#   add_54 => add_55
+#   add_58 => add_59
+#   add_59 => add_60
+#   add_67 => add_67
+#   add_68 => add_68
+#   add_77 => add_77
+#   add_78 => add_78
+#   add_79 => view_317_replacement
+#   add_8 => add_9
+#   add_9 => add_10
+#   add_99 => add_99
+#   ffn_output => view_21
+#   ffn_output_12 => view_109
+#   ffn_output_15 => view_131
+#   ffn_output_18 => view_153
+#   ffn_output_21 => view_175
+#   ffn_output_24 => view_197
+#   ffn_output_27 => view_219
+#   ffn_output_3 => view_43
+#   ffn_output_30 => view_241
+#   ffn_output_33 => view_263
+#   ffn_output_6 => view_65
+#   ffn_output_9 => view_87
+#   mul_1 => mul_1
+#   mul_10 => mul_10
+#   mul_100 => mul_100
+#   mul_101 => mul_101
+#   mul_102 => mul_102
+#   mul_103 => mul_103
+#   mul_104 => mul_104
+#   mul_105 => mul_105
+#   mul_106 => mul_106
+#   mul_107 => mul_107
+#   mul_108 => mul_108
+#   mul_11 => mul_11
+#   mul_124 => mul_124
+#   mul_125 => mul_125
+#   mul_126 => mul_126
+#   mul_127 => mul_127
+#   mul_128 => mul_128
+#   mul_129 => mul_129
+#   mul_13 => mul_13
+#   mul_130 => mul_130
+#   mul_131 => mul_131
+#   mul_132 => mul_132
+#   mul_14 => mul_14
+#   mul_148 => mul_148
+#   mul_149 => mul_149
+#   mul_15 => mul_15
+#   mul_150 => mul_150
+#   mul_151 => mul_151
+#   mul_152 => mul_152
+#   mul_153 => mul_153
+#   mul_154 => mul_154
+#   mul_155 => mul_155
+#   mul_156 => mul_156
+#   mul_17 => mul_17
+#   mul_172 => mul_172
+#   mul_173 => mul_173
+#   mul_174 => mul_174
+#   mul_175 => mul_175
+#   mul_176 => mul_176
+#   mul_177 => mul_177
+#   mul_178 => mul_178
+#   mul_179 => mul_179
+#   mul_18 => mul_18
+#   mul_180 => mul_180
+#   mul_19 => mul_19
+#   mul_196 => mul_196
+#   mul_197 => mul_197
+#   mul_198 => mul_198
+#   mul_199 => mul_199
+#   mul_2 => mul_2
+#   mul_200 => mul_200
+#   mul_201 => mul_201
+#   mul_202 => mul_202
+#   mul_203 => mul_203
+#   mul_204 => mul_204
+#   mul_21 => mul_21
+#   mul_22 => mul_22
+#   mul_220 => mul_220
+#   mul_221 => mul_221
+#   mul_222 => mul_222
+#   mul_223 => mul_223
+#   mul_224 => mul_224
+#   mul_225 => mul_225
+#   mul_226 => mul_226
+#   mul_227 => mul_227
+#   mul_228 => mul_228
+#   mul_23 => mul_23
+#   mul_244 => mul_244
+#   mul_245 => mul_245
+#   mul_246 => mul_246
+#   mul_247 => mul_247
+#   mul_248 => mul_248
+#   mul_249 => mul_249
+#   mul_25 => mul_25
+#   mul_250 => mul_250
+#   mul_251 => mul_251
+#   mul_252 => mul_252
+#   mul_26 => mul_26
+#   mul_268 => mul_268
+#   mul_269 => mul_269
+#   mul_27 => mul_27
+#   mul_270 => mul_270
+#   mul_271 => mul_271
+#   mul_272 => mul_272
+#   mul_273 => mul_273
+#   mul_274 => mul_274
+#   mul_275 => mul_275
+#   mul_276 => mul_276
+#   mul_29 => mul_29
+#   mul_292 => mul_292
+#   mul_293 => mul_293
+#   mul_294 => mul_294
+#   mul_295 => mul_295
+#   mul_296 => mul_296
+#   mul_297 => mul_297
+#   mul_298 => mul_298
+#   mul_299 => mul_299
+#   mul_3 => mul_3
+#   mul_30 => mul_30
+#   mul_300 => mul_300
+#   mul_31 => mul_31
+#   mul_316 => mul_316
+#   mul_317 => mul_317
+#   mul_318 => mul_318
+#   mul_319 => mul_319
+#   mul_320 => mul_320
+#   mul_321 => mul_321
+#   mul_322 => mul_322
+#   mul_323 => mul_323
+#   mul_324 => mul_324
+#   mul_33 => mul_33
+#   mul_34 => mul_34
+#   mul_340 => mul_340
+#   mul_341 => mul_341
+#   mul_342 => mul_342
+#   mul_343 => mul_343
+#   mul_344 => mul_344
+#   mul_345 => mul_345
+#   mul_346 => mul_346
+#   mul_347 => mul_347
+#   mul_348 => mul_348
+#   mul_35 => mul_35
+#   mul_37 => mul_37
+#   mul_38 => mul_38
+#   mul_39 => mul_39
+#   mul_41 => mul_41
+#   mul_42 => mul_42
+#   mul_43 => mul_43
+#   mul_45 => mul_45
+#   mul_46 => mul_46
+#   mul_47 => mul_47
+#   mul_5 => mul_5
+#   mul_6 => mul_6
+#   mul_7 => mul_7
+#   mul_76 => mul_76
+#   mul_77 => mul_77
+#   mul_78 => mul_78
+#   mul_79 => mul_79
+#   mul_80 => mul_80
+#   mul_81 => mul_81
+#   mul_82 => mul_82
+#   mul_83 => mul_83
+#   mul_84 => mul_84
+#   mul_9 => mul_9
+#   pow_1 => pow_1
+#   pow_10 => pow_10
+#   pow_11 => pow_11
+#   pow_12 => pow_12
+#   pow_15 => pow_15
+#   pow_16 => pow_16
+#   pow_17 => pow_17
+#   pow_18 => pow_18
+#   pow_19 => pow_19
+#   pow_2 => pow_2
+#   pow_20 => pow_20
+#   pow_21 => pow_21
+#   pow_22 => pow_22
+#   pow_23 => pow_23
+#   pow_24 => pow_24
+#   pow_25 => pow_25
+#   pow_26 => pow_26
+#   pow_3 => pow_3
+#   pow_4 => pow_4
+#   pow_5 => pow_5
+#   pow_6 => pow_6
+#   pow_7 => pow_7
+#   pow_8 => pow_8
+#   pow_9 => pow_9
+#   sub_22 => sub_22
+#   sub_29 => sub_29
+#   sub_36 => sub_36
+#   sub_43 => sub_43
+#   sub_50 => sub_50
+#   sub_57 => sub_57
+#   sub_64 => sub_64
+#   sub_71 => sub_71
+#   sub_78 => sub_78
+#   sub_85 => sub_85
+#   sub_92 => sub_92
+#   sub_99 => sub_99
+#   sum_100 => sum_100
+#   sum_115 => sum_115
+#   sum_130 => sum_130
+#   sum_145 => sum_145
+#   sum_160 => sum_160
+#   sum_175 => sum_175
+#   sum_190 => sum_190
+#   sum_25 => sum_25
+#   sum_40 => sum_40
+#   sum_55 => sum_55
+#   sum_70 => sum_70
+#   sum_85 => sum_85
+#   tanh => tanh
+#   tanh_1 => tanh_1
+#   tanh_10 => tanh_10
+#   tanh_11 => tanh_11
+#   tanh_2 => tanh_2
+#   tanh_3 => tanh_3
+#   tanh_4 => tanh_4
+#   tanh_5 => tanh_5
+#   tanh_6 => tanh_6
+#   tanh_7 => tanh_7
+#   tanh_8 => tanh_8
+#   tanh_9 => tanh_9
+#   view_281 => view_281
+#   view_282 => view_282
+#   view_283 => view_283
+#   view_315 => view_315
+#   view_316 => view_316
+#   view_349 => view_349
+#   view_350 => view_350
+#   view_383 => view_383
+#   view_384 => view_384
+#   view_417 => view_417
+#   view_418 => view_418
+#   view_451 => view_451
+#   view_452 => view_452
+#   view_485 => view_485
+#   view_486 => view_486
+#   view_519 => view_519
+#   view_520 => view_520
+#   view_553 => view_553
+#   view_554 => view_554
+#   view_587 => view_587
+#   view_588 => view_588
+#   view_621 => view_621
+#   view_622 => view_622
+#   view_655 => view_655
+#   view_656 => view_656
+# Graph fragment:
+#   %add_68 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_68]
+#   %add_78 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_78]
+#   %add_100 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_100]
+#   %add_122 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_122]
+#   %add_144 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_144]
+#   %add_166 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_166]
+#   %add_254 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_254]
+#   %add_188 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_188]
+#   %add_276 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_276]
+#   %add_210 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_210]
+#   %add_298 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_298]
+#   %add_232 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0" = PlaceHolder[target=add_232]
+#   %sum_25 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_25]
+#   %sum_40 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_40]
+#   %sum_55 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_55]
+#   %sum_70 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_70]
+#   %sum_85 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_85]
+#   %sum_100 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_100]
+#   %sum_115 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_115]
+#   %sum_130 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_130]
+#   %sum_145 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_145]
+#   %add_233_replacement : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=add_233_replacement]
+#   %sum_160 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_160]
+#   %sum_175 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_175]
+#   %sum_190 : Tensor "f32[1, 16384][16384, 1]npu:0" = PlaceHolder[target=sum_190]
+#   %view_281 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_4, [4, 512, 16384]), kwargs = {})
+#   %view_263 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_71, [4, 512, 16384]), kwargs = {})
+#   %mul_45 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_263, 0.5), kwargs = {})
+#   %mul_76 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_281, %mul_45), kwargs = {})
+#   %pow_12 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_263, 3.0), kwargs = {})
+#   %mul_46 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_12, 0.044715), kwargs = {})
+#   %add_59 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_263, %mul_46), kwargs = {})
+#   %mul_47 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_59, 0.7978845608028654), kwargs = {})
+#   %tanh_11 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_47,), kwargs = {})
+#   %add_60 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_11, 1.0), kwargs = {})
+#   %mul_77 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_281, %add_60), kwargs = {})
+#   %mul_78 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_11, %tanh_11), kwargs = {})
+#   %sub_22 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_78), kwargs = {})
+#   %mul_79 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_76, %sub_22), kwargs = {})
+#   %mul_80 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_79, 0.7978845608028654), kwargs = {})
+#   %mul_81 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_80, 0.044715), kwargs = {})
+#   %pow_15 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_263, 2.0), kwargs = {})
+#   %mul_82 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_15, 3.0), kwargs = {})
+#   %mul_83 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_81, %mul_82), kwargs = {})
+#   %add_67 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_80, %mul_83), kwargs = {})
+#   %mul_84 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_77, 0.5), kwargs = {})
+#   %add_68 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_67, %mul_84), kwargs = {})
+#   %view_282 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_68, [2048, 16384]), kwargs = {})
+#   %sum_25 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_282, [0], True), kwargs = {})
+#   %view_283 : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%sum_25, [16384]), kwargs = {})
+#   %view_315 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_16, [4, 512, 16384]), kwargs = {})
+#   %view_241 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_65, [4, 512, 16384]), kwargs = {})
+#   %mul_41 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_241, 0.5), kwargs = {})
+#   %mul_100 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_315, %mul_41), kwargs = {})
+#   %pow_11 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_241, 3.0), kwargs = {})
+#   %mul_42 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_11, 0.044715), kwargs = {})
+#   %add_54 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_241, %mul_42), kwargs = {})
+#   %mul_43 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_54, 0.7978845608028654), kwargs = {})
+#   %tanh_10 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_43,), kwargs = {})
+#   %add_55 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_10, 1.0), kwargs = {})
+#   %mul_101 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_315, %add_55), kwargs = {})
+#   %mul_102 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_10, %tanh_10), kwargs = {})
+#   %sub_29 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_102), kwargs = {})
+#   %mul_103 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_100, %sub_29), kwargs = {})
+#   %mul_104 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_103, 0.7978845608028654), kwargs = {})
+#   %mul_105 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_104, 0.044715), kwargs = {})
+#   %pow_16 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_241, 2.0), kwargs = {})
+#   %mul_106 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_16, 3.0), kwargs = {})
+#   %mul_107 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_105, %mul_106), kwargs = {})
+#   %add_77 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_104, %mul_107), kwargs = {})
+#   %mul_108 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_101, 0.5), kwargs = {})
+#   %add_78 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_77, %mul_108), kwargs = {})
+#   %view_316 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_78, [2048, 16384]), kwargs = {})
+#   %sum_40 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_316, [0], True), kwargs = {})
+#   %add_79_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_283, %sum_40), kwargs = {})
+#   %view_317_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_79_replacement, [16384]), kwargs = {})
+#   %view_349 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_28, [4, 512, 16384]), kwargs = {})
+#   %view_219 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_59, [4, 512, 16384]), kwargs = {})
+#   %mul_37 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_219, 0.5), kwargs = {})
+#   %mul_124 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_349, %mul_37), kwargs = {})
+#   %pow_10 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_219, 3.0), kwargs = {})
+#   %mul_38 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_10, 0.044715), kwargs = {})
+#   %add_49 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_219, %mul_38), kwargs = {})
+#   %mul_39 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_49, 0.7978845608028654), kwargs = {})
+#   %tanh_9 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_39,), kwargs = {})
+#   %add_50 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_9, 1.0), kwargs = {})
+#   %mul_125 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_349, %add_50), kwargs = {})
+#   %mul_126 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_9, %tanh_9), kwargs = {})
+#   %sub_36 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_126), kwargs = {})
+#   %mul_127 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_124, %sub_36), kwargs = {})
+#   %mul_128 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_127, 0.7978845608028654), kwargs = {})
+#   %mul_129 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_128, 0.044715), kwargs = {})
+#   %pow_17 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_219, 2.0), kwargs = {})
+#   %mul_130 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_17, 3.0), kwargs = {})
+#   %mul_131 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_129, %mul_130), kwargs = {})
+#   %add_99 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_128, %mul_131), kwargs = {})
+#   %mul_132 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_125, 0.5), kwargs = {})
+#   %add_100 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_99, %mul_132), kwargs = {})
+#   %view_350 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_100, [2048, 16384]), kwargs = {})
+#   %sum_55 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_350, [0], True), kwargs = {})
+#   %add_101_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_317_replacement, %sum_55), kwargs = {})
+#   %view_351_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_101_replacement, [16384]), kwargs = {})
+#   %view_383 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_40, [4, 512, 16384]), kwargs = {})
+#   %view_197 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_53, [4, 512, 16384]), kwargs = {})
+#   %mul_33 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_197, 0.5), kwargs = {})
+#   %mul_148 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_383, %mul_33), kwargs = {})
+#   %pow_9 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_197, 3.0), kwargs = {})
+#   %mul_34 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_9, 0.044715), kwargs = {})
+#   %add_44 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_197, %mul_34), kwargs = {})
+#   %mul_35 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_44, 0.7978845608028654), kwargs = {})
+#   %tanh_8 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_35,), kwargs = {})
+#   %add_45 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_8, 1.0), kwargs = {})
+#   %mul_149 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_383, %add_45), kwargs = {})
+#   %mul_150 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_8, %tanh_8), kwargs = {})
+#   %sub_43 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_150), kwargs = {})
+#   %mul_151 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_148, %sub_43), kwargs = {})
+#   %mul_152 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_151, 0.7978845608028654), kwargs = {})
+#   %mul_153 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_152, 0.044715), kwargs = {})
+#   %pow_18 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_197, 2.0), kwargs = {})
+#   %mul_154 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_18, 3.0), kwargs = {})
+#   %mul_155 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_153, %mul_154), kwargs = {})
+#   %add_121 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_152, %mul_155), kwargs = {})
+#   %mul_156 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_149, 0.5), kwargs = {})
+#   %add_122 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_121, %mul_156), kwargs = {})
+#   %view_384 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_122, [2048, 16384]), kwargs = {})
+#   %sum_70 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_384, [0], True), kwargs = {})
+#   %add_123_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_351_replacement, %sum_70), kwargs = {})
+#   %view_385_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_123_replacement, [16384]), kwargs = {})
+#   %view_417 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_52, [4, 512, 16384]), kwargs = {})
+#   %view_175 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_47, [4, 512, 16384]), kwargs = {})
+#   %mul_29 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_175, 0.5), kwargs = {})
+#   %mul_172 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_417, %mul_29), kwargs = {})
+#   %pow_8 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_175, 3.0), kwargs = {})
+#   %mul_30 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_8, 0.044715), kwargs = {})
+#   %add_39 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_175, %mul_30), kwargs = {})
+#   %mul_31 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_39, 0.7978845608028654), kwargs = {})
+#   %tanh_7 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_31,), kwargs = {})
+#   %add_40 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_7, 1.0), kwargs = {})
+#   %mul_173 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_417, %add_40), kwargs = {})
+#   %mul_174 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_7, %tanh_7), kwargs = {})
+#   %sub_50 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_174), kwargs = {})
+#   %mul_175 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_172, %sub_50), kwargs = {})
+#   %mul_176 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_175, 0.7978845608028654), kwargs = {})
+#   %mul_177 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_176, 0.044715), kwargs = {})
+#   %pow_19 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_175, 2.0), kwargs = {})
+#   %mul_178 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_19, 3.0), kwargs = {})
+#   %mul_179 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_177, %mul_178), kwargs = {})
+#   %add_143 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_176, %mul_179), kwargs = {})
+#   %mul_180 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_173, 0.5), kwargs = {})
+#   %add_144 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_143, %mul_180), kwargs = {})
+#   %view_418 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_144, [2048, 16384]), kwargs = {})
+#   %sum_85 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_418, [0], True), kwargs = {})
+#   %add_145_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_385_replacement, %sum_85), kwargs = {})
+#   %view_419_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_145_replacement, [16384]), kwargs = {})
+#   %view_451 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_64, [4, 512, 16384]), kwargs = {})
+#   %view_153 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_41, [4, 512, 16384]), kwargs = {})
+#   %mul_25 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_153, 0.5), kwargs = {})
+#   %mul_196 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_451, %mul_25), kwargs = {})
+#   %pow_7 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_153, 3.0), kwargs = {})
+#   %mul_26 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_7, 0.044715), kwargs = {})
+#   %add_34 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_153, %mul_26), kwargs = {})
+#   %mul_27 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_34, 0.7978845608028654), kwargs = {})
+#   %tanh_6 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_27,), kwargs = {})
+#   %add_35 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_6, 1.0), kwargs = {})
+#   %mul_197 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_451, %add_35), kwargs = {})
+#   %mul_198 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_6, %tanh_6), kwargs = {})
+#   %sub_57 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_198), kwargs = {})
+#   %mul_199 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_196, %sub_57), kwargs = {})
+#   %mul_200 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_199, 0.7978845608028654), kwargs = {})
+#   %mul_201 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_200, 0.044715), kwargs = {})
+#   %pow_20 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_153, 2.0), kwargs = {})
+#   %mul_202 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_20, 3.0), kwargs = {})
+#   %mul_203 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_201, %mul_202), kwargs = {})
+#   %add_165 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_200, %mul_203), kwargs = {})
+#   %mul_204 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_197, 0.5), kwargs = {})
+#   %add_166 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_165, %mul_204), kwargs = {})
+#   %view_452 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_166, [2048, 16384]), kwargs = {})
+#   %sum_100 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_452, [0], True), kwargs = {})
+#   %add_167_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_419_replacement, %sum_100), kwargs = {})
+#   %view_453_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_167_replacement, [16384]), kwargs = {})
+#   %view_485 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_76, [4, 512, 16384]), kwargs = {})
+#   %view_131 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_35, [4, 512, 16384]), kwargs = {})
+#   %mul_21 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_131, 0.5), kwargs = {})
+#   %mul_220 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_485, %mul_21), kwargs = {})
+#   %pow_6 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_131, 3.0), kwargs = {})
+#   %mul_22 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_6, 0.044715), kwargs = {})
+#   %add_29 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_131, %mul_22), kwargs = {})
+#   %mul_23 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_29, 0.7978845608028654), kwargs = {})
+#   %tanh_5 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_23,), kwargs = {})
+#   %add_30 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_5, 1.0), kwargs = {})
+#   %mul_221 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_485, %add_30), kwargs = {})
+#   %mul_222 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_5, %tanh_5), kwargs = {})
+#   %sub_64 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_222), kwargs = {})
+#   %mul_223 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_220, %sub_64), kwargs = {})
+#   %mul_224 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_223, 0.7978845608028654), kwargs = {})
+#   %mul_225 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_224, 0.044715), kwargs = {})
+#   %pow_21 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_131, 2.0), kwargs = {})
+#   %mul_226 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_21, 3.0), kwargs = {})
+#   %mul_227 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_225, %mul_226), kwargs = {})
+#   %add_187 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_224, %mul_227), kwargs = {})
+#   %mul_228 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_221, 0.5), kwargs = {})
+#   %add_188 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_187, %mul_228), kwargs = {})
+#   %view_486 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_188, [2048, 16384]), kwargs = {})
+#   %sum_115 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_486, [0], True), kwargs = {})
+#   %add_189_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_453_replacement, %sum_115), kwargs = {})
+#   %view_487_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_189_replacement, [16384]), kwargs = {})
+#   %view_519 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_88, [4, 512, 16384]), kwargs = {})
+#   %view_109 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_29, [4, 512, 16384]), kwargs = {})
+#   %mul_17 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_109, 0.5), kwargs = {})
+#   %mul_244 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_519, %mul_17), kwargs = {})
+#   %pow_5 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_109, 3.0), kwargs = {})
+#   %mul_18 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_5, 0.044715), kwargs = {})
+#   %add_24 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_109, %mul_18), kwargs = {})
+#   %mul_19 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_24, 0.7978845608028654), kwargs = {})
+#   %tanh_4 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_19,), kwargs = {})
+#   %add_25 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_4, 1.0), kwargs = {})
+#   %mul_245 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_519, %add_25), kwargs = {})
+#   %mul_246 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_4, %tanh_4), kwargs = {})
+#   %sub_71 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_246), kwargs = {})
+#   %mul_247 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_244, %sub_71), kwargs = {})
+#   %mul_248 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_247, 0.7978845608028654), kwargs = {})
+#   %mul_249 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_248, 0.044715), kwargs = {})
+#   %pow_22 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_109, 2.0), kwargs = {})
+#   %mul_250 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_22, 3.0), kwargs = {})
+#   %mul_251 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_249, %mul_250), kwargs = {})
+#   %add_209 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_248, %mul_251), kwargs = {})
+#   %mul_252 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_245, 0.5), kwargs = {})
+#   %add_210 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_209, %mul_252), kwargs = {})
+#   %view_520 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_210, [2048, 16384]), kwargs = {})
+#   %sum_130 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_520, [0], True), kwargs = {})
+#   %add_211_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_487_replacement, %sum_130), kwargs = {})
+#   %view_521_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_211_replacement, [16384]), kwargs = {})
+#   %view_553 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_100, [4, 512, 16384]), kwargs = {})
+#   %view_87 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_23, [4, 512, 16384]), kwargs = {})
+#   %mul_13 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_87, 0.5), kwargs = {})
+#   %mul_268 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_553, %mul_13), kwargs = {})
+#   %pow_4 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_87, 3.0), kwargs = {})
+#   %mul_14 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_4, 0.044715), kwargs = {})
+#   %add_19 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_87, %mul_14), kwargs = {})
+#   %mul_15 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_19, 0.7978845608028654), kwargs = {})
+#   %tanh_3 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_15,), kwargs = {})
+#   %add_20 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_3, 1.0), kwargs = {})
+#   %mul_269 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_553, %add_20), kwargs = {})
+#   %mul_270 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_3, %tanh_3), kwargs = {})
+#   %sub_78 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_270), kwargs = {})
+#   %mul_271 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_268, %sub_78), kwargs = {})
+#   %mul_272 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_271, 0.7978845608028654), kwargs = {})
+#   %mul_273 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_272, 0.044715), kwargs = {})
+#   %pow_23 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_87, 2.0), kwargs = {})
+#   %mul_274 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_23, 3.0), kwargs = {})
+#   %mul_275 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_273, %mul_274), kwargs = {})
+#   %add_231 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_272, %mul_275), kwargs = {})
+#   %mul_276 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_269, 0.5), kwargs = {})
+#   %add_232 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_231, %mul_276), kwargs = {})
+#   %view_554 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_232, [2048, 16384]), kwargs = {})
+#   %sum_145 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_554, [0], True), kwargs = {})
+#   %add_233_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_521_replacement, %sum_145), kwargs = {})
+#   %view_555_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_233_replacement, [16384]), kwargs = {})
+#   %view_587 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_112, [4, 512, 16384]), kwargs = {})
+#   %view_65 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_17, [4, 512, 16384]), kwargs = {})
+#   %mul_9 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_65, 0.5), kwargs = {})
+#   %mul_292 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_587, %mul_9), kwargs = {})
+#   %pow_3 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_65, 3.0), kwargs = {})
+#   %mul_10 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_3, 0.044715), kwargs = {})
+#   %add_14 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_65, %mul_10), kwargs = {})
+#   %mul_11 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_14, 0.7978845608028654), kwargs = {})
+#   %tanh_2 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_11,), kwargs = {})
+#   %add_15 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_2, 1.0), kwargs = {})
+#   %mul_293 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_587, %add_15), kwargs = {})
+#   %mul_294 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_2, %tanh_2), kwargs = {})
+#   %sub_85 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_294), kwargs = {})
+#   %mul_295 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_292, %sub_85), kwargs = {})
+#   %mul_296 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_295, 0.7978845608028654), kwargs = {})
+#   %mul_297 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_296, 0.044715), kwargs = {})
+#   %pow_24 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_65, 2.0), kwargs = {})
+#   %mul_298 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_24, 3.0), kwargs = {})
+#   %mul_299 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_297, %mul_298), kwargs = {})
+#   %add_253 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_296, %mul_299), kwargs = {})
+#   %mul_300 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_293, 0.5), kwargs = {})
+#   %add_254 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_253, %mul_300), kwargs = {})
+#   %view_588 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_254, [2048, 16384]), kwargs = {})
+#   %sum_160 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_588, [0], True), kwargs = {})
+#   %add_255_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_555_replacement, %sum_160), kwargs = {})
+#   %view_589_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_255_replacement, [16384]), kwargs = {})
+#   %view_621 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_124, [4, 512, 16384]), kwargs = {})
+#   %view_43 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_11, [4, 512, 16384]), kwargs = {})
+#   %mul_5 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_43, 0.5), kwargs = {})
+#   %mul_316 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_621, %mul_5), kwargs = {})
+#   %pow_2 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_43, 3.0), kwargs = {})
+#   %mul_6 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_2, 0.044715), kwargs = {})
+#   %add_9 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_43, %mul_6), kwargs = {})
+#   %mul_7 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_9, 0.7978845608028654), kwargs = {})
+#   %tanh_1 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_7,), kwargs = {})
+#   %add_10 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh_1, 1.0), kwargs = {})
+#   %mul_317 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_621, %add_10), kwargs = {})
+#   %mul_318 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh_1, %tanh_1), kwargs = {})
+#   %sub_92 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_318), kwargs = {})
+#   %mul_319 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_316, %sub_92), kwargs = {})
+#   %mul_320 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_319, 0.7978845608028654), kwargs = {})
+#   %mul_321 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_320, 0.044715), kwargs = {})
+#   %pow_25 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_43, 2.0), kwargs = {})
+#   %mul_322 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_25, 3.0), kwargs = {})
+#   %mul_323 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_321, %mul_322), kwargs = {})
+#   %add_275 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_320, %mul_323), kwargs = {})
+#   %mul_324 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_317, 0.5), kwargs = {})
+#   %add_276 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_275, %mul_324), kwargs = {})
+#   %view_622 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_276, [2048, 16384]), kwargs = {})
+#   %sum_175 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_622, [0], True), kwargs = {})
+#   %add_277_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_589_replacement, %sum_175), kwargs = {})
+#   %view_623_replacement : Tensor "f32[16384][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_277_replacement, [16384]), kwargs = {})
+#   %view_655 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%mm_136, [4, 512, 16384]), kwargs = {})
+#   %view_21 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=4] = call_function[target=torch.ops.aten.reshape.default](args = (%addmm_5, [4, 512, 16384]), kwargs = {})
+#   %mul_1 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_21, 0.5), kwargs = {})
+#   %mul_340 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_655, %mul_1), kwargs = {})
+#   %pow_1 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_21, 3.0), kwargs = {})
+#   %mul_2 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%pow_1, 0.044715), kwargs = {})
+#   %add_4 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_21, %mul_2), kwargs = {})
+#   %mul_3 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%add_4, 0.7978845608028654), kwargs = {})
+#   %tanh : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.tanh.default](args = (%mul_3,), kwargs = {})
+#   %add_5 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%tanh, 1.0), kwargs = {})
+#   %mul_341 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%view_655, %add_5), kwargs = {})
+#   %mul_342 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%tanh, %tanh), kwargs = {})
+#   %sub_99 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (1, %mul_342), kwargs = {})
+#   %mul_343 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_340, %sub_99), kwargs = {})
+#   %mul_344 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_343, 0.7978845608028654), kwargs = {})
+#   %mul_345 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_344, 0.044715), kwargs = {})
+#   %pow_26 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.pow.Tensor_Scalar](args = (%view_21, 2.0), kwargs = {})
+#   %mul_346 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Scalar](args = (%pow_26, 3.0), kwargs = {})
+#   %mul_347 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_345, %mul_346), kwargs = {})
+#   %add_297 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_344, %mul_347), kwargs = {})
+#   %mul_348 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_341, 0.5), kwargs = {})
+#   %add_298 : Tensor "f32[4, 512, 16384][8388608, 16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%add_297, %mul_348), kwargs = {})
+#   %view_656 : Tensor "f32[2048, 16384][16384, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%add_298, [2048, 16384]), kwargs = {})
+#   %sum_190 : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_656, [0], True), kwargs = {})
+#   %add_299_replacement : Tensor "f32[1, 16384][16384, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_623_replacement, %sum_190), kwargs = {})
+#   return %sum_25,%sum_40,%sum_55,%sum_70,%sum_85,%sum_100,%sum_160,%sum_115,%sum_175,%sum_130,%sum_190,%sum_145,%add_233_replacement,%add_299_replacement
+# SchedulerNodes: [SchedulerNode(name='op27'), SchedulerNode(name='op71'), SchedulerNode(name='op121'), SchedulerNode(name='op171'), SchedulerNode(name='op221'), SchedulerNode(name='op271'), SchedulerNode(name='op481'), SchedulerNode(name='op321'), SchedulerNode(name='op531'), SchedulerNode(name='op371'), SchedulerNode(name='op584'), SchedulerNode(name='op424'), SchedulerNode(name='op425'), SchedulerNode(name='op585')]
+
+triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_17 = async_compile.triton('triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_17', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.persistent_reduction(
+    size_hints={'x0': 16384, 'r1': 2048},
+    reduction_hint=ReductionHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'in_ptr4': '*fp32', 'in_ptr5': '*fp32', 'in_ptr6': '*fp32', 'in_ptr7': '*fp32', 'in_ptr8': '*fp32', 'in_ptr9': '*fp32', 'in_ptr10': '*fp32', 'in_ptr11': '*fp32', 'x0_numel': 'i32', 'r1_numel': 'i32', 'X0BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_17', 'mutated_arg_names': ['in_out_ptr0'], 'backend_hash': '<redacted>', 'split_axis': [0], 'tiling_axis': [0, 1], 'no_loop_axis': [], 'axis_names': ['x0', 'r1'], 'axis_static_values': (('x0', 16384), ('r1', 2048)), 'low_dims': {0}, 'numof_reduction_axis': 1, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('X0BLOCK',), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()}
+)
+@triton.jit
+def triton_per_fused_add_mul_pow_sum_tanh_tanh_bac_17(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, in_ptr4, in_ptr5, in_ptr6, in_ptr7, in_ptr8, in_ptr9, in_ptr10, in_ptr11, x0_numel, r1_numel, X0BLOCK, X0BLOCK_SUB : tl.constexpr):
+    R1BLOCK_SUB: tl.constexpr = 2048
+    x0_offset = tl.program_id(0) * X0BLOCK
+    base_x0= tl.arange(0, X0BLOCK_SUB)
+    loops_x0 = (X0BLOCK + X0BLOCK_SUB - 1) // X0BLOCK_SUB
+    base_r1= tl.arange(0, R1BLOCK_SUB)
+    loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB
+    for loop_x0 in range(loops_x0):
+        x0 = x0_offset + (loop_x0 * X0BLOCK_SUB) + base_x0[None,:]
+        x0_mask = x0 < min(X0BLOCK+x0_offset, x0_numel)
+        r1 = base_r1[:,None]
+        r1_mask = True
+        tmp0 = tl.load(in_ptr0 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp4 = tl.load(in_ptr1 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp8 = tl.load(in_ptr2 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp12 = tl.load(in_ptr3 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp16 = tl.load(in_ptr4 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp20 = tl.load(in_ptr5 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp24 = tl.load(in_ptr6 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp28 = tl.load(in_ptr7 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp32 = tl.load(in_ptr8 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp36 = tl.load(in_ptr9 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp40 = tl.load(in_ptr10 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp44 = tl.load(in_ptr11 + (x0 + 16384*r1), x0_mask, other=0.0)
+        tmp2 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp0, 0)
+        tmp3 = tl.sum(tmp2, 0).reshape(1, X0BLOCK_SUB)
+        tmp6 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp4, 0)
+        tmp7 = tl.sum(tmp6, 0).reshape(1, X0BLOCK_SUB)
+        tmp10 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp8, 0)
+        tmp11 = tl.sum(tmp10, 0).reshape(1, X0BLOCK_SUB)
+        tmp14 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp12, 0)
+        tmp15 = tl.sum(tmp14, 0).reshape(1, X0BLOCK_SUB)
+        tmp18 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp16, 0)
+        tmp19 = tl.sum(tmp18, 0).reshape(1, X0BLOCK_SUB)
+        tmp22 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp20, 0)
+        tmp23 = tl.sum(tmp22, 0).reshape(1, X0BLOCK_SUB)
+        tmp26 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp24, 0)
+        tmp27 = tl.sum(tmp26, 0).reshape(1, X0BLOCK_SUB)
+        tmp30 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp28, 0)
+        tmp31 = tl.sum(tmp30, 0).reshape(1, X0BLOCK_SUB)
+        tmp34 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp32, 0)
+        tmp35 = tl.sum(tmp34, 0).reshape(1, X0BLOCK_SUB)
+        tmp38 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp36, 0)
+        tmp39 = tl.sum(tmp38, 0).reshape(1, X0BLOCK_SUB)
+        tmp42 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp40, 0)
+        tmp43 = tl.sum(tmp42, 0).reshape(1, X0BLOCK_SUB)
+        tmp46 = tl.where(tl.broadcast_to((x0_mask.reshape([1, X0BLOCK_SUB])), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp44, 0)
+        tmp47 = tl.sum(tmp46, 0).reshape(1, X0BLOCK_SUB)
+        tmp48 = tmp3 + tmp7
+        tmp49 = tmp48 + tmp11
+        tmp50 = tmp49 + tmp15
+        tmp51 = tmp50 + tmp19
+        tmp52 = tmp51 + tmp23
+        tmp53 = tmp52 + tmp31
+        tmp54 = tmp53 + tmp39
+        tmp55 = tmp54 + tmp47
+        tmp56 = tmp55 + tmp27
+        tmp57 = tmp56 + tmp35
+        tmp58 = tmp57 + tmp43
+        tl.store(in_out_ptr0 + (x0), tmp58, x0_mask)
+''', device_str='npu')
+
+
+# Source: AlbertForMaskedLM_Train/NPU_g01_output_code.py:3967
+# Topologically Sorted Source Nodes: [sum_32, view_305, sum_47, , add_86, sum_62, add_108, sum_77, add_130, sum_92, add_152, sum_107, add_174, sum_122, add_196, sum_137, add_218, sum_152, add_240, sum_167, add_262, sum_182, add_284, view_668, permute_524, view_675, view_678, sum_197], Original ATen: [aten.sum, aten.view, aten.matmul_backward, aten.permute, aten.clone]
+# Source node to ATen node mapping:
+#    => add_108_replacement, add_130_replacement, add_152_replacement, add_174_replacement, add_196_replacement, add_218_replacement, add_240_replacement, add_262_replacement, add_284_replacement, add_306_replacement, add_86_replacement
+#   add_108 => view_373_replacement
+#   add_130 => view_407_replacement
+#   add_152 => view_441_replacement
+#   add_174 => view_475_replacement
+#   add_196 => view_509_replacement
+#   add_218 => view_543_replacement
+#   add_240 => view_577_replacement
+#   add_262 => view_611_replacement
+#   add_284 => view_645_replacement
+#   add_86 => view_339_replacement
+#   permute_524 => permute_524
+#   sum_107 => sum_107
+#   sum_122 => sum_122
+#   sum_137 => sum_137
+#   sum_152 => sum_152
+#   sum_167 => sum_167
+#   sum_182 => sum_182
+#   sum_197 => sum_197
+#   sum_32 => sum_32
+#   sum_47 => sum_47
+#   sum_62 => sum_62
+#   sum_77 => sum_77
+#   sum_92 => sum_92
+#   view_305 => view_305
+#   view_668 => view_668
+#   view_675 => clone_166
+#   view_678 => view_678
+# Graph fragment:
+#   %bmm_69 : Tensor "f32[256, 512, 64][32768, 64, 1]npu:0" = PlaceHolder[target=bmm_69]
+#   %view_304 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_304]
+#   %view_338 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_338]
+#   %view_372 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_372]
+#   %view_406 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_406]
+#   %view_440 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_440]
+#   %view_474 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_474]
+#   %view_610 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_610]
+#   %view_508 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_508]
+#   %view_644 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_644]
+#   %view_542 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_542]
+#   %view_678 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_678]
+#   %view_576 : Tensor "f32[2048, 4096][4096, 1]npu:0" = PlaceHolder[target=view_576]
+#   %sum_32 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_32]
+#   %sum_47 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_47]
+#   %sum_62 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_62]
+#   %sum_77 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_77]
+#   %sum_92 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_92]
+#   %sum_107 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_107]
+#   %sum_122 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_122]
+#   %sum_137 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_137]
+#   %sum_152 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_152]
+#   %add_240_replacement : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=add_240_replacement]
+#   %sum_167 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_167]
+#   %sum_182 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_182]
+#   %sum_197 : Tensor "f32[1, 4096][4096, 1]npu:0" = PlaceHolder[target=sum_197]
+#   %sum_32 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_304, [0], True), kwargs = {})
+#   %view_305 : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%sum_32, [4096]), kwargs = {})
+#   %sum_47 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_338, [0], True), kwargs = {})
+#   %add_86_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_305, %sum_47), kwargs = {})
+#   %view_339_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_86_replacement, [4096]), kwargs = {})
+#   %sum_62 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_372, [0], True), kwargs = {})
+#   %add_108_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_339_replacement, %sum_62), kwargs = {})
+#   %view_373_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_108_replacement, [4096]), kwargs = {})
+#   %sum_77 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_406, [0], True), kwargs = {})
+#   %add_130_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_373_replacement, %sum_77), kwargs = {})
+#   %view_407_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_130_replacement, [4096]), kwargs = {})
+#   %sum_92 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_440, [0], True), kwargs = {})
+#   %add_152_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_407_replacement, %sum_92), kwargs = {})
+#   %view_441_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_152_replacement, [4096]), kwargs = {})
+#   %sum_107 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_474, [0], True), kwargs = {})
+#   %add_174_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_441_replacement, %sum_107), kwargs = {})
+#   %view_475_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_174_replacement, [4096]), kwargs = {})
+#   %sum_122 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_508, [0], True), kwargs = {})
+#   %add_196_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_475_replacement, %sum_122), kwargs = {})
+#   %view_509_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_196_replacement, [4096]), kwargs = {})
+#   %sum_137 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_542, [0], True), kwargs = {})
+#   %add_218_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_509_replacement, %sum_137), kwargs = {})
+#   %view_543_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_218_replacement, [4096]), kwargs = {})
+#   %sum_152 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_576, [0], True), kwargs = {})
+#   %add_240_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_543_replacement, %sum_152), kwargs = {})
+#   %view_577_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_240_replacement, [4096]), kwargs = {})
+#   %sum_167 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_610, [0], True), kwargs = {})
+#   %add_262_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_577_replacement, %sum_167), kwargs = {})
+#   %view_611_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_262_replacement, [4096]), kwargs = {})
+#   %sum_182 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_644, [0], True), kwargs = {})
+#   %add_284_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_611_replacement, %sum_182), kwargs = {})
+#   %view_645_replacement : Tensor "f32[4096][1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%add_284_replacement, [4096]), kwargs = {})
+#   %view_668 : Tensor "f32[4, 64, 512, 64][2097152, 32768, 64, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%bmm_69, [4, 64, 512, 64]), kwargs = {})
+#   %permute_524 : Tensor "f32[4, 512, 64, 64][2097152, 64, 32768, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.permute.default](args = (%view_668, [0, 2, 1, 3]), kwargs = {})
+#   %clone_166 : Tensor "f32[4, 512, 64, 64][2097152, 4096, 64, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.clone.default](args = (%permute_524,), kwargs = {memory_format: torch.contiguous_format})
+#   %view_678 : Tensor "f32[2048, 4096][4096, 1]npu:0"[num_users=3] = call_function[target=torch.ops.aten.reshape.default](args = (%clone_166, [2048, 4096]), kwargs = {})
+#   %sum_197 : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.sum.dim_IntList](args = (%view_678, [0], True), kwargs = {})
+#   %add_306_replacement : Tensor "f32[1, 4096][4096, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%view_645_replacement, %sum_197), kwargs = {})
+#   return %view_678,%sum_32,%sum_47,%sum_62,%sum_77,%sum_92,%sum_107,%sum_167,%sum_122,%sum_182,%sum_137,%sum_197,%sum_152,%add_240_replacement,%add_306_replacement
+# SchedulerNodes: [SchedulerNode(name='op611'), SchedulerNode(name='op50'), SchedulerNode(name='op96'), SchedulerNode(name='op146'), SchedulerNode(name='op196'), SchedulerNode(name='op246'), SchedulerNode(name='op296'), SchedulerNode(name='op506'), SchedulerNode(name='op346'), SchedulerNode(name='op556'), SchedulerNode(name='op396'), SchedulerNode(name='op613'), SchedulerNode(name='op453'), SchedulerNode(name='op454'), SchedulerNode(name='op614')]
+
+triton_per_fused_clone_matmul_backward_permute_20 = async_compile.triton('triton_per_fused_clone_matmul_backward_permute_20', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.persistent_reduction(
+    size_hints={'x4': 64, 'x5': 64, 'r2': 4, 'r3': 512},
+    reduction_hint=ReductionHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'in_ptr4': '*fp32', 'in_ptr5': '*fp32', 'in_ptr6': '*fp32', 'in_ptr7': '*fp32', 'in_ptr8': '*fp32', 'in_ptr9': '*fp32', 'in_ptr10': '*fp32', 'in_ptr11': '*fp32', 'out_ptr0': '*fp32', 'x4_numel': 'i32', 'x5_numel': 'i32', 'r2_numel': 'i32', 'r3_numel': 'i32', 'X4BLOCK': 'i32', 'X5BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_per_fused_clone_matmul_backward_permute_20', 'mutated_arg_names': ['in_out_ptr0'], 'backend_hash': '<redacted>', 'split_axis': [0, 1], 'tiling_axis': [1, 2, 3], 'no_loop_axis': [], 'axis_names': ['x4', 'x5', 'r2', 'r3'], 'axis_static_values': (('x4', 64), ('x5', 64), ('r2', 4), ('r3', 512)), 'low_dims': {1}, 'numof_reduction_axis': 2, 'split_axis_dtype': torch.float32, 'dual_reduction': True, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'runtime_block_arg_names': ('X4BLOCK', 'X5BLOCK'), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()}
+)
+@triton.jit
+def triton_per_fused_clone_matmul_backward_permute_20(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, in_ptr4, in_ptr5, in_ptr6, in_ptr7, in_ptr8, in_ptr9, in_ptr10, in_ptr11, out_ptr0, x4_numel, x5_numel, r2_numel, r3_numel, X4BLOCK, X5BLOCK, X5BLOCK_SUB : tl.constexpr):
+    R2BLOCK_SUB: tl.constexpr = 4
+    R3BLOCK_SUB: tl.constexpr = 512
+    x4_offset = tl.program_id(0) * X4BLOCK
+    x5_offset = tl.program_id(1) * X5BLOCK
+    base_x5= tl.arange(0, X5BLOCK_SUB)
+    loops_x5 = (X5BLOCK + X5BLOCK_SUB - 1) // X5BLOCK_SUB
+    base_r2= tl.arange(0, R2BLOCK_SUB)
+    loops_r2 = (r2_numel + R2BLOCK_SUB - 1) // R2BLOCK_SUB
+    base_r3= tl.arange(0, R3BLOCK_SUB)
+    loops_r3 = (r3_numel + R3BLOCK_SUB - 1) // R3BLOCK_SUB
+    for x4 in range(x4_offset, min(x4_offset + X4BLOCK, x4_numel)):
+        for loop_x5 in range(loops_x5):
+            x5 = x5_offset + (loop_x5 * X5BLOCK_SUB) + base_x5[None,None,:]
+            x5_mask = x5 < min(X5BLOCK+x5_offset, x5_numel)
+            for loop_r2 in range(loops_r2):
+                r2 = base_r2[:,None,None]
+                r2_mask = True
+                r3 = base_r3[None,:,None]
+                r3_mask = True
+                tmp0 = tl.load(in_ptr0 + (x5 + 64*r3 + 32768*x4 + 2097152*r2), x5_mask, other=0.0)
+                tmp1 = tl.load(in_ptr1 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp6 = tl.load(in_ptr2 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp11 = tl.load(in_ptr3 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp16 = tl.load(in_ptr4 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp21 = tl.load(in_ptr5 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp26 = tl.load(in_ptr6 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp31 = tl.load(in_ptr7 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp36 = tl.load(in_ptr8 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp41 = tl.load(in_ptr9 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp46 = tl.load(in_ptr10 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp55 = tl.load(in_ptr11 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), x5_mask, other=0.0)
+                tmp2 = tl.reshape(tmp1.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp4 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp2, 0)
+                tmp5 = tl.sum(tmp4, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp7 = tl.reshape(tmp6.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp9 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp7, 0)
+                tmp10 = tl.sum(tmp9, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp12 = tl.reshape(tmp11.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp14 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp12, 0)
+                tmp15 = tl.sum(tmp14, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp17 = tl.reshape(tmp16.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp19 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp17, 0)
+                tmp20 = tl.sum(tmp19, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp22 = tl.reshape(tmp21.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp24 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp22, 0)
+                tmp25 = tl.sum(tmp24, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp27 = tl.reshape(tmp26.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp29 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp27, 0)
+                tmp30 = tl.sum(tmp29, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp32 = tl.reshape(tmp31.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp34 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp32, 0)
+                tmp35 = tl.sum(tmp34, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp37 = tl.reshape(tmp36.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp39 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp37, 0)
+                tmp40 = tl.sum(tmp39, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp42 = tl.reshape(tmp41.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp44 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp42, 0)
+                tmp45 = tl.sum(tmp44, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp47 = tl.reshape(tmp46.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp49 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp47, 0)
+                tmp50 = tl.sum(tmp49, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp51 = tl.reshape(tmp0.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp53 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp51, 0)
+                tmp54 = tl.sum(tmp53, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp56 = tl.reshape(tmp55.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
+                tmp58 = tl.where(tl.reshape((tl.broadcast_to((x5_mask.reshape([1, 1, X5BLOCK_SUB])), [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])).permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB]), tmp56, 0)
+                tmp59 = tl.sum(tmp58, 1).reshape(1, 1, X5BLOCK_SUB)
+                tmp60 = tmp5 + tmp10
+                tmp61 = tmp60 + tmp15
+                tmp62 = tmp61 + tmp20
+                tmp63 = tmp62 + tmp25
+                tmp64 = tmp63 + tmp30
+                tmp65 = tmp64 + tmp40
+                tmp66 = tmp65 + tmp50
+                tmp67 = tmp66 + tmp59
+                tmp68 = tmp67 + tmp35
+                tmp69 = tmp68 + tmp45
+                tmp70 = tmp69 + tmp54
+                tl.store(out_ptr0 + (x5 + 64*x4 + 4096*r3 + 2097152*r2), tmp0, x5_mask)
+                tl.store(in_out_ptr0 + (x5 + 64*x4), tmp70, x5_mask)
+''', device_str='npu')

@@ -1,0 +1,1409 @@
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:1125
+# Topologically Sorted Source Nodes: [reshape, batch_norm, reshape_1, batch_norm_1, reshape_2, batch_norm_2, mul, view, weight, input_1, input_2, mul_1, view_1, weight_1, input_3, input_4, mul_2, view_2, weight_2, input_5, input_6], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.mul, aten.convolution, aten.silu]
+# Source node to ATen node mapping:
+#   batch_norm => add, mul_1, mul_2, rsqrt, sub, unsqueeze, var_mean
+#   batch_norm_1 => add_2, mul_4, mul_5, rsqrt_1, sub_1, unsqueeze_1, var_mean_1
+#   batch_norm_2 => add_4, mul_7, mul_8, rsqrt_2, sub_2, unsqueeze_2, var_mean_2
+#   input_1 => convolution
+#   input_2 => add_1, div, exp, neg
+#   input_3 => convolution_1
+#   input_4 => add_3, div_1, exp_1, neg_1
+#   input_5 => convolution_2
+#   input_6 => add_5, div_2, exp_2, neg_2
+#   mul => mul
+#   mul_1 => mul_3
+#   mul_2 => mul_6
+#   reshape => view
+#   reshape_1 => view_3
+#   reshape_2 => view_6
+#   view => view_1
+#   view_1 => view_4
+#   view_2 => view_7
+#   weight => view_2
+#   weight_1 => view_5
+#   weight_2 => view_8
+# Graph fragment:
+#   %buf182 : Tensor "f32[128, 64, 144, 144][1327104, 1, 9216, 64]cuda:0" = PlaceHolder[target=buf182]
+#   %arg9_1 : Tensor "f32[64][1]cuda:0" = PlaceHolder[target=arg9_1]
+#   %view : Tensor "f32[1, 16, 27][432, 27, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg0_1, [1, 16, -1]), kwargs = {})
+#   %var_mean : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_3 : Tensor "f32[1, 32, 144][4608, 144, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg4_1, [1, 32, -1]), kwargs = {})
+#   %var_mean_1 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_3, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_6 : Tensor "f32[1, 64, 288][18432, 288, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg7_1, [1, 64, -1]), kwargs = {})
+#   %var_mean_2 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_6, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %sub : Tensor "f32[1, 16, 27][432, 27, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view, %getitem_1), kwargs = {})
+#   %add : Tensor "f32[1, 16, 1][16, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem, 1e-05), kwargs = {})
+#   %rsqrt : Tensor "f32[1, 16, 1][16, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add,), kwargs = {})
+#   %mul_1 : Tensor "f32[1, 16, 27][432, 27, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub, %rsqrt), kwargs = {})
+#   %mul : Tensor "f32[16, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg1_1, 0.34412564994580647), kwargs = {})
+#   %view_1 : Tensor "f32[16][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul, [-1]), kwargs = {})
+#   %unsqueeze : Tensor "f32[16, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_1, -1), kwargs = {})
+#   %mul_2 : Tensor "f32[1, 16, 27][432, 27, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_1, %unsqueeze), kwargs = {})
+#   %view_2 : Tensor "f32[16, 3, 3, 3][27, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_2, [16, 3, 3, 3]), kwargs = {})
+#   %convolution : Tensor "f32[128, 16, 144, 144][331776, 20736, 144, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%arg3_1, %view_2, %arg2_1, [2, 2], [1, 1], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg : Tensor "f32[128, 16, 144, 144][331776, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution,), kwargs = {})
+#   %exp : Tensor "f32[128, 16, 144, 144][331776, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg,), kwargs = {})
+#   %add_1 : Tensor "f32[128, 16, 144, 144][331776, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp, 1), kwargs = {})
+#   %div : Tensor "f32[128, 16, 144, 144][331776, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution, %add_1), kwargs = {})
+#   %sub_1 : Tensor "f32[1, 32, 144][4608, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_3, %getitem_3), kwargs = {})
+#   %add_2 : Tensor "f32[1, 32, 1][32, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_2, 1e-05), kwargs = {})
+#   %rsqrt_1 : Tensor "f32[1, 32, 1][32, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_2,), kwargs = {})
+#   %mul_4 : Tensor "f32[1, 32, 144][4608, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_1, %rsqrt_1), kwargs = {})
+#   %mul_3 : Tensor "f32[32, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg5_1, 0.1490107774734497), kwargs = {})
+#   %view_4 : Tensor "f32[32][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_3, [-1]), kwargs = {})
+#   %unsqueeze_1 : Tensor "f32[32, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_4, -1), kwargs = {})
+#   %mul_5 : Tensor "f32[1, 32, 144][4608, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_4, %unsqueeze_1), kwargs = {})
+#   %view_5 : Tensor "f32[32, 16, 3, 3][144, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_5, [32, 16, 3, 3]), kwargs = {})
+#   %convolution_1 : Tensor "f32[128, 32, 144, 144][663552, 20736, 144, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div, %view_5, %arg6_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_1 : Tensor "f32[128, 32, 144, 144][663552, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_1,), kwargs = {})
+#   %exp_1 : Tensor "f32[128, 32, 144, 144][663552, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_1,), kwargs = {})
+#   %add_3 : Tensor "f32[128, 32, 144, 144][663552, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_1, 1), kwargs = {})
+#   %div_1 : Tensor "f32[128, 32, 144, 144][663552, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_1, %add_3), kwargs = {})
+#   %sub_2 : Tensor "f32[1, 64, 288][18432, 288, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_6, %getitem_5), kwargs = {})
+#   %add_4 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_4, 1e-05), kwargs = {})
+#   %rsqrt_2 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_4,), kwargs = {})
+#   %mul_7 : Tensor "f32[1, 64, 288][18432, 288, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_2, %rsqrt_2), kwargs = {})
+#   %mul_6 : Tensor "f32[64, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg8_1, 0.10536653122135592), kwargs = {})
+#   %view_7 : Tensor "f32[64][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_6, [-1]), kwargs = {})
+#   %unsqueeze_2 : Tensor "f32[64, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_7, -1), kwargs = {})
+#   %mul_8 : Tensor "f32[1, 64, 288][18432, 288, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_7, %unsqueeze_2), kwargs = {})
+#   %view_8 : Tensor "f32[64, 32, 3, 3][288, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_8, [64, 32, 3, 3]), kwargs = {})
+#   %convolution_2 : Tensor "f32[128, 64, 144, 144][1327104, 20736, 144, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_1, %view_8, %arg9_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_2 : Tensor "f32[128, 64, 144, 144][1327104, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_2,), kwargs = {})
+#   %exp_2 : Tensor "f32[128, 64, 144, 144][1327104, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_2,), kwargs = {})
+#   %add_5 : Tensor "f32[128, 64, 144, 144][1327104, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_2, 1), kwargs = {})
+#   %div_2 : Tensor "f32[128, 64, 144, 144][1327104, 20736, 144, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_2, %add_5), kwargs = {})
+#   return %div_2
+triton_poi_fused__native_batch_norm_legit_convolution_mul_silu_view_10 = async_compile.triton('triton_poi_fused__native_batch_norm_legit_convolution_mul_silu_view_10', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 268435456}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused__native_batch_norm_legit_convolution_mul_silu_view_10', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 2, 'num_store': 1, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 2038432000}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__native_batch_norm_legit_convolution_mul_silu_view_10(in_out_ptr0, in_ptr0, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 169869312
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x2 = xindex
+    x0 = (xindex % 64)
+    tmp0 = tl.load(in_out_ptr0 + (x2), None)
+    tmp1 = tl.load(in_ptr0 + (x0), None, eviction_policy='evict_last')
+    tmp2 = tmp0 + tmp1
+    tmp3 = -tmp2
+    tmp4 = libdevice.exp(tmp3)
+    tmp5 = tl.full([1], 1.0, tl.float32)
+    tmp6 = tmp4 + tmp5
+    tmp7 = (tmp2 / tmp6)
+    tl.store(in_out_ptr0 + (x2), tmp7, None)
+''', device_str='cuda')
+
+
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:2039
+# Topologically Sorted Source Nodes: [reshape_4, batch_norm_4, reshape_5, batch_norm_5, reshape_6, batch_norm_6, reshape_7, batch_norm_7, reshape_8, batch_norm_8, mul_6, view_5, weight_5, out_1, silu_4, mul_7, view_6, weight_6, out_2, silu_5, mul_8, view_7, weight_7, out_3, silu_6, mul_9, view_8, weight_8, out_4, x_se, x_se_1, x_se_2, x_se_3, sigmoid, mul_10, out_5, mul_12, mul_5, view_4, weight_4, shortcut, out_6, silu_7, out_7], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.mul, aten.convolution, aten.silu, aten.mean, aten.relu, aten.sigmoid, aten.add]
+# Source node to ATen node mapping:
+#   batch_norm_4 => add_8, mul_14, mul_15, rsqrt_4, sub_4, unsqueeze_4, var_mean_4
+#   batch_norm_5 => add_9, mul_17, mul_18, rsqrt_5, sub_5, unsqueeze_5, var_mean_5
+#   batch_norm_6 => add_11, mul_20, mul_21, rsqrt_6, sub_6, unsqueeze_6, var_mean_6
+#   batch_norm_7 => add_13, mul_23, mul_24, rsqrt_7, sub_7, unsqueeze_7, var_mean_7
+#   batch_norm_8 => add_15, mul_26, mul_27, rsqrt_8, sub_8, unsqueeze_8, var_mean_8
+#   mul_10 => mul_28
+#   mul_12 => mul_30
+#   mul_5 => mul_13
+#   mul_6 => mul_16
+#   mul_7 => mul_19
+#   mul_8 => mul_22
+#   mul_9 => mul_25
+#   out_1 => convolution_5
+#   out_2 => convolution_6
+#   out_3 => convolution_7
+#   out_4 => convolution_8
+#   out_5 => mul_29
+#   out_6 => add_16
+#   out_7 => mul_31
+#   reshape_4 => view_12
+#   reshape_5 => view_15
+#   reshape_6 => view_18
+#   reshape_7 => view_21
+#   reshape_8 => view_24
+#   shortcut => convolution_4
+#   sigmoid => sigmoid
+#   silu_4 => add_10, div_4, exp_4, neg_4
+#   silu_5 => add_12, div_5, exp_5, neg_5
+#   silu_6 => add_14, div_6, exp_6, neg_6
+#   silu_7 => add_17, div_7, exp_7, neg_7
+#   view_4 => view_13
+#   view_5 => view_16
+#   view_6 => view_19
+#   view_7 => view_22
+#   view_8 => view_25
+#   weight_4 => view_14
+#   weight_5 => view_17
+#   weight_6 => view_20
+#   weight_7 => view_23
+#   weight_8 => view_26
+#   x_se => mean
+#   x_se_1 => convolution_9
+#   x_se_2 => relu
+#   x_se_3 => convolution_10
+# Graph fragment:
+#   %buf200 : Tensor "f32[128, 256, 72, 72][1327104, 1, 18432, 256]cuda:0" = PlaceHolder[target=buf200]
+#   %arg27_1 : Tensor "f32[256][1]cuda:0" = PlaceHolder[target=arg27_1]
+#   %buf205 : Tensor "f32[128, 256, 1, 1][256, 1, 1, 1]cuda:0" = PlaceHolder[target=buf205]
+#   %arg31_1 : Tensor "f32[256][1]cuda:0" = PlaceHolder[target=arg31_1]
+#   %buf207 : Tensor "f32[128, 256, 72, 72][1327104, 1, 18432, 256]cuda:0" = PlaceHolder[target=buf207]
+#   %arg15_1 : Tensor "f32[256][1]cuda:0" = PlaceHolder[target=arg15_1]
+#   %add_16 : Tensor "f32[128, 256, 72, 72][1327104, 1, 18432, 256]cuda:0" = PlaceHolder[target=add_16]
+#   %view_12 : Tensor "f32[1, 256, 128][32768, 128, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg13_1, [1, 256, -1]), kwargs = {})
+#   %var_mean_4 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_12, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_15 : Tensor "f32[1, 64, 128][8192, 128, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg16_1, [1, 64, -1]), kwargs = {})
+#   %var_mean_5 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_15, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_18 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg19_1, [1, 64, -1]), kwargs = {})
+#   %var_mean_6 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_18, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_21 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg22_1, [1, 64, -1]), kwargs = {})
+#   %var_mean_7 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_21, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_24 : Tensor "f32[1, 256, 64][16384, 64, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg25_1, [1, 256, -1]), kwargs = {})
+#   %var_mean_8 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_24, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %sub_5 : Tensor "f32[1, 64, 128][8192, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_15, %getitem_11), kwargs = {})
+#   %add_9 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_10, 1e-05), kwargs = {})
+#   %rsqrt_5 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_9,), kwargs = {})
+#   %mul_17 : Tensor "f32[1, 64, 128][8192, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_5, %rsqrt_5), kwargs = {})
+#   %mul_16 : Tensor "f32[64, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg17_1, 0.1580497968320339), kwargs = {})
+#   %view_16 : Tensor "f32[64][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_16, [-1]), kwargs = {})
+#   %unsqueeze_5 : Tensor "f32[64, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_16, -1), kwargs = {})
+#   %mul_18 : Tensor "f32[1, 64, 128][8192, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_17, %unsqueeze_5), kwargs = {})
+#   %view_17 : Tensor "f32[64, 128, 1, 1][128, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_18, [64, 128, 1, 1]), kwargs = {})
+#   %convolution_5 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_12, %view_17, %arg18_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_4 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_5,), kwargs = {})
+#   %exp_4 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_4,), kwargs = {})
+#   %add_10 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_4, 1), kwargs = {})
+#   %div_4 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_5, %add_10), kwargs = {})
+#   %sub_6 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_18, %getitem_13), kwargs = {})
+#   %add_11 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_12, 1e-05), kwargs = {})
+#   %rsqrt_6 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_11,), kwargs = {})
+#   %mul_20 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_6, %rsqrt_6), kwargs = {})
+#   %mul_19 : Tensor "f32[64, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg20_1, 0.07450538873672485), kwargs = {})
+#   %view_19 : Tensor "f32[64][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_19, [-1]), kwargs = {})
+#   %unsqueeze_6 : Tensor "f32[64, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_19, -1), kwargs = {})
+#   %mul_21 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_20, %unsqueeze_6), kwargs = {})
+#   %view_20 : Tensor "f32[64, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_21, [64, 64, 3, 3]), kwargs = {})
+#   %convolution_6 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_4, %view_20, %arg21_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_5 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_6,), kwargs = {})
+#   %exp_5 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_5,), kwargs = {})
+#   %add_12 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_5, 1), kwargs = {})
+#   %div_5 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_6, %add_12), kwargs = {})
+#   %sub_7 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_21, %getitem_15), kwargs = {})
+#   %add_13 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_14, 1e-05), kwargs = {})
+#   %rsqrt_7 : Tensor "f32[1, 64, 1][64, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_13,), kwargs = {})
+#   %mul_23 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_7, %rsqrt_7), kwargs = {})
+#   %mul_22 : Tensor "f32[64, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg23_1, 0.07450538873672485), kwargs = {})
+#   %view_22 : Tensor "f32[64][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_22, [-1]), kwargs = {})
+#   %unsqueeze_7 : Tensor "f32[64, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_22, -1), kwargs = {})
+#   %mul_24 : Tensor "f32[1, 64, 576][36864, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_23, %unsqueeze_7), kwargs = {})
+#   %view_23 : Tensor "f32[64, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_24, [64, 64, 3, 3]), kwargs = {})
+#   %convolution_7 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_5, %view_23, %arg24_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_6 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_7,), kwargs = {})
+#   %exp_6 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_6,), kwargs = {})
+#   %add_14 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_6, 1), kwargs = {})
+#   %div_6 : Tensor "f32[128, 64, 72, 72][331776, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_7, %add_14), kwargs = {})
+#   %sub_8 : Tensor "f32[1, 256, 64][16384, 64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_24, %getitem_17), kwargs = {})
+#   %add_15 : Tensor "f32[1, 256, 1][256, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_16, 1e-05), kwargs = {})
+#   %rsqrt_8 : Tensor "f32[1, 256, 1][256, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_15,), kwargs = {})
+#   %mul_26 : Tensor "f32[1, 256, 64][16384, 64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_8, %rsqrt_8), kwargs = {})
+#   %mul_25 : Tensor "f32[256, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg26_1, 0.22351616621017456), kwargs = {})
+#   %view_25 : Tensor "f32[256][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_25, [-1]), kwargs = {})
+#   %unsqueeze_8 : Tensor "f32[256, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_25, -1), kwargs = {})
+#   %mul_27 : Tensor "f32[1, 256, 64][16384, 64, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_26, %unsqueeze_8), kwargs = {})
+#   %view_26 : Tensor "f32[256, 64, 1, 1][64, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_27, [256, 64, 1, 1]), kwargs = {})
+#   %convolution_8 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_6, %view_26, %arg27_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %mean : Tensor "f32[128, 256, 1, 1][256, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%convolution_8, [2, 3], True), kwargs = {})
+#   %convolution_9 : Tensor "f32[128, 64, 1, 1][64, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mean, %arg28_1, %arg29_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %relu : Tensor "f32[128, 64, 1, 1][64, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%convolution_9,), kwargs = {})
+#   %convolution_10 : Tensor "f32[128, 256, 1, 1][256, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%relu, %arg30_1, %arg31_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %sigmoid : Tensor "f32[128, 256, 1, 1][256, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%convolution_10,), kwargs = {})
+#   %mul_28 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%convolution_8, %sigmoid), kwargs = {})
+#   %mul_29 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_28, 2.0), kwargs = {})
+#   %mul_30 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_29, 0.2), kwargs = {})
+#   %sub_4 : Tensor "f32[1, 256, 128][32768, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_12, %getitem_9), kwargs = {})
+#   %add_8 : Tensor "f32[1, 256, 1][256, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_8, 1e-05), kwargs = {})
+#   %rsqrt_4 : Tensor "f32[1, 256, 1][256, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_8,), kwargs = {})
+#   %mul_14 : Tensor "f32[1, 256, 128][32768, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_4, %rsqrt_4), kwargs = {})
+#   %mul_13 : Tensor "f32[256, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg14_1, 0.1580497968320339), kwargs = {})
+#   %view_13 : Tensor "f32[256][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_13, [-1]), kwargs = {})
+#   %unsqueeze_4 : Tensor "f32[256, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_13, -1), kwargs = {})
+#   %mul_15 : Tensor "f32[1, 256, 128][32768, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_14, %unsqueeze_4), kwargs = {})
+#   %view_14 : Tensor "f32[256, 128, 1, 1][128, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_15, [256, 128, 1, 1]), kwargs = {})
+#   %convolution_4 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_12, %view_14, %arg15_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %add_16 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_30, %convolution_4), kwargs = {})
+#   %neg_7 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_16,), kwargs = {})
+#   %exp_7 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_7,), kwargs = {})
+#   %add_17 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_7, 1), kwargs = {})
+#   %div_7 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_16, %add_17), kwargs = {})
+#   %mul_31 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_7, 0.9805806756909201), kwargs = {})
+#   return %add_16,%mul_31
+triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_18 = async_compile.triton('triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_18', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 268435456}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'in_ptr4': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]], (4,): [['tt.divisibility', 16]], (5,): [['tt.divisibility', 16]], (6,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_18', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 6, 'num_store': 1, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 2718043136}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_18(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, in_ptr4, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 169869312
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x3 = xindex
+    x0 = (xindex % 256)
+    x2 = xindex // 1327104
+    tmp0 = tl.load(in_out_ptr0 + (x3), None)
+    tmp1 = tl.load(in_ptr0 + (x0), None, eviction_policy='evict_last')
+    tmp3 = tl.load(in_ptr1 + (x0 + 256*x2), None, eviction_policy='evict_last')
+    tmp4 = tl.load(in_ptr2 + (x0), None, eviction_policy='evict_last')
+    tmp12 = tl.load(in_ptr3 + (x3), None)
+    tmp13 = tl.load(in_ptr4 + (x0), None, eviction_policy='evict_last')
+    tmp2 = tmp0 + tmp1
+    tmp5 = tmp3 + tmp4
+    tmp6 = tl.sigmoid(tmp5)
+    tmp7 = tmp2 * tmp6
+    tmp8 = tl.full([1], 2.0, tl.float32)
+    tmp9 = tmp7 * tmp8
+    tmp10 = tl.full([1], 0.2, tl.float32)
+    tmp11 = tmp9 * tmp10
+    tmp14 = tmp12 + tmp13
+    tmp15 = tmp11 + tmp14
+    tmp16 = -tmp15
+    tmp17 = libdevice.exp(tmp16)
+    tmp18 = tl.full([1], 1.0, tl.float32)
+    tmp19 = tmp17 + tmp18
+    tmp20 = (tmp15 / tmp19)
+    tmp21 = tl.full([1], 0.9805806756909201, tl.float32)
+    tmp22 = tmp20 * tmp21
+    tl.store(in_out_ptr0 + (x3), tmp22, None)
+''', device_str='cuda')
+
+
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:2920
+# Topologically Sorted Source Nodes: [reshape_9, batch_norm_9, reshape_10, batch_norm_10, reshape_11, batch_norm_11, reshape_12, batch_norm_12, reshape_13, batch_norm_13, silu_7, out_7, mul_15, view_10, weight_10, out_8, silu_8, mul_16, view_11, weight_11, out_9, silu_9, mul_17, view_12, weight_12, out_10, silu_10, mul_18, view_13, weight_13, out_11, x_se_4, x_se_5, x_se_6, x_se_7, sigmoid_1, mul_19, out_12, mul_21, avg_pool2d, mul_14, view_9, weight_9, shortcut_1, out_13, silu_11, out_14], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.silu, aten.mul, aten.convolution, aten.mean, aten.relu, aten.sigmoid, aten.avg_pool2d, aten.add]
+# Source node to ATen node mapping:
+#   avg_pool2d => avg_pool2d
+#   batch_norm_10 => add_19, mul_36, mul_37, rsqrt_10, sub_10, unsqueeze_10, var_mean_10
+#   batch_norm_11 => add_21, mul_39, mul_40, rsqrt_11, sub_11, unsqueeze_11, var_mean_11
+#   batch_norm_12 => add_23, mul_42, mul_43, rsqrt_12, sub_12, unsqueeze_12, var_mean_12
+#   batch_norm_13 => add_25, mul_45, mul_46, rsqrt_13, sub_13, unsqueeze_13, var_mean_13
+#   batch_norm_9 => add_18, mul_33, mul_34, rsqrt_9, sub_9, unsqueeze_9, var_mean_9
+#   mul_14 => mul_32
+#   mul_15 => mul_35
+#   mul_16 => mul_38
+#   mul_17 => mul_41
+#   mul_18 => mul_44
+#   mul_19 => mul_47
+#   mul_21 => mul_49
+#   out_10 => convolution_14
+#   out_11 => convolution_15
+#   out_12 => mul_48
+#   out_13 => add_26
+#   out_14 => mul_50
+#   out_7 => mul_31
+#   out_8 => convolution_12
+#   out_9 => convolution_13
+#   reshape_10 => view_30
+#   reshape_11 => view_33
+#   reshape_12 => view_36
+#   reshape_13 => view_39
+#   reshape_9 => view_27
+#   shortcut_1 => convolution_11
+#   sigmoid_1 => sigmoid_1
+#   silu_10 => add_24, div_10, exp_10, neg_10
+#   silu_11 => add_27, div_11, exp_11, neg_11
+#   silu_7 => add_17, div_7, exp_7, neg_7
+#   silu_8 => add_20, div_8, exp_8, neg_8
+#   silu_9 => add_22, div_9, exp_9, neg_9
+#   view_10 => view_31
+#   view_11 => view_34
+#   view_12 => view_37
+#   view_13 => view_40
+#   view_9 => view_28
+#   weight_10 => view_32
+#   weight_11 => view_35
+#   weight_12 => view_38
+#   weight_13 => view_41
+#   weight_9 => view_29
+#   x_se_4 => mean_1
+#   x_se_5 => convolution_16
+#   x_se_6 => relu_1
+#   x_se_7 => convolution_17
+# Graph fragment:
+#   %buf222 : Tensor "f32[128, 512, 36, 36][663552, 1, 18432, 512]cuda:0" = PlaceHolder[target=buf222]
+#   %arg46_1 : Tensor "f32[512][1]cuda:0" = PlaceHolder[target=arg46_1]
+#   %buf227 : Tensor "f32[128, 512, 1, 1][512, 1, 1, 1]cuda:0" = PlaceHolder[target=buf227]
+#   %arg50_1 : Tensor "f32[512][1]cuda:0" = PlaceHolder[target=arg50_1]
+#   %buf230 : Tensor "f32[128, 512, 36, 36][663552, 1, 18432, 512]cuda:0" = PlaceHolder[target=buf230]
+#   %arg34_1 : Tensor "f32[512][1]cuda:0" = PlaceHolder[target=arg34_1]
+#   %add_26 : Tensor "f32[128, 512, 36, 36][663552, 1, 18432, 512]cuda:0" = PlaceHolder[target=add_26]
+#   %view_27 : Tensor "f32[1, 512, 256][131072, 256, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg32_1, [1, 512, -1]), kwargs = {})
+#   %var_mean_9 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_27, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_30 : Tensor "f32[1, 128, 256][32768, 256, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg35_1, [1, 128, -1]), kwargs = {})
+#   %var_mean_10 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_30, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_33 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg38_1, [1, 128, -1]), kwargs = {})
+#   %var_mean_11 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_33, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_36 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg41_1, [1, 128, -1]), kwargs = {})
+#   %var_mean_12 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_36, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_39 : Tensor "f32[1, 512, 128][65536, 128, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg44_1, [1, 512, -1]), kwargs = {})
+#   %var_mean_13 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_39, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %neg_7 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_16,), kwargs = {})
+#   %exp_7 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_7,), kwargs = {})
+#   %add_17 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_7, 1), kwargs = {})
+#   %div_7 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_16, %add_17), kwargs = {})
+#   %mul_31 : Tensor "f32[128, 256, 72, 72][1327104, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_7, 0.9805806756909201), kwargs = {})
+#   %sub_10 : Tensor "f32[1, 128, 256][32768, 256, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_30, %getitem_21), kwargs = {})
+#   %add_19 : Tensor "f32[1, 128, 1][128, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_20, 1e-05), kwargs = {})
+#   %rsqrt_10 : Tensor "f32[1, 128, 1][128, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_19,), kwargs = {})
+#   %mul_36 : Tensor "f32[1, 128, 256][32768, 256, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_10, %rsqrt_10), kwargs = {})
+#   %mul_35 : Tensor "f32[128, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg36_1, 0.11175808310508728), kwargs = {})
+#   %view_31 : Tensor "f32[128][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_35, [-1]), kwargs = {})
+#   %unsqueeze_10 : Tensor "f32[128, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_31, -1), kwargs = {})
+#   %mul_37 : Tensor "f32[1, 128, 256][32768, 256, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_36, %unsqueeze_10), kwargs = {})
+#   %view_32 : Tensor "f32[128, 256, 1, 1][256, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_37, [128, 256, 1, 1]), kwargs = {})
+#   %convolution_12 : Tensor "f32[128, 128, 72, 72][663552, 5184, 72, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_31, %view_32, %arg37_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_8 : Tensor "f32[128, 128, 72, 72][663552, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_12,), kwargs = {})
+#   %exp_8 : Tensor "f32[128, 128, 72, 72][663552, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_8,), kwargs = {})
+#   %add_20 : Tensor "f32[128, 128, 72, 72][663552, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_8, 1), kwargs = {})
+#   %div_8 : Tensor "f32[128, 128, 72, 72][663552, 5184, 72, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_12, %add_20), kwargs = {})
+#   %sub_11 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_33, %getitem_23), kwargs = {})
+#   %add_21 : Tensor "f32[1, 128, 1][128, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_22, 1e-05), kwargs = {})
+#   %rsqrt_11 : Tensor "f32[1, 128, 1][128, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_21,), kwargs = {})
+#   %mul_39 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_11, %rsqrt_11), kwargs = {})
+#   %mul_38 : Tensor "f32[128, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg39_1, 0.07450538873672485), kwargs = {})
+#   %view_34 : Tensor "f32[128][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_38, [-1]), kwargs = {})
+#   %unsqueeze_11 : Tensor "f32[128, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_34, -1), kwargs = {})
+#   %mul_40 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_39, %unsqueeze_11), kwargs = {})
+#   %view_35 : Tensor "f32[128, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_40, [128, 64, 3, 3]), kwargs = {})
+#   %convolution_13 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_8, %view_35, %arg40_1, [2, 2], [1, 1], [1, 1], False, [0, 0], 2), kwargs = {})
+#   %neg_9 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_13,), kwargs = {})
+#   %exp_9 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_9,), kwargs = {})
+#   %add_22 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_9, 1), kwargs = {})
+#   %div_9 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_13, %add_22), kwargs = {})
+#   %sub_12 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_36, %getitem_25), kwargs = {})
+#   %add_23 : Tensor "f32[1, 128, 1][128, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_24, 1e-05), kwargs = {})
+#   %rsqrt_12 : Tensor "f32[1, 128, 1][128, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_23,), kwargs = {})
+#   %mul_42 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_12, %rsqrt_12), kwargs = {})
+#   %mul_41 : Tensor "f32[128, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg42_1, 0.07450538873672485), kwargs = {})
+#   %view_37 : Tensor "f32[128][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_41, [-1]), kwargs = {})
+#   %unsqueeze_12 : Tensor "f32[128, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_37, -1), kwargs = {})
+#   %mul_43 : Tensor "f32[1, 128, 576][73728, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_42, %unsqueeze_12), kwargs = {})
+#   %view_38 : Tensor "f32[128, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_43, [128, 64, 3, 3]), kwargs = {})
+#   %convolution_14 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_9, %view_38, %arg43_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 2), kwargs = {})
+#   %neg_10 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_14,), kwargs = {})
+#   %exp_10 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_10,), kwargs = {})
+#   %add_24 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_10, 1), kwargs = {})
+#   %div_10 : Tensor "f32[128, 128, 36, 36][165888, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_14, %add_24), kwargs = {})
+#   %sub_13 : Tensor "f32[1, 512, 128][65536, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_39, %getitem_27), kwargs = {})
+#   %add_25 : Tensor "f32[1, 512, 1][512, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_26, 1e-05), kwargs = {})
+#   %rsqrt_13 : Tensor "f32[1, 512, 1][512, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_25,), kwargs = {})
+#   %mul_45 : Tensor "f32[1, 512, 128][65536, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_13, %rsqrt_13), kwargs = {})
+#   %mul_44 : Tensor "f32[512, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg45_1, 0.1580497968320339), kwargs = {})
+#   %view_40 : Tensor "f32[512][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_44, [-1]), kwargs = {})
+#   %unsqueeze_13 : Tensor "f32[512, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_40, -1), kwargs = {})
+#   %mul_46 : Tensor "f32[1, 512, 128][65536, 128, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_45, %unsqueeze_13), kwargs = {})
+#   %view_41 : Tensor "f32[512, 128, 1, 1][128, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_46, [512, 128, 1, 1]), kwargs = {})
+#   %convolution_15 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_10, %view_41, %arg46_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %mean_1 : Tensor "f32[128, 512, 1, 1][512, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%convolution_15, [2, 3], True), kwargs = {})
+#   %convolution_16 : Tensor "f32[128, 128, 1, 1][128, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mean_1, %arg47_1, %arg48_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %relu_1 : Tensor "f32[128, 128, 1, 1][128, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%convolution_16,), kwargs = {})
+#   %convolution_17 : Tensor "f32[128, 512, 1, 1][512, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%relu_1, %arg49_1, %arg50_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %sigmoid_1 : Tensor "f32[128, 512, 1, 1][512, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%convolution_17,), kwargs = {})
+#   %mul_47 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%convolution_15, %sigmoid_1), kwargs = {})
+#   %mul_48 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_47, 2.0), kwargs = {})
+#   %mul_49 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_48, 0.2), kwargs = {})
+#   %avg_pool2d : Tensor "f32[128, 256, 36, 36][331776, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.avg_pool2d.default](args = (%mul_31, [2, 2], [2, 2], [0, 0], True, False), kwargs = {})
+#   %sub_9 : Tensor "f32[1, 512, 256][131072, 256, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_27, %getitem_19), kwargs = {})
+#   %add_18 : Tensor "f32[1, 512, 1][512, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_18, 1e-05), kwargs = {})
+#   %rsqrt_9 : Tensor "f32[1, 512, 1][512, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_18,), kwargs = {})
+#   %mul_33 : Tensor "f32[1, 512, 256][131072, 256, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_9, %rsqrt_9), kwargs = {})
+#   %mul_32 : Tensor "f32[512, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg33_1, 0.11175808310508728), kwargs = {})
+#   %view_28 : Tensor "f32[512][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_32, [-1]), kwargs = {})
+#   %unsqueeze_9 : Tensor "f32[512, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_28, -1), kwargs = {})
+#   %mul_34 : Tensor "f32[1, 512, 256][131072, 256, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_33, %unsqueeze_9), kwargs = {})
+#   %view_29 : Tensor "f32[512, 256, 1, 1][256, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_34, [512, 256, 1, 1]), kwargs = {})
+#   %convolution_11 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%avg_pool2d, %view_29, %arg34_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %add_26 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=3] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_49, %convolution_11), kwargs = {})
+#   %neg_11 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_26,), kwargs = {})
+#   %exp_11 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_11,), kwargs = {})
+#   %add_27 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_11, 1), kwargs = {})
+#   %div_11 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_26, %add_27), kwargs = {})
+#   %mul_50 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_11, 0.9805806756909201), kwargs = {})
+#   return %add_26,%mul_50
+triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_26 = async_compile.triton('triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_26', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 134217728}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'in_ptr4': '*fp32', 'out_ptr0': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]], (4,): [['tt.divisibility', 16]], (5,): [['tt.divisibility', 16]], (6,): [['tt.divisibility', 16]], (7,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_26', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 6, 'num_store': 2, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 2038700032}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_26(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, in_ptr4, out_ptr0, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 84934656
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x3 = xindex
+    x0 = (xindex % 512)
+    x2 = xindex // 663552
+    tmp0 = tl.load(in_out_ptr0 + (x3), None)
+    tmp1 = tl.load(in_ptr0 + (x0), None, eviction_policy='evict_last')
+    tmp3 = tl.load(in_ptr1 + (x0 + 512*x2), None, eviction_policy='evict_last')
+    tmp4 = tl.load(in_ptr2 + (x0), None, eviction_policy='evict_last')
+    tmp12 = tl.load(in_ptr3 + (x3), None)
+    tmp13 = tl.load(in_ptr4 + (x0), None, eviction_policy='evict_last')
+    tmp2 = tmp0 + tmp1
+    tmp5 = tmp3 + tmp4
+    tmp6 = tl.sigmoid(tmp5)
+    tmp7 = tmp2 * tmp6
+    tmp8 = tl.full([1], 2.0, tl.float32)
+    tmp9 = tmp7 * tmp8
+    tmp10 = tl.full([1], 0.2, tl.float32)
+    tmp11 = tmp9 * tmp10
+    tmp14 = tmp12 + tmp13
+    tmp15 = tmp11 + tmp14
+    tmp16 = -tmp15
+    tmp17 = libdevice.exp(tmp16)
+    tmp18 = tl.full([1], 1.0, tl.float32)
+    tmp19 = tmp17 + tmp18
+    tmp20 = (tmp15 / tmp19)
+    tmp21 = tl.full([1], 0.9805806756909201, tl.float32)
+    tmp22 = tmp20 * tmp21
+    tl.store(in_out_ptr0 + (x3), tmp15, None)
+    tl.store(out_ptr0 + (x3), tmp22, None)
+''', device_str='cuda')
+
+
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:3736
+# Topologically Sorted Source Nodes: [reshape_19, batch_norm_19, reshape_20, batch_norm_20, reshape_21, batch_norm_21, reshape_22, batch_norm_22, silu_15, out_21, mul_32, view_19, weight_19, out_22, silu_16, mul_33, view_20, weight_20, out_23, silu_17, mul_34, view_21, weight_21, out_24, silu_18, mul_35, view_22, weight_22, out_25, x_se_12], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.silu, aten.mul, aten.convolution, aten.mean]
+# Source node to ATen node mapping:
+#   batch_norm_19 => add_38, mul_71, mul_72, rsqrt_19, sub_19, unsqueeze_19, var_mean_19
+#   batch_norm_20 => add_40, mul_74, mul_75, rsqrt_20, sub_20, unsqueeze_20, var_mean_20
+#   batch_norm_21 => add_42, mul_77, mul_78, rsqrt_21, sub_21, unsqueeze_21, var_mean_21
+#   batch_norm_22 => add_44, mul_80, mul_81, rsqrt_22, sub_22, unsqueeze_22, var_mean_22
+#   mul_32 => mul_70
+#   mul_33 => mul_73
+#   mul_34 => mul_76
+#   mul_35 => mul_79
+#   out_21 => mul_66
+#   out_22 => convolution_25
+#   out_23 => convolution_26
+#   out_24 => convolution_27
+#   out_25 => convolution_28
+#   reshape_19 => view_57
+#   reshape_20 => view_60
+#   reshape_21 => view_63
+#   reshape_22 => view_66
+#   silu_15 => add_36, div_15, exp_15, neg_15
+#   silu_16 => add_39, div_16, exp_16, neg_16
+#   silu_17 => add_41, div_17, exp_17, neg_17
+#   silu_18 => add_43, div_18, exp_18, neg_18
+#   view_19 => view_58
+#   view_20 => view_61
+#   view_21 => view_64
+#   view_22 => view_67
+#   weight_19 => view_59
+#   weight_20 => view_62
+#   weight_21 => view_65
+#   weight_22 => view_68
+#   x_se_12 => mean_3
+# Graph fragment:
+#   %buf265 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=buf265]
+#   %arg81_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg81_1]
+#   %buf266 : Tensor "f32[128, 1536, 1, 1][1536, 1, 196608, 196608]cuda:0" = PlaceHolder[target=buf266]
+#   %view_57 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg70_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_19 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_57, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_60 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg73_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_20 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_60, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_63 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg76_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_21 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_63, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_66 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg79_1, [1, 1536, -1]), kwargs = {})
+#   %var_mean_22 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_66, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %neg_15 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_35,), kwargs = {})
+#   %exp_15 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_15,), kwargs = {})
+#   %add_36 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_15, 1), kwargs = {})
+#   %div_15 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_35, %add_36), kwargs = {})
+#   %mul_66 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_15, 0.9622504486493761), kwargs = {})
+#   %sub_19 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_57, %getitem_39), kwargs = {})
+#   %add_38 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_38, 1e-05), kwargs = {})
+#   %rsqrt_19 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_38,), kwargs = {})
+#   %mul_71 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_19, %rsqrt_19), kwargs = {})
+#   %mul_70 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg71_1, 0.07902489841601695), kwargs = {})
+#   %view_58 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_70, [-1]), kwargs = {})
+#   %unsqueeze_19 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_58, -1), kwargs = {})
+#   %mul_72 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_71, %unsqueeze_19), kwargs = {})
+#   %view_59 : Tensor "f32[384, 512, 1, 1][512, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_72, [384, 512, 1, 1]), kwargs = {})
+#   %convolution_25 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_66, %view_59, %arg72_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_16 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_25,), kwargs = {})
+#   %exp_16 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_16,), kwargs = {})
+#   %add_39 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_16, 1), kwargs = {})
+#   %div_16 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_25, %add_39), kwargs = {})
+#   %sub_20 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_60, %getitem_41), kwargs = {})
+#   %add_40 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_40, 1e-05), kwargs = {})
+#   %rsqrt_20 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_40,), kwargs = {})
+#   %mul_74 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_20, %rsqrt_20), kwargs = {})
+#   %mul_73 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg74_1, 0.07450538873672485), kwargs = {})
+#   %view_61 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_73, [-1]), kwargs = {})
+#   %unsqueeze_20 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_61, -1), kwargs = {})
+#   %mul_75 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_74, %unsqueeze_20), kwargs = {})
+#   %view_62 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_75, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_26 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_16, %view_62, %arg75_1, [2, 2], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_17 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_26,), kwargs = {})
+#   %exp_17 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_17,), kwargs = {})
+#   %add_41 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_17, 1), kwargs = {})
+#   %div_17 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_26, %add_41), kwargs = {})
+#   %sub_21 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_63, %getitem_43), kwargs = {})
+#   %add_42 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_42, 1e-05), kwargs = {})
+#   %rsqrt_21 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_42,), kwargs = {})
+#   %mul_77 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_21, %rsqrt_21), kwargs = {})
+#   %mul_76 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg77_1, 0.07450538873672485), kwargs = {})
+#   %view_64 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_76, [-1]), kwargs = {})
+#   %unsqueeze_21 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_64, -1), kwargs = {})
+#   %mul_78 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_77, %unsqueeze_21), kwargs = {})
+#   %view_65 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_78, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_27 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_17, %view_65, %arg78_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_18 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_27,), kwargs = {})
+#   %exp_18 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_18,), kwargs = {})
+#   %add_43 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_18, 1), kwargs = {})
+#   %div_18 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_27, %add_43), kwargs = {})
+#   %sub_22 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_66, %getitem_45), kwargs = {})
+#   %add_44 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_44, 1e-05), kwargs = {})
+#   %rsqrt_22 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_44,), kwargs = {})
+#   %mul_80 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_22, %rsqrt_22), kwargs = {})
+#   %mul_79 : Tensor "f32[1536, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg80_1, 0.09125009274634042), kwargs = {})
+#   %view_67 : Tensor "f32[1536][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_79, [-1]), kwargs = {})
+#   %unsqueeze_22 : Tensor "f32[1536, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_67, -1), kwargs = {})
+#   %mul_81 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_80, %unsqueeze_22), kwargs = {})
+#   %view_68 : Tensor "f32[1536, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_81, [1536, 384, 1, 1]), kwargs = {})
+#   %convolution_28 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_18, %view_68, %arg81_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %mean_3 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%convolution_28, [2, 3], True), kwargs = {})
+#   return %buf266,%mean_3
+triton_red_fused__native_batch_norm_legit_convolution_mean_mul_silu_view_33 = async_compile.triton('triton_red_fused__native_batch_norm_legit_convolution_mean_mul_silu_view_33', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.reduction(
+    size_hints={'x': 262144, 'r0_': 512},
+    reduction_hint=ReductionHint.DEFAULT,
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'xnumel': 'i32', 'r0_numel': 'i32', 'XBLOCK': 'constexpr', 'R0_BLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_red_fused__native_batch_norm_legit_convolution_mean_mul_silu_view_33', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 2, 'num_store': 1, 'num_reduction': 1, 'autotune_hints': set(), 'tiling_scores': {'x': 256382976, 'r0_': 0}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False}
+)
+@triton.jit
+def triton_red_fused__native_batch_norm_legit_convolution_mean_mul_silu_view_33(in_out_ptr0, in_ptr0, in_ptr1, xnumel, r0_numel, XBLOCK : tl.constexpr, R0_BLOCK : tl.constexpr):
+    xnumel = 196608
+    r0_numel = 324
+    rnumel = r0_numel
+    RBLOCK: tl.constexpr = R0_BLOCK
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:, None]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:, None]
+    r0_base = tl.arange(0, R0_BLOCK)[None, :]
+    rbase = r0_base
+    x0 = (xindex % 1536)
+    x1 = xindex // 1536
+    tmp1 = tl.load(in_ptr1 + (x0), None, eviction_policy='evict_last')
+    _tmp4 = tl.full([XBLOCK, R0_BLOCK], 0, tl.float32)
+    x3 = xindex
+    for r0_offset in tl.range(0, r0_numel, R0_BLOCK):
+        r0_index = r0_offset + r0_base
+        r0_mask = r0_index < r0_numel
+        roffset = r0_offset
+        rindex = r0_index
+        r0_2 = r0_index
+        tmp0 = tl.load(in_ptr0 + (x0 + 1536*r0_2 + 497664*x1), r0_mask, eviction_policy='evict_first', other=0.0)
+        tmp2 = tmp0 + tmp1
+        tmp3 = tl.broadcast_to(tmp2, [XBLOCK, R0_BLOCK])
+        tmp5 = _tmp4 + tmp3
+        _tmp4 = tl.where(r0_mask, tmp5, _tmp4)
+    tmp4 = tl.sum(_tmp4, 1)[:, None]
+    tmp6 = tl.full([1, 1], 324.0, tl.float32)
+    tmp7 = (tmp4 / tmp6)
+    tl.store(in_out_ptr0 + (x3), tmp7, None)
+''', device_str='cuda')
+
+
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:4302
+# Topologically Sorted Source Nodes: [reshape_18, batch_norm_18, reshape_19, batch_norm_19, reshape_20, batch_norm_20, reshape_21, batch_norm_21, reshape_22, batch_norm_22, silu_15, out_21, mul_32, view_19, weight_19, out_22, silu_16, mul_33, view_20, weight_20, out_23, silu_17, mul_34, view_21, weight_21, out_24, silu_18, mul_35, view_22, weight_22, out_25, x_se_12, x_se_13, x_se_14, x_se_15, sigmoid_3, mul_36, out_26, mul_38, avg_pool2d_1, mul_31, view_18, weight_18, shortcut_2, out_27, silu_19, out_28], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.silu, aten.mul, aten.convolution, aten.mean, aten.relu, aten.sigmoid, aten.avg_pool2d, aten.add]
+# Source node to ATen node mapping:
+#   avg_pool2d_1 => avg_pool2d_1
+#   batch_norm_18 => add_37, mul_68, mul_69, rsqrt_18, sub_18, unsqueeze_18, var_mean_18
+#   batch_norm_19 => add_38, mul_71, mul_72, rsqrt_19, sub_19, unsqueeze_19, var_mean_19
+#   batch_norm_20 => add_40, mul_74, mul_75, rsqrt_20, sub_20, unsqueeze_20, var_mean_20
+#   batch_norm_21 => add_42, mul_77, mul_78, rsqrt_21, sub_21, unsqueeze_21, var_mean_21
+#   batch_norm_22 => add_44, mul_80, mul_81, rsqrt_22, sub_22, unsqueeze_22, var_mean_22
+#   mul_31 => mul_67
+#   mul_32 => mul_70
+#   mul_33 => mul_73
+#   mul_34 => mul_76
+#   mul_35 => mul_79
+#   mul_36 => mul_82
+#   mul_38 => mul_84
+#   out_21 => mul_66
+#   out_22 => convolution_25
+#   out_23 => convolution_26
+#   out_24 => convolution_27
+#   out_25 => convolution_28
+#   out_26 => mul_83
+#   out_27 => add_45
+#   out_28 => mul_85
+#   reshape_18 => view_54
+#   reshape_19 => view_57
+#   reshape_20 => view_60
+#   reshape_21 => view_63
+#   reshape_22 => view_66
+#   shortcut_2 => convolution_24
+#   sigmoid_3 => sigmoid_3
+#   silu_15 => add_36, div_15, exp_15, neg_15
+#   silu_16 => add_39, div_16, exp_16, neg_16
+#   silu_17 => add_41, div_17, exp_17, neg_17
+#   silu_18 => add_43, div_18, exp_18, neg_18
+#   silu_19 => add_46, div_19, exp_19, neg_19
+#   view_18 => view_55
+#   view_19 => view_58
+#   view_20 => view_61
+#   view_21 => view_64
+#   view_22 => view_67
+#   weight_18 => view_56
+#   weight_19 => view_59
+#   weight_20 => view_62
+#   weight_21 => view_65
+#   weight_22 => view_68
+#   x_se_12 => mean_3
+#   x_se_13 => convolution_29
+#   x_se_14 => relu_3
+#   x_se_15 => convolution_30
+# Graph fragment:
+#   %buf265 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=buf265]
+#   %arg81_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg81_1]
+#   %buf270 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0" = PlaceHolder[target=buf270]
+#   %arg85_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg85_1]
+#   %buf273 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=buf273]
+#   %arg69_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg69_1]
+#   %add_45 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=add_45]
+#   %view_54 : Tensor "f32[1, 1536, 512][786432, 512, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg67_1, [1, 1536, -1]), kwargs = {})
+#   %var_mean_18 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_54, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_57 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg70_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_19 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_57, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_60 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg73_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_20 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_60, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_63 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg76_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_21 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_63, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_66 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg79_1, [1, 1536, -1]), kwargs = {})
+#   %var_mean_22 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_66, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %neg_15 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_35,), kwargs = {})
+#   %exp_15 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_15,), kwargs = {})
+#   %add_36 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_15, 1), kwargs = {})
+#   %div_15 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_35, %add_36), kwargs = {})
+#   %mul_66 : Tensor "f32[128, 512, 36, 36][663552, 1296, 36, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_15, 0.9622504486493761), kwargs = {})
+#   %sub_19 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_57, %getitem_39), kwargs = {})
+#   %add_38 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_38, 1e-05), kwargs = {})
+#   %rsqrt_19 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_38,), kwargs = {})
+#   %mul_71 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_19, %rsqrt_19), kwargs = {})
+#   %mul_70 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg71_1, 0.07902489841601695), kwargs = {})
+#   %view_58 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_70, [-1]), kwargs = {})
+#   %unsqueeze_19 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_58, -1), kwargs = {})
+#   %mul_72 : Tensor "f32[1, 384, 512][196608, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_71, %unsqueeze_19), kwargs = {})
+#   %view_59 : Tensor "f32[384, 512, 1, 1][512, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_72, [384, 512, 1, 1]), kwargs = {})
+#   %convolution_25 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_66, %view_59, %arg72_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_16 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_25,), kwargs = {})
+#   %exp_16 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_16,), kwargs = {})
+#   %add_39 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_16, 1), kwargs = {})
+#   %div_16 : Tensor "f32[128, 384, 36, 36][497664, 1296, 36, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_25, %add_39), kwargs = {})
+#   %sub_20 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_60, %getitem_41), kwargs = {})
+#   %add_40 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_40, 1e-05), kwargs = {})
+#   %rsqrt_20 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_40,), kwargs = {})
+#   %mul_74 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_20, %rsqrt_20), kwargs = {})
+#   %mul_73 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg74_1, 0.07450538873672485), kwargs = {})
+#   %view_61 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_73, [-1]), kwargs = {})
+#   %unsqueeze_20 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_61, -1), kwargs = {})
+#   %mul_75 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_74, %unsqueeze_20), kwargs = {})
+#   %view_62 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_75, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_26 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_16, %view_62, %arg75_1, [2, 2], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_17 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_26,), kwargs = {})
+#   %exp_17 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_17,), kwargs = {})
+#   %add_41 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_17, 1), kwargs = {})
+#   %div_17 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_26, %add_41), kwargs = {})
+#   %sub_21 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_63, %getitem_43), kwargs = {})
+#   %add_42 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_42, 1e-05), kwargs = {})
+#   %rsqrt_21 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_42,), kwargs = {})
+#   %mul_77 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_21, %rsqrt_21), kwargs = {})
+#   %mul_76 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg77_1, 0.07450538873672485), kwargs = {})
+#   %view_64 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_76, [-1]), kwargs = {})
+#   %unsqueeze_21 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_64, -1), kwargs = {})
+#   %mul_78 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_77, %unsqueeze_21), kwargs = {})
+#   %view_65 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_78, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_27 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_17, %view_65, %arg78_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_18 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_27,), kwargs = {})
+#   %exp_18 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_18,), kwargs = {})
+#   %add_43 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_18, 1), kwargs = {})
+#   %div_18 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_27, %add_43), kwargs = {})
+#   %sub_22 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_66, %getitem_45), kwargs = {})
+#   %add_44 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_44, 1e-05), kwargs = {})
+#   %rsqrt_22 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_44,), kwargs = {})
+#   %mul_80 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_22, %rsqrt_22), kwargs = {})
+#   %mul_79 : Tensor "f32[1536, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg80_1, 0.09125009274634042), kwargs = {})
+#   %view_67 : Tensor "f32[1536][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_79, [-1]), kwargs = {})
+#   %unsqueeze_22 : Tensor "f32[1536, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_67, -1), kwargs = {})
+#   %mul_81 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_80, %unsqueeze_22), kwargs = {})
+#   %view_68 : Tensor "f32[1536, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_81, [1536, 384, 1, 1]), kwargs = {})
+#   %convolution_28 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_18, %view_68, %arg81_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %mean_3 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%convolution_28, [2, 3], True), kwargs = {})
+#   %convolution_29 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mean_3, %arg82_1, %arg83_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %relu_3 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%convolution_29,), kwargs = {})
+#   %convolution_30 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%relu_3, %arg84_1, %arg85_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %sigmoid_3 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%convolution_30,), kwargs = {})
+#   %mul_82 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%convolution_28, %sigmoid_3), kwargs = {})
+#   %mul_83 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_82, 2.0), kwargs = {})
+#   %mul_84 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_83, 0.2), kwargs = {})
+#   %avg_pool2d_1 : Tensor "f32[128, 512, 18, 18][165888, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.avg_pool2d.default](args = (%mul_66, [2, 2], [2, 2], [0, 0], True, False), kwargs = {})
+#   %sub_18 : Tensor "f32[1, 1536, 512][786432, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_54, %getitem_37), kwargs = {})
+#   %add_37 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_36, 1e-05), kwargs = {})
+#   %rsqrt_18 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_37,), kwargs = {})
+#   %mul_68 : Tensor "f32[1, 1536, 512][786432, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_18, %rsqrt_18), kwargs = {})
+#   %mul_67 : Tensor "f32[1536, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg68_1, 0.07902489841601695), kwargs = {})
+#   %view_55 : Tensor "f32[1536][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_67, [-1]), kwargs = {})
+#   %unsqueeze_18 : Tensor "f32[1536, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_55, -1), kwargs = {})
+#   %mul_69 : Tensor "f32[1, 1536, 512][786432, 512, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_68, %unsqueeze_18), kwargs = {})
+#   %view_56 : Tensor "f32[1536, 512, 1, 1][512, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_69, [1536, 512, 1, 1]), kwargs = {})
+#   %convolution_24 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%avg_pool2d_1, %view_56, %arg69_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %add_45 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=3] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_84, %convolution_24), kwargs = {})
+#   %neg_19 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_45,), kwargs = {})
+#   %exp_19 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_19,), kwargs = {})
+#   %add_46 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_19, 1), kwargs = {})
+#   %div_19 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_45, %add_46), kwargs = {})
+#   %mul_85 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_19, 0.9805806756909201), kwargs = {})
+#   return %add_45,%mul_85
+triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_38 = async_compile.triton('triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_38', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 67108864}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'in_ptr4': '*fp32', 'out_ptr0': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]], (4,): [['tt.divisibility', 16]], (5,): [['tt.divisibility', 16]], (6,): [['tt.divisibility', 16]], (7,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_38', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 6, 'num_store': 2, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 1529628672}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__native_batch_norm_legit_add_avg_pool2d_convolution_mean_mul_relu_sigmoid_silu_view_38(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, in_ptr4, out_ptr0, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 63700992
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x3 = xindex
+    x0 = (xindex % 1536)
+    x2 = xindex // 497664
+    tmp0 = tl.load(in_out_ptr0 + (x3), None)
+    tmp1 = tl.load(in_ptr0 + (x0), None, eviction_policy='evict_last')
+    tmp3 = tl.load(in_ptr1 + (x0 + 1536*x2), None, eviction_policy='evict_last')
+    tmp4 = tl.load(in_ptr2 + (x0), None, eviction_policy='evict_last')
+    tmp12 = tl.load(in_ptr3 + (x3), None)
+    tmp13 = tl.load(in_ptr4 + (x0), None, eviction_policy='evict_last')
+    tmp2 = tmp0 + tmp1
+    tmp5 = tmp3 + tmp4
+    tmp6 = tl.sigmoid(tmp5)
+    tmp7 = tmp2 * tmp6
+    tmp8 = tl.full([1], 2.0, tl.float32)
+    tmp9 = tmp7 * tmp8
+    tmp10 = tl.full([1], 0.2, tl.float32)
+    tmp11 = tmp9 * tmp10
+    tmp14 = tmp12 + tmp13
+    tmp15 = tmp11 + tmp14
+    tmp16 = -tmp15
+    tmp17 = libdevice.exp(tmp16)
+    tmp18 = tl.full([1], 1.0, tl.float32)
+    tmp19 = tmp17 + tmp18
+    tmp20 = (tmp15 / tmp19)
+    tmp21 = tl.full([1], 0.9805806756909201, tl.float32)
+    tmp22 = tmp20 * tmp21
+    tl.store(in_out_ptr0 + (x3), tmp15, None)
+    tl.store(out_ptr0 + (x3), tmp22, None)
+''', device_str='cuda')
+
+
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:4485
+# Topologically Sorted Source Nodes: [reshape_23, batch_norm_23, reshape_24, batch_norm_24, reshape_25, batch_norm_25, reshape_26, batch_norm_26, silu_19, out_28, mul_40, view_23, weight_23, out_29, silu_20, mul_41, view_24, weight_24, out_30, silu_21, mul_42, view_25, weight_25, out_31, silu_22, mul_43, view_26, weight_26, out_32, x_se_16, x_se_17, x_se_18, x_se_19, sigmoid_4, mul_44, out_33, mul_46, out_34, silu_23, out_35], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.silu, aten.mul, aten.convolution, aten.mean, aten.relu, aten.sigmoid, aten.add]
+# Source node to ATen node mapping:
+#   batch_norm_23 => add_47, mul_87, mul_88, rsqrt_23, sub_23, unsqueeze_23, var_mean_23
+#   batch_norm_24 => add_49, mul_90, mul_91, rsqrt_24, sub_24, unsqueeze_24, var_mean_24
+#   batch_norm_25 => add_51, mul_93, mul_94, rsqrt_25, sub_25, unsqueeze_25, var_mean_25
+#   batch_norm_26 => add_53, mul_96, mul_97, rsqrt_26, sub_26, unsqueeze_26, var_mean_26
+#   mul_40 => mul_86
+#   mul_41 => mul_89
+#   mul_42 => mul_92
+#   mul_43 => mul_95
+#   mul_44 => mul_98
+#   mul_46 => mul_100
+#   out_28 => mul_85
+#   out_29 => convolution_31
+#   out_30 => convolution_32
+#   out_31 => convolution_33
+#   out_32 => convolution_34
+#   out_33 => mul_99
+#   out_34 => add_54
+#   out_35 => mul_101
+#   reshape_23 => view_69
+#   reshape_24 => view_72
+#   reshape_25 => view_75
+#   reshape_26 => view_78
+#   sigmoid_4 => sigmoid_4
+#   silu_19 => add_46, div_19, exp_19, neg_19
+#   silu_20 => add_48, div_20, exp_20, neg_20
+#   silu_21 => add_50, div_21, exp_21, neg_21
+#   silu_22 => add_52, div_22, exp_22, neg_22
+#   silu_23 => add_55, div_23, exp_23, neg_23
+#   view_23 => view_70
+#   view_24 => view_73
+#   view_25 => view_76
+#   view_26 => view_79
+#   weight_23 => view_71
+#   weight_24 => view_74
+#   weight_25 => view_77
+#   weight_26 => view_80
+#   x_se_16 => mean_4
+#   x_se_17 => convolution_35
+#   x_se_18 => relu_4
+#   x_se_19 => convolution_36
+# Graph fragment:
+#   %buf288 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=buf288]
+#   %arg97_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg97_1]
+#   %buf293 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0" = PlaceHolder[target=buf293]
+#   %arg101_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg101_1]
+#   %add_45 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=add_45]
+#   %add_54 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=add_54]
+#   %view_69 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg86_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_23 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_69, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_72 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg89_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_24 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_72, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_75 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg92_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_25 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_75, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_78 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg95_1, [1, 1536, -1]), kwargs = {})
+#   %var_mean_26 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_78, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %neg_19 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_45,), kwargs = {})
+#   %exp_19 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_19,), kwargs = {})
+#   %add_46 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_19, 1), kwargs = {})
+#   %div_19 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_45, %add_46), kwargs = {})
+#   %mul_85 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_19, 0.9805806756909201), kwargs = {})
+#   %sub_23 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_69, %getitem_47), kwargs = {})
+#   %add_47 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_46, 1e-05), kwargs = {})
+#   %rsqrt_23 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_47,), kwargs = {})
+#   %mul_87 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_23, %rsqrt_23), kwargs = {})
+#   %mul_86 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg87_1, 0.04562504637317021), kwargs = {})
+#   %view_70 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_86, [-1]), kwargs = {})
+#   %unsqueeze_23 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_70, -1), kwargs = {})
+#   %mul_88 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_87, %unsqueeze_23), kwargs = {})
+#   %view_71 : Tensor "f32[384, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_88, [384, 1536, 1, 1]), kwargs = {})
+#   %convolution_31 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_85, %view_71, %arg88_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_20 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_31,), kwargs = {})
+#   %exp_20 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_20,), kwargs = {})
+#   %add_48 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_20, 1), kwargs = {})
+#   %div_20 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_31, %add_48), kwargs = {})
+#   %sub_24 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_72, %getitem_49), kwargs = {})
+#   %add_49 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_48, 1e-05), kwargs = {})
+#   %rsqrt_24 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_49,), kwargs = {})
+#   %mul_90 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_24, %rsqrt_24), kwargs = {})
+#   %mul_89 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg90_1, 0.07450538873672485), kwargs = {})
+#   %view_73 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_89, [-1]), kwargs = {})
+#   %unsqueeze_24 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_73, -1), kwargs = {})
+#   %mul_91 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_90, %unsqueeze_24), kwargs = {})
+#   %view_74 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_91, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_32 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_20, %view_74, %arg91_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_21 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_32,), kwargs = {})
+#   %exp_21 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_21,), kwargs = {})
+#   %add_50 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_21, 1), kwargs = {})
+#   %div_21 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_32, %add_50), kwargs = {})
+#   %sub_25 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_75, %getitem_51), kwargs = {})
+#   %add_51 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_50, 1e-05), kwargs = {})
+#   %rsqrt_25 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_51,), kwargs = {})
+#   %mul_93 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_25, %rsqrt_25), kwargs = {})
+#   %mul_92 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg93_1, 0.07450538873672485), kwargs = {})
+#   %view_76 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_92, [-1]), kwargs = {})
+#   %unsqueeze_25 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_76, -1), kwargs = {})
+#   %mul_94 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_93, %unsqueeze_25), kwargs = {})
+#   %view_77 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_94, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_33 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_21, %view_77, %arg94_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_22 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_33,), kwargs = {})
+#   %exp_22 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_22,), kwargs = {})
+#   %add_52 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_22, 1), kwargs = {})
+#   %div_22 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_33, %add_52), kwargs = {})
+#   %sub_26 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_78, %getitem_53), kwargs = {})
+#   %add_53 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_52, 1e-05), kwargs = {})
+#   %rsqrt_26 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_53,), kwargs = {})
+#   %mul_96 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_26, %rsqrt_26), kwargs = {})
+#   %mul_95 : Tensor "f32[1536, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg96_1, 0.09125009274634042), kwargs = {})
+#   %view_79 : Tensor "f32[1536][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_95, [-1]), kwargs = {})
+#   %unsqueeze_26 : Tensor "f32[1536, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_79, -1), kwargs = {})
+#   %mul_97 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_96, %unsqueeze_26), kwargs = {})
+#   %view_80 : Tensor "f32[1536, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_97, [1536, 384, 1, 1]), kwargs = {})
+#   %convolution_34 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_22, %view_80, %arg97_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %mean_4 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%convolution_34, [2, 3], True), kwargs = {})
+#   %convolution_35 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mean_4, %arg98_1, %arg99_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %relu_4 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%convolution_35,), kwargs = {})
+#   %convolution_36 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%relu_4, %arg100_1, %arg101_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %sigmoid_4 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%convolution_36,), kwargs = {})
+#   %mul_98 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%convolution_34, %sigmoid_4), kwargs = {})
+#   %mul_99 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_98, 2.0), kwargs = {})
+#   %mul_100 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_99, 0.2), kwargs = {})
+#   %add_54 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=3] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_100, %add_45), kwargs = {})
+#   %neg_23 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_54,), kwargs = {})
+#   %exp_23 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_23,), kwargs = {})
+#   %add_55 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_23, 1), kwargs = {})
+#   %div_23 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_54, %add_55), kwargs = {})
+#   %mul_101 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_23, 0.9622504486493761), kwargs = {})
+#   return %add_54,%mul_101
+triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_39 = async_compile.triton('triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_39', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 67108864}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'out_ptr0': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]], (4,): [['tt.divisibility', 16]], (5,): [['tt.divisibility', 16]], (6,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_39', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 5, 'num_store': 2, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 1529622528}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_39(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, out_ptr0, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 63700992
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x3 = xindex
+    x0 = (xindex % 1536)
+    x2 = xindex // 497664
+    tmp0 = tl.load(in_out_ptr0 + (x3), None)
+    tmp1 = tl.load(in_ptr0 + (x0), None, eviction_policy='evict_last')
+    tmp3 = tl.load(in_ptr1 + (x0 + 1536*x2), None, eviction_policy='evict_last')
+    tmp4 = tl.load(in_ptr2 + (x0), None, eviction_policy='evict_last')
+    tmp12 = tl.load(in_ptr3 + (x3), None)
+    tmp2 = tmp0 + tmp1
+    tmp5 = tmp3 + tmp4
+    tmp6 = tl.sigmoid(tmp5)
+    tmp7 = tmp2 * tmp6
+    tmp8 = tl.full([1], 2.0, tl.float32)
+    tmp9 = tmp7 * tmp8
+    tmp10 = tl.full([1], 0.2, tl.float32)
+    tmp11 = tmp9 * tmp10
+    tmp13 = tmp11 + tmp12
+    tmp14 = -tmp13
+    tmp15 = libdevice.exp(tmp14)
+    tmp16 = tl.full([1], 1.0, tl.float32)
+    tmp17 = tmp15 + tmp16
+    tmp18 = (tmp13 / tmp17)
+    tmp19 = tl.full([1], 0.9622504486493761, tl.float32)
+    tmp20 = tmp18 * tmp19
+    tl.store(in_out_ptr0 + (x3), tmp13, None)
+    tl.store(out_ptr0 + (x3), tmp20, None)
+''', device_str='cuda')
+
+
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:4666
+# Topologically Sorted Source Nodes: [reshape_27, batch_norm_27, reshape_28, batch_norm_28, reshape_29, batch_norm_29, reshape_30, batch_norm_30, silu_23, out_35, mul_48, view_27, weight_27, out_36, silu_24, mul_49, view_28, weight_28, out_37, silu_25, mul_50, view_29, weight_29, out_38, silu_26, mul_51, view_30, weight_30, out_39, x_se_20, x_se_21, x_se_22, x_se_23, sigmoid_5, mul_52, out_40, mul_54, out_41, silu_27, out_42], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.silu, aten.mul, aten.convolution, aten.mean, aten.relu, aten.sigmoid, aten.add]
+# Source node to ATen node mapping:
+#   batch_norm_27 => add_56, mul_103, mul_104, rsqrt_27, sub_27, unsqueeze_27, var_mean_27
+#   batch_norm_28 => add_58, mul_106, mul_107, rsqrt_28, sub_28, unsqueeze_28, var_mean_28
+#   batch_norm_29 => add_60, mul_109, mul_110, rsqrt_29, sub_29, unsqueeze_29, var_mean_29
+#   batch_norm_30 => add_62, mul_112, mul_113, rsqrt_30, sub_30, unsqueeze_30, var_mean_30
+#   mul_48 => mul_102
+#   mul_49 => mul_105
+#   mul_50 => mul_108
+#   mul_51 => mul_111
+#   mul_52 => mul_114
+#   mul_54 => mul_116
+#   out_35 => mul_101
+#   out_36 => convolution_37
+#   out_37 => convolution_38
+#   out_38 => convolution_39
+#   out_39 => convolution_40
+#   out_40 => mul_115
+#   out_41 => add_63
+#   out_42 => mul_117
+#   reshape_27 => view_81
+#   reshape_28 => view_84
+#   reshape_29 => view_87
+#   reshape_30 => view_90
+#   sigmoid_5 => sigmoid_5
+#   silu_23 => add_55, div_23, exp_23, neg_23
+#   silu_24 => add_57, div_24, exp_24, neg_24
+#   silu_25 => add_59, div_25, exp_25, neg_25
+#   silu_26 => add_61, div_26, exp_26, neg_26
+#   silu_27 => add_64, div_27, exp_27, neg_27
+#   view_27 => view_82
+#   view_28 => view_85
+#   view_29 => view_88
+#   view_30 => view_91
+#   weight_27 => view_83
+#   weight_28 => view_86
+#   weight_29 => view_89
+#   weight_30 => view_92
+#   x_se_20 => mean_5
+#   x_se_21 => convolution_41
+#   x_se_22 => relu_5
+#   x_se_23 => convolution_42
+# Graph fragment:
+#   %buf308 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=buf308]
+#   %arg113_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg113_1]
+#   %buf313 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0" = PlaceHolder[target=buf313]
+#   %arg117_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg117_1]
+#   %add_54 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=add_54]
+#   %add_63 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=add_63]
+#   %view_81 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg102_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_27 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_81, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_84 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg105_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_28 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_84, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_87 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg108_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_29 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_87, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_90 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg111_1, [1, 1536, -1]), kwargs = {})
+#   %var_mean_30 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_90, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %neg_23 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_54,), kwargs = {})
+#   %exp_23 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_23,), kwargs = {})
+#   %add_55 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_23, 1), kwargs = {})
+#   %div_23 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_54, %add_55), kwargs = {})
+#   %mul_101 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_23, 0.9622504486493761), kwargs = {})
+#   %sub_27 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_81, %getitem_55), kwargs = {})
+#   %add_56 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_54, 1e-05), kwargs = {})
+#   %rsqrt_27 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_56,), kwargs = {})
+#   %mul_103 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_27, %rsqrt_27), kwargs = {})
+#   %mul_102 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg103_1, 0.04562504637317021), kwargs = {})
+#   %view_82 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_102, [-1]), kwargs = {})
+#   %unsqueeze_27 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_82, -1), kwargs = {})
+#   %mul_104 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_103, %unsqueeze_27), kwargs = {})
+#   %view_83 : Tensor "f32[384, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_104, [384, 1536, 1, 1]), kwargs = {})
+#   %convolution_37 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_101, %view_83, %arg104_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_24 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_37,), kwargs = {})
+#   %exp_24 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_24,), kwargs = {})
+#   %add_57 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_24, 1), kwargs = {})
+#   %div_24 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_37, %add_57), kwargs = {})
+#   %sub_28 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_84, %getitem_57), kwargs = {})
+#   %add_58 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_56, 1e-05), kwargs = {})
+#   %rsqrt_28 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_58,), kwargs = {})
+#   %mul_106 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_28, %rsqrt_28), kwargs = {})
+#   %mul_105 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg106_1, 0.07450538873672485), kwargs = {})
+#   %view_85 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_105, [-1]), kwargs = {})
+#   %unsqueeze_28 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_85, -1), kwargs = {})
+#   %mul_107 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_106, %unsqueeze_28), kwargs = {})
+#   %view_86 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_107, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_38 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_24, %view_86, %arg107_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_25 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_38,), kwargs = {})
+#   %exp_25 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_25,), kwargs = {})
+#   %add_59 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_25, 1), kwargs = {})
+#   %div_25 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_38, %add_59), kwargs = {})
+#   %sub_29 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_87, %getitem_59), kwargs = {})
+#   %add_60 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_58, 1e-05), kwargs = {})
+#   %rsqrt_29 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_60,), kwargs = {})
+#   %mul_109 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_29, %rsqrt_29), kwargs = {})
+#   %mul_108 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg109_1, 0.07450538873672485), kwargs = {})
+#   %view_88 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_108, [-1]), kwargs = {})
+#   %unsqueeze_29 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_88, -1), kwargs = {})
+#   %mul_110 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_109, %unsqueeze_29), kwargs = {})
+#   %view_89 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_110, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_39 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_25, %view_89, %arg110_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_26 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_39,), kwargs = {})
+#   %exp_26 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_26,), kwargs = {})
+#   %add_61 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_26, 1), kwargs = {})
+#   %div_26 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_39, %add_61), kwargs = {})
+#   %sub_30 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_90, %getitem_61), kwargs = {})
+#   %add_62 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_60, 1e-05), kwargs = {})
+#   %rsqrt_30 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_62,), kwargs = {})
+#   %mul_112 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_30, %rsqrt_30), kwargs = {})
+#   %mul_111 : Tensor "f32[1536, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg112_1, 0.09125009274634042), kwargs = {})
+#   %view_91 : Tensor "f32[1536][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_111, [-1]), kwargs = {})
+#   %unsqueeze_30 : Tensor "f32[1536, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_91, -1), kwargs = {})
+#   %mul_113 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_112, %unsqueeze_30), kwargs = {})
+#   %view_92 : Tensor "f32[1536, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_113, [1536, 384, 1, 1]), kwargs = {})
+#   %convolution_40 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_26, %view_92, %arg113_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %mean_5 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%convolution_40, [2, 3], True), kwargs = {})
+#   %convolution_41 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mean_5, %arg114_1, %arg115_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %relu_5 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%convolution_41,), kwargs = {})
+#   %convolution_42 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%relu_5, %arg116_1, %arg117_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %sigmoid_5 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%convolution_42,), kwargs = {})
+#   %mul_114 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%convolution_40, %sigmoid_5), kwargs = {})
+#   %mul_115 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_114, 2.0), kwargs = {})
+#   %mul_116 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_115, 0.2), kwargs = {})
+#   %add_63 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=3] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_116, %add_54), kwargs = {})
+#   %neg_27 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_63,), kwargs = {})
+#   %exp_27 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_27,), kwargs = {})
+#   %add_64 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_27, 1), kwargs = {})
+#   %div_27 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_63, %add_64), kwargs = {})
+#   %mul_117 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_27, 0.9449111825230679), kwargs = {})
+#   return %add_63,%mul_117
+triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_40 = async_compile.triton('triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_40', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 67108864}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'out_ptr0': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]], (4,): [['tt.divisibility', 16]], (5,): [['tt.divisibility', 16]], (6,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_40', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 5, 'num_store': 2, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 1529622528}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_40(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, out_ptr0, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 63700992
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x3 = xindex
+    x0 = (xindex % 1536)
+    x2 = xindex // 497664
+    tmp0 = tl.load(in_out_ptr0 + (x3), None)
+    tmp1 = tl.load(in_ptr0 + (x0), None, eviction_policy='evict_last')
+    tmp3 = tl.load(in_ptr1 + (x0 + 1536*x2), None, eviction_policy='evict_last')
+    tmp4 = tl.load(in_ptr2 + (x0), None, eviction_policy='evict_last')
+    tmp12 = tl.load(in_ptr3 + (x3), None)
+    tmp2 = tmp0 + tmp1
+    tmp5 = tmp3 + tmp4
+    tmp6 = tl.sigmoid(tmp5)
+    tmp7 = tmp2 * tmp6
+    tmp8 = tl.full([1], 2.0, tl.float32)
+    tmp9 = tmp7 * tmp8
+    tmp10 = tl.full([1], 0.2, tl.float32)
+    tmp11 = tmp9 * tmp10
+    tmp13 = tmp11 + tmp12
+    tmp14 = -tmp13
+    tmp15 = libdevice.exp(tmp14)
+    tmp16 = tl.full([1], 1.0, tl.float32)
+    tmp17 = tmp15 + tmp16
+    tmp18 = (tmp13 / tmp17)
+    tmp19 = tl.full([1], 0.9449111825230679, tl.float32)
+    tmp20 = tmp18 * tmp19
+    tl.store(in_out_ptr0 + (x3), tmp13, None)
+    tl.store(out_ptr0 + (x3), tmp20, None)
+''', device_str='cuda')
+
+
+# Source: nfnet_l0_Infer/GPU_g01_output_code.py:5028
+# Topologically Sorted Source Nodes: [reshape_35, batch_norm_35, reshape_36, batch_norm_36, reshape_37, batch_norm_37, reshape_38, batch_norm_38, silu_31, out_49, mul_64, view_35, weight_35, out_50, silu_32, mul_65, view_36, weight_36, out_51, silu_33, mul_66, view_37, weight_37, out_52, silu_34, mul_67, view_38, weight_38, out_53, x_se_28, x_se_29, x_se_30, x_se_31, sigmoid_7, mul_68, out_54, mul_70, out_55, silu_35, out_56], Original ATen: [aten.view, aten._native_batch_norm_legit, aten.silu, aten.mul, aten.convolution, aten.mean, aten.relu, aten.sigmoid, aten.add]
+# Source node to ATen node mapping:
+#   batch_norm_35 => add_74, mul_135, mul_136, rsqrt_35, sub_35, unsqueeze_35, var_mean_35
+#   batch_norm_36 => add_76, mul_138, mul_139, rsqrt_36, sub_36, unsqueeze_36, var_mean_36
+#   batch_norm_37 => add_78, mul_141, mul_142, rsqrt_37, sub_37, unsqueeze_37, var_mean_37
+#   batch_norm_38 => add_80, mul_144, mul_145, rsqrt_38, sub_38, unsqueeze_38, var_mean_38
+#   mul_64 => mul_134
+#   mul_65 => mul_137
+#   mul_66 => mul_140
+#   mul_67 => mul_143
+#   mul_68 => mul_146
+#   mul_70 => mul_148
+#   out_49 => mul_133
+#   out_50 => convolution_49
+#   out_51 => convolution_50
+#   out_52 => convolution_51
+#   out_53 => convolution_52
+#   out_54 => mul_147
+#   out_55 => add_81
+#   out_56 => mul_149
+#   reshape_35 => view_105
+#   reshape_36 => view_108
+#   reshape_37 => view_111
+#   reshape_38 => view_114
+#   sigmoid_7 => sigmoid_7
+#   silu_31 => add_73, div_31, exp_31, neg_31
+#   silu_32 => add_75, div_32, exp_32, neg_32
+#   silu_33 => add_77, div_33, exp_33, neg_33
+#   silu_34 => add_79, div_34, exp_34, neg_34
+#   silu_35 => add_82, div_35, exp_35, neg_35
+#   view_35 => view_106
+#   view_36 => view_109
+#   view_37 => view_112
+#   view_38 => view_115
+#   weight_35 => view_107
+#   weight_36 => view_110
+#   weight_37 => view_113
+#   weight_38 => view_116
+#   x_se_28 => mean_7
+#   x_se_29 => convolution_53
+#   x_se_30 => relu_7
+#   x_se_31 => convolution_54
+# Graph fragment:
+#   %buf348 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=buf348]
+#   %arg145_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg145_1]
+#   %buf353 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0" = PlaceHolder[target=buf353]
+#   %arg149_1 : Tensor "f32[1536][1]cuda:0" = PlaceHolder[target=arg149_1]
+#   %add_72 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=add_72]
+#   %add_81 : Tensor "f32[128, 1536, 18, 18][497664, 1, 27648, 1536]cuda:0" = PlaceHolder[target=add_81]
+#   %view_105 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg134_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_35 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_105, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_108 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg137_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_36 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_108, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_111 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg140_1, [1, 384, -1]), kwargs = {})
+#   %var_mean_37 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_111, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %view_114 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.reshape.default](args = (%arg143_1, [1, 1536, -1]), kwargs = {})
+#   %var_mean_38 : [num_users=2] = call_function[target=torch.ops.aten.var_mean.correction](args = (%view_114, [0, 2]), kwargs = {correction: 0, keepdim: True})
+#   %neg_31 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_72,), kwargs = {})
+#   %exp_31 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_31,), kwargs = {})
+#   %add_73 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_31, 1), kwargs = {})
+#   %div_31 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_72, %add_73), kwargs = {})
+#   %mul_133 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_31, 0.9284766908852592), kwargs = {})
+#   %sub_35 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_105, %getitem_71), kwargs = {})
+#   %add_74 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_70, 1e-05), kwargs = {})
+#   %rsqrt_35 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_74,), kwargs = {})
+#   %mul_135 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_35, %rsqrt_35), kwargs = {})
+#   %mul_134 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg135_1, 0.04562504637317021), kwargs = {})
+#   %view_106 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_134, [-1]), kwargs = {})
+#   %unsqueeze_35 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_106, -1), kwargs = {})
+#   %mul_136 : Tensor "f32[1, 384, 1536][589824, 1536, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_135, %unsqueeze_35), kwargs = {})
+#   %view_107 : Tensor "f32[384, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_136, [384, 1536, 1, 1]), kwargs = {})
+#   %convolution_49 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%mul_133, %view_107, %arg136_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %neg_32 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_49,), kwargs = {})
+#   %exp_32 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_32,), kwargs = {})
+#   %add_75 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_32, 1), kwargs = {})
+#   %div_32 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_49, %add_75), kwargs = {})
+#   %sub_36 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_108, %getitem_73), kwargs = {})
+#   %add_76 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_72, 1e-05), kwargs = {})
+#   %rsqrt_36 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_76,), kwargs = {})
+#   %mul_138 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_36, %rsqrt_36), kwargs = {})
+#   %mul_137 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg138_1, 0.07450538873672485), kwargs = {})
+#   %view_109 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_137, [-1]), kwargs = {})
+#   %unsqueeze_36 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_109, -1), kwargs = {})
+#   %mul_139 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_138, %unsqueeze_36), kwargs = {})
+#   %view_110 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_139, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_50 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_32, %view_110, %arg139_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_33 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_50,), kwargs = {})
+#   %exp_33 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_33,), kwargs = {})
+#   %add_77 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_33, 1), kwargs = {})
+#   %div_33 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_50, %add_77), kwargs = {})
+#   %sub_37 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_111, %getitem_75), kwargs = {})
+#   %add_78 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_74, 1e-05), kwargs = {})
+#   %rsqrt_37 : Tensor "f32[1, 384, 1][384, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_78,), kwargs = {})
+#   %mul_141 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_37, %rsqrt_37), kwargs = {})
+#   %mul_140 : Tensor "f32[384, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg141_1, 0.07450538873672485), kwargs = {})
+#   %view_112 : Tensor "f32[384][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_140, [-1]), kwargs = {})
+#   %unsqueeze_37 : Tensor "f32[384, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_112, -1), kwargs = {})
+#   %mul_142 : Tensor "f32[1, 384, 576][221184, 576, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_141, %unsqueeze_37), kwargs = {})
+#   %view_113 : Tensor "f32[384, 64, 3, 3][576, 9, 3, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_142, [384, 64, 3, 3]), kwargs = {})
+#   %convolution_51 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_33, %view_113, %arg142_1, [1, 1], [1, 1], [1, 1], False, [0, 0], 6), kwargs = {})
+#   %neg_34 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%convolution_51,), kwargs = {})
+#   %exp_34 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_34,), kwargs = {})
+#   %add_79 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_34, 1), kwargs = {})
+#   %div_34 : Tensor "f32[128, 384, 18, 18][124416, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%convolution_51, %add_79), kwargs = {})
+#   %sub_38 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sub.Tensor](args = (%view_114, %getitem_77), kwargs = {})
+#   %add_80 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_76, 1e-05), kwargs = {})
+#   %rsqrt_38 : Tensor "f32[1, 1536, 1][1536, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.rsqrt.default](args = (%add_80,), kwargs = {})
+#   %mul_144 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%sub_38, %rsqrt_38), kwargs = {})
+#   %mul_143 : Tensor "f32[1536, 1, 1, 1][1, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%arg144_1, 0.09125009274634042), kwargs = {})
+#   %view_115 : Tensor "f32[1536][1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_143, [-1]), kwargs = {})
+#   %unsqueeze_38 : Tensor "f32[1536, 1][1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.unsqueeze.default](args = (%view_115, -1), kwargs = {})
+#   %mul_145 : Tensor "f32[1, 1536, 384][589824, 384, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_144, %unsqueeze_38), kwargs = {})
+#   %view_116 : Tensor "f32[1536, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.reshape.default](args = (%mul_145, [1536, 384, 1, 1]), kwargs = {})
+#   %convolution_52 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=2] = call_function[target=torch.ops.aten.convolution.default](args = (%div_34, %view_116, %arg145_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %mean_7 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%convolution_52, [2, 3], True), kwargs = {})
+#   %convolution_53 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%mean_7, %arg146_1, %arg147_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %relu_7 : Tensor "f32[128, 384, 1, 1][384, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%convolution_53,), kwargs = {})
+#   %convolution_54 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.convolution.default](args = (%relu_7, %arg148_1, %arg149_1, [1, 1], [0, 0], [1, 1], False, [0, 0], 1), kwargs = {})
+#   %sigmoid_7 : Tensor "f32[128, 1536, 1, 1][1536, 1, 1, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.sigmoid.default](args = (%convolution_54,), kwargs = {})
+#   %mul_146 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%convolution_52, %sigmoid_7), kwargs = {})
+#   %mul_147 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_146, 2.0), kwargs = {})
+#   %mul_148 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%mul_147, 0.2), kwargs = {})
+#   %add_81 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=3] = call_function[target=torch.ops.aten.add.Tensor](args = (%mul_148, %add_72), kwargs = {})
+#   %neg_35 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.neg.default](args = (%add_81,), kwargs = {})
+#   %exp_35 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.exp.default](args = (%neg_35,), kwargs = {})
+#   %add_82 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%exp_35, 1), kwargs = {})
+#   %div_35 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.div.Tensor](args = (%add_81, %add_82), kwargs = {})
+#   %mul_149 : Tensor "f32[128, 1536, 18, 18][497664, 324, 18, 1]cuda:0"[num_users=1] = call_function[target=torch.ops.aten.mul.Tensor](args = (%div_35, 0.9128709291752768), kwargs = {})
+#   return %add_81,%mul_149
+triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_42 = async_compile.triton('triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_42', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+triton_helpers.set_driver_to_gpu()
+
+@triton_heuristics.pointwise(
+    size_hints={'x': 67108864}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_out_ptr0': '*fp32', 'in_ptr0': '*fp32', 'in_ptr1': '*fp32', 'in_ptr2': '*fp32', 'in_ptr3': '*fp32', 'out_ptr0': '*fp32', 'xnumel': 'i32', 'XBLOCK': 'constexpr'}, 'device': DeviceProperties(type='cuda', index=0, multi_processor_count=92, cc=89, major=8, regs_per_multiprocessor=65536, max_threads_per_multi_processor=1536, max_threads_per_block=1024, warp_size=32), 'constants': {}, 'native_matmul': False, 'enable_fp_fusion': True, 'launch_pdl': False, 'disable_ftz': False, 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]], (2,): [['tt.divisibility', 16]], (3,): [['tt.divisibility', 16]], (4,): [['tt.divisibility', 16]], (5,): [['tt.divisibility', 16]], (6,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'Grid1D', 'kernel_name': 'triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_42', 'mutated_arg_names': ['in_out_ptr0'], 'optimize_mem': True, 'no_x_dim': False, 'atomic_add_found': False, 'num_load': 5, 'num_store': 2, 'num_reduction': 0, 'autotune_hints': set(), 'tiling_scores': {'x': 1529622528}, 'backend_hash': '<redacted>', 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': True, 'autotune_remote_cache': None, 'force_disable_caches': True, 'dynamic_scale_rblock': True, 'incremental_autotune': False, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'batch_invariant': False, 'force_filter_reduction_configs': False, 'mix_order_reduction_allow_multi_stages': True, 'dynamic_disable_pipelining': True, 'are_deterministic_algorithms_enabled': False},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__native_batch_norm_legit_add_convolution_mean_mul_relu_sigmoid_silu_view_42(in_out_ptr0, in_ptr0, in_ptr1, in_ptr2, in_ptr3, out_ptr0, xnumel, XBLOCK : tl.constexpr):
+    xnumel = 63700992
+    xoffset = tl.program_id(0) * XBLOCK
+    xindex = xoffset + tl.arange(0, XBLOCK)[:]
+    xmask = tl.full([XBLOCK], True, tl.int1)[:]
+    x3 = xindex
+    x0 = (xindex % 1536)
+    x2 = xindex // 497664
+    tmp0 = tl.load(in_out_ptr0 + (x3), None)
+    tmp1 = tl.load(in_ptr0 + (x0), None, eviction_policy='evict_last')
+    tmp3 = tl.load(in_ptr1 + (x0 + 1536*x2), None, eviction_policy='evict_last')
+    tmp4 = tl.load(in_ptr2 + (x0), None, eviction_policy='evict_last')
+    tmp12 = tl.load(in_ptr3 + (x3), None)
+    tmp2 = tmp0 + tmp1
+    tmp5 = tmp3 + tmp4
+    tmp6 = tl.sigmoid(tmp5)
+    tmp7 = tmp2 * tmp6
+    tmp8 = tl.full([1], 2.0, tl.float32)
+    tmp9 = tmp7 * tmp8
+    tmp10 = tl.full([1], 0.2, tl.float32)
+    tmp11 = tmp9 * tmp10
+    tmp13 = tmp11 + tmp12
+    tmp14 = -tmp13
+    tmp15 = libdevice.exp(tmp14)
+    tmp16 = tl.full([1], 1.0, tl.float32)
+    tmp17 = tmp15 + tmp16
+    tmp18 = (tmp13 / tmp17)
+    tmp19 = tl.full([1], 0.9128709291752768, tl.float32)
+    tmp20 = tmp18 * tmp19
+    tl.store(in_out_ptr0 + (x3), tmp13, None)
+    tl.store(out_ptr0 + (x3), tmp20, None)
+''', device_str='cuda')

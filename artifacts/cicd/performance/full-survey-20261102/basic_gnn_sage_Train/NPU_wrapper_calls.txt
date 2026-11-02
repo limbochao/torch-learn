@@ -1,0 +1,180 @@
+# Source: basic_gnn_sage_Train/NPU_g01_output_code.py:370
+            extern_kernels.mm(reinterpret_tensor(tangents_1, (64, 10000), (1, 64), 0), div_2, out=buf3)
+            del div_2
+            buf4 = empty_strided_npu((1, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_0.run(tangents_1, buf4, 64, 10000, stream=raw_stream0)
+            del tangents_1
+            buf5 = empty_strided_npu((10000, 64), (64, 1), torch.float32)
+            buf13 = empty_strided_npu((10000, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [count_1, view_1, expand_as_1, div_3, edge_index_i, view, index_1, gather, index, index_put, div_4, gather_1, index_put_1], Original ATen: [aten.clamp, aten.view, aten.expand, aten.div, aten.select, aten.gather, aten.index_add]
+
+
+# Source: basic_gnn_sage_Train/NPU_g01_output_code.py:380
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clamp_div_expand_gather_index_1.run(full_default_2, buf5, buf13, 10000, 64, stream=raw_stream0)
+            del full_default_2
+            # Topologically Sorted Source Nodes: [count_1, view_1, expand_as_1, div_3, edge_index_i, view, index_1, gather, index, index_put], Original ATen: [aten.clamp, aten.view, aten.expand, aten.div, aten.select, aten.gather, aten.index_add]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clamp_div_expand_gather_index_2.run(primals_2, buf2, scatter_add, buf5, 200000, 64, stream=raw_stream0)
+            del buf2
+            buf7 = relu_1; del relu_1  # reuse
+            buf12 = empty_strided_npu((1, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [add_3, le, scalar_tensor, where, sum_2], Original ATen: [aten.add, aten.threshold_backward, aten.sum]
+
+
+# Source: basic_gnn_sage_Train/NPU_g01_output_code.py:390
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_add_sum_threshold_backward_3.run(buf7, buf0, buf5, buf12, 64, 10000, stream=raw_stream0)
+            buf8 = buf5; del buf5  # reuse
+            # Topologically Sorted Source Nodes: [linear_3, permute_13, mm_7], Original ATen: [aten.t, aten.matmul_backward]
+            # [Provenance debug handles] extern_kernels.mm:5
+            extern_kernels.mm(buf7, primals_8, out=buf8)
+
+
+# Source: basic_gnn_sage_Train/NPU_g01_output_code.py:409
+            extern_kernels.mm(reinterpret_tensor(buf7, (64, 10000), (1, 64), 0), div_1, out=buf11)
+            del buf7
+            del div_1
+            # Topologically Sorted Source Nodes: [count_1, view_1, expand_as_1, edge_index_i, view, index_1, index, div_4, gather_1, index_put_1], Original ATen: [aten.clamp, aten.view, aten.expand, aten.select, aten.div, aten.gather, aten.index_add]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clamp_div_expand_gather_index_2.run(primals_2, buf10, scatter_add, buf13, 200000, 64, stream=raw_stream0)
+            del buf10
+            del primals_2
+            del scatter_add
+            buf15 = relu; del relu  # reuse
+
+
+# Source: basic_gnn_sage_Train/NPU_g01_output_code.py:419
+            buf18 = empty_strided_npu((1, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [scalar_tensor, add_4, le_1, where_1, sum_3], Original ATen: [aten.threshold_backward, aten.add, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_add_sum_threshold_backward_3.run(buf15, buf8, buf13, buf18, 64, 10000, stream=raw_stream0)
+            del buf13
+            del buf8
+            buf16 = empty_strided_npu((64, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [mm_11], Original ATen: [aten.matmul_backward]
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:390
+            # Topologically Sorted Source Nodes: [new_ones], Original ATen: [aten.new_ones]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_new_ones_1.run(buf1, 200000, stream=raw_stream0)
+            primals_2 = copy_if_misaligned(primals_2)
+            # Topologically Sorted Source Nodes: [edge_index_i, count, new_ones, scatter_add_], Original ATen: [aten.select, aten.new_zeros, aten.new_ones, aten.scatter_add]
+            # [Provenance debug handles] torch.ops.aten.scatter_add.default:1
+            buf2 = torch.ops.aten.scatter_add.default(buf0, 0, reinterpret_tensor(primals_2, (200000, ), (1, ), 200000), buf1)
+            del buf0
+            del buf1
+            buf3 = buf2
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:400
+            assert_size_stride(buf3, (10000, ), (1, ), 'torch.ops.aten.scatter_add.default')
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:401
+            assert_alignment(buf3, 16, 'torch.ops.aten.scatter_add.default')
+            del buf2
+            buf4 = empty_strided_npu((10000, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [new_zeros_1], Original ATen: [aten.new_zeros]
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:405
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:406
+            triton_poi_fused_new_zeros_2.run(buf4, 10000, 64, stream=raw_stream0)
+            primals_1 = copy_if_misaligned(primals_1)
+            buf5 = empty_strided_npu((200000, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [index, x_j], Original ATen: [aten.select, aten.index_select]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_index_select_select_3.run(primals_2, primals_1, buf5, 200000, 64, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [index, x_j, edge_index_i, view, index_1, out], Original ATen: [aten.select, aten.index_select, aten.view, aten.expand, aten.scatter_add]
+            # [Provenance debug handles] torch.ops.aten.scatter_add.default:2
+            buf6 = torch.ops.aten.scatter_add.default(buf4, 0, reinterpret_tensor(primals_2, (200000, 64), (1, 0), 200000), buf5)
+            buf7 = buf6
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:416
+            assert_size_stride(buf7, (10000, 64), (64, 1), 'torch.ops.aten.scatter_add.default')
+            assert_alignment(buf7, 16, 'torch.ops.aten.scatter_add.default')
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:418
+            del buf6
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:419
+            buf8 = buf7; del buf7  # reuse
+            # Topologically Sorted Source Nodes: [count_1, view_1, expand_as_1, out_1], Original ATen: [aten.clamp, aten.view, aten.expand, aten.div]
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:421
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:436
+            triton_poi_fused_add_addmm_relu_5.run(buf11, primals_4, buf10, 10000, 64, stream=raw_stream0)
+            del primals_4
+            buf12 = buf5; del buf5  # reuse
+            # Topologically Sorted Source Nodes: [index, x_j_1], Original ATen: [aten.select, aten.index_select]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_index_select_select_3.run(primals_2, buf11, buf12, 200000, 64, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [index, edge_index_i, view, index_1, x_j_1, out_4], Original ATen: [aten.select, aten.view, aten.expand, aten.index_select, aten.scatter_add]
+            # [Provenance debug handles] torch.ops.aten.scatter_add.default:5
+            buf13 = torch.ops.aten.scatter_add.default(buf4, 0, reinterpret_tensor(primals_2, (200000, 64), (1, 0), 200000), buf12)
+            del buf12
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:446
+            buf14 = buf13
+            assert_size_stride(buf14, (10000, 64), (64, 1), 'torch.ops.aten.scatter_add.default')
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:448
+            assert_alignment(buf14, 16, 'torch.ops.aten.scatter_add.default')
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:449
+            del buf13
+            buf15 = buf14; del buf14  # reuse
+            # Topologically Sorted Source Nodes: [count_1, view_1, expand_as_1, out_5], Original ATen: [aten.clamp, aten.view, aten.expand, aten.div]
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:452
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:466
+            del buf17
+            del primals_7
+            buf19 = empty_strided_npu((200000, 64), (64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [index, x_j_2], Original ATen: [aten.select, aten.index_select]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_index_select_select_3.run(primals_2, buf18, buf19, 200000, 64, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [index, edge_index_i, view, index_1, x_j_2, out_8], Original ATen: [aten.select, aten.view, aten.expand, aten.index_select, aten.scatter_add]
+            # [Provenance debug handles] torch.ops.aten.scatter_add.default:8
+            buf20 = torch.ops.aten.scatter_add.default(buf4, 0, reinterpret_tensor(primals_2, (200000, 64), (1, 0), 200000), buf19)
+            del buf19
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:476
+            buf21 = buf20
+            assert_size_stride(buf21, (10000, 64), (64, 1), 'torch.ops.aten.scatter_add.default')
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:478
+            assert_alignment(buf21, 16, 'torch.ops.aten.scatter_add.default')
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:479
+            del buf20
+            buf22 = buf21; del buf21  # reuse
+            # Topologically Sorted Source Nodes: [count_1, view_1, expand_as_1, out_9], Original ATen: [aten.clamp, aten.view, aten.expand, aten.div]
+
+
+# Source: basic_gnn_sage_Train/NPU_g02_output_code.py:482
+            raw_stream0 = get_raw_stream(0)

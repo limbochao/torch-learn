@@ -1,0 +1,1115 @@
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:934
+            buf0 = empty_strided_cuda((32, 512, 128), (65536, 128, 1), torch.float32)
+            buf4 = buf0; del buf0  # reuse
+            # Topologically Sorted Source Nodes: [inputs_embeds, buffered_token_type_ids_expanded, token_type_embeddings, embeddings, position_embeddings, embeddings_1, embeddings_2], Original ATen: [aten.embedding, aten.expand, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_embedding_expand_native_layer_norm_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_embedding_expand_native_layer_norm_0.run(buf4, arg1_1, arg3_1, arg2_1, arg5_1, arg4_1, arg6_1, arg7_1, arg8_1, 16384, 128, stream=raw_stream0)
+            del arg1_1
+            del arg2_1
+            del arg4_1
+            del arg5_1
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:967
+            assert_size_stride(arg12_1, (256, ), (1, ), 'input')
+            buf8 = empty_strided_cuda((32, 4, 512, 64), (131072, 32768, 64, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, query_layer, view, query_layer_1, attention_scores], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:5
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg12_1, buf6, buf8, 4194304, stream=raw_stream0)
+            del arg12_1
+            assert_size_stride(arg14_1, (256, ), (1, ), 'input')
+            buf9 = reinterpret_tensor(buf6, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf6  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer, view_1, key_layer_1, transpose_3, attention_scores], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:977
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:6
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg14_1, buf7, buf9, 8192, 512, stream=raw_stream0)
+            del arg14_1
+            buf10 = empty_strided_cuda((128, 512, 512), (262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, query_layer, view, query_layer_1, attention_scores, key_layer, view_1, key_layer_1, transpose_3], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:7
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:996
+            assert_size_stride(arg16_1, (256, ), (1, ), 'input')
+            buf17 = buf8; del buf8  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer, view_2, value_layer_1, context_layer], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:10
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg16_1, buf15, buf17, 4194304, stream=raw_stream0)
+            del arg16_1
+            buf18 = reinterpret_tensor(buf15, (128, 512, 64), (32768, 64, 1), 0); del buf15  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores, , attention_probs, context_layer, value_layer, view_2, value_layer_1], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:11
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1006
+            extern_kernels.bmm(reinterpret_tensor(buf16, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf17, (128, 512, 64), (32768, 64, 1), 0), out=buf18)
+            buf19 = reinterpret_tensor(buf17, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf17  # reuse
+            # Topologically Sorted Source Nodes: [context_layer, permute, context_layer_1], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:12
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf18, buf19, 4194304, stream=raw_stream0)
+            assert_size_stride(arg17_1, (256, 256), (256, 1), 'input')
+            buf20 = reinterpret_tensor(buf18, (16384, 256), (256, 1), 0); del buf18  # reuse
+            # Topologically Sorted Source Nodes: [context_layer, permute, context_layer_1, context_layer_2, hidden_states_1, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:13
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1020
+            assert_size_stride(arg20_1, (256, ), (1, ), 'input')
+            buf24 = reinterpret_tensor(buf20, (32, 512, 256), (131072, 256, 1), 0); del buf20  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states, , hidden_states_1, add_2, hidden_states_3], Original ATen: [aten.view, aten.addmm, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:14
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf24, arg18_1, buf5, arg19_1, arg20_1, 16384, 256, stream=raw_stream0)
+            del arg18_1
+            del arg19_1
+            del arg20_1
+            assert_size_stride(arg21_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1035
+            assert_size_stride(arg22_1, (1024, ), (1, ), 'input')
+            buf26 = reinterpret_tensor(buf25, (32, 512, 1024), (524288, 1024, 1), 0); del buf25  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_4, hidden_states_5], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:16
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf26, arg22_1, 16777216, stream=raw_stream0)
+            del arg22_1
+            assert_size_stride(arg23_1, (256, 1024), (1024, 1), 'input')
+            buf27 = buf5; del buf5  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_4, hidden_states_5, hidden_states_6], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1050
+            assert_size_stride(arg26_1, (256, ), (1, ), 'input')
+            buf31 = reinterpret_tensor(buf27, (32, 512, 256), (131072, 256, 1), 0); del buf27  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_6, add_3, hidden_states_8], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:18
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf31, arg24_1, buf24, arg25_1, arg26_1, 16384, 256, stream=raw_stream0)
+            del arg24_1
+            del arg25_1
+            del arg26_1
+            assert_size_stride(arg27_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1071
+            assert_size_stride(arg28_1, (256, ), (1, ), 'input')
+            buf34 = reinterpret_tensor(buf7, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf7  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_2, view_4, query_layer_3, attention_scores_3], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:21
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg28_1, buf32, buf34, 4194304, stream=raw_stream0)
+            del arg28_1
+            assert_size_stride(arg30_1, (256, ), (1, ), 'input')
+            buf35 = reinterpret_tensor(buf32, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf32  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_2, view_5, key_layer_3, transpose_7, attention_scores_3], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1081
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:22
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg30_1, buf33, buf35, 8192, 512, stream=raw_stream0)
+            del arg30_1
+            buf36 = reinterpret_tensor(buf16, (128, 512, 512), (262144, 512, 1), 0); del buf16  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_2, view_4, query_layer_3, attention_scores_3, key_layer_2, view_5, key_layer_3, transpose_7], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:23
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1100
+            assert_size_stride(arg32_1, (256, ), (1, ), 'input')
+            buf43 = buf34; del buf34  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_2, view_6, value_layer_3, context_layer_3], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:26
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg32_1, buf41, buf43, 4194304, stream=raw_stream0)
+            del arg32_1
+            buf44 = reinterpret_tensor(buf41, (128, 512, 64), (32768, 64, 1), 0); del buf41  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_3, , attention_probs_2, context_layer_3, value_layer_2, view_6, value_layer_3], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:27
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1110
+            extern_kernels.bmm(reinterpret_tensor(buf42, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf43, (128, 512, 64), (32768, 64, 1), 0), out=buf44)
+            buf45 = reinterpret_tensor(buf43, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf43  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_3, permute_1, context_layer_4], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:28
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf44, buf45, 4194304, stream=raw_stream0)
+            assert_size_stride(arg33_1, (256, 256), (256, 1), 'input')
+            buf46 = reinterpret_tensor(buf44, (16384, 256), (256, 1), 0); del buf44  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_3, permute_1, context_layer_4, context_layer_5, hidden_states_9, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:29
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1124
+            assert_size_stride(arg36_1, (256, ), (1, ), 'input')
+            buf50 = reinterpret_tensor(buf46, (32, 512, 256), (131072, 256, 1), 0); del buf46  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_9, add_5, hidden_states_11], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:30
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf50, arg34_1, buf31, arg35_1, arg36_1, 16384, 256, stream=raw_stream0)
+            del arg34_1
+            del arg35_1
+            del arg36_1
+            assert_size_stride(arg37_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1139
+            assert_size_stride(arg38_1, (1024, ), (1, ), 'input')
+            buf52 = reinterpret_tensor(buf51, (32, 512, 1024), (524288, 1024, 1), 0); del buf51  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_12, hidden_states_13], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:32
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf52, arg38_1, 16777216, stream=raw_stream0)
+            del arg38_1
+            assert_size_stride(arg39_1, (256, 1024), (1024, 1), 'input')
+            buf53 = reinterpret_tensor(buf31, (16384, 256), (256, 1), 0); del buf31  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_12, hidden_states_13, hidden_states_14], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1154
+            assert_size_stride(arg42_1, (256, ), (1, ), 'input')
+            buf57 = reinterpret_tensor(buf53, (32, 512, 256), (131072, 256, 1), 0); del buf53  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_14, add_6, hidden_states_16], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:34
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf57, arg40_1, buf50, arg41_1, arg42_1, 16384, 256, stream=raw_stream0)
+            del arg40_1
+            del arg41_1
+            del arg42_1
+            assert_size_stride(arg43_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1175
+            assert_size_stride(arg44_1, (256, ), (1, ), 'input')
+            buf60 = reinterpret_tensor(buf33, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf33  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_4, view_8, query_layer_5, attention_scores_6], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:37
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg44_1, buf58, buf60, 4194304, stream=raw_stream0)
+            del arg44_1
+            assert_size_stride(arg46_1, (256, ), (1, ), 'input')
+            buf61 = reinterpret_tensor(buf58, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf58  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_4, view_9, key_layer_5, transpose_11, attention_scores_6], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1185
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:38
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg46_1, buf59, buf61, 8192, 512, stream=raw_stream0)
+            del arg46_1
+            buf62 = reinterpret_tensor(buf42, (128, 512, 512), (262144, 512, 1), 0); del buf42  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_4, view_8, query_layer_5, attention_scores_6, key_layer_4, view_9, key_layer_5, transpose_11], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:39
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1204
+            assert_size_stride(arg48_1, (256, ), (1, ), 'input')
+            buf69 = buf60; del buf60  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_4, view_10, value_layer_5, context_layer_6], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:42
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg48_1, buf67, buf69, 4194304, stream=raw_stream0)
+            del arg48_1
+            buf70 = reinterpret_tensor(buf67, (128, 512, 64), (32768, 64, 1), 0); del buf67  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_6, , attention_probs_4, context_layer_6, value_layer_4, view_10, value_layer_5], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:43
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1214
+            extern_kernels.bmm(reinterpret_tensor(buf68, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf69, (128, 512, 64), (32768, 64, 1), 0), out=buf70)
+            buf71 = reinterpret_tensor(buf69, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf69  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_6, permute_2, context_layer_7], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:44
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf70, buf71, 4194304, stream=raw_stream0)
+            assert_size_stride(arg49_1, (256, 256), (256, 1), 'input')
+            buf72 = reinterpret_tensor(buf70, (16384, 256), (256, 1), 0); del buf70  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_6, permute_2, context_layer_7, context_layer_8, hidden_states_17, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:45
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1228
+            assert_size_stride(arg52_1, (256, ), (1, ), 'input')
+            buf76 = reinterpret_tensor(buf72, (32, 512, 256), (131072, 256, 1), 0); del buf72  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_17, add_8, hidden_states_19], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:46
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf76, arg50_1, buf57, arg51_1, arg52_1, 16384, 256, stream=raw_stream0)
+            del arg50_1
+            del arg51_1
+            del arg52_1
+            assert_size_stride(arg53_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1243
+            assert_size_stride(arg54_1, (1024, ), (1, ), 'input')
+            buf78 = reinterpret_tensor(buf77, (32, 512, 1024), (524288, 1024, 1), 0); del buf77  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_20, hidden_states_21], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:48
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf78, arg54_1, 16777216, stream=raw_stream0)
+            del arg54_1
+            assert_size_stride(arg55_1, (256, 1024), (1024, 1), 'input')
+            buf79 = reinterpret_tensor(buf57, (16384, 256), (256, 1), 0); del buf57  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_20, hidden_states_21, hidden_states_22], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1258
+            assert_size_stride(arg58_1, (256, ), (1, ), 'input')
+            buf83 = reinterpret_tensor(buf79, (32, 512, 256), (131072, 256, 1), 0); del buf79  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_22, add_9, hidden_states_24], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:50
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf83, arg56_1, buf76, arg57_1, arg58_1, 16384, 256, stream=raw_stream0)
+            del arg56_1
+            del arg57_1
+            del arg58_1
+            assert_size_stride(arg59_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1279
+            assert_size_stride(arg60_1, (256, ), (1, ), 'input')
+            buf86 = reinterpret_tensor(buf59, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf59  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_6, view_12, query_layer_7, attention_scores_9], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:53
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg60_1, buf84, buf86, 4194304, stream=raw_stream0)
+            del arg60_1
+            assert_size_stride(arg62_1, (256, ), (1, ), 'input')
+            buf87 = reinterpret_tensor(buf84, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf84  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_6, view_13, key_layer_7, transpose_15, attention_scores_9], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1289
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:54
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg62_1, buf85, buf87, 8192, 512, stream=raw_stream0)
+            del arg62_1
+            buf88 = reinterpret_tensor(buf68, (128, 512, 512), (262144, 512, 1), 0); del buf68  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_6, view_12, query_layer_7, attention_scores_9, key_layer_6, view_13, key_layer_7, transpose_15], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:55
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1308
+            assert_size_stride(arg64_1, (256, ), (1, ), 'input')
+            buf95 = buf86; del buf86  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_6, view_14, value_layer_7, context_layer_9], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:58
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg64_1, buf93, buf95, 4194304, stream=raw_stream0)
+            del arg64_1
+            buf96 = reinterpret_tensor(buf93, (128, 512, 64), (32768, 64, 1), 0); del buf93  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_9, , attention_probs_6, context_layer_9, value_layer_6, view_14, value_layer_7], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:59
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1318
+            extern_kernels.bmm(reinterpret_tensor(buf94, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf95, (128, 512, 64), (32768, 64, 1), 0), out=buf96)
+            buf97 = reinterpret_tensor(buf95, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf95  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_9, permute_3, context_layer_10], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:60
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf96, buf97, 4194304, stream=raw_stream0)
+            assert_size_stride(arg65_1, (256, 256), (256, 1), 'input')
+            buf98 = reinterpret_tensor(buf96, (16384, 256), (256, 1), 0); del buf96  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_9, permute_3, context_layer_10, context_layer_11, hidden_states_25, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:61
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1332
+            assert_size_stride(arg68_1, (256, ), (1, ), 'input')
+            buf102 = reinterpret_tensor(buf98, (32, 512, 256), (131072, 256, 1), 0); del buf98  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_25, add_11, hidden_states_27], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:62
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf102, arg66_1, buf83, arg67_1, arg68_1, 16384, 256, stream=raw_stream0)
+            del arg66_1
+            del arg67_1
+            del arg68_1
+            assert_size_stride(arg69_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1347
+            assert_size_stride(arg70_1, (1024, ), (1, ), 'input')
+            buf104 = reinterpret_tensor(buf103, (32, 512, 1024), (524288, 1024, 1), 0); del buf103  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_28, hidden_states_29], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:64
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf104, arg70_1, 16777216, stream=raw_stream0)
+            del arg70_1
+            assert_size_stride(arg71_1, (256, 1024), (1024, 1), 'input')
+            buf105 = reinterpret_tensor(buf83, (16384, 256), (256, 1), 0); del buf83  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_28, hidden_states_29, hidden_states_30], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1362
+            assert_size_stride(arg74_1, (256, ), (1, ), 'input')
+            buf109 = reinterpret_tensor(buf105, (32, 512, 256), (131072, 256, 1), 0); del buf105  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_30, add_12, hidden_states_32], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:66
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf109, arg72_1, buf102, arg73_1, arg74_1, 16384, 256, stream=raw_stream0)
+            del arg72_1
+            del arg73_1
+            del arg74_1
+            assert_size_stride(arg75_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1383
+            assert_size_stride(arg76_1, (256, ), (1, ), 'input')
+            buf112 = reinterpret_tensor(buf85, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf85  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_8, view_16, query_layer_9, attention_scores_12], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:69
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg76_1, buf110, buf112, 4194304, stream=raw_stream0)
+            del arg76_1
+            assert_size_stride(arg78_1, (256, ), (1, ), 'input')
+            buf113 = reinterpret_tensor(buf110, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf110  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_8, view_17, key_layer_9, transpose_19, attention_scores_12], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1393
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:70
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg78_1, buf111, buf113, 8192, 512, stream=raw_stream0)
+            del arg78_1
+            buf114 = reinterpret_tensor(buf94, (128, 512, 512), (262144, 512, 1), 0); del buf94  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_8, view_16, query_layer_9, attention_scores_12, key_layer_8, view_17, key_layer_9, transpose_19], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:71
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1412
+            assert_size_stride(arg80_1, (256, ), (1, ), 'input')
+            buf121 = buf112; del buf112  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_8, view_18, value_layer_9, context_layer_12], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:74
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg80_1, buf119, buf121, 4194304, stream=raw_stream0)
+            del arg80_1
+            buf122 = reinterpret_tensor(buf119, (128, 512, 64), (32768, 64, 1), 0); del buf119  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_12, , attention_probs_8, context_layer_12, value_layer_8, view_18, value_layer_9], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:75
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1422
+            extern_kernels.bmm(reinterpret_tensor(buf120, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf121, (128, 512, 64), (32768, 64, 1), 0), out=buf122)
+            buf123 = reinterpret_tensor(buf121, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf121  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_12, permute_4, context_layer_13], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:76
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf122, buf123, 4194304, stream=raw_stream0)
+            assert_size_stride(arg81_1, (256, 256), (256, 1), 'input')
+            buf124 = reinterpret_tensor(buf122, (16384, 256), (256, 1), 0); del buf122  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_12, permute_4, context_layer_13, context_layer_14, hidden_states_33, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:77
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1436
+            assert_size_stride(arg84_1, (256, ), (1, ), 'input')
+            buf128 = reinterpret_tensor(buf124, (32, 512, 256), (131072, 256, 1), 0); del buf124  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_33, add_14, hidden_states_35], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:78
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf128, arg82_1, buf109, arg83_1, arg84_1, 16384, 256, stream=raw_stream0)
+            del arg82_1
+            del arg83_1
+            del arg84_1
+            assert_size_stride(arg85_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1451
+            assert_size_stride(arg86_1, (1024, ), (1, ), 'input')
+            buf130 = reinterpret_tensor(buf129, (32, 512, 1024), (524288, 1024, 1), 0); del buf129  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_36, hidden_states_37], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:80
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf130, arg86_1, 16777216, stream=raw_stream0)
+            del arg86_1
+            assert_size_stride(arg87_1, (256, 1024), (1024, 1), 'input')
+            buf131 = reinterpret_tensor(buf109, (16384, 256), (256, 1), 0); del buf109  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_36, hidden_states_37, hidden_states_38], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1466
+            assert_size_stride(arg90_1, (256, ), (1, ), 'input')
+            buf135 = reinterpret_tensor(buf131, (32, 512, 256), (131072, 256, 1), 0); del buf131  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_38, add_15, hidden_states_40], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:82
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf135, arg88_1, buf128, arg89_1, arg90_1, 16384, 256, stream=raw_stream0)
+            del arg88_1
+            del arg89_1
+            del arg90_1
+            assert_size_stride(arg91_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1487
+            assert_size_stride(arg92_1, (256, ), (1, ), 'input')
+            buf138 = reinterpret_tensor(buf111, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf111  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_10, view_20, query_layer_11, attention_scores_15], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:85
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg92_1, buf136, buf138, 4194304, stream=raw_stream0)
+            del arg92_1
+            assert_size_stride(arg94_1, (256, ), (1, ), 'input')
+            buf139 = reinterpret_tensor(buf136, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf136  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_10, view_21, key_layer_11, transpose_23, attention_scores_15], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1497
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:86
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg94_1, buf137, buf139, 8192, 512, stream=raw_stream0)
+            del arg94_1
+            buf140 = reinterpret_tensor(buf120, (128, 512, 512), (262144, 512, 1), 0); del buf120  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_10, view_20, query_layer_11, attention_scores_15, key_layer_10, view_21, key_layer_11, transpose_23], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:87
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1516
+            assert_size_stride(arg96_1, (256, ), (1, ), 'input')
+            buf147 = buf138; del buf138  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_10, view_22, value_layer_11, context_layer_15], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:90
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg96_1, buf145, buf147, 4194304, stream=raw_stream0)
+            del arg96_1
+            buf148 = reinterpret_tensor(buf145, (128, 512, 64), (32768, 64, 1), 0); del buf145  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_15, , attention_probs_10, context_layer_15, value_layer_10, view_22, value_layer_11], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:91
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1526
+            extern_kernels.bmm(reinterpret_tensor(buf146, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf147, (128, 512, 64), (32768, 64, 1), 0), out=buf148)
+            buf149 = reinterpret_tensor(buf147, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf147  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_15, permute_5, context_layer_16], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:92
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf148, buf149, 4194304, stream=raw_stream0)
+            assert_size_stride(arg97_1, (256, 256), (256, 1), 'input')
+            buf150 = reinterpret_tensor(buf148, (16384, 256), (256, 1), 0); del buf148  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_15, permute_5, context_layer_16, context_layer_17, hidden_states_41, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:93
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1540
+            assert_size_stride(arg100_1, (256, ), (1, ), 'input')
+            buf154 = reinterpret_tensor(buf150, (32, 512, 256), (131072, 256, 1), 0); del buf150  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_41, add_17, hidden_states_43], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:94
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf154, arg98_1, buf135, arg99_1, arg100_1, 16384, 256, stream=raw_stream0)
+            del arg100_1
+            del arg98_1
+            del arg99_1
+            assert_size_stride(arg101_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1555
+            assert_size_stride(arg102_1, (1024, ), (1, ), 'input')
+            buf156 = reinterpret_tensor(buf155, (32, 512, 1024), (524288, 1024, 1), 0); del buf155  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_44, hidden_states_45], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:96
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf156, arg102_1, 16777216, stream=raw_stream0)
+            del arg102_1
+            assert_size_stride(arg103_1, (256, 1024), (1024, 1), 'input')
+            buf157 = reinterpret_tensor(buf135, (16384, 256), (256, 1), 0); del buf135  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_44, hidden_states_45, hidden_states_46], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1570
+            assert_size_stride(arg106_1, (256, ), (1, ), 'input')
+            buf161 = reinterpret_tensor(buf157, (32, 512, 256), (131072, 256, 1), 0); del buf157  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_46, add_18, hidden_states_48], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:98
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf161, arg104_1, buf154, arg105_1, arg106_1, 16384, 256, stream=raw_stream0)
+            del arg104_1
+            del arg105_1
+            del arg106_1
+            assert_size_stride(arg107_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1591
+            assert_size_stride(arg108_1, (256, ), (1, ), 'input')
+            buf164 = reinterpret_tensor(buf137, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf137  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_12, view_24, query_layer_13, attention_scores_18], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:101
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg108_1, buf162, buf164, 4194304, stream=raw_stream0)
+            del arg108_1
+            assert_size_stride(arg110_1, (256, ), (1, ), 'input')
+            buf165 = reinterpret_tensor(buf162, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf162  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_12, view_25, key_layer_13, transpose_27, attention_scores_18], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1601
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:102
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg110_1, buf163, buf165, 8192, 512, stream=raw_stream0)
+            del arg110_1
+            buf166 = reinterpret_tensor(buf146, (128, 512, 512), (262144, 512, 1), 0); del buf146  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_12, view_24, query_layer_13, attention_scores_18, key_layer_12, view_25, key_layer_13, transpose_27], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:103
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1620
+            assert_size_stride(arg112_1, (256, ), (1, ), 'input')
+            buf173 = buf164; del buf164  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_12, view_26, value_layer_13, context_layer_18], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:106
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg112_1, buf171, buf173, 4194304, stream=raw_stream0)
+            del arg112_1
+            buf174 = reinterpret_tensor(buf171, (128, 512, 64), (32768, 64, 1), 0); del buf171  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_18, , attention_probs_12, context_layer_18, value_layer_12, view_26, value_layer_13], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:107
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1630
+            extern_kernels.bmm(reinterpret_tensor(buf172, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf173, (128, 512, 64), (32768, 64, 1), 0), out=buf174)
+            buf175 = reinterpret_tensor(buf173, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf173  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_18, permute_6, context_layer_19], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:108
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf174, buf175, 4194304, stream=raw_stream0)
+            assert_size_stride(arg113_1, (256, 256), (256, 1), 'input')
+            buf176 = reinterpret_tensor(buf174, (16384, 256), (256, 1), 0); del buf174  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_18, permute_6, context_layer_19, context_layer_20, hidden_states_49, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:109
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1644
+            assert_size_stride(arg116_1, (256, ), (1, ), 'input')
+            buf180 = reinterpret_tensor(buf176, (32, 512, 256), (131072, 256, 1), 0); del buf176  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_49, add_20, hidden_states_51], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:110
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf180, arg114_1, buf161, arg115_1, arg116_1, 16384, 256, stream=raw_stream0)
+            del arg114_1
+            del arg115_1
+            del arg116_1
+            assert_size_stride(arg117_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1659
+            assert_size_stride(arg118_1, (1024, ), (1, ), 'input')
+            buf182 = reinterpret_tensor(buf181, (32, 512, 1024), (524288, 1024, 1), 0); del buf181  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_52, hidden_states_53], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:112
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf182, arg118_1, 16777216, stream=raw_stream0)
+            del arg118_1
+            assert_size_stride(arg119_1, (256, 1024), (1024, 1), 'input')
+            buf183 = reinterpret_tensor(buf161, (16384, 256), (256, 1), 0); del buf161  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_52, hidden_states_53, hidden_states_54], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1674
+            assert_size_stride(arg122_1, (256, ), (1, ), 'input')
+            buf187 = reinterpret_tensor(buf183, (32, 512, 256), (131072, 256, 1), 0); del buf183  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_54, add_21, hidden_states_56], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:114
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf187, arg120_1, buf180, arg121_1, arg122_1, 16384, 256, stream=raw_stream0)
+            del arg120_1
+            del arg121_1
+            del arg122_1
+            assert_size_stride(arg123_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1695
+            assert_size_stride(arg124_1, (256, ), (1, ), 'input')
+            buf190 = reinterpret_tensor(buf163, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf163  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_14, view_28, query_layer_15, attention_scores_21], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:117
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg124_1, buf188, buf190, 4194304, stream=raw_stream0)
+            del arg124_1
+            assert_size_stride(arg126_1, (256, ), (1, ), 'input')
+            buf191 = reinterpret_tensor(buf188, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf188  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_14, view_29, key_layer_15, transpose_31, attention_scores_21], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1705
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:118
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg126_1, buf189, buf191, 8192, 512, stream=raw_stream0)
+            del arg126_1
+            buf192 = reinterpret_tensor(buf172, (128, 512, 512), (262144, 512, 1), 0); del buf172  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_14, view_28, query_layer_15, attention_scores_21, key_layer_14, view_29, key_layer_15, transpose_31], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:119
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1724
+            assert_size_stride(arg128_1, (256, ), (1, ), 'input')
+            buf199 = buf190; del buf190  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_14, view_30, value_layer_15, context_layer_21], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:122
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg128_1, buf197, buf199, 4194304, stream=raw_stream0)
+            del arg128_1
+            buf200 = reinterpret_tensor(buf197, (128, 512, 64), (32768, 64, 1), 0); del buf197  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_21, , attention_probs_14, context_layer_21, value_layer_14, view_30, value_layer_15], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:123
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1734
+            extern_kernels.bmm(reinterpret_tensor(buf198, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf199, (128, 512, 64), (32768, 64, 1), 0), out=buf200)
+            buf201 = reinterpret_tensor(buf199, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf199  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_21, permute_7, context_layer_22], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:124
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf200, buf201, 4194304, stream=raw_stream0)
+            assert_size_stride(arg129_1, (256, 256), (256, 1), 'input')
+            buf202 = reinterpret_tensor(buf200, (16384, 256), (256, 1), 0); del buf200  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_21, permute_7, context_layer_22, context_layer_23, hidden_states_57, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:125
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1748
+            assert_size_stride(arg132_1, (256, ), (1, ), 'input')
+            buf206 = reinterpret_tensor(buf202, (32, 512, 256), (131072, 256, 1), 0); del buf202  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_57, add_23, hidden_states_59], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:126
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf206, arg130_1, buf187, arg131_1, arg132_1, 16384, 256, stream=raw_stream0)
+            del arg130_1
+            del arg131_1
+            del arg132_1
+            assert_size_stride(arg133_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1763
+            assert_size_stride(arg134_1, (1024, ), (1, ), 'input')
+            buf208 = reinterpret_tensor(buf207, (32, 512, 1024), (524288, 1024, 1), 0); del buf207  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_60, hidden_states_61], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:128
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf208, arg134_1, 16777216, stream=raw_stream0)
+            del arg134_1
+            assert_size_stride(arg135_1, (256, 1024), (1024, 1), 'input')
+            buf209 = reinterpret_tensor(buf187, (16384, 256), (256, 1), 0); del buf187  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_60, hidden_states_61, hidden_states_62], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1778
+            assert_size_stride(arg138_1, (256, ), (1, ), 'input')
+            buf213 = reinterpret_tensor(buf209, (32, 512, 256), (131072, 256, 1), 0); del buf209  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_62, add_24, hidden_states_64], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:130
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf213, arg136_1, buf206, arg137_1, arg138_1, 16384, 256, stream=raw_stream0)
+            del arg136_1
+            del arg137_1
+            del arg138_1
+            assert_size_stride(arg139_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1799
+            assert_size_stride(arg140_1, (256, ), (1, ), 'input')
+            buf216 = reinterpret_tensor(buf189, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf189  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_16, view_32, query_layer_17, attention_scores_24], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:133
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg140_1, buf214, buf216, 4194304, stream=raw_stream0)
+            del arg140_1
+            assert_size_stride(arg142_1, (256, ), (1, ), 'input')
+            buf217 = reinterpret_tensor(buf214, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf214  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_16, view_33, key_layer_17, transpose_35, attention_scores_24], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1809
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:134
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg142_1, buf215, buf217, 8192, 512, stream=raw_stream0)
+            del arg142_1
+            buf218 = reinterpret_tensor(buf198, (128, 512, 512), (262144, 512, 1), 0); del buf198  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_16, view_32, query_layer_17, attention_scores_24, key_layer_16, view_33, key_layer_17, transpose_35], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:135
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1828
+            assert_size_stride(arg144_1, (256, ), (1, ), 'input')
+            buf225 = buf216; del buf216  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_16, view_34, value_layer_17, context_layer_24], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:138
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg144_1, buf223, buf225, 4194304, stream=raw_stream0)
+            del arg144_1
+            buf226 = reinterpret_tensor(buf223, (128, 512, 64), (32768, 64, 1), 0); del buf223  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_24, , attention_probs_16, context_layer_24, value_layer_16, view_34, value_layer_17], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:139
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1838
+            extern_kernels.bmm(reinterpret_tensor(buf224, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf225, (128, 512, 64), (32768, 64, 1), 0), out=buf226)
+            buf227 = reinterpret_tensor(buf225, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf225  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_24, permute_8, context_layer_25], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:140
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf226, buf227, 4194304, stream=raw_stream0)
+            assert_size_stride(arg145_1, (256, 256), (256, 1), 'input')
+            buf228 = reinterpret_tensor(buf226, (16384, 256), (256, 1), 0); del buf226  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_24, permute_8, context_layer_25, context_layer_26, hidden_states_65, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:141
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1852
+            assert_size_stride(arg148_1, (256, ), (1, ), 'input')
+            buf232 = reinterpret_tensor(buf228, (32, 512, 256), (131072, 256, 1), 0); del buf228  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_65, add_26, hidden_states_67], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:142
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf232, arg146_1, buf213, arg147_1, arg148_1, 16384, 256, stream=raw_stream0)
+            del arg146_1
+            del arg147_1
+            del arg148_1
+            assert_size_stride(arg149_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1867
+            assert_size_stride(arg150_1, (1024, ), (1, ), 'input')
+            buf234 = reinterpret_tensor(buf233, (32, 512, 1024), (524288, 1024, 1), 0); del buf233  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_68, hidden_states_69], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:144
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf234, arg150_1, 16777216, stream=raw_stream0)
+            del arg150_1
+            assert_size_stride(arg151_1, (256, 1024), (1024, 1), 'input')
+            buf235 = reinterpret_tensor(buf213, (16384, 256), (256, 1), 0); del buf213  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_68, hidden_states_69, hidden_states_70], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1882
+            assert_size_stride(arg154_1, (256, ), (1, ), 'input')
+            buf239 = reinterpret_tensor(buf235, (32, 512, 256), (131072, 256, 1), 0); del buf235  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_70, add_27, hidden_states_72], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:146
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf239, arg152_1, buf232, arg153_1, arg154_1, 16384, 256, stream=raw_stream0)
+            del arg152_1
+            del arg153_1
+            del arg154_1
+            assert_size_stride(arg155_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1903
+            assert_size_stride(arg156_1, (256, ), (1, ), 'input')
+            buf242 = reinterpret_tensor(buf215, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf215  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_18, view_36, query_layer_19, attention_scores_27], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:149
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg156_1, buf240, buf242, 4194304, stream=raw_stream0)
+            del arg156_1
+            assert_size_stride(arg158_1, (256, ), (1, ), 'input')
+            buf243 = reinterpret_tensor(buf240, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf240  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_18, view_37, key_layer_19, transpose_39, attention_scores_27], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1913
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:150
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg158_1, buf241, buf243, 8192, 512, stream=raw_stream0)
+            del arg158_1
+            buf244 = reinterpret_tensor(buf224, (128, 512, 512), (262144, 512, 1), 0); del buf224  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_18, view_36, query_layer_19, attention_scores_27, key_layer_18, view_37, key_layer_19, transpose_39], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:151
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1932
+            assert_size_stride(arg160_1, (256, ), (1, ), 'input')
+            buf251 = buf242; del buf242  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_18, view_38, value_layer_19, context_layer_27], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:154
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg160_1, buf249, buf251, 4194304, stream=raw_stream0)
+            del arg160_1
+            buf252 = reinterpret_tensor(buf249, (128, 512, 64), (32768, 64, 1), 0); del buf249  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_27, , attention_probs_18, context_layer_27, value_layer_18, view_38, value_layer_19], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:155
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1942
+            extern_kernels.bmm(reinterpret_tensor(buf250, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf251, (128, 512, 64), (32768, 64, 1), 0), out=buf252)
+            buf253 = reinterpret_tensor(buf251, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf251  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_27, permute_9, context_layer_28], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:156
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf252, buf253, 4194304, stream=raw_stream0)
+            assert_size_stride(arg161_1, (256, 256), (256, 1), 'input')
+            buf254 = reinterpret_tensor(buf252, (16384, 256), (256, 1), 0); del buf252  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_27, permute_9, context_layer_28, context_layer_29, hidden_states_73, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:157
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1956
+            assert_size_stride(arg164_1, (256, ), (1, ), 'input')
+            buf258 = reinterpret_tensor(buf254, (32, 512, 256), (131072, 256, 1), 0); del buf254  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_73, add_29, hidden_states_75], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:158
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf258, arg162_1, buf239, arg163_1, arg164_1, 16384, 256, stream=raw_stream0)
+            del arg162_1
+            del arg163_1
+            del arg164_1
+            assert_size_stride(arg165_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1971
+            assert_size_stride(arg166_1, (1024, ), (1, ), 'input')
+            buf260 = reinterpret_tensor(buf259, (32, 512, 1024), (524288, 1024, 1), 0); del buf259  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_76, hidden_states_77], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:160
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf260, arg166_1, 16777216, stream=raw_stream0)
+            del arg166_1
+            assert_size_stride(arg167_1, (256, 1024), (1024, 1), 'input')
+            buf261 = reinterpret_tensor(buf239, (16384, 256), (256, 1), 0); del buf239  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_76, hidden_states_77, hidden_states_78], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:1986
+            assert_size_stride(arg170_1, (256, ), (1, ), 'input')
+            buf265 = reinterpret_tensor(buf261, (32, 512, 256), (131072, 256, 1), 0); del buf261  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_78, add_30, hidden_states_80], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:162
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf265, arg168_1, buf258, arg169_1, arg170_1, 16384, 256, stream=raw_stream0)
+            del arg168_1
+            del arg169_1
+            del arg170_1
+            assert_size_stride(arg171_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2007
+            assert_size_stride(arg172_1, (256, ), (1, ), 'input')
+            buf268 = reinterpret_tensor(buf241, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf241  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_20, view_40, query_layer_21, attention_scores_30], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:165
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg172_1, buf266, buf268, 4194304, stream=raw_stream0)
+            del arg172_1
+            assert_size_stride(arg174_1, (256, ), (1, ), 'input')
+            buf269 = reinterpret_tensor(buf266, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf266  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_20, view_41, key_layer_21, transpose_43, attention_scores_30], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2017
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:166
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg174_1, buf267, buf269, 8192, 512, stream=raw_stream0)
+            del arg174_1
+            buf270 = reinterpret_tensor(buf250, (128, 512, 512), (262144, 512, 1), 0); del buf250  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_20, view_40, query_layer_21, attention_scores_30, key_layer_20, view_41, key_layer_21, transpose_43], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:167
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2036
+            assert_size_stride(arg176_1, (256, ), (1, ), 'input')
+            buf277 = buf268; del buf268  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_20, view_42, value_layer_21, context_layer_30], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:170
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg176_1, buf275, buf277, 4194304, stream=raw_stream0)
+            del arg176_1
+            buf278 = reinterpret_tensor(buf275, (128, 512, 64), (32768, 64, 1), 0); del buf275  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_30, , attention_probs_20, context_layer_30, value_layer_20, view_42, value_layer_21], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:171
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2046
+            extern_kernels.bmm(reinterpret_tensor(buf276, (128, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf277, (128, 512, 64), (32768, 64, 1), 0), out=buf278)
+            buf279 = reinterpret_tensor(buf277, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf277  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_30, permute_10, context_layer_31], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:172
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf278, buf279, 4194304, stream=raw_stream0)
+            assert_size_stride(arg177_1, (256, 256), (256, 1), 'input')
+            buf280 = reinterpret_tensor(buf278, (16384, 256), (256, 1), 0); del buf278  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_30, permute_10, context_layer_31, context_layer_32, hidden_states_81, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:173
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2060
+            assert_size_stride(arg180_1, (256, ), (1, ), 'input')
+            buf284 = reinterpret_tensor(buf280, (32, 512, 256), (131072, 256, 1), 0); del buf280  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_81, add_32, hidden_states_83], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:174
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf284, arg178_1, buf265, arg179_1, arg180_1, 16384, 256, stream=raw_stream0)
+            del arg178_1
+            del arg179_1
+            del arg180_1
+            assert_size_stride(arg181_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2075
+            assert_size_stride(arg182_1, (1024, ), (1, ), 'input')
+            buf286 = reinterpret_tensor(buf285, (32, 512, 1024), (524288, 1024, 1), 0); del buf285  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_84, hidden_states_85], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:176
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf286, arg182_1, 16777216, stream=raw_stream0)
+            del arg182_1
+            assert_size_stride(arg183_1, (256, 1024), (1024, 1), 'input')
+            buf287 = reinterpret_tensor(buf265, (16384, 256), (256, 1), 0); del buf265  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_84, hidden_states_85, hidden_states_86], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2090
+            assert_size_stride(arg186_1, (256, ), (1, ), 'input')
+            buf291 = reinterpret_tensor(buf287, (32, 512, 256), (131072, 256, 1), 0); del buf287  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_86, add_33, hidden_states_88], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:178
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf291, arg184_1, buf284, arg185_1, arg186_1, 16384, 256, stream=raw_stream0)
+            del arg184_1
+            del arg185_1
+            del arg186_1
+            assert_size_stride(arg187_1, (256, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2111
+            assert_size_stride(arg188_1, (256, ), (1, ), 'input')
+            buf294 = reinterpret_tensor(buf267, (32, 4, 512, 64), (131072, 32768, 64, 1), 0); del buf267  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_22, view_44, query_layer_23, attention_scores_33], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:181
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg188_1, buf292, buf294, 4194304, stream=raw_stream0)
+            del arg188_1
+            assert_size_stride(arg190_1, (256, ), (1, ), 'input')
+            buf295 = reinterpret_tensor(buf292, (32, 4, 64, 512), (131072, 32768, 512, 1), 0); del buf292  # reuse
+            # Topologically Sorted Source Nodes: [, key_layer_22, view_45, key_layer_23, transpose_47, attention_scores_33], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2121
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_2:182
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_2.run(arg190_1, buf293, buf295, 8192, 512, stream=raw_stream0)
+            del arg190_1
+            del buf293
+            buf296 = reinterpret_tensor(buf276, (128, 512, 512), (262144, 512, 1), 0); del buf276  # reuse
+            # Topologically Sorted Source Nodes: [, query_layer_22, view_44, query_layer_23, attention_scores_33, key_layer_22, view_45, key_layer_23, transpose_47], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2141
+            assert_size_stride(arg192_1, (256, ), (1, ), 'input')
+            buf303 = buf294; del buf294  # reuse
+            # Topologically Sorted Source Nodes: [, value_layer_22, view_46, value_layer_23, context_layer_33], Original ATen: [aten.addmm, aten.view, aten.transpose, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_addmm_clone_transpose_view_1:186
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_clone_transpose_view_1.run(arg192_1, buf301, buf303, 4194304, stream=raw_stream0)
+            del arg192_1
+            buf304 = reinterpret_tensor(buf301, (128, 512, 64), (32768, 64, 1), 0); del buf301  # reuse
+            # Topologically Sorted Source Nodes: [attention_scores_33, , attention_probs_22, context_layer_33, value_layer_22, view_46, value_layer_23], Original ATen: [aten.view, aten.div, aten.all, aten.mul, aten.sub, aten._softmax, aten.addmm, aten.transpose, aten.clone, aten._unsafe_view, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:187
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2152
+            del buf302
+            buf305 = reinterpret_tensor(buf303, (32, 512, 4, 64), (131072, 256, 64, 1), 0); del buf303  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_33, permute_11, context_layer_34], Original ATen: [aten.view, aten.permute, aten.clone]
+            # [Provenance debug handles] triton_poi_fused_clone_permute_view_4:188
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_clone_permute_view_4.run(buf304, buf305, 4194304, stream=raw_stream0)
+            assert_size_stride(arg193_1, (256, 256), (256, 1), 'input')
+            buf306 = reinterpret_tensor(buf304, (16384, 256), (256, 1), 0); del buf304  # reuse
+            # Topologically Sorted Source Nodes: [context_layer_33, permute_11, context_layer_34, context_layer_35, hidden_states_89, ], Original ATen: [aten.view, aten.permute, aten.clone, aten.t, aten.addmm]
+            # [Provenance debug handles] extern_kernels.mm:189
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2167
+            assert_size_stride(arg196_1, (256, ), (1, ), 'input')
+            buf310 = reinterpret_tensor(buf306, (32, 512, 256), (131072, 256, 1), 0); del buf306  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_89, add_35, hidden_states_91], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:190
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf310, arg194_1, buf291, arg195_1, arg196_1, 16384, 256, stream=raw_stream0)
+            del arg194_1
+            del arg195_1
+            del arg196_1
+            assert_size_stride(arg197_1, (1024, 256), (256, 1), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2182
+            assert_size_stride(arg198_1, (1024, ), (1, ), 'input')
+            buf312 = reinterpret_tensor(buf311, (32, 512, 1024), (524288, 1024, 1), 0); del buf311  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_92, hidden_states_93], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_6:192
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_6.run(buf312, arg198_1, 16777216, stream=raw_stream0)
+            del arg198_1
+            assert_size_stride(arg199_1, (256, 1024), (1024, 1), 'input')
+            buf313 = reinterpret_tensor(buf291, (16384, 256), (256, 1), 0); del buf291  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_92, hidden_states_93, hidden_states_94], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2198
+            assert_size_stride(arg202_1, (256, ), (1, ), 'input')
+            buf317 = reinterpret_tensor(buf313, (32, 512, 256), (131072, 256, 1), 0); del buf313  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_94, add_36, hidden_states_96], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:194
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf317, arg200_1, buf310, arg201_1, arg202_1, 16384, 256, stream=raw_stream0)
+            del arg200_1
+            del arg201_1
+            del arg202_1
+            del buf310
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2217
+            assert_size_stride(arg206_1, (128, ), (1, ), 'input')
+            buf322 = reinterpret_tensor(buf318, (32, 512, 128), (65536, 128, 1), 0); del buf318  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_97, hidden_states_98, hidden_states_99], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_addmm_gelu_native_layer_norm_view_7:196
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_addmm_gelu_native_layer_norm_view_7.run(buf322, arg204_1, arg205_1, arg206_1, 16384, 128, stream=raw_stream0)
+            del arg204_1
+            del arg205_1
+            del arg206_1
+            assert_size_stride(arg207_1, (30522, ), (1, ), 'input')
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2234
+            buf324 = empty_strided_cuda((16384, 1), (1, 16384), torch.float32)
+            buf325 = empty_strided_cuda((16384, 1), (1, 16384), torch.float32)
+            # Topologically Sorted Source Nodes: [prediction_scores, logits_1, ], Original ATen: [aten.view, prims.prepare_softmax_online]
+            # [Provenance debug handles] triton_red_fused_prepare_softmax_online_view_8:198
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_prepare_softmax_online_view_8.run(buf323, buf324, buf325, 16384, 30522, stream=raw_stream0)
+            assert_size_stride(arg0_1, (32, 512), (512, 1), 'input')
+            arg0_1 = copy_if_misaligned(arg0_1)
+            buf327 = empty_strided_cuda((2, ), (1, ), torch.float32)
+            buf330 = empty_strided_cuda((2, ), (1, ), torch.int64)
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2244
+            # Topologically Sorted Source Nodes: [labels, getitem_3, shift_labels, shift_labels_1, loss, prediction_scores, logits_1, ], Original ATen: [aten.constant_pad_nd, aten.slice, aten.clone, aten.view, aten.nll_loss_forward, aten._log_softmax]
+            # [Provenance debug handles] triton_red_fused__log_softmax_clone_constant_pad_nd_nll_loss_forward_slice_view_9:199
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused__log_softmax_clone_constant_pad_nd_nll_loss_forward_slice_view_9.run(arg0_1, buf323, buf324, buf325, buf327, buf330, 2, 8192, stream=raw_stream0)
+            del arg0_1
+            del buf324
+            del buf325
+            buf328 = empty_strided_cuda((), (), torch.float32)
+
+
+# Source: ElectraForCausalLM_Infer/GPU_g01_output_code.py:2252
+            buf332 = buf328; del buf328  # reuse
+            # Topologically Sorted Source Nodes: [labels, getitem_3, shift_labels, shift_labels_1, loss, prediction_scores, logits_1, ], Original ATen: [aten.constant_pad_nd, aten.slice, aten.clone, aten.view, aten.nll_loss_forward, aten._log_softmax]
+            # [Provenance debug handles] triton_per_fused__log_softmax_clone_constant_pad_nd_nll_loss_forward_slice_view_10:200
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__log_softmax_clone_constant_pad_nd_nll_loss_forward_slice_view_10.run(buf332, buf327, buf330, 1, 2, stream=raw_stream0)
+            del buf327
+            del buf330
+        return (buf332, reinterpret_tensor(buf323, (32, 512, 30522), (15627264, 30522, 1), 0), )

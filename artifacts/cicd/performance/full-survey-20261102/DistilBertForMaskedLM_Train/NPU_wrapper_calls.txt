@@ -1,0 +1,463 @@
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:1980
+        args.clear()
+        with torch.npu.utils.device(0):
+            torch.npu.set_device(0)
+            tangents_1 = copy_if_misaligned(tangents_1)
+            # Topologically Sorted Source Nodes: [nll_loss_backward], Original ATen: [aten.nll_loss_backward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_backward.default:1
+            buf0 = torch.ops.aten.nll_loss_backward.default(tangents_1, sub_7, view_143, None, 1, -100, getitem_43)
+            del getitem_43
+            del tangents_1
+            del view_143
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:1990
+            buf1 = buf0
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:1991
+            assert_size_stride(buf1, (16384, 30522), (30522, 1), 'torch.ops.aten.nll_loss_backward.default')
+            assert_alignment(buf1, 16, 'torch.ops.aten.nll_loss_backward.default')
+            del buf0
+            # Topologically Sorted Source Nodes: [_log_softmax_backward_data], Original ATen: [aten._log_softmax_backward_data]
+            # [Provenance debug handles] torch.ops.aten._log_softmax_backward_data.default:2
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:1996
+            buf2 = torch.ops.aten._log_softmax_backward_data.default(buf1, sub_7, 1, torch.float32)
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:1997
+            del buf1
+            del sub_7
+            buf3 = buf2
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2000
+            assert_size_stride(buf3, (16384, 30522), (30522, 1), 'torch.ops.aten._log_softmax_backward_data.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2001
+            assert_alignment(buf3, 16, 'torch.ops.aten._log_softmax_backward_data.default')
+            del buf2
+            tangents_2 = copy_if_misaligned(tangents_2)
+            buf4 = reinterpret_tensor(buf3, (128, 128, 30522), (3906816, 30522, 1), 0); del buf3  # reuse
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2005
+            # Topologically Sorted Source Nodes: [view_144, add_13], Original ATen: [aten.view, aten.add]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2006
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_view_0.run(buf4, tangents_2, 128, 128, 30522, stream=raw_stream0)
+            del tangents_2
+            buf5 = empty_strided_npu((16384, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_144, add_13, view_145, prediction_logits_3, permute_68, mm], Original ATen: [aten.view, aten.add, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:3
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2014
+            buf6 = empty_strided_npu((1, 30522), (30522, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_144, add_13, view_145, sum_8], Original ATen: [aten.view, aten.add, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_add_sum_view_1.run(buf4, buf6, 30522, 16384, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [prediction_logits, prediction_logits_1], Original ATen: [aten.view, aten.gelu]
+            # [Provenance debug handles] torch.ops.aten.gelu.default:4
+            buf7 = torch.ops.aten.gelu.default(reinterpret_tensor(addmm_36, (128, 128, 768), (98304, 768, 1), 0))
+            buf8 = buf7
+            assert_size_stride(buf8, (128, 128, 768), (98304, 768, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf8, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2024
+            del buf7
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2025
+            buf13 = reinterpret_tensor(addmm_36, (128, 128, 768), (98304, 768, 1), 0); del addmm_36  # reuse
+            # Topologically Sorted Source Nodes: [view_147, prediction_logits, sub_8, mul_26, mul_27, mul_28, sum_9, mul_29, sum_10, mul_30, sub_9, sub_10, div_12, mul_31, mul_33, erf, add_14, mul_34, mul_35, mul_36, exp_7, mul_37, mul_38, add_15, mul_39], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.gelu_backward]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2027
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2078
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_view_4.run(buf22, buf25, 768, 16384, stream=raw_stream0)
+            buf26 = reinterpret_tensor(buf23, (128, 128, 3072), (393216, 3072, 1), 0); del buf23  # reuse
+            # Topologically Sorted Source Nodes: [view_153, x_20, mul_49, erf_1, add_16, mul_50, mul_51, mul_52, exp_8, mul_53, mul_54, add_17, mul_55], Original ATen: [aten.view, aten.gelu_backward]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_gelu_backward_view_6.run(buf26, addmm_34, 128, 128, 3072, stream=raw_stream0)
+            del addmm_34
+            buf27 = reinterpret_tensor(buf22, (16384, 768), (768, 1), 0); del buf22  # reuse
+            # Topologically Sorted Source Nodes: [view_153, x_20, mul_49, erf_1, add_16, mul_50, mul_51, mul_52, exp_8, mul_53, mul_54, add_17, mul_55, view_154, permute_80, mm_6], Original ATen: [aten.view, aten.gelu_backward, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:9
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2145
+            triton_per_fused__softmax_backward_data_matmul_11.run(buf41, gt_11, div_11, buf43, buf42, 128, 12, 128, 128, stream=raw_stream0)
+            del div_11
+            del gt_11
+            # Topologically Sorted Source Nodes: [neg, fma], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:15
+            buf44 = torch.ops.prims.fma.default(buf43, buf42, buf41)
+            del buf41
+            buf45 = buf44
+            assert_size_stride(buf45, (128, 12, 128, 128), (196608, 16384, 128, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf45, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2244
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_view_4.run(buf67, buf70, 768, 16384, stream=raw_stream0)
+            buf71 = reinterpret_tensor(buf68, (128, 128, 3072), (393216, 3072, 1), 0); del buf68  # reuse
+            # Topologically Sorted Source Nodes: [view_187, x_16, mul_75, erf_2, add_22, mul_76, mul_77, mul_78, exp_9, mul_79, mul_80, add_23, mul_81], Original ATen: [aten.view, aten.gelu_backward]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_gelu_backward_view_6.run(buf71, addmm_28, 128, 128, 3072, stream=raw_stream0)
+            del addmm_28
+            buf72 = reinterpret_tensor(buf67, (16384, 768), (768, 1), 0); del buf67  # reuse
+            # Topologically Sorted Source Nodes: [view_187, x_16, mul_75, erf_2, add_22, mul_76, mul_77, mul_78, exp_9, mul_79, mul_80, add_23, mul_81, view_188, permute_113, mm_18], Original ATen: [aten.view, aten.gelu_backward, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:29
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2311
+            triton_per_fused__softmax_backward_data_matmul_11.run(buf86, gt_9, div_9, buf88, buf87, 128, 12, 128, 128, stream=raw_stream0)
+            del div_9
+            del gt_9
+            # Topologically Sorted Source Nodes: [neg_1, fma_1], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:35
+            buf89 = torch.ops.prims.fma.default(buf88, buf87, buf86)
+            del buf86
+            buf90 = buf89
+            assert_size_stride(buf90, (128, 12, 128, 128), (196608, 16384, 128, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf90, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2410
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_view_4.run(buf112, buf115, 768, 16384, stream=raw_stream0)
+            buf116 = reinterpret_tensor(buf113, (128, 128, 3072), (393216, 3072, 1), 0); del buf113  # reuse
+            # Topologically Sorted Source Nodes: [view_221, x_12, mul_101, erf_3, add_28, mul_102, mul_103, mul_104, exp_10, mul_105, mul_106, add_29, mul_107], Original ATen: [aten.view, aten.gelu_backward]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_gelu_backward_view_6.run(buf116, addmm_22, 128, 128, 3072, stream=raw_stream0)
+            del addmm_22
+            buf117 = reinterpret_tensor(buf112, (16384, 768), (768, 1), 0); del buf112  # reuse
+            # Topologically Sorted Source Nodes: [view_221, x_12, mul_101, erf_3, add_28, mul_102, mul_103, mul_104, exp_10, mul_105, mul_106, add_29, mul_107, view_222, permute_146, mm_30], Original ATen: [aten.view, aten.gelu_backward, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:49
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2477
+            triton_per_fused__softmax_backward_data_matmul_11.run(buf131, gt_7, div_7, buf133, buf132, 128, 12, 128, 128, stream=raw_stream0)
+            del div_7
+            del gt_7
+            # Topologically Sorted Source Nodes: [neg_2, fma_2], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:55
+            buf134 = torch.ops.prims.fma.default(buf133, buf132, buf131)
+            del buf131
+            buf135 = buf134
+            assert_size_stride(buf135, (128, 12, 128, 128), (196608, 16384, 128, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf135, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2576
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_view_4.run(buf157, buf160, 768, 16384, stream=raw_stream0)
+            buf161 = reinterpret_tensor(buf158, (128, 128, 3072), (393216, 3072, 1), 0); del buf158  # reuse
+            # Topologically Sorted Source Nodes: [view_255, x_8, mul_127, erf_4, add_34, mul_128, mul_129, mul_130, exp_11, mul_131, mul_132, add_35, mul_133], Original ATen: [aten.view, aten.gelu_backward]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_gelu_backward_view_6.run(buf161, addmm_16, 128, 128, 3072, stream=raw_stream0)
+            del addmm_16
+            buf162 = reinterpret_tensor(buf157, (16384, 768), (768, 1), 0); del buf157  # reuse
+            # Topologically Sorted Source Nodes: [view_255, x_8, mul_127, erf_4, add_34, mul_128, mul_129, mul_130, exp_11, mul_131, mul_132, add_35, mul_133, view_256, permute_179, mm_42], Original ATen: [aten.view, aten.gelu_backward, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:69
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2643
+            triton_per_fused__softmax_backward_data_matmul_11.run(buf176, gt_5, div_5, buf178, buf177, 128, 12, 128, 128, stream=raw_stream0)
+            del div_5
+            del gt_5
+            # Topologically Sorted Source Nodes: [neg_3, fma_3], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:75
+            buf179 = torch.ops.prims.fma.default(buf178, buf177, buf176)
+            del buf176
+            buf180 = buf179
+            assert_size_stride(buf180, (128, 12, 128, 128), (196608, 16384, 128, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf180, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2742
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_view_4.run(buf202, buf205, 768, 16384, stream=raw_stream0)
+            buf206 = reinterpret_tensor(buf203, (128, 128, 3072), (393216, 3072, 1), 0); del buf203  # reuse
+            # Topologically Sorted Source Nodes: [view_289, x_4, mul_153, erf_5, add_40, mul_154, mul_155, mul_156, exp_12, mul_157, mul_158, add_41, mul_159], Original ATen: [aten.view, aten.gelu_backward]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_gelu_backward_view_6.run(buf206, addmm_10, 128, 128, 3072, stream=raw_stream0)
+            del addmm_10
+            buf207 = reinterpret_tensor(buf202, (16384, 768), (768, 1), 0); del buf202  # reuse
+            # Topologically Sorted Source Nodes: [view_289, x_4, mul_153, erf_5, add_40, mul_154, mul_155, mul_156, exp_12, mul_157, mul_158, add_41, mul_159, view_290, permute_212, mm_54], Original ATen: [aten.view, aten.gelu_backward, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:89
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2809
+            triton_per_fused__softmax_backward_data_matmul_11.run(buf221, gt_3, div_3, buf223, buf222, 128, 12, 128, 128, stream=raw_stream0)
+            del div_3
+            del gt_3
+            # Topologically Sorted Source Nodes: [neg_4, fma_4], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:95
+            buf224 = torch.ops.prims.fma.default(buf223, buf222, buf221)
+            del buf221
+            buf225 = buf224
+            assert_size_stride(buf225, (128, 12, 128, 128), (196608, 16384, 128, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf225, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2909
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_view_4.run(buf247, buf250, 768, 16384, stream=raw_stream0)
+            buf251 = reinterpret_tensor(buf248, (128, 128, 3072), (393216, 3072, 1), 0); del buf248  # reuse
+            # Topologically Sorted Source Nodes: [view_323, x, mul_179, erf_6, add_46, mul_180, mul_181, mul_182, exp_13, mul_183, mul_184, add_47, mul_185], Original ATen: [aten.view, aten.gelu_backward]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_gelu_backward_view_6.run(buf251, addmm_4, 128, 128, 3072, stream=raw_stream0)
+            del addmm_4
+            buf252 = reinterpret_tensor(buf247, (16384, 768), (768, 1), 0); del buf247  # reuse
+            # Topologically Sorted Source Nodes: [view_323, x, mul_179, erf_6, add_46, mul_180, mul_181, mul_182, exp_13, mul_183, mul_184, add_47, mul_185, view_324, permute_245, mm_66], Original ATen: [aten.view, aten.gelu_backward, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:109
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g01_output_code.py:2979
+            del bmm
+            del gt_1
+            del sum_1
+            # Topologically Sorted Source Nodes: [attention_mask, eq, view_3, mask, scores, tensor, scores_1, weights, neg_5, fma_5], Original ATen: [aten.ones, aten.eq, aten.view, aten.expand, aten.matmul, aten.lift_fresh, aten.masked_fill, aten._softmax, aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:115
+            buf269 = torch.ops.prims.fma.default(buf268, buf267, buf266)
+            del buf266
+            del buf267
+            del buf268
+            buf270 = buf269
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1245
+            buf31 = buf30
+            assert_size_stride(buf31, (16384, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf31, 16, 'torch.ops.aten.addmm.default')
+            del buf30
+            # Topologically Sorted Source Nodes: [view_20_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:10
+            buf32 = torch.ops.aten.gelu.default(buf31)
+            buf33 = buf32
+            assert_size_stride(buf33, (16384, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf33, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1255
+            del buf32
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1256
+            buf34 = empty_strided_npu((16384, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x_2, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1258
+            # [Provenance debug handles] extern_kernels.mm:11
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1346
+            buf66 = buf65
+            assert_size_stride(buf66, (16384, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf66, 16, 'torch.ops.aten.addmm.default')
+            del buf65
+            # Topologically Sorted Source Nodes: [view_43_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:19
+            buf67 = torch.ops.aten.gelu.default(buf66)
+            buf68 = buf67
+            assert_size_stride(buf68, (16384, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf68, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1356
+            del buf67
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1357
+            buf69 = empty_strided_npu((16384, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x_6, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1359
+            # [Provenance debug handles] extern_kernels.mm:20
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1447
+            buf101 = buf100
+            assert_size_stride(buf101, (16384, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf101, 16, 'torch.ops.aten.addmm.default')
+            del buf100
+            # Topologically Sorted Source Nodes: [view_66_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:28
+            buf102 = torch.ops.aten.gelu.default(buf101)
+            buf103 = buf102
+            assert_size_stride(buf103, (16384, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf103, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1457
+            del buf102
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1458
+            buf104 = empty_strided_npu((16384, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x_10, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1460
+            # [Provenance debug handles] extern_kernels.mm:29
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1548
+            buf136 = buf135
+            assert_size_stride(buf136, (16384, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf136, 16, 'torch.ops.aten.addmm.default')
+            del buf135
+            # Topologically Sorted Source Nodes: [view_89_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:37
+            buf137 = torch.ops.aten.gelu.default(buf136)
+            buf138 = buf137
+            assert_size_stride(buf138, (16384, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf138, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1558
+            del buf137
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1559
+            buf139 = empty_strided_npu((16384, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x_14, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1561
+            # [Provenance debug handles] extern_kernels.mm:38
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1649
+            buf171 = buf170
+            assert_size_stride(buf171, (16384, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf171, 16, 'torch.ops.aten.addmm.default')
+            del buf170
+            # Topologically Sorted Source Nodes: [view_112_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:46
+            buf172 = torch.ops.aten.gelu.default(buf171)
+            buf173 = buf172
+            assert_size_stride(buf173, (16384, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf173, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1659
+            del buf172
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1660
+            buf174 = empty_strided_npu((16384, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x_18, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1662
+            # [Provenance debug handles] extern_kernels.mm:47
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1750
+            buf206 = buf205
+            assert_size_stride(buf206, (16384, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf206, 16, 'torch.ops.aten.addmm.default')
+            del buf205
+            # Topologically Sorted Source Nodes: [view_135_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:55
+            buf207 = torch.ops.aten.gelu.default(buf206)
+            buf208 = buf207
+            assert_size_stride(buf208, (16384, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf208, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1760
+            del buf207
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1761
+            buf209 = empty_strided_npu((16384, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x_22, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1763
+            # [Provenance debug handles] extern_kernels.mm:56
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1781
+            buf219 = buf218
+            assert_size_stride(buf219, (16384, 768), (768, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf219, 16, 'torch.ops.aten.addmm.default')
+            del buf218
+            # Topologically Sorted Source Nodes: [], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:58
+            buf220 = torch.ops.aten.gelu.default(buf219)
+            buf221 = buf220
+            assert_size_stride(buf221, (16384, 768), (768, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf221, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1791
+            del buf220
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1792
+            buf222 = empty_strided_npu((128, 128, 1), (128, 1, 16384), torch.float32)
+            buf223 = buf222; del buf222  # reuse
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1794
+            buf226 = reinterpret_tensor(buf221, (128, 128, 768), (98304, 768, 1), 0); del buf221  # reuse
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1807
+            del buf227
+            buf229 = empty_strided_npu((16384, 1), (1, 16384), torch.float32)
+            buf231 = empty_strided_npu((16384, 30522), (30522, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [mlm_loss], Original ATen: [aten._log_softmax]
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused__log_softmax_11.run(buf228, buf229, buf231, 16384, 30522, stream=raw_stream0)
+            del buf229
+            primals_108 = copy_if_misaligned(primals_108)
+            # Topologically Sorted Source Nodes: [view_31, mlm_loss], Original ATen: [aten.view, aten.nll_loss_forward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_forward.default:60
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1817
+            buf232 = torch.ops.aten.nll_loss_forward.default(buf231, reinterpret_tensor(primals_108, (16384, ), (1, ), 0), None, 1, -100)
+            buf233 = buf232[0]
+            assert_size_stride(buf233, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf233, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1821
+            buf234 = buf232[1]
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1822
+            assert_size_stride(buf234, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf234, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1824
+            del buf232
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1825
+        return (buf233, reinterpret_tensor(buf228, (128, 128, 30522), (3906816, 30522, 1), 0), primals_1, primals_2, primals_3, primals_5, primals_7, primals_9, primals_11, primals_13, primals_15, primals_17, primals_19, primals_21, primals_23, primals_25, primals_27, primals_29, primals_31, primals_33, primals_35, primals_37, primals_39, primals_41, primals_43, primals_45, primals_47, primals_49, primals_51, primals_53, primals_55, primals_57, primals_59, primals_61, primals_63, primals_65, primals_67, primals_69, primals_71, primals_73, primals_75, primals_77, primals_79, primals_81, primals_83, primals_85, primals_87, primals_89, primals_91, primals_93, primals_95, primals_97, primals_99, primals_101, primals_103, primals_105, buf0, reinterpret_tensor(buf2, (128, 128, 1), (128, 1, 1), 0), buf4, buf7, reinterpret_tensor(buf8, (16384, 768), (768, 1), 0), buf14, buf15, buf16, buf18, reinterpret_tensor(buf22, (16384, 768), (768, 1), 0), buf24, reinterpret_tensor(buf26, (128, 128, 1), (128, 1, 1), 0), buf29, reinterpret_tensor(buf28, (16384, 768), (768, 1), 0), buf31, buf33, buf36, buf37, reinterpret_tensor(buf39, (128, 128, 1), (128, 1, 1), 0), buf42, reinterpret_tensor(buf41, (16384, 768), (768, 1), 0), buf51, buf53, reinterpret_tensor(buf57, (16384, 768), (768, 1), 0), buf59, reinterpret_tensor(buf61, (128, 128, 1), (128, 1, 1), 0), buf64, reinterpret_tensor(buf63, (16384, 768), (768, 1), 0), buf66, buf68, buf71, buf72, reinterpret_tensor(buf74, (128, 128, 1), (128, 1, 1), 0), buf77, reinterpret_tensor(buf76, (16384, 768), (768, 1), 0), buf86, buf88, reinterpret_tensor(buf92, (16384, 768), (768, 1), 0), buf94, reinterpret_tensor(buf96, (128, 128, 1), (128, 1, 1), 0), buf99, reinterpret_tensor(buf98, (16384, 768), (768, 1), 0), buf101, buf103, buf106, buf107, reinterpret_tensor(buf109, (128, 128, 1), (128, 1, 1), 0), buf112, reinterpret_tensor(buf111, (16384, 768), (768, 1), 0), buf121, buf123, reinterpret_tensor(buf127, (16384, 768), (768, 1), 0), buf129, reinterpret_tensor(buf131, (128, 128, 1), (128, 1, 1), 0), buf134, reinterpret_tensor(buf133, (16384, 768), (768, 1), 0), buf136, buf138, buf141, buf142, reinterpret_tensor(buf144, (128, 128, 1), (128, 1, 1), 0), buf147, reinterpret_tensor(buf146, (16384, 768), (768, 1), 0), buf156, buf158, reinterpret_tensor(buf162, (16384, 768), (768, 1), 0), buf164, reinterpret_tensor(buf166, (128, 128, 1), (128, 1, 1), 0), buf169, reinterpret_tensor(buf168, (16384, 768), (768, 1), 0), buf171, buf173, buf176, buf177, reinterpret_tensor(buf179, (128, 128, 1), (128, 1, 1), 0), buf182, reinterpret_tensor(buf181, (16384, 768), (768, 1), 0), buf191, buf193, reinterpret_tensor(buf197, (16384, 768), (768, 1), 0), buf199, reinterpret_tensor(buf201, (128, 128, 1), (128, 1, 1), 0), buf204, reinterpret_tensor(buf203, (16384, 768), (768, 1), 0), buf206, buf208, buf211, buf212, reinterpret_tensor(buf214, (128, 128, 1), (128, 1, 1), 0), buf216, reinterpret_tensor(buf217, (16384, 768), (768, 1), 0), buf219, reinterpret_tensor(buf223, (128, 128, 1), (128, 1, 1), 0), buf225, reinterpret_tensor(buf226, (16384, 768), (768, 1), 0), reinterpret_tensor(primals_108, (16384, ), (1, ), 0), buf231, buf234, reinterpret_tensor(buf235, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf194, (1536, 128, 128), (16384, 1, 128), 0), reinterpret_tensor(buf236, (1536, 128, 64), (8192, 64, 1), 0), reinterpret_tensor(buf237, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf238, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf159, (1536, 128, 128), (16384, 1, 128), 0), reinterpret_tensor(buf239, (1536, 128, 64), (8192, 64, 1), 0), reinterpret_tensor(buf240, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf241, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf124, (1536, 128, 128), (16384, 1, 128), 0), reinterpret_tensor(buf242, (1536, 128, 64), (8192, 64, 1), 0), reinterpret_tensor(buf243, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf244, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf89, (1536, 128, 128), (16384, 1, 128), 0), reinterpret_tensor(buf245, (1536, 128, 64), (8192, 64, 1), 0), reinterpret_tensor(buf246, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf247, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf54, (1536, 128, 128), (16384, 1, 128), 0), reinterpret_tensor(buf248, (1536, 128, 64), (8192, 64, 1), 0), reinterpret_tensor(buf249, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf250, (1536, 64, 128), (8192, 128, 1), 0), reinterpret_tensor(buf19, (1536, 128, 128), (16384, 1, 128), 0), reinterpret_tensor(buf251, (1536, 128, 64), (8192, 64, 1), 0), reinterpret_tensor(buf252, (1536, 64, 128), (8192, 128, 1), 0), )
+
+
+
+# Source: DistilBertForMaskedLM_Train/NPU_g02_output_code.py:1827
+runner = Runner(partitions=[])

@@ -1,0 +1,205 @@
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:398
+            tangents_3 = copy_if_misaligned(tangents_3)
+            buf0 = empty_strided_cuda((32768, 2), (2, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [add_2, add_3, mul_1, mul_2, mul_4, cat], Original ATen: [aten.add, aten.mul, aten.tanh_backward, aten.cat]
+            # [Provenance debug handles] triton_poi_fused_add_cat_mul_tanh_backward_0:2
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_cat_mul_tanh_backward_0.run(tangents_1, tangents_4, tangents_2, tangents_3, exp, sub, buf0, 65536, stream=raw_stream0)
+            del exp
+            del sub
+            del tangents_1
+            del tangents_2
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:420
+            extern_kernels.mm(reinterpret_tensor(buf0, (2, 32768), (1, 2), 0), relu_1, out=buf2)
+            buf3 = empty_strided_cuda((1, 2, 256), (512, 1, 2), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_1:5
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_1.run(buf0, buf3, 512, 128, stream=raw_stream0)
+            del buf0
+            buf4 = empty_strided_cuda((1, 2), (2, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_1], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_2:6
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:430
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_2.run(buf3, buf4, 2, 256, stream=raw_stream0)
+            del buf3
+            buf5 = relu_1; del relu_1  # reuse
+            # Topologically Sorted Source Nodes: [le, scalar_tensor, where], Original ATen: [aten.threshold_backward]
+            # [Provenance debug handles] triton_poi_fused_threshold_backward_3:7
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:436
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_threshold_backward_3.run(buf5, buf1, 33554432, stream=raw_stream0)
+            assert_size_stride(primals_4, (1024, 1024), (1024, 1), 'input')
+            buf6 = buf1; del buf1  # reuse
+            # Topologically Sorted Source Nodes: [linear_1, permute_7, mm_2], Original ATen: [aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:8
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:448
+            extern_kernels.mm(reinterpret_tensor(buf5, (1024, 32768), (1, 1024), 0), relu, out=buf7)
+            buf8 = empty_strided_cuda((1, 1024, 64), (65536, 1, 1024), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_2], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_4:10
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_4.run(buf5, buf8, 65536, 512, stream=raw_stream0)
+            del buf5
+            buf9 = empty_strided_cuda((1, 1024), (1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_2], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_per_fused_sum_5:11
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:458
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_5.run(buf8, buf9, 1024, 64, stream=raw_stream0)
+            buf10 = relu; del relu  # reuse
+            # Topologically Sorted Source Nodes: [scalar_tensor, le_1, where_1], Original ATen: [aten.threshold_backward]
+            # [Provenance debug handles] triton_poi_fused_threshold_backward_3:12
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:464
+            triton_poi_fused_threshold_backward_3.run(buf10, buf6, 33554432, stream=raw_stream0)
+            del buf6
+            assert_size_stride(primals_3, (32768, 3), (3, 1), 'input')
+            buf11 = empty_strided_cuda((1024, 3), (3, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [scalar_tensor, le_1, where_1, permute_11, permute_13], Original ATen: [aten.threshold_backward, aten.t, aten.mm]
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:471
+            del primals_3
+            buf12 = buf8; del buf8  # reuse
+            # Topologically Sorted Source Nodes: [sum_3], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_red_fused_sum_4:14
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_sum_4.run(buf10, buf12, 65536, 512, stream=raw_stream0)
+            del buf10
+            buf13 = empty_strided_cuda((1, 1024), (1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [sum_3], Original ATen: [aten.sum]
+            # [Provenance debug handles] triton_per_fused_sum_5:15
+
+
+# Source: soft_actor_critic_Train/GPU_g01_output_code.py:481
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_sum_5.run(buf12, buf13, 1024, 64, stream=raw_stream0)
+            del buf12
+        return (buf11, reinterpret_tensor(buf13, (1024, ), (1, ), 0), None, buf7, reinterpret_tensor(buf9, (1024, ), (1, ), 0), buf2, reinterpret_tensor(buf4, (2, ), (1, ), 0), )
+
+runner = Runner(partitions=[])
+
+
+# Source: soft_actor_critic_Train/GPU_g02_output_code.py:169
+            assert_size_stride(primals_2, (1024, ), (1, ), 'input')
+            buf1 = buf0; del buf0  # reuse
+            # Topologically Sorted Source Nodes: [, x], Original ATen: [aten.addmm, aten.relu]
+            # [Provenance debug handles] triton_poi_fused_addmm_relu_0:2
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_relu_0.run(buf1, primals_2, 33554432, stream=raw_stream0)
+            del primals_2
+            assert_size_stride(primals_4, (1024, 1024), (1024, 1), 'input')
+            buf2 = empty_strided_cuda((32768, 1024), (1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [linear_1, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: soft_actor_critic_Train/GPU_g02_output_code.py:181
+            assert_size_stride(primals_5, (1024, ), (1, ), 'input')
+            buf3 = buf2; del buf2  # reuse
+            # Topologically Sorted Source Nodes: [, x_1], Original ATen: [aten.addmm, aten.relu]
+            # [Provenance debug handles] triton_poi_fused_addmm_relu_0:4
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_relu_0.run(buf3, primals_5, 33554432, stream=raw_stream0)
+            del primals_5
+            assert_size_stride(primals_7, (2, ), (1, ), 'input')
+            assert_size_stride(primals_6, (2, 1024), (1024, 1), 'input')
+            buf4 = empty_strided_cuda((32768, 2), (2, 1), torch.float32)
+
+
+# Source: soft_actor_critic_Train/GPU_g02_output_code.py:195
+            buf5 = empty_strided_cuda((32768, 1), (1, 1), torch.float32)
+            buf6 = empty_strided_cuda((32768, 1), (1, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [chunk, log_std_1, add, mul, log_std_2, std, mul_3, sub], Original ATen: [aten.split, aten.tanh, aten.add, aten.mul, aten.exp, aten.tanh_backward]
+            # [Provenance debug handles] triton_poi_fused_add_exp_mul_split_tanh_tanh_backward_1:6
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_exp_mul_split_tanh_tanh_backward_1.run(buf4, buf5, buf6, 32768, stream=raw_stream0)
+        return (reinterpret_tensor(buf4, (32768, 1), (2, 1), 0), buf5, buf5, reinterpret_tensor(buf4, (32768, 1), (2, 1), 0), primals_3, primals_4, primals_6, buf1, buf3, buf5, buf6, )
+
+runner = Runner(partitions=[])
+call = runner.call
+
+
+# Source: soft_actor_critic_Train/GPU_g05_output_code.py:267
+            torch.cuda.set_device(0)
+            arg6_1 = copy_if_misaligned(arg6_1)
+            # Topologically Sorted Source Nodes: [add_], Original ATen: [aten.add, aten.copy_]
+            # [Provenance debug handles] triton_poi_fused_add_copy__0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_copy__0.run(arg0_1, arg6_1, arg0_1, 3072, stream=raw_stream0)
+            del arg0_1
+            del arg6_1
+            assert_size_stride(arg1_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg7_1, (1024, ), (1, ), 'input')
+
+
+# Source: soft_actor_critic_Train/GPU_g05_output_code.py:277
+            arg7_1 = copy_if_misaligned(arg7_1)
+            # Topologically Sorted Source Nodes: [add__1], Original ATen: [aten.add, aten.copy_]
+            # [Provenance debug handles] triton_poi_fused_add_copy__1:2
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_copy__1.run(arg1_1, arg7_1, arg1_1, 1024, stream=raw_stream0)
+            del arg1_1
+            del arg7_1
+            assert_size_stride(arg2_1, (1024, 1024), (1024, 1), 'input')
+            assert_size_stride(arg8_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: soft_actor_critic_Train/GPU_g05_output_code.py:286
+            arg8_1 = copy_if_misaligned(arg8_1)
+            # Topologically Sorted Source Nodes: [add__2], Original ATen: [aten.add, aten.copy_]
+            # [Provenance debug handles] triton_poi_fused_add_copy__2:3
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_copy__2.run(arg2_1, arg8_1, arg2_1, 1048576, stream=raw_stream0)
+            del arg2_1
+            del arg8_1
+            assert_size_stride(arg3_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg9_1, (1024, ), (1, ), 'input')
+
+
+# Source: soft_actor_critic_Train/GPU_g05_output_code.py:295
+            arg9_1 = copy_if_misaligned(arg9_1)
+            # Topologically Sorted Source Nodes: [add__3], Original ATen: [aten.add, aten.copy_]
+            # [Provenance debug handles] triton_poi_fused_add_copy__1:4
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_copy__1.run(arg3_1, arg9_1, arg3_1, 1024, stream=raw_stream0)
+            del arg3_1
+            del arg9_1
+            assert_size_stride(arg4_1, (2, 1024), (1024, 1), 'input')
+            assert_size_stride(arg10_1, (2, 1024), (1024, 1), 'input')
+
+
+# Source: soft_actor_critic_Train/GPU_g05_output_code.py:304
+            arg10_1 = copy_if_misaligned(arg10_1)
+            # Topologically Sorted Source Nodes: [add__4], Original ATen: [aten.add, aten.copy_]
+            # [Provenance debug handles] triton_poi_fused_add_copy__3:5
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_copy__3.run(arg4_1, arg10_1, arg4_1, 2048, stream=raw_stream0)
+            del arg10_1
+            del arg4_1
+            assert_size_stride(arg5_1, (2, ), (1, ), 'input')
+            assert_size_stride(arg11_1, (2, ), (1, ), 'input')
+
+
+# Source: soft_actor_critic_Train/GPU_g05_output_code.py:313
+            arg11_1 = copy_if_misaligned(arg11_1)
+            # Topologically Sorted Source Nodes: [add__5], Original ATen: [aten.add, aten.copy_]
+            # [Provenance debug handles] triton_poi_fused_add_copy__4:6
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_copy__4.run(arg5_1, arg11_1, arg5_1, 2, stream=raw_stream0)
+            del arg11_1
+            del arg5_1
+        return ()

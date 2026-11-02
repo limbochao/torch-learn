@@ -1,0 +1,731 @@
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:879
+            arg0_1 = copy_if_misaligned(arg0_1)
+            buf3 = empty_strided_cuda((32, 128, 1024), (131072, 1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [inputs_embeds, inputs_embeds_1, cache_position, positions, hidden_states, hidden_states_2], Original ATen: [aten.embedding, aten.mul, aten.arange, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_arange_embedding_mul_native_layer_norm_0:1
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_arange_embedding_mul_native_layer_norm_0.run(arg0_1, arg1_1, arg2_1, arg3_1, arg4_1, buf3, 4096, 1024, stream=raw_stream0)
+            del arg3_1
+            del arg4_1
+            assert_size_stride(arg6_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg5_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:910
+            del arg9_1
+            buf7 = empty_strided_cuda((32, 1, 128, 128), (16384, 0, 128, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [cache_position, linear, view_1, query_states, key_states, view_2, key_states_1, value_states, view_3, value_states_1, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, attn_output], Original ATen: [aten.arange, aten.view, aten.transpose, aten.triu, aten.full, aten.gt, aten.mul, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:5
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf7, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, linear, view_1, query_states, key_states, view_2, key_states_1, value_states, view_3, value_states_1, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, attn_output], Original ATen: [aten.arange, aten.view, aten.transpose, aten.triu, aten.full, aten.gt, aten.mul, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:6
+            buf8 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf4, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf5, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf6, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf7, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf9 = buf8[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:920
+            assert_size_stride(buf9, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf9, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf8
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:932
+            buf14 = reinterpret_tensor(buf13, (32, 128, 1024), (131072, 1024, 1), 0); del buf13  # reuse
+            buf18 = reinterpret_tensor(buf9, (32, 128, 1024), (131072, 1024, 1), 0); del buf9  # reuse
+            # Topologically Sorted Source Nodes: [inputs_embeds, inputs_embeds_1, cache_position, positions, hidden_states, , attn_output_3, hidden_states_4, hidden_states_5], Original ATen: [aten.embedding, aten.mul, aten.arange, aten.add, aten.addmm, aten.view, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_arange_embedding_mul_native_layer_norm_view_2:8
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_arange_embedding_mul_native_layer_norm_view_2.run(buf14, arg0_1, arg1_1, arg2_1, arg12_1, arg13_1, arg14_1, buf18, 4096, 1024, stream=raw_stream0)
+            del arg0_1
+            del arg12_1
+            del arg13_1
+            del arg14_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:949
+            assert_size_stride(arg16_1, (4096, ), (1, ), 'input')
+            buf20 = reinterpret_tensor(buf19, (32, 128, 4096), (524288, 4096, 1), 0); del buf19  # reuse
+            # Topologically Sorted Source Nodes: [, linear_4, hidden_states_6], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:10
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf20, arg16_1, 16777216, stream=raw_stream0)
+            del arg16_1
+            assert_size_stride(arg17_1, (1024, 4096), (4096, 1), 'input')
+            buf21 = reinterpret_tensor(buf18, (4096, 1024), (1024, 1), 0); del buf18  # reuse
+            # Topologically Sorted Source Nodes: [, linear_4, hidden_states_6, hidden_states_8], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:964
+            assert_size_stride(arg20_1, (1024, ), (1, ), 'input')
+            buf25 = reinterpret_tensor(buf5, (32, 128, 1024), (131072, 1024, 1), 0); del buf5  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_8, hidden_states_10, hidden_states_11], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:12
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf14, arg18_1, buf21, arg19_1, arg20_1, buf25, 4096, 1024, stream=raw_stream0)
+            del arg19_1
+            del arg20_1
+            assert_size_stride(arg22_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg21_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:996
+            del buf25
+            buf29 = buf7; del buf7  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_6, view_4, query_states_1, key_states_2, view_5, key_states_3, value_states_2, view_6, value_states_3, attn_output_4], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:16
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf29, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_6, view_4, query_states_1, key_states_2, view_5, key_states_3, value_states_2, view_6, value_states_3, attn_output_4], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:17
+            buf30 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf26, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf27, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf28, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf29, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf31 = buf30[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1006
+            assert_size_stride(buf31, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf31, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf30
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1018
+            buf36 = buf14; del buf14  # reuse
+            buf40 = reinterpret_tensor(buf31, (32, 128, 1024), (131072, 1024, 1), 0); del buf31  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_8, hidden_states_10, attn_output_7, hidden_states_13, hidden_states_14], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:19
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf36, arg18_1, buf21, arg28_1, buf35, arg29_1, arg30_1, buf40, 4096, 1024, stream=raw_stream0)
+            del arg18_1
+            del arg28_1
+            del arg29_1
+            del arg30_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1034
+            assert_size_stride(arg32_1, (4096, ), (1, ), 'input')
+            buf42 = reinterpret_tensor(buf41, (32, 128, 4096), (524288, 4096, 1), 0); del buf41  # reuse
+            # Topologically Sorted Source Nodes: [, linear_10, hidden_states_15], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:21
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf42, arg32_1, 16777216, stream=raw_stream0)
+            del arg32_1
+            assert_size_stride(arg33_1, (1024, 4096), (4096, 1), 'input')
+            buf43 = reinterpret_tensor(buf40, (4096, 1024), (1024, 1), 0); del buf40  # reuse
+            # Topologically Sorted Source Nodes: [, linear_10, hidden_states_15, hidden_states_17], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1049
+            assert_size_stride(arg36_1, (1024, ), (1, ), 'input')
+            buf47 = reinterpret_tensor(buf35, (32, 128, 1024), (131072, 1024, 1), 0); del buf35  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_17, hidden_states_19, hidden_states_20], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:23
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf36, arg34_1, buf43, arg35_1, arg36_1, buf47, 4096, 1024, stream=raw_stream0)
+            del arg35_1
+            del arg36_1
+            assert_size_stride(arg38_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg37_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1081
+            del buf47
+            buf51 = buf29; del buf29  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_12, view_7, query_states_2, key_states_4, view_8, key_states_5, value_states_4, view_9, value_states_5, attn_output_8], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:27
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf51, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_12, view_7, query_states_2, key_states_4, view_8, key_states_5, value_states_4, view_9, value_states_5, attn_output_8], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:28
+            buf52 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf48, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf49, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf50, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf51, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf53 = buf52[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1091
+            assert_size_stride(buf53, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf53, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf52
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1103
+            buf58 = buf36; del buf36  # reuse
+            buf62 = reinterpret_tensor(buf53, (32, 128, 1024), (131072, 1024, 1), 0); del buf53  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_17, hidden_states_19, attn_output_11, hidden_states_22, hidden_states_23], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:30
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf58, arg34_1, buf43, arg44_1, buf57, arg45_1, arg46_1, buf62, 4096, 1024, stream=raw_stream0)
+            del arg34_1
+            del arg44_1
+            del arg45_1
+            del arg46_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1119
+            assert_size_stride(arg48_1, (4096, ), (1, ), 'input')
+            buf64 = reinterpret_tensor(buf63, (32, 128, 4096), (524288, 4096, 1), 0); del buf63  # reuse
+            # Topologically Sorted Source Nodes: [, linear_16, hidden_states_24], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:32
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf64, arg48_1, 16777216, stream=raw_stream0)
+            del arg48_1
+            assert_size_stride(arg49_1, (1024, 4096), (4096, 1), 'input')
+            buf65 = reinterpret_tensor(buf62, (4096, 1024), (1024, 1), 0); del buf62  # reuse
+            # Topologically Sorted Source Nodes: [, linear_16, hidden_states_24, hidden_states_26], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1134
+            assert_size_stride(arg52_1, (1024, ), (1, ), 'input')
+            buf69 = reinterpret_tensor(buf57, (32, 128, 1024), (131072, 1024, 1), 0); del buf57  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_26, hidden_states_28, hidden_states_29], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:34
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf58, arg50_1, buf65, arg51_1, arg52_1, buf69, 4096, 1024, stream=raw_stream0)
+            del arg51_1
+            del arg52_1
+            assert_size_stride(arg54_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg53_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1166
+            del buf69
+            buf73 = buf51; del buf51  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_18, view_10, query_states_3, key_states_6, view_11, key_states_7, value_states_6, view_12, value_states_7, attn_output_12], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:38
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf73, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_18, view_10, query_states_3, key_states_6, view_11, key_states_7, value_states_6, view_12, value_states_7, attn_output_12], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:39
+            buf74 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf70, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf71, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf72, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf73, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf75 = buf74[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1176
+            assert_size_stride(buf75, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf75, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf74
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1188
+            buf80 = buf58; del buf58  # reuse
+            buf84 = reinterpret_tensor(buf75, (32, 128, 1024), (131072, 1024, 1), 0); del buf75  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_26, hidden_states_28, attn_output_15, hidden_states_31, hidden_states_32], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:41
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf80, arg50_1, buf65, arg60_1, buf79, arg61_1, arg62_1, buf84, 4096, 1024, stream=raw_stream0)
+            del arg50_1
+            del arg60_1
+            del arg61_1
+            del arg62_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1204
+            assert_size_stride(arg64_1, (4096, ), (1, ), 'input')
+            buf86 = reinterpret_tensor(buf85, (32, 128, 4096), (524288, 4096, 1), 0); del buf85  # reuse
+            # Topologically Sorted Source Nodes: [, linear_22, hidden_states_33], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:43
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf86, arg64_1, 16777216, stream=raw_stream0)
+            del arg64_1
+            assert_size_stride(arg65_1, (1024, 4096), (4096, 1), 'input')
+            buf87 = reinterpret_tensor(buf84, (4096, 1024), (1024, 1), 0); del buf84  # reuse
+            # Topologically Sorted Source Nodes: [, linear_22, hidden_states_33, hidden_states_35], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1219
+            assert_size_stride(arg68_1, (1024, ), (1, ), 'input')
+            buf91 = reinterpret_tensor(buf79, (32, 128, 1024), (131072, 1024, 1), 0); del buf79  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_35, hidden_states_37, hidden_states_38], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:45
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf80, arg66_1, buf87, arg67_1, arg68_1, buf91, 4096, 1024, stream=raw_stream0)
+            del arg67_1
+            del arg68_1
+            assert_size_stride(arg70_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg69_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1251
+            del buf91
+            buf95 = buf73; del buf73  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_24, view_13, query_states_4, key_states_8, view_14, key_states_9, value_states_8, view_15, value_states_9, attn_output_16], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:49
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf95, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_24, view_13, query_states_4, key_states_8, view_14, key_states_9, value_states_8, view_15, value_states_9, attn_output_16], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:50
+            buf96 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf92, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf93, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf94, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf95, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf97 = buf96[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1261
+            assert_size_stride(buf97, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf97, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf96
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1273
+            buf102 = buf80; del buf80  # reuse
+            buf106 = reinterpret_tensor(buf97, (32, 128, 1024), (131072, 1024, 1), 0); del buf97  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_35, hidden_states_37, attn_output_19, hidden_states_40, hidden_states_41], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:52
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf102, arg66_1, buf87, arg76_1, buf101, arg77_1, arg78_1, buf106, 4096, 1024, stream=raw_stream0)
+            del arg66_1
+            del arg76_1
+            del arg77_1
+            del arg78_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1289
+            assert_size_stride(arg80_1, (4096, ), (1, ), 'input')
+            buf108 = reinterpret_tensor(buf107, (32, 128, 4096), (524288, 4096, 1), 0); del buf107  # reuse
+            # Topologically Sorted Source Nodes: [, linear_28, hidden_states_42], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:54
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf108, arg80_1, 16777216, stream=raw_stream0)
+            del arg80_1
+            assert_size_stride(arg81_1, (1024, 4096), (4096, 1), 'input')
+            buf109 = reinterpret_tensor(buf106, (4096, 1024), (1024, 1), 0); del buf106  # reuse
+            # Topologically Sorted Source Nodes: [, linear_28, hidden_states_42, hidden_states_44], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1304
+            assert_size_stride(arg84_1, (1024, ), (1, ), 'input')
+            buf113 = reinterpret_tensor(buf87, (32, 128, 1024), (131072, 1024, 1), 0); del buf87  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_44, hidden_states_46, hidden_states_47], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:56
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf102, arg82_1, buf109, arg83_1, arg84_1, buf113, 4096, 1024, stream=raw_stream0)
+            del arg83_1
+            del arg84_1
+            assert_size_stride(arg86_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg85_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1336
+            del buf113
+            buf117 = buf95; del buf95  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_30, view_16, query_states_5, key_states_10, view_17, key_states_11, value_states_10, view_18, value_states_11, attn_output_20], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:60
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf117, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_30, view_16, query_states_5, key_states_10, view_17, key_states_11, value_states_10, view_18, value_states_11, attn_output_20], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:61
+            buf118 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf114, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf115, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf116, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf117, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf119 = buf118[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1346
+            assert_size_stride(buf119, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf119, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf118
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1358
+            buf124 = buf102; del buf102  # reuse
+            buf128 = reinterpret_tensor(buf119, (32, 128, 1024), (131072, 1024, 1), 0); del buf119  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_44, hidden_states_46, attn_output_23, hidden_states_49, hidden_states_50], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:63
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf124, arg82_1, buf109, arg92_1, buf123, arg93_1, arg94_1, buf128, 4096, 1024, stream=raw_stream0)
+            del arg82_1
+            del arg92_1
+            del arg93_1
+            del arg94_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1374
+            assert_size_stride(arg96_1, (4096, ), (1, ), 'input')
+            buf130 = reinterpret_tensor(buf129, (32, 128, 4096), (524288, 4096, 1), 0); del buf129  # reuse
+            # Topologically Sorted Source Nodes: [, linear_34, hidden_states_51], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:65
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf130, arg96_1, 16777216, stream=raw_stream0)
+            del arg96_1
+            assert_size_stride(arg97_1, (1024, 4096), (4096, 1), 'input')
+            buf131 = reinterpret_tensor(buf128, (4096, 1024), (1024, 1), 0); del buf128  # reuse
+            # Topologically Sorted Source Nodes: [, linear_34, hidden_states_51, hidden_states_53], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1389
+            assert_size_stride(arg100_1, (1024, ), (1, ), 'input')
+            buf135 = reinterpret_tensor(buf123, (32, 128, 1024), (131072, 1024, 1), 0); del buf123  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_53, hidden_states_55, hidden_states_56], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:67
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf124, arg98_1, buf131, arg99_1, arg100_1, buf135, 4096, 1024, stream=raw_stream0)
+            del arg100_1
+            del arg99_1
+            assert_size_stride(arg102_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg101_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1421
+            del buf135
+            buf139 = buf117; del buf117  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_36, view_19, query_states_6, key_states_12, view_20, key_states_13, value_states_12, view_21, value_states_13, attn_output_24], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:71
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf139, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_36, view_19, query_states_6, key_states_12, view_20, key_states_13, value_states_12, view_21, value_states_13, attn_output_24], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:72
+            buf140 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf136, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf137, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf138, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf139, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf141 = buf140[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1431
+            assert_size_stride(buf141, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf141, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf140
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1443
+            buf146 = buf124; del buf124  # reuse
+            buf150 = reinterpret_tensor(buf141, (32, 128, 1024), (131072, 1024, 1), 0); del buf141  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_53, hidden_states_55, attn_output_27, hidden_states_58, hidden_states_59], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:74
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf146, arg98_1, buf131, arg108_1, buf145, arg109_1, arg110_1, buf150, 4096, 1024, stream=raw_stream0)
+            del arg108_1
+            del arg109_1
+            del arg110_1
+            del arg98_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1459
+            assert_size_stride(arg112_1, (4096, ), (1, ), 'input')
+            buf152 = reinterpret_tensor(buf151, (32, 128, 4096), (524288, 4096, 1), 0); del buf151  # reuse
+            # Topologically Sorted Source Nodes: [, linear_40, hidden_states_60], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:76
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf152, arg112_1, 16777216, stream=raw_stream0)
+            del arg112_1
+            assert_size_stride(arg113_1, (1024, 4096), (4096, 1), 'input')
+            buf153 = reinterpret_tensor(buf150, (4096, 1024), (1024, 1), 0); del buf150  # reuse
+            # Topologically Sorted Source Nodes: [, linear_40, hidden_states_60, hidden_states_62], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1474
+            assert_size_stride(arg116_1, (1024, ), (1, ), 'input')
+            buf157 = reinterpret_tensor(buf145, (32, 128, 1024), (131072, 1024, 1), 0); del buf145  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_62, hidden_states_64, hidden_states_65], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:78
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf146, arg114_1, buf153, arg115_1, arg116_1, buf157, 4096, 1024, stream=raw_stream0)
+            del arg115_1
+            del arg116_1
+            assert_size_stride(arg118_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg117_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1506
+            del buf157
+            buf161 = buf139; del buf139  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_42, view_22, query_states_7, key_states_14, view_23, key_states_15, value_states_14, view_24, value_states_15, attn_output_28], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:82
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf161, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_42, view_22, query_states_7, key_states_14, view_23, key_states_15, value_states_14, view_24, value_states_15, attn_output_28], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:83
+            buf162 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf158, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf159, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf160, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf161, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf163 = buf162[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1516
+            assert_size_stride(buf163, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf163, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf162
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1528
+            buf168 = buf146; del buf146  # reuse
+            buf172 = reinterpret_tensor(buf163, (32, 128, 1024), (131072, 1024, 1), 0); del buf163  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_62, hidden_states_64, attn_output_31, hidden_states_67, hidden_states_68], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:85
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf168, arg114_1, buf153, arg124_1, buf167, arg125_1, arg126_1, buf172, 4096, 1024, stream=raw_stream0)
+            del arg114_1
+            del arg124_1
+            del arg125_1
+            del arg126_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1544
+            assert_size_stride(arg128_1, (4096, ), (1, ), 'input')
+            buf174 = reinterpret_tensor(buf173, (32, 128, 4096), (524288, 4096, 1), 0); del buf173  # reuse
+            # Topologically Sorted Source Nodes: [, linear_46, hidden_states_69], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:87
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf174, arg128_1, 16777216, stream=raw_stream0)
+            del arg128_1
+            assert_size_stride(arg129_1, (1024, 4096), (4096, 1), 'input')
+            buf175 = reinterpret_tensor(buf172, (4096, 1024), (1024, 1), 0); del buf172  # reuse
+            # Topologically Sorted Source Nodes: [, linear_46, hidden_states_69, hidden_states_71], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1559
+            assert_size_stride(arg132_1, (1024, ), (1, ), 'input')
+            buf179 = reinterpret_tensor(buf167, (32, 128, 1024), (131072, 1024, 1), 0); del buf167  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_71, hidden_states_73, hidden_states_74], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:89
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf168, arg130_1, buf175, arg131_1, arg132_1, buf179, 4096, 1024, stream=raw_stream0)
+            del arg131_1
+            del arg132_1
+            assert_size_stride(arg134_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg133_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1591
+            del buf179
+            buf183 = buf161; del buf161  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_48, view_25, query_states_8, key_states_16, view_26, key_states_17, value_states_16, view_27, value_states_17, attn_output_32], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:93
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf183, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_48, view_25, query_states_8, key_states_16, view_26, key_states_17, value_states_16, view_27, value_states_17, attn_output_32], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:94
+            buf184 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf180, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf181, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf182, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf183, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf185 = buf184[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1601
+            assert_size_stride(buf185, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf185, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf184
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1613
+            buf190 = buf168; del buf168  # reuse
+            buf194 = reinterpret_tensor(buf185, (32, 128, 1024), (131072, 1024, 1), 0); del buf185  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_71, hidden_states_73, attn_output_35, hidden_states_76, hidden_states_77], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:96
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf190, arg130_1, buf175, arg140_1, buf189, arg141_1, arg142_1, buf194, 4096, 1024, stream=raw_stream0)
+            del arg130_1
+            del arg140_1
+            del arg141_1
+            del arg142_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1629
+            assert_size_stride(arg144_1, (4096, ), (1, ), 'input')
+            buf196 = reinterpret_tensor(buf195, (32, 128, 4096), (524288, 4096, 1), 0); del buf195  # reuse
+            # Topologically Sorted Source Nodes: [, linear_52, hidden_states_78], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:98
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf196, arg144_1, 16777216, stream=raw_stream0)
+            del arg144_1
+            assert_size_stride(arg145_1, (1024, 4096), (4096, 1), 'input')
+            buf197 = reinterpret_tensor(buf194, (4096, 1024), (1024, 1), 0); del buf194  # reuse
+            # Topologically Sorted Source Nodes: [, linear_52, hidden_states_78, hidden_states_80], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1644
+            assert_size_stride(arg148_1, (1024, ), (1, ), 'input')
+            buf201 = reinterpret_tensor(buf189, (32, 128, 1024), (131072, 1024, 1), 0); del buf189  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_80, hidden_states_82, hidden_states_83], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:100
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf190, arg146_1, buf197, arg147_1, arg148_1, buf201, 4096, 1024, stream=raw_stream0)
+            del arg147_1
+            del arg148_1
+            assert_size_stride(arg150_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg149_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1676
+            del buf201
+            buf205 = buf183; del buf183  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_54, view_28, query_states_9, key_states_18, view_29, key_states_19, value_states_18, view_30, value_states_19, attn_output_36], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:104
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf205, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_54, view_28, query_states_9, key_states_18, view_29, key_states_19, value_states_18, view_30, value_states_19, attn_output_36], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:105
+            buf206 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf202, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf203, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf204, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf205, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf207 = buf206[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1686
+            assert_size_stride(buf207, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf207, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf206
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1698
+            buf212 = buf190; del buf190  # reuse
+            buf216 = reinterpret_tensor(buf207, (32, 128, 1024), (131072, 1024, 1), 0); del buf207  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_80, hidden_states_82, attn_output_39, hidden_states_85, hidden_states_86], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:107
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf212, arg146_1, buf197, arg156_1, buf211, arg157_1, arg158_1, buf216, 4096, 1024, stream=raw_stream0)
+            del arg146_1
+            del arg156_1
+            del arg157_1
+            del arg158_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1714
+            assert_size_stride(arg160_1, (4096, ), (1, ), 'input')
+            buf218 = reinterpret_tensor(buf217, (32, 128, 4096), (524288, 4096, 1), 0); del buf217  # reuse
+            # Topologically Sorted Source Nodes: [, linear_58, hidden_states_87], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:109
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf218, arg160_1, 16777216, stream=raw_stream0)
+            del arg160_1
+            assert_size_stride(arg161_1, (1024, 4096), (4096, 1), 'input')
+            buf219 = reinterpret_tensor(buf216, (4096, 1024), (1024, 1), 0); del buf216  # reuse
+            # Topologically Sorted Source Nodes: [, linear_58, hidden_states_87, hidden_states_89], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1729
+            assert_size_stride(arg164_1, (1024, ), (1, ), 'input')
+            buf223 = reinterpret_tensor(buf211, (32, 128, 1024), (131072, 1024, 1), 0); del buf211  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_89, hidden_states_91, hidden_states_92], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:111
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf212, arg162_1, buf219, arg163_1, arg164_1, buf223, 4096, 1024, stream=raw_stream0)
+            del arg163_1
+            del arg164_1
+            assert_size_stride(arg166_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg165_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1761
+            del buf223
+            buf227 = buf205; del buf205  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_60, view_31, query_states_10, key_states_20, view_32, key_states_21, value_states_20, view_33, value_states_21, attn_output_40], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:115
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf227, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_60, view_31, query_states_10, key_states_20, view_32, key_states_21, value_states_20, view_33, value_states_21, attn_output_40], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:116
+            buf228 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf224, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf225, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf226, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf227, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            buf229 = buf228[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1771
+            assert_size_stride(buf229, (32, 16, 128, 64), (131072, 64, 1024, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf229, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            del buf228
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1783
+            buf234 = buf212; del buf212  # reuse
+            buf238 = reinterpret_tensor(buf229, (32, 128, 1024), (131072, 1024, 1), 0); del buf229  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_89, hidden_states_91, attn_output_43, hidden_states_94, hidden_states_95], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:118
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf234, arg162_1, buf219, arg172_1, buf233, arg173_1, arg174_1, buf238, 4096, 1024, stream=raw_stream0)
+            del arg162_1
+            del arg172_1
+            del arg173_1
+            del arg174_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1799
+            assert_size_stride(arg176_1, (4096, ), (1, ), 'input')
+            buf240 = reinterpret_tensor(buf239, (32, 128, 4096), (524288, 4096, 1), 0); del buf239  # reuse
+            # Topologically Sorted Source Nodes: [, linear_64, hidden_states_96], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:120
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf240, arg176_1, 16777216, stream=raw_stream0)
+            del arg176_1
+            assert_size_stride(arg177_1, (1024, 4096), (4096, 1), 'input')
+            buf241 = reinterpret_tensor(buf238, (4096, 1024), (1024, 1), 0); del buf238  # reuse
+            # Topologically Sorted Source Nodes: [, linear_64, hidden_states_96, hidden_states_98], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1814
+            assert_size_stride(arg180_1, (1024, ), (1, ), 'input')
+            buf245 = reinterpret_tensor(buf233, (32, 128, 1024), (131072, 1024, 1), 0); del buf233  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_98, hidden_states_100, hidden_states_101], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:122
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf234, arg178_1, buf241, arg179_1, arg180_1, buf245, 4096, 1024, stream=raw_stream0)
+            del arg179_1
+            del arg180_1
+            assert_size_stride(arg182_1, (1024, ), (1, ), 'input')
+            assert_size_stride(arg181_1, (1024, 1024), (1024, 1), 'input')
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1846
+            del buf245
+            buf249 = buf227; del buf227  # reuse
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_66, view_34, query_states_11, key_states_22, view_35, key_states_23, value_states_22, view_36, value_states_23, attn_output_44], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1:126
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention_arange_constant_pad_nd_expand_full_gt_mul_slice_transpose_triu_unsqueeze_view_1.run(buf249, 524288, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [cache_position, causal_mask_1, causal_mask, arange_1, reshape, gt, causal_mask_2, linear_66, view_34, query_states_11, key_states_22, view_35, key_states_23, value_states_22, view_36, value_states_23, attn_output_44], Original ATen: [aten.arange, aten.triu, aten.full, aten.view, aten.gt, aten.mul, aten.transpose, aten.unsqueeze, aten.expand, aten.slice, aten.constant_pad_nd, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:127
+            buf250 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf246, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf247, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf248, (32, 16, 128, 64), (131072, 64, 1024, 1), 0), reinterpret_tensor(buf249, (32, 16, 128, 128), (16384, 0, 128, 1), 0), False, scale=0.125)
+            del buf246
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1856
+            del buf247
+            del buf249
+            buf251 = buf250[0]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1871
+            buf256 = buf234; del buf234  # reuse
+            buf260 = reinterpret_tensor(buf251, (32, 128, 1024), (131072, 1024, 1), 0); del buf251  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_98, hidden_states_100, attn_output_47, hidden_states_103, hidden_states_104], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:129
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf256, arg178_1, buf241, arg188_1, buf255, arg189_1, arg190_1, buf260, 4096, 1024, stream=raw_stream0)
+            del arg178_1
+            del arg188_1
+            del arg189_1
+            del arg190_1
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1889
+            assert_size_stride(arg192_1, (4096, ), (1, ), 'input')
+            buf262 = reinterpret_tensor(buf261, (32, 128, 4096), (524288, 4096, 1), 0); del buf261  # reuse
+            # Topologically Sorted Source Nodes: [, linear_70, hidden_states_105], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_3:131
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_3.run(buf262, arg192_1, 16777216, stream=raw_stream0)
+            del arg192_1
+            assert_size_stride(arg193_1, (1024, 4096), (4096, 1), 'input')
+            buf263 = reinterpret_tensor(buf260, (4096, 1024), (1024, 1), 0); del buf260  # reuse
+            # Topologically Sorted Source Nodes: [, linear_70, hidden_states_105, hidden_states_107], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1905
+            assert_size_stride(arg196_1, (1024, ), (1, ), 'input')
+            buf267 = buf256; del buf256  # reuse
+            # Topologically Sorted Source Nodes: [, hidden_states_107, hidden_states_109, hidden_states_110], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_6:133
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_6.run(buf267, arg194_1, buf263, arg195_1, arg196_1, 4096, 1024, stream=raw_stream0)
+            del arg194_1
+            del arg195_1
+            del arg196_1
+            del buf263
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1921
+            buf269 = empty_strided_cuda((4096, 1), (1, 4096), torch.float32)
+            buf270 = empty_strided_cuda((4096, 1), (1, 4096), torch.float32)
+            # Topologically Sorted Source Nodes: [logits, view_37, ], Original ATen: [aten._unsafe_view, aten.view, prims.prepare_softmax_online]
+            # [Provenance debug handles] triton_red_fused__unsafe_view_prepare_softmax_online_view_7:135
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused__unsafe_view_prepare_softmax_online_view_7.run(buf268, buf269, buf270, 4096, 50265, stream=raw_stream0)
+            assert_size_stride(arg197_1, (32, 128), (128, 1), 'input')
+            arg197_1 = copy_if_misaligned(arg197_1)
+            buf271 = empty_strided_cuda((), (), torch.float32)
+            buf273 = buf271; del buf271  # reuse
+
+
+# Source: PegasusForCausalLM_Infer/GPU_g01_output_code.py:1931
+            # Topologically Sorted Source Nodes: [view_38, loss, logits, view_37, ], Original ATen: [aten.view, aten.nll_loss_forward, aten._unsafe_view, aten._log_softmax]
+            # [Provenance debug handles] triton_red_fused__log_softmax__unsafe_view_nll_loss_forward_view_8:136
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused__log_softmax__unsafe_view_nll_loss_forward_view_8.run(buf273, arg197_1, buf268, buf269, buf270, 1, 4096, stream=raw_stream0)
+            del arg197_1
+            del buf269
+            del buf270
+        return (buf273, reinterpret_tensor(buf268, (32, 128, 50265), (6433920, 50265, 1), 0), )

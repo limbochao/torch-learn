@@ -1,0 +1,143 @@
+# Source: XGLMForCausalLM_Train/NPU_g03_output_code.py:1374
+            del amax
+            del gt
+            del sum_1
+            # Topologically Sorted Source Nodes: [view_6, attn_weights_1, tensor, attn_weights_2, attn_weights_3, attn_weights_4, neg, fma], Original ATen: [aten.view, aten.add, aten.lift_fresh, aten.maximum, aten._softmax, aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:15
+            buf23 = torch.ops.prims.fma.default(buf22, buf21, buf20)
+            del buf20
+            del buf21
+            del buf22
+            buf24 = buf23
+
+
+# Source: XGLMForCausalLM_Train/NPU_g04_output_code.py:749
+            buf30 = buf29
+            assert_size_stride(buf30, (1024, 4096), (4096, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf30, 16, 'torch.ops.aten.addmm.default')
+            del buf29
+            # Topologically Sorted Source Nodes: [view_19_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:10
+            buf31 = torch.ops.aten.gelu.default(buf30)
+            buf32 = buf31
+            assert_size_stride(buf32, (1024, 4096), (4096, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf32, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: XGLMForCausalLM_Train/NPU_g04_output_code.py:759
+            del buf31
+
+
+# Source: XGLMForCausalLM_Train/NPU_g04_output_code.py:760
+            buf33 = empty_strided_npu((1024, 1024), (1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [hidden_states_6, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: XGLMForCausalLM_Train/NPU_g04_output_code.py:762
+            # [Provenance debug handles] extern_kernels.mm:11
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:122
+        args.clear()
+        with torch.npu.utils.device(0):
+            torch.npu.set_device(0)
+            tangents_1 = copy_if_misaligned(tangents_1)
+            # Topologically Sorted Source Nodes: [nll_loss_backward], Original ATen: [aten.nll_loss_backward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_backward.default:1
+            buf0 = torch.ops.aten.nll_loss_backward.default(tangents_1, sub_1, view_5, None, 1, -100, getitem_1)
+            del getitem_1
+            del tangents_1
+            del view_5
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:132
+            buf1 = buf0
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:133
+            assert_size_stride(buf1, (1024, 256008), (256008, 1), 'torch.ops.aten.nll_loss_backward.default')
+            assert_alignment(buf1, 16, 'torch.ops.aten.nll_loss_backward.default')
+            del buf0
+            # Topologically Sorted Source Nodes: [_log_softmax_backward_data], Original ATen: [aten._log_softmax_backward_data]
+            # [Provenance debug handles] torch.ops.aten._log_softmax_backward_data.default:2
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:138
+            buf2 = torch.ops.aten._log_softmax_backward_data.default(buf1, sub_1, 1, torch.float32)
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:139
+            del sub_1
+            buf3 = buf2
+            assert_size_stride(buf3, (1024, 256008), (256008, 1), 'torch.ops.aten._log_softmax_backward_data.default')
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:142
+            assert_alignment(buf3, 16, 'torch.ops.aten._log_softmax_backward_data.default')
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:143
+            del buf2
+            tangents_2 = copy_if_misaligned(tangents_2)
+            buf4 = reinterpret_tensor(buf3, (8, 128, 256008), (32769024, 256008, 1), 0); del buf3  # reuse
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:146
+            # Topologically Sorted Source Nodes: [view_6, add], Original ATen: [aten.view, aten.add]
+
+
+# Source: XGLMForCausalLM_Train/NPU_g05_output_code.py:147
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_view_0.run(buf4, tangents_2, 8, 128, 256008, stream=raw_stream0)
+            del tangents_2
+            buf5 = empty_strided_npu((1024, 1024), (1024, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [view_6, add, view_7, logits, permute_1, mm_1], Original ATen: [aten.view, aten.add, aten.matmul_backward, aten.t]
+            # [Provenance debug handles] extern_kernels.mm:3
+
+
+# Source: XGLMForCausalLM_Train/NPU_g06_output_code.py:236
+            # Topologically Sorted Source Nodes: [shift_labels, getitem, setitem, _generalized_scatter, setitem_1, _generalized_scatter_1], Original ATen: [aten.new_zeros, aten.slice, aten.copy, aten.scalar_tensor, aten.expand, aten.select]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_copy_expand_new_zeros_scalar__1.run(primals_3, buf4, 8, 128, stream=raw_stream0)
+            del primals_3
+            # Topologically Sorted Source Nodes: [shift_labels, getitem, setitem, _generalized_scatter, setitem_1, _generalized_scatter_1, loss], Original ATen: [aten.new_zeros, aten.slice, aten.copy, aten.scalar_tensor, aten.expand, aten.select, aten.view, aten.nll_loss_forward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_forward.default:2
+            buf5 = torch.ops.aten.nll_loss_forward.default(buf3, reinterpret_tensor(buf4, (1024, ), (1, ), 0), None, 1, -100)
+            buf6 = buf5[0]
+            assert_size_stride(buf6, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf6, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: XGLMForCausalLM_Train/NPU_g06_output_code.py:246
+            buf7 = buf5[1]
+
+
+# Source: XGLMForCausalLM_Train/NPU_g06_output_code.py:247
+            assert_size_stride(buf7, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf7, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: XGLMForCausalLM_Train/NPU_g06_output_code.py:249
+            del buf5
+
+
+# Source: XGLMForCausalLM_Train/NPU_g06_output_code.py:250
+        return (buf6, reinterpret_tensor(buf0, (8, 128, 256008), (32769024, 256008, 1), 0), primals_1, buf3, reinterpret_tensor(buf4, (1024, ), (1, ), 0), buf7, reinterpret_tensor(primals_2, (1024, 1024), (1, 1024), 0), )
+
+
+
+# Source: XGLMForCausalLM_Train/NPU_g06_output_code.py:252
+runner = Runner(partitions=[])
+
+
+# Source: XGLMForCausalLM_Train/NPU_g07_output_code.py:396
+        with torch.npu.utils.device(0):
+            torch.npu.set_device(0)
+            arg387_1 = copy_if_misaligned(arg387_1)
+            # Topologically Sorted Source Nodes: [add_], Original ATen: [aten.add, aten.copy_]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_copy__0.run(arg0_1, arg387_1, arg0_1, 256008, 1024, stream=raw_stream0)
+            del arg0_1
+            del arg387_1
+            arg388_1 = copy_if_misaligned(arg388_1)
+            # Topologically Sorted Source Nodes: [add__1], Original ATen: [aten.add, aten.copy_]

@@ -1,0 +1,903 @@
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1808
+        args.clear()
+        with torch.npu.utils.device(0):
+            torch.npu.set_device(0)
+            tangents_1 = copy_if_misaligned(tangents_1)
+            # Topologically Sorted Source Nodes: [nll_loss_backward], Original ATen: [aten.nll_loss_backward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_backward.default:1
+            buf0 = torch.ops.aten.nll_loss_backward.default(tangents_1, sub_14, view_269, None, 1, -100, getitem_79)
+            del getitem_79
+            del tangents_1
+            del view_269
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1818
+            buf1 = buf0
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1819
+            assert_size_stride(buf1, (8176, 50265), (50265, 1), 'torch.ops.aten.nll_loss_backward.default')
+            assert_alignment(buf1, 16, 'torch.ops.aten.nll_loss_backward.default')
+            del buf0
+            # Topologically Sorted Source Nodes: [_log_softmax_backward_data], Original ATen: [aten._log_softmax_backward_data]
+            # [Provenance debug handles] torch.ops.aten._log_softmax_backward_data.default:2
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1824
+            buf2 = torch.ops.aten._log_softmax_backward_data.default(buf1, sub_14, 1, torch.float32)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1825
+            del buf1
+            del sub_14
+            buf3 = buf2
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1828
+            assert_size_stride(buf3, (8176, 50265), (50265, 1), 'torch.ops.aten._log_softmax_backward_data.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1829
+            assert_alignment(buf3, 16, 'torch.ops.aten._log_softmax_backward_data.default')
+            del buf2
+            # Topologically Sorted Source Nodes: [view_270, slice_backward], Original ATen: [aten.view, aten.slice_backward]
+            # [Provenance debug handles] torch.ops.aten.slice_backward.default:3
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1833
+            buf4 = torch.ops.aten.slice_backward.default(reinterpret_tensor(buf3, (16, 511, 50265), (25685415, 50265, 1), 0), [16, 512, 50265], 1, 0, -1, 1)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1838
+            del buf4
+            tangents_2 = copy_if_misaligned(tangents_2)
+            buf6 = buf5; del buf5  # reuse
+            # Topologically Sorted Source Nodes: [add_40], Original ATen: [aten.add]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_0.run(buf6, tangents_2, 16, 512, 50265, stream=raw_stream0)
+            del tangents_2
+            buf7 = empty_strided_npu((8192, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [add_40, view_271, x_39, permute_134, mm], Original ATen: [aten.add, aten.view, aten.t, aten.mm]
+            # [Provenance debug handles] extern_kernels.mm:4
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1850
+            buf8 = empty_strided_npu((1, 50265), (50265, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [add_40, view_271, sum_14], Original ATen: [aten.add, aten.view, aten.sum]
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_add_sum_view_1.run(buf6, buf8, 50265, 8192, stream=raw_stream0)
+            # Topologically Sorted Source Nodes: [x_36, x_37], Original ATen: [aten.view, aten.gelu]
+            # [Provenance debug handles] torch.ops.aten.gelu.default:5
+            buf9 = torch.ops.aten.gelu.default(reinterpret_tensor(addmm_72, (16, 512, 768), (393216, 768, 1), 0))
+            buf10 = buf9
+            assert_size_stride(buf10, (16, 512, 768), (393216, 768, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf10, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1860
+            del buf9
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1861
+            buf15 = reinterpret_tensor(addmm_72, (16, 512, 768), (393216, 768, 1), 0); del addmm_72  # reuse
+            # Topologically Sorted Source Nodes: [view_273, x_36, sub_15, mul_76, mul_77, mul_78, sum_15, mul_79, sum_16, mul_80, sub_16, sub_17, div_24, mul_81, mul_83, erf, add_41, mul_84, mul_85, mul_86, exp_13, mul_87, mul_88, add_42, mul_89], Original ATen: [aten.view, aten.native_layer_norm_backward, aten.gelu_backward]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1863
+            raw_stream0 = get_raw_stream(0)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1979
+            buf45 = reinterpret_tensor(buf42, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf42  # reuse
+            buf47 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            buf46 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 98304), torch.float32)
+            # Topologically Sorted Source Nodes: [view_289, convert_element_type_5, mul_115, clone_55, attention_scores_33, , attention_probs_22, mul_117, sum_31, neg], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf44, buf45, logical_not_default_1, amax_default, amax_default_1, sum_12, gt_34, buf47, buf46, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default
+            del amax_default_1
+            del buf44
+            del gt_34
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:1989
+            del logical_not_default_1
+            del sum_12
+            # Topologically Sorted Source Nodes: [neg, fma], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:16
+            buf48 = torch.ops.prims.fma.default(buf47, buf46, buf45)
+            del buf45
+            buf49 = buf48
+            assert_size_stride(buf49, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf49, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2152
+            buf92 = reinterpret_tensor(buf89, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf89  # reuse
+            buf94 = buf47; del buf47  # reuse
+            buf93 = buf46; del buf46  # reuse
+            # Topologically Sorted Source Nodes: [view_323, convert_element_type_8, mul_143, clone_66, attention_scores_30, , attention_probs_20, mul_145, sum_46, neg_1], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf91, buf92, logical_not_default_3, amax_default_2, amax_default_3, sum_11, gt_31, buf94, buf93, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_2
+            del amax_default_3
+            del buf91
+            del gt_31
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2162
+            del logical_not_default_3
+            del sum_11
+            # Topologically Sorted Source Nodes: [neg_1, fma_1], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:36
+            buf95 = torch.ops.prims.fma.default(buf94, buf93, buf92)
+            del buf92
+            buf96 = buf95
+            assert_size_stride(buf96, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf96, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2325
+            buf139 = reinterpret_tensor(buf136, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf136  # reuse
+            buf141 = buf94; del buf94  # reuse
+            buf140 = buf93; del buf93  # reuse
+            # Topologically Sorted Source Nodes: [view_357, convert_element_type_11, mul_171, clone_77, attention_scores_27, , attention_probs_18, mul_173, sum_61, neg_2], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf138, buf139, logical_not_default_5, amax_default_4, amax_default_5, sum_10, gt_28, buf141, buf140, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_4
+            del amax_default_5
+            del buf138
+            del gt_28
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2335
+            del logical_not_default_5
+            del sum_10
+            # Topologically Sorted Source Nodes: [neg_2, fma_2], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:56
+            buf142 = torch.ops.prims.fma.default(buf141, buf140, buf139)
+            del buf139
+            buf143 = buf142
+            assert_size_stride(buf143, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf143, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2498
+            buf186 = reinterpret_tensor(buf183, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf183  # reuse
+            buf188 = buf141; del buf141  # reuse
+            buf187 = buf140; del buf140  # reuse
+            # Topologically Sorted Source Nodes: [view_391, convert_element_type_14, mul_199, clone_88, attention_scores_24, , attention_probs_16, mul_201, sum_76, neg_3], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf185, buf186, logical_not_default_7, amax_default_6, amax_default_7, sum_9, gt_25, buf188, buf187, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_6
+            del amax_default_7
+            del buf185
+            del gt_25
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2508
+            del logical_not_default_7
+            del sum_9
+            # Topologically Sorted Source Nodes: [neg_3, fma_3], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:76
+            buf189 = torch.ops.prims.fma.default(buf188, buf187, buf186)
+            del buf186
+            buf190 = buf189
+            assert_size_stride(buf190, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf190, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2671
+            buf233 = reinterpret_tensor(buf230, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf230  # reuse
+            buf235 = buf188; del buf188  # reuse
+            buf234 = buf187; del buf187  # reuse
+            # Topologically Sorted Source Nodes: [view_425, convert_element_type_17, mul_227, clone_99, attention_scores_21, , attention_probs_14, mul_229, sum_91, neg_4], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf232, buf233, logical_not_default_9, amax_default_8, amax_default_9, sum_8, gt_22, buf235, buf234, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_8
+            del amax_default_9
+            del buf232
+            del gt_22
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2681
+            del logical_not_default_9
+            del sum_8
+            # Topologically Sorted Source Nodes: [neg_4, fma_4], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:96
+            buf236 = torch.ops.prims.fma.default(buf235, buf234, buf233)
+            del buf233
+            buf237 = buf236
+            assert_size_stride(buf237, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf237, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2844
+            buf280 = reinterpret_tensor(buf277, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf277  # reuse
+            buf282 = buf235; del buf235  # reuse
+            buf281 = buf234; del buf234  # reuse
+            # Topologically Sorted Source Nodes: [view_459, convert_element_type_20, mul_255, clone_110, attention_scores_18, , attention_probs_12, mul_257, sum_106, neg_5], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf279, buf280, logical_not_default_11, amax_default_10, amax_default_11, sum_7, gt_19, buf282, buf281, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_10
+            del amax_default_11
+            del buf279
+            del gt_19
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:2854
+            del logical_not_default_11
+            del sum_7
+            # Topologically Sorted Source Nodes: [neg_5, fma_5], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:116
+            buf283 = torch.ops.prims.fma.default(buf282, buf281, buf280)
+            del buf280
+            buf284 = buf283
+            assert_size_stride(buf284, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf284, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3017
+            buf327 = reinterpret_tensor(buf324, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf324  # reuse
+            buf329 = buf282; del buf282  # reuse
+            buf328 = buf281; del buf281  # reuse
+            # Topologically Sorted Source Nodes: [view_493, convert_element_type_23, mul_283, clone_121, attention_scores_15, , attention_probs_10, mul_285, sum_121, neg_6], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf326, buf327, logical_not_default_13, amax_default_12, amax_default_13, sum_6, gt_16, buf329, buf328, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_12
+            del amax_default_13
+            del buf326
+            del gt_16
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3027
+            del logical_not_default_13
+            del sum_6
+            # Topologically Sorted Source Nodes: [neg_6, fma_6], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:136
+            buf330 = torch.ops.prims.fma.default(buf329, buf328, buf327)
+            del buf327
+            buf331 = buf330
+            assert_size_stride(buf331, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf331, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3190
+            buf374 = reinterpret_tensor(buf371, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf371  # reuse
+            buf376 = buf329; del buf329  # reuse
+            buf375 = buf328; del buf328  # reuse
+            # Topologically Sorted Source Nodes: [view_527, convert_element_type_26, mul_311, clone_132, attention_scores_12, , attention_probs_8, mul_313, sum_136, neg_7], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf373, buf374, logical_not_default_15, amax_default_14, amax_default_15, sum_5, gt_13, buf376, buf375, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_14
+            del amax_default_15
+            del buf373
+            del gt_13
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3200
+            del logical_not_default_15
+            del sum_5
+            # Topologically Sorted Source Nodes: [neg_7, fma_7], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:156
+            buf377 = torch.ops.prims.fma.default(buf376, buf375, buf374)
+            del buf374
+            buf378 = buf377
+            assert_size_stride(buf378, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf378, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3363
+            buf421 = reinterpret_tensor(buf418, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf418  # reuse
+            buf423 = buf376; del buf376  # reuse
+            buf422 = buf375; del buf375  # reuse
+            # Topologically Sorted Source Nodes: [view_561, convert_element_type_29, mul_339, clone_143, attention_scores_9, , attention_probs_6, mul_341, sum_151, neg_8], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf420, buf421, logical_not_default_17, amax_default_16, amax_default_17, sum_4, gt_10, buf423, buf422, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_16
+            del amax_default_17
+            del buf420
+            del gt_10
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3373
+            del logical_not_default_17
+            del sum_4
+            # Topologically Sorted Source Nodes: [neg_8, fma_8], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:176
+            buf424 = torch.ops.prims.fma.default(buf423, buf422, buf421)
+            del buf421
+            buf425 = buf424
+            assert_size_stride(buf425, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf425, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3536
+            buf468 = reinterpret_tensor(buf465, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf465  # reuse
+            buf470 = buf423; del buf423  # reuse
+            buf469 = buf422; del buf422  # reuse
+            # Topologically Sorted Source Nodes: [view_595, convert_element_type_32, mul_367, clone_154, attention_scores_6, , attention_probs_4, mul_369, sum_166, neg_9], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf467, buf468, logical_not_default_19, amax_default_18, amax_default_19, sum_3, gt_7, buf470, buf469, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_18
+            del amax_default_19
+            del buf467
+            del gt_7
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3546
+            del logical_not_default_19
+            del sum_3
+            # Topologically Sorted Source Nodes: [neg_9, fma_9], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:196
+            buf471 = torch.ops.prims.fma.default(buf470, buf469, buf468)
+            del buf468
+            buf472 = buf471
+            assert_size_stride(buf472, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf472, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3709
+            buf515 = reinterpret_tensor(buf512, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf512  # reuse
+            buf517 = buf470; del buf470  # reuse
+            buf516 = buf469; del buf469  # reuse
+            # Topologically Sorted Source Nodes: [view_629, convert_element_type_35, mul_395, clone_165, attention_scores_3, , attention_probs_2, mul_397, sum_181, neg_10], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf514, buf515, logical_not_default_21, amax_default_20, amax_default_21, sum_2, gt_4, buf517, buf516, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_20
+            del amax_default_21
+            del buf514
+            del gt_4
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3719
+            del logical_not_default_21
+            del sum_2
+            # Topologically Sorted Source Nodes: [neg_10, fma_10], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:216
+            buf518 = torch.ops.prims.fma.default(buf517, buf516, buf515)
+            del buf515
+            buf519 = buf518
+            assert_size_stride(buf519, (16, 12, 512, 512), (3145728, 262144, 512, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf519, 16, 'torch.ops.prims.fma.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3884
+            buf562 = reinterpret_tensor(buf559, (16, 12, 512, 512), (3145728, 262144, 512, 1), 0); del buf559  # reuse
+            buf564 = buf517; del buf517  # reuse
+            buf563 = buf516; del buf516  # reuse
+            # Topologically Sorted Source Nodes: [view_663, convert_element_type_38, mul_423, clone_176, attention_scores, , attention_probs, mul_425, sum_196, neg_11], Original ATen: [aten.matmul_backward, aten.native_dropout_backward, aten.matmul, aten.div, aten.sub, aten._softmax, aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax__softmax_backward_da_11.run(buf561, buf562, logical_not_default_23, amax_default_22, amax_default_23, sum_1, gt_1, buf564, buf563, 16, 12, 512, 512, stream=raw_stream0)
+            del amax_default_22
+            del amax_default_23
+            del buf561
+            del gt_1
+
+
+# Source: RobertaForCausalLM_Train/NPU_g01_output_code.py:3894
+            del logical_not_default_23
+            del sum_1
+            # Topologically Sorted Source Nodes: [neg_11, fma_11], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:236
+            buf565 = torch.ops.prims.fma.default(buf564, buf563, buf562)
+            del buf562
+            del buf563
+            del buf564
+            buf566 = buf565
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1201
+            buf40 = buf39
+            assert_size_stride(buf40, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf40, 16, 'torch.ops.aten.addmm.default')
+            del buf39
+            # Topologically Sorted Source Nodes: [view_19_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:11
+            buf41 = torch.ops.aten.gelu.default(buf40)
+            buf42 = buf41
+            assert_size_stride(buf42, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf42, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1211
+            del buf41
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1212
+            buf43 = buf15; del buf15  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_5, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1214
+            # [Provenance debug handles] extern_kernels.mm:12
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1274
+            buf62 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf64 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf65 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_3, , attention_probs_2, attention_probs_3], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf61, buf57, buf9, buf58, buf59, buf62, buf64, buf65, 4, 16, 12, 512, 512, stream=raw_stream0)
+            buf67 = reinterpret_tensor(buf56, (192, 512, 64), (32768, 64, 1), 0); del buf56  # reuse
+            # Topologically Sorted Source Nodes: [, x_4, value_layer_1, context_layer_3], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:17
+            extern_kernels.bmm(reinterpret_tensor(buf65, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf66, (192, 512, 64), (32768, 64, 1), 0), out=buf67)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1307
+            buf79 = buf78
+            assert_size_stride(buf79, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf79, 16, 'torch.ops.aten.addmm.default')
+            del buf78
+            # Topologically Sorted Source Nodes: [view_41_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:20
+            buf80 = torch.ops.aten.gelu.default(buf79)
+            buf81 = buf80
+            assert_size_stride(buf81, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf81, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1317
+            del buf80
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1318
+            buf82 = buf54; del buf54  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_13, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1320
+            # [Provenance debug handles] extern_kernels.mm:21
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1380
+            buf101 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf103 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf104 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_6, , attention_probs_4, attention_probs_5], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf100, buf96, buf9, buf97, buf98, buf101, buf103, buf104, 7, 16, 12, 512, 512, stream=raw_stream0)
+            buf106 = reinterpret_tensor(buf95, (192, 512, 64), (32768, 64, 1), 0); del buf95  # reuse
+            # Topologically Sorted Source Nodes: [, x_7, value_layer_2, context_layer_6], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:26
+            extern_kernels.bmm(reinterpret_tensor(buf104, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf105, (192, 512, 64), (32768, 64, 1), 0), out=buf106)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1413
+            buf118 = buf117
+            assert_size_stride(buf118, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf118, 16, 'torch.ops.aten.addmm.default')
+            del buf117
+            # Topologically Sorted Source Nodes: [view_63_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:29
+            buf119 = torch.ops.aten.gelu.default(buf118)
+            buf120 = buf119
+            assert_size_stride(buf120, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf120, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1423
+            del buf119
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1424
+            buf121 = buf93; del buf93  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_21, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1426
+            # [Provenance debug handles] extern_kernels.mm:30
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1486
+            buf140 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf142 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf143 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_9, , attention_probs_6, attention_probs_7], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf139, buf135, buf9, buf136, buf137, buf140, buf142, buf143, 10, 16, 12, 512, 512, stream=raw_stream0)
+            buf145 = reinterpret_tensor(buf134, (192, 512, 64), (32768, 64, 1), 0); del buf134  # reuse
+            # Topologically Sorted Source Nodes: [, x_10, value_layer_3, context_layer_9], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:35
+            extern_kernels.bmm(reinterpret_tensor(buf143, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf144, (192, 512, 64), (32768, 64, 1), 0), out=buf145)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1519
+            buf157 = buf156
+            assert_size_stride(buf157, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf157, 16, 'torch.ops.aten.addmm.default')
+            del buf156
+            # Topologically Sorted Source Nodes: [view_85_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:38
+            buf158 = torch.ops.aten.gelu.default(buf157)
+            buf159 = buf158
+            assert_size_stride(buf159, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf159, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1529
+            del buf158
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1530
+            buf160 = buf132; del buf132  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_29, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1532
+            # [Provenance debug handles] extern_kernels.mm:39
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1592
+            buf179 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf181 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf182 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_12, , attention_probs_8, attention_probs_9], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf178, buf174, buf9, buf175, buf176, buf179, buf181, buf182, 13, 16, 12, 512, 512, stream=raw_stream0)
+            buf184 = reinterpret_tensor(buf173, (192, 512, 64), (32768, 64, 1), 0); del buf173  # reuse
+            # Topologically Sorted Source Nodes: [, x_13, value_layer_4, context_layer_12], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:44
+            extern_kernels.bmm(reinterpret_tensor(buf182, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf183, (192, 512, 64), (32768, 64, 1), 0), out=buf184)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1625
+            buf196 = buf195
+            assert_size_stride(buf196, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf196, 16, 'torch.ops.aten.addmm.default')
+            del buf195
+            # Topologically Sorted Source Nodes: [view_107_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:47
+            buf197 = torch.ops.aten.gelu.default(buf196)
+            buf198 = buf197
+            assert_size_stride(buf198, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf198, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1635
+            del buf197
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1636
+            buf199 = buf171; del buf171  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_37, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1638
+            # [Provenance debug handles] extern_kernels.mm:48
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1698
+            buf218 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf220 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf221 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_15, , attention_probs_10, attention_probs_11], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf217, buf213, buf9, buf214, buf215, buf218, buf220, buf221, 16, 16, 12, 512, 512, stream=raw_stream0)
+            buf223 = reinterpret_tensor(buf212, (192, 512, 64), (32768, 64, 1), 0); del buf212  # reuse
+            # Topologically Sorted Source Nodes: [, x_16, value_layer_5, context_layer_15], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:53
+            extern_kernels.bmm(reinterpret_tensor(buf221, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf222, (192, 512, 64), (32768, 64, 1), 0), out=buf223)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1731
+            buf235 = buf234
+            assert_size_stride(buf235, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf235, 16, 'torch.ops.aten.addmm.default')
+            del buf234
+            # Topologically Sorted Source Nodes: [view_129_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:56
+            buf236 = torch.ops.aten.gelu.default(buf235)
+            buf237 = buf236
+            assert_size_stride(buf237, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf237, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1741
+            del buf236
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1742
+            buf238 = buf210; del buf210  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_45, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1744
+            # [Provenance debug handles] extern_kernels.mm:57
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1804
+            buf257 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf259 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf260 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_18, , attention_probs_12, attention_probs_13], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf256, buf252, buf9, buf253, buf254, buf257, buf259, buf260, 19, 16, 12, 512, 512, stream=raw_stream0)
+            buf262 = reinterpret_tensor(buf251, (192, 512, 64), (32768, 64, 1), 0); del buf251  # reuse
+            # Topologically Sorted Source Nodes: [, x_19, value_layer_6, context_layer_18], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:62
+            extern_kernels.bmm(reinterpret_tensor(buf260, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf261, (192, 512, 64), (32768, 64, 1), 0), out=buf262)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1837
+            buf274 = buf273
+            assert_size_stride(buf274, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf274, 16, 'torch.ops.aten.addmm.default')
+            del buf273
+            # Topologically Sorted Source Nodes: [view_151_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:65
+            buf275 = torch.ops.aten.gelu.default(buf274)
+            buf276 = buf275
+            assert_size_stride(buf276, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf276, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1847
+            del buf275
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1848
+            buf277 = buf249; del buf249  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_53, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1850
+            # [Provenance debug handles] extern_kernels.mm:66
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1910
+            buf296 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf298 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf299 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_21, , attention_probs_14, attention_probs_15], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf295, buf291, buf9, buf292, buf293, buf296, buf298, buf299, 22, 16, 12, 512, 512, stream=raw_stream0)
+            buf301 = reinterpret_tensor(buf290, (192, 512, 64), (32768, 64, 1), 0); del buf290  # reuse
+            # Topologically Sorted Source Nodes: [, x_22, value_layer_7, context_layer_21], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:71
+            extern_kernels.bmm(reinterpret_tensor(buf299, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf300, (192, 512, 64), (32768, 64, 1), 0), out=buf301)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1943
+            buf313 = buf312
+            assert_size_stride(buf313, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf313, 16, 'torch.ops.aten.addmm.default')
+            del buf312
+            # Topologically Sorted Source Nodes: [view_173_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:74
+            buf314 = torch.ops.aten.gelu.default(buf313)
+            buf315 = buf314
+            assert_size_stride(buf315, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf315, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1953
+            del buf314
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1954
+            buf316 = buf288; del buf288  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_61, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:1956
+            # [Provenance debug handles] extern_kernels.mm:75
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2016
+            buf335 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf337 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf338 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_24, , attention_probs_16, attention_probs_17], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf334, buf330, buf9, buf331, buf332, buf335, buf337, buf338, 25, 16, 12, 512, 512, stream=raw_stream0)
+            buf340 = reinterpret_tensor(buf329, (192, 512, 64), (32768, 64, 1), 0); del buf329  # reuse
+            # Topologically Sorted Source Nodes: [, x_25, value_layer_8, context_layer_24], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:80
+            extern_kernels.bmm(reinterpret_tensor(buf338, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf339, (192, 512, 64), (32768, 64, 1), 0), out=buf340)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2049
+            buf352 = buf351
+            assert_size_stride(buf352, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf352, 16, 'torch.ops.aten.addmm.default')
+            del buf351
+            # Topologically Sorted Source Nodes: [view_195_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:83
+            buf353 = torch.ops.aten.gelu.default(buf352)
+            buf354 = buf353
+            assert_size_stride(buf354, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf354, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2059
+            del buf353
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2060
+            buf355 = buf327; del buf327  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_69, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2062
+            # [Provenance debug handles] extern_kernels.mm:84
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2122
+            buf374 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf376 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf377 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_27, , attention_probs_18, attention_probs_19], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf373, buf369, buf9, buf370, buf371, buf374, buf376, buf377, 28, 16, 12, 512, 512, stream=raw_stream0)
+            buf379 = reinterpret_tensor(buf368, (192, 512, 64), (32768, 64, 1), 0); del buf368  # reuse
+            # Topologically Sorted Source Nodes: [, x_28, value_layer_9, context_layer_27], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:89
+            extern_kernels.bmm(reinterpret_tensor(buf377, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf378, (192, 512, 64), (32768, 64, 1), 0), out=buf379)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2155
+            buf391 = buf390
+            assert_size_stride(buf391, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf391, 16, 'torch.ops.aten.addmm.default')
+            del buf390
+            # Topologically Sorted Source Nodes: [view_217_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:92
+            buf392 = torch.ops.aten.gelu.default(buf391)
+            buf393 = buf392
+            assert_size_stride(buf393, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf393, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2165
+            del buf392
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2166
+            buf394 = buf366; del buf366  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_77, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2168
+            # [Provenance debug handles] extern_kernels.mm:93
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2228
+            buf413 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf415 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf416 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_30, , attention_probs_20, attention_probs_21], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf412, buf408, buf9, buf409, buf410, buf413, buf415, buf416, 31, 16, 12, 512, 512, stream=raw_stream0)
+            buf418 = reinterpret_tensor(buf407, (192, 512, 64), (32768, 64, 1), 0); del buf407  # reuse
+            # Topologically Sorted Source Nodes: [, x_31, value_layer_10, context_layer_30], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:98
+            extern_kernels.bmm(reinterpret_tensor(buf416, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf417, (192, 512, 64), (32768, 64, 1), 0), out=buf418)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2261
+            buf430 = buf429
+            assert_size_stride(buf430, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf430, 16, 'torch.ops.aten.addmm.default')
+            del buf429
+            # Topologically Sorted Source Nodes: [view_239_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:101
+            buf431 = torch.ops.aten.gelu.default(buf430)
+            buf432 = buf431
+            assert_size_stride(buf432, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf432, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2271
+            del buf431
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2272
+            buf433 = buf405; del buf405  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_85, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2274
+            # [Provenance debug handles] extern_kernels.mm:102
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2334
+            buf452 = empty_strided_npu((16, 12, 512, 1), (6144, 512, 1, 1), torch.float32)
+            buf454 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.bool)
+            buf455 = empty_strided_npu((16, 12, 512, 512), (3145728, 262144, 512, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [attention_scores_33, , attention_probs_22, attention_probs_23], Original ATen: [aten.matmul, aten.div, aten.amax, aten.sub, aten.isfinite, aten.all, aten._softmax, aten.native_dropout]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_all_amax_div_isfinit_8.run(buf451, buf447, buf9, buf448, buf449, buf452, buf454, buf455, 34, 16, 12, 512, 512, stream=raw_stream0)
+            buf457 = reinterpret_tensor(buf446, (192, 512, 64), (32768, 64, 1), 0); del buf446  # reuse
+            # Topologically Sorted Source Nodes: [, x_34, value_layer_11, context_layer_33], Original ATen: [aten.addmm, aten.view, aten.permute, aten.matmul]
+            # [Provenance debug handles] extern_kernels.bmm:107
+            extern_kernels.bmm(reinterpret_tensor(buf455, (192, 512, 512), (262144, 512, 1), 0), reinterpret_tensor(buf456, (192, 512, 64), (32768, 64, 1), 0), out=buf457)
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2367
+            buf469 = buf468
+            assert_size_stride(buf469, (8192, 3072), (3072, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf469, 16, 'torch.ops.aten.addmm.default')
+            del buf468
+            # Topologically Sorted Source Nodes: [view_261_replacement], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:110
+            buf470 = torch.ops.aten.gelu.default(buf469)
+            buf471 = buf470
+            assert_size_stride(buf471, (8192, 3072), (3072, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf471, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2377
+            del buf470
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2378
+            buf472 = buf444; del buf444  # reuse
+            # Topologically Sorted Source Nodes: [hidden_states_93, ], Original ATen: [aten.t, aten.addmm]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2380
+            # [Provenance debug handles] extern_kernels.mm:111
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2398
+            buf482 = buf481
+            assert_size_stride(buf482, (8192, 768), (768, 1), 'torch.ops.aten.addmm.default')
+            assert_alignment(buf482, 16, 'torch.ops.aten.addmm.default')
+            del buf481
+            # Topologically Sorted Source Nodes: [], Original ATen: []
+            # [Provenance debug handles] torch.ops.aten.gelu.default:113
+            buf483 = torch.ops.aten.gelu.default(buf482)
+            buf484 = buf483
+            assert_size_stride(buf484, (8192, 768), (768, 1), 'torch.ops.aten.gelu.default')
+            assert_alignment(buf484, 16, 'torch.ops.aten.gelu.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2408
+            del buf483
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2409
+            buf485 = empty_strided_npu((16, 512, 1), (512, 1, 8192), torch.float32)
+            buf486 = buf485; del buf485  # reuse
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2411
+            buf489 = reinterpret_tensor(buf484, (16, 512, 768), (393216, 768, 1), 0); del buf484  # reuse
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2427
+            # Topologically Sorted Source Nodes: [x_39, getitem_2, shifted_prediction_scores, view_48, lm_loss], Original ATen: [aten.view, aten.slice, aten.clone, aten._log_softmax]
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused__log_softmax_clone_slice_view_10.run(buf491, buf493, buf495, 16, 511, 50265, stream=raw_stream0)
+            del buf493
+            # Topologically Sorted Source Nodes: [getitem_3, labels_1, view_49, lm_loss], Original ATen: [aten.slice, aten.clone, aten.view, aten.nll_loss_forward]
+            # [Provenance debug handles] torch.ops.aten.nll_loss_forward.default:115
+            buf496 = torch.ops.aten.nll_loss_forward.default(buf495, reinterpret_tensor(buf492, (8176, ), (1, ), 0), None, 1, -100)
+            buf497 = buf496[0]
+            assert_size_stride(buf497, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf497, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2437
+            buf498 = buf496[1]
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2438
+            assert_size_stride(buf498, (), (), 'torch.ops.aten.nll_loss_forward.default')
+            assert_alignment(buf498, 16, 'torch.ops.aten.nll_loss_forward.default')
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2440
+            del buf496
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2441
+        return (buf497, reinterpret_tensor(buf491, (16, 512, 50265), (25735680, 50265, 1), 0), primals_2, primals_3, primals_4, primals_7, primals_9, primals_11, primals_13, primals_15, primals_17, primals_19, primals_21, primals_23, primals_25, primals_27, primals_29, primals_31, primals_33, primals_35, primals_37, primals_39, primals_41, primals_43, primals_45, primals_47, primals_49, primals_51, primals_53, primals_55, primals_57, primals_59, primals_61, primals_63, primals_65, primals_67, primals_69, primals_71, primals_73, primals_75, primals_77, primals_79, primals_81, primals_83, primals_85, primals_87, primals_89, primals_91, primals_93, primals_95, primals_97, primals_99, primals_101, primals_103, primals_105, primals_107, primals_109, primals_111, primals_113, primals_115, primals_117, primals_119, primals_121, primals_123, primals_125, primals_127, primals_129, primals_131, primals_133, primals_135, primals_137, primals_139, primals_141, primals_143, primals_145, primals_147, primals_149, primals_151, primals_153, primals_155, primals_157, primals_159, primals_161, primals_163, primals_165, primals_167, primals_169, primals_171, primals_173, primals_175, primals_177, primals_179, primals_181, primals_183, primals_185, primals_187, primals_189, primals_191, primals_193, primals_195, primals_197, primals_199, primals_201, primals_203, buf3, buf4, reinterpret_tensor(buf6, (16, 512, 1), (512, 1, 1), 0), buf8, buf11, reinterpret_tensor(buf12, (8192, 768), (768, 1), 0), buf18, buf19, buf20, buf22, buf23, buf25, reinterpret_tensor(buf29, (8192, 768), (768, 1), 0), buf32, buf33, reinterpret_tensor(buf35, (16, 512, 1), (512, 1, 1), 0), buf38, reinterpret_tensor(buf37, (8192, 768), (768, 1), 0), buf40, buf42, buf45, buf46, reinterpret_tensor(buf48, (16, 512, 1), (512, 1, 1), 0), buf51, reinterpret_tensor(buf50, (8192, 768), (768, 1), 0), buf57, buf58, buf59, buf61, buf62, buf64, reinterpret_tensor(buf68, (8192, 768), (768, 1), 0), buf71, buf72, reinterpret_tensor(buf74, (16, 512, 1), (512, 1, 1), 0), buf77, reinterpret_tensor(buf76, (8192, 768), (768, 1), 0), buf79, buf81, buf84, buf85, reinterpret_tensor(buf87, (16, 512, 1), (512, 1, 1), 0), buf90, reinterpret_tensor(buf89, (8192, 768), (768, 1), 0), buf96, buf97, buf98, buf100, buf101, buf103, reinterpret_tensor(buf107, (8192, 768), (768, 1), 0), buf110, buf111, reinterpret_tensor(buf113, (16, 512, 1), (512, 1, 1), 0), buf116, reinterpret_tensor(buf115, (8192, 768), (768, 1), 0), buf118, buf120, buf123, buf124, reinterpret_tensor(buf126, (16, 512, 1), (512, 1, 1), 0), buf129, reinterpret_tensor(buf128, (8192, 768), (768, 1), 0), buf135, buf136, buf137, buf139, buf140, buf142, reinterpret_tensor(buf146, (8192, 768), (768, 1), 0), buf149, buf150, reinterpret_tensor(buf152, (16, 512, 1), (512, 1, 1), 0), buf155, reinterpret_tensor(buf154, (8192, 768), (768, 1), 0), buf157, buf159, buf162, buf163, reinterpret_tensor(buf165, (16, 512, 1), (512, 1, 1), 0), buf168, reinterpret_tensor(buf167, (8192, 768), (768, 1), 0), buf174, buf175, buf176, buf178, buf179, buf181, reinterpret_tensor(buf185, (8192, 768), (768, 1), 0), buf188, buf189, reinterpret_tensor(buf191, (16, 512, 1), (512, 1, 1), 0), buf194, reinterpret_tensor(buf193, (8192, 768), (768, 1), 0), buf196, buf198, buf201, buf202, reinterpret_tensor(buf204, (16, 512, 1), (512, 1, 1), 0), buf207, reinterpret_tensor(buf206, (8192, 768), (768, 1), 0), buf213, buf214, buf215, buf217, buf218, buf220, reinterpret_tensor(buf224, (8192, 768), (768, 1), 0), buf227, buf228, reinterpret_tensor(buf230, (16, 512, 1), (512, 1, 1), 0), buf233, reinterpret_tensor(buf232, (8192, 768), (768, 1), 0), buf235, buf237, buf240, buf241, reinterpret_tensor(buf243, (16, 512, 1), (512, 1, 1), 0), buf246, reinterpret_tensor(buf245, (8192, 768), (768, 1), 0), buf252, buf253, buf254, buf256, buf257, buf259, reinterpret_tensor(buf263, (8192, 768), (768, 1), 0), buf266, buf267, reinterpret_tensor(buf269, (16, 512, 1), (512, 1, 1), 0), buf272, reinterpret_tensor(buf271, (8192, 768), (768, 1), 0), buf274, buf276, buf279, buf280, reinterpret_tensor(buf282, (16, 512, 1), (512, 1, 1), 0), buf285, reinterpret_tensor(buf284, (8192, 768), (768, 1), 0), buf291, buf292, buf293, buf295, buf296, buf298, reinterpret_tensor(buf302, (8192, 768), (768, 1), 0), buf305, buf306, reinterpret_tensor(buf308, (16, 512, 1), (512, 1, 1), 0), buf311, reinterpret_tensor(buf310, (8192, 768), (768, 1), 0), buf313, buf315, buf318, buf319, reinterpret_tensor(buf321, (16, 512, 1), (512, 1, 1), 0), buf324, reinterpret_tensor(buf323, (8192, 768), (768, 1), 0), buf330, buf331, buf332, buf334, buf335, buf337, reinterpret_tensor(buf341, (8192, 768), (768, 1), 0), buf344, buf345, reinterpret_tensor(buf347, (16, 512, 1), (512, 1, 1), 0), buf350, reinterpret_tensor(buf349, (8192, 768), (768, 1), 0), buf352, buf354, buf357, buf358, reinterpret_tensor(buf360, (16, 512, 1), (512, 1, 1), 0), buf363, reinterpret_tensor(buf362, (8192, 768), (768, 1), 0), buf369, buf370, buf371, buf373, buf374, buf376, reinterpret_tensor(buf380, (8192, 768), (768, 1), 0), buf383, buf384, reinterpret_tensor(buf386, (16, 512, 1), (512, 1, 1), 0), buf389, reinterpret_tensor(buf388, (8192, 768), (768, 1), 0), buf391, buf393, buf396, buf397, reinterpret_tensor(buf399, (16, 512, 1), (512, 1, 1), 0), buf402, reinterpret_tensor(buf401, (8192, 768), (768, 1), 0), buf408, buf409, buf410, buf412, buf413, buf415, reinterpret_tensor(buf419, (8192, 768), (768, 1), 0), buf422, buf423, reinterpret_tensor(buf425, (16, 512, 1), (512, 1, 1), 0), buf428, reinterpret_tensor(buf427, (8192, 768), (768, 1), 0), buf430, buf432, buf435, buf436, reinterpret_tensor(buf438, (16, 512, 1), (512, 1, 1), 0), buf441, reinterpret_tensor(buf440, (8192, 768), (768, 1), 0), buf447, buf448, buf449, buf451, buf452, buf454, reinterpret_tensor(buf458, (8192, 768), (768, 1), 0), buf461, buf462, reinterpret_tensor(buf464, (16, 512, 1), (512, 1, 1), 0), buf467, reinterpret_tensor(buf466, (8192, 768), (768, 1), 0), buf469, buf471, buf474, buf475, reinterpret_tensor(buf477, (16, 512, 1), (512, 1, 1), 0), buf479, reinterpret_tensor(buf480, (8192, 768), (768, 1), 0), buf482, reinterpret_tensor(buf486, (16, 512, 1), (512, 1, 1), 0), buf488, reinterpret_tensor(buf489, (8192, 768), (768, 1), 0), reinterpret_tensor(buf492, (8176, ), (1, ), 0), buf495, buf498, reinterpret_tensor(buf499, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf455, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf500, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf501, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf502, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf416, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf503, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf504, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf505, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf377, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf506, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf507, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf508, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf338, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf509, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf510, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf511, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf299, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf512, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf513, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf514, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf260, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf515, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf516, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf517, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf221, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf518, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf519, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf520, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf182, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf521, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf522, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf523, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf143, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf524, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf525, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf526, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf104, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf527, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf528, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf529, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf65, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf530, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf531, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf532, (192, 64, 512), (32768, 512, 1), 0), reinterpret_tensor(buf26, (192, 512, 512), (262144, 1, 512), 0), reinterpret_tensor(buf533, (192, 512, 64), (32768, 64, 1), 0), reinterpret_tensor(buf534, (192, 64, 512), (32768, 512, 1), 0), )
+
+
+
+# Source: RobertaForCausalLM_Train/NPU_g02_output_code.py:2443
+runner = Runner(partitions=[])

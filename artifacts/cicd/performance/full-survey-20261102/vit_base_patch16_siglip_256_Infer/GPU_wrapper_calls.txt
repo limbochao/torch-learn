@@ -1,0 +1,680 @@
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:884
+            assert_size_stride(arg5_1, (768, ), (1, ), 'input')
+            buf4 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [x, flatten, x_1, x_2, x_4], Original ATen: [aten.convolution, aten.view, aten.transpose, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_red_fused_add_convolution_native_layer_norm_transpose_view_0:2
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_add_convolution_native_layer_norm_transpose_view_0.run(buf0, arg2_1, arg3_1, arg4_1, arg5_1, buf4, 32768, 768, stream=raw_stream0)
+            del arg4_1
+            del arg5_1
+            assert_size_stride(arg7_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg6_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:897
+            extern_kernels.addmm(arg7_1, reinterpret_tensor(buf4, (32768, 768), (768, 1), 0), reinterpret_tensor(arg6_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf5)
+            del arg6_1
+            del arg7_1
+            # Topologically Sorted Source Nodes: [linear, reshape, qkv, unbind, x_5], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:4
+            buf6 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf5, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf5, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf5, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf5
+            buf7 = buf6[0]
+            assert_size_stride(buf7, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf7, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:917
+            buf12 = reinterpret_tensor(buf11, (128, 256, 768), (196608, 768, 1), 0); del buf11  # reuse
+            buf16 = reinterpret_tensor(buf7, (128, 256, 768), (196608, 768, 1), 0); del buf7  # reuse
+            # Topologically Sorted Source Nodes: [x, flatten, x_1, x_2, , x_7, x_9, x_10], Original ATen: [aten.convolution, aten.view, aten.transpose, aten.add, aten.addmm, aten.native_layer_norm]
+            # [Provenance debug handles] triton_red_fused_add_addmm_convolution_native_layer_norm_transpose_view_1:6
+            raw_stream0 = get_raw_stream(0)
+            triton_red_fused_add_addmm_convolution_native_layer_norm_transpose_view_1.run(buf12, buf0, arg2_1, arg3_1, arg9_1, arg10_1, arg11_1, buf16, 32768, 768, stream=raw_stream0)
+            del arg10_1
+            del arg11_1
+            del arg2_1
+            del arg3_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:936
+            assert_size_stride(arg13_1, (3072, ), (1, ), 'input')
+            buf18 = reinterpret_tensor(buf17, (128, 256, 3072), (786432, 3072, 1), 0); del buf17  # reuse
+            # Topologically Sorted Source Nodes: [, x_11, x_12], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:8
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf18, arg13_1, 100663296, stream=raw_stream0)
+            del arg13_1
+            assert_size_stride(arg14_1, (768, 3072), (3072, 1), 'input')
+            buf19 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_11, x_12, x_14], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:952
+            assert_size_stride(arg17_1, (768, ), (1, ), 'input')
+            buf23 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_14, x_16, x_17], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:10
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf12, arg15_1, buf19, arg16_1, arg17_1, buf23, 32768, 768, stream=raw_stream0)
+            del arg16_1
+            del arg17_1
+            assert_size_stride(arg19_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg18_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:965
+            extern_kernels.addmm(arg19_1, reinterpret_tensor(buf23, (32768, 768), (768, 1), 0), reinterpret_tensor(arg18_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf24)
+            del arg18_1
+            del arg19_1
+            # Topologically Sorted Source Nodes: [linear_4, reshape_2, qkv_1, unbind_1, x_18], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:12
+            buf25 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf24, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf24, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf24, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf24
+            buf26 = buf25[0]
+            assert_size_stride(buf26, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf26, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:985
+            buf31 = buf12; del buf12  # reuse
+            buf35 = reinterpret_tensor(buf26, (128, 256, 768), (196608, 768, 1), 0); del buf26  # reuse
+            # Topologically Sorted Source Nodes: [, x_14, x_16, x_20, x_22, x_23], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:14
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf31, arg15_1, buf19, arg21_1, buf30, arg22_1, arg23_1, buf35, 32768, 768, stream=raw_stream0)
+            del arg15_1
+            del arg21_1
+            del arg22_1
+            del arg23_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1004
+            assert_size_stride(arg25_1, (3072, ), (1, ), 'input')
+            buf37 = reinterpret_tensor(buf36, (128, 256, 3072), (786432, 3072, 1), 0); del buf36  # reuse
+            # Topologically Sorted Source Nodes: [, x_24, x_25], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:16
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf37, arg25_1, 100663296, stream=raw_stream0)
+            del arg25_1
+            assert_size_stride(arg26_1, (768, 3072), (3072, 1), 'input')
+            buf38 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_24, x_25, x_27], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1020
+            assert_size_stride(arg29_1, (768, ), (1, ), 'input')
+            buf42 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_27, x_29, x_30], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:18
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf31, arg27_1, buf38, arg28_1, arg29_1, buf42, 32768, 768, stream=raw_stream0)
+            del arg28_1
+            del arg29_1
+            assert_size_stride(arg31_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg30_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1033
+            extern_kernels.addmm(arg31_1, reinterpret_tensor(buf42, (32768, 768), (768, 1), 0), reinterpret_tensor(arg30_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf43)
+            del arg30_1
+            del arg31_1
+            # Topologically Sorted Source Nodes: [linear_8, reshape_4, qkv_2, unbind_2, x_31], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:20
+            buf44 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf43, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf43, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf43, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf43
+            buf45 = buf44[0]
+            assert_size_stride(buf45, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf45, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1053
+            buf50 = buf31; del buf31  # reuse
+            buf54 = reinterpret_tensor(buf45, (128, 256, 768), (196608, 768, 1), 0); del buf45  # reuse
+            # Topologically Sorted Source Nodes: [, x_27, x_29, x_33, x_35, x_36], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:22
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf50, arg27_1, buf38, arg33_1, buf49, arg34_1, arg35_1, buf54, 32768, 768, stream=raw_stream0)
+            del arg27_1
+            del arg33_1
+            del arg34_1
+            del arg35_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1072
+            assert_size_stride(arg37_1, (3072, ), (1, ), 'input')
+            buf56 = reinterpret_tensor(buf55, (128, 256, 3072), (786432, 3072, 1), 0); del buf55  # reuse
+            # Topologically Sorted Source Nodes: [, x_37, x_38], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:24
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf56, arg37_1, 100663296, stream=raw_stream0)
+            del arg37_1
+            assert_size_stride(arg38_1, (768, 3072), (3072, 1), 'input')
+            buf57 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_37, x_38, x_40], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1088
+            assert_size_stride(arg41_1, (768, ), (1, ), 'input')
+            buf61 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_40, x_42, x_43], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:26
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf50, arg39_1, buf57, arg40_1, arg41_1, buf61, 32768, 768, stream=raw_stream0)
+            del arg40_1
+            del arg41_1
+            assert_size_stride(arg43_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg42_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1101
+            extern_kernels.addmm(arg43_1, reinterpret_tensor(buf61, (32768, 768), (768, 1), 0), reinterpret_tensor(arg42_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf62)
+            del arg42_1
+            del arg43_1
+            # Topologically Sorted Source Nodes: [linear_12, reshape_6, qkv_3, unbind_3, x_44], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:28
+            buf63 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf62, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf62, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf62, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf62
+            buf64 = buf63[0]
+            assert_size_stride(buf64, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf64, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1121
+            buf69 = buf50; del buf50  # reuse
+            buf73 = reinterpret_tensor(buf64, (128, 256, 768), (196608, 768, 1), 0); del buf64  # reuse
+            # Topologically Sorted Source Nodes: [, x_40, x_42, x_46, x_48, x_49], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:30
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf69, arg39_1, buf57, arg45_1, buf68, arg46_1, arg47_1, buf73, 32768, 768, stream=raw_stream0)
+            del arg39_1
+            del arg45_1
+            del arg46_1
+            del arg47_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1140
+            assert_size_stride(arg49_1, (3072, ), (1, ), 'input')
+            buf75 = reinterpret_tensor(buf74, (128, 256, 3072), (786432, 3072, 1), 0); del buf74  # reuse
+            # Topologically Sorted Source Nodes: [, x_50, x_51], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:32
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf75, arg49_1, 100663296, stream=raw_stream0)
+            del arg49_1
+            assert_size_stride(arg50_1, (768, 3072), (3072, 1), 'input')
+            buf76 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_50, x_51, x_53], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1156
+            assert_size_stride(arg53_1, (768, ), (1, ), 'input')
+            buf80 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_53, x_55, x_56], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:34
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf69, arg51_1, buf76, arg52_1, arg53_1, buf80, 32768, 768, stream=raw_stream0)
+            del arg52_1
+            del arg53_1
+            assert_size_stride(arg55_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg54_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1169
+            extern_kernels.addmm(arg55_1, reinterpret_tensor(buf80, (32768, 768), (768, 1), 0), reinterpret_tensor(arg54_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf81)
+            del arg54_1
+            del arg55_1
+            # Topologically Sorted Source Nodes: [linear_16, reshape_8, qkv_4, unbind_4, x_57], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:36
+            buf82 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf81, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf81, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf81, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf81
+            buf83 = buf82[0]
+            assert_size_stride(buf83, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf83, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1189
+            buf88 = buf69; del buf69  # reuse
+            buf92 = reinterpret_tensor(buf83, (128, 256, 768), (196608, 768, 1), 0); del buf83  # reuse
+            # Topologically Sorted Source Nodes: [, x_53, x_55, x_59, x_61, x_62], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:38
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf88, arg51_1, buf76, arg57_1, buf87, arg58_1, arg59_1, buf92, 32768, 768, stream=raw_stream0)
+            del arg51_1
+            del arg57_1
+            del arg58_1
+            del arg59_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1208
+            assert_size_stride(arg61_1, (3072, ), (1, ), 'input')
+            buf94 = reinterpret_tensor(buf93, (128, 256, 3072), (786432, 3072, 1), 0); del buf93  # reuse
+            # Topologically Sorted Source Nodes: [, x_63, x_64], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:40
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf94, arg61_1, 100663296, stream=raw_stream0)
+            del arg61_1
+            assert_size_stride(arg62_1, (768, 3072), (3072, 1), 'input')
+            buf95 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_63, x_64, x_66], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1224
+            assert_size_stride(arg65_1, (768, ), (1, ), 'input')
+            buf99 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_66, x_68, x_69], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:42
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf88, arg63_1, buf95, arg64_1, arg65_1, buf99, 32768, 768, stream=raw_stream0)
+            del arg64_1
+            del arg65_1
+            assert_size_stride(arg67_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg66_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1237
+            extern_kernels.addmm(arg67_1, reinterpret_tensor(buf99, (32768, 768), (768, 1), 0), reinterpret_tensor(arg66_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf100)
+            del arg66_1
+            del arg67_1
+            # Topologically Sorted Source Nodes: [linear_20, reshape_10, qkv_5, unbind_5, x_70], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:44
+            buf101 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf100, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf100, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf100, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf100
+            buf102 = buf101[0]
+            assert_size_stride(buf102, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf102, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1257
+            buf107 = buf88; del buf88  # reuse
+            buf111 = reinterpret_tensor(buf102, (128, 256, 768), (196608, 768, 1), 0); del buf102  # reuse
+            # Topologically Sorted Source Nodes: [, x_66, x_68, x_72, x_74, x_75], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:46
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf107, arg63_1, buf95, arg69_1, buf106, arg70_1, arg71_1, buf111, 32768, 768, stream=raw_stream0)
+            del arg63_1
+            del arg69_1
+            del arg70_1
+            del arg71_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1276
+            assert_size_stride(arg73_1, (3072, ), (1, ), 'input')
+            buf113 = reinterpret_tensor(buf112, (128, 256, 3072), (786432, 3072, 1), 0); del buf112  # reuse
+            # Topologically Sorted Source Nodes: [, x_76, x_77], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:48
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf113, arg73_1, 100663296, stream=raw_stream0)
+            del arg73_1
+            assert_size_stride(arg74_1, (768, 3072), (3072, 1), 'input')
+            buf114 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_76, x_77, x_79], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1292
+            assert_size_stride(arg77_1, (768, ), (1, ), 'input')
+            buf118 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_79, x_81, x_82], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:50
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf107, arg75_1, buf114, arg76_1, arg77_1, buf118, 32768, 768, stream=raw_stream0)
+            del arg76_1
+            del arg77_1
+            assert_size_stride(arg79_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg78_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1305
+            extern_kernels.addmm(arg79_1, reinterpret_tensor(buf118, (32768, 768), (768, 1), 0), reinterpret_tensor(arg78_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf119)
+            del arg78_1
+            del arg79_1
+            # Topologically Sorted Source Nodes: [linear_24, reshape_12, qkv_6, unbind_6, x_83], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:52
+            buf120 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf119, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf119, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf119, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf119
+            buf121 = buf120[0]
+            assert_size_stride(buf121, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf121, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1325
+            buf126 = buf107; del buf107  # reuse
+            buf130 = reinterpret_tensor(buf121, (128, 256, 768), (196608, 768, 1), 0); del buf121  # reuse
+            # Topologically Sorted Source Nodes: [, x_79, x_81, x_85, x_87, x_88], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:54
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf126, arg75_1, buf114, arg81_1, buf125, arg82_1, arg83_1, buf130, 32768, 768, stream=raw_stream0)
+            del arg75_1
+            del arg81_1
+            del arg82_1
+            del arg83_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1344
+            assert_size_stride(arg85_1, (3072, ), (1, ), 'input')
+            buf132 = reinterpret_tensor(buf131, (128, 256, 3072), (786432, 3072, 1), 0); del buf131  # reuse
+            # Topologically Sorted Source Nodes: [, x_89, x_90], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:56
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf132, arg85_1, 100663296, stream=raw_stream0)
+            del arg85_1
+            assert_size_stride(arg86_1, (768, 3072), (3072, 1), 'input')
+            buf133 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_89, x_90, x_92], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1360
+            assert_size_stride(arg89_1, (768, ), (1, ), 'input')
+            buf137 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_92, x_94, x_95], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:58
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf126, arg87_1, buf133, arg88_1, arg89_1, buf137, 32768, 768, stream=raw_stream0)
+            del arg88_1
+            del arg89_1
+            assert_size_stride(arg91_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg90_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1373
+            extern_kernels.addmm(arg91_1, reinterpret_tensor(buf137, (32768, 768), (768, 1), 0), reinterpret_tensor(arg90_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf138)
+            del arg90_1
+            del arg91_1
+            # Topologically Sorted Source Nodes: [linear_28, reshape_14, qkv_7, unbind_7, x_96], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:60
+            buf139 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf138, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf138, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf138, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf138
+            buf140 = buf139[0]
+            assert_size_stride(buf140, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf140, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1393
+            buf145 = buf126; del buf126  # reuse
+            buf149 = reinterpret_tensor(buf140, (128, 256, 768), (196608, 768, 1), 0); del buf140  # reuse
+            # Topologically Sorted Source Nodes: [, x_92, x_94, x_98, x_100, x_101], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:62
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf145, arg87_1, buf133, arg93_1, buf144, arg94_1, arg95_1, buf149, 32768, 768, stream=raw_stream0)
+            del arg87_1
+            del arg93_1
+            del arg94_1
+            del arg95_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1412
+            assert_size_stride(arg97_1, (3072, ), (1, ), 'input')
+            buf151 = reinterpret_tensor(buf150, (128, 256, 3072), (786432, 3072, 1), 0); del buf150  # reuse
+            # Topologically Sorted Source Nodes: [, x_102, x_103], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:64
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf151, arg97_1, 100663296, stream=raw_stream0)
+            del arg97_1
+            assert_size_stride(arg98_1, (768, 3072), (3072, 1), 'input')
+            buf152 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_102, x_103, x_105], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1428
+            assert_size_stride(arg101_1, (768, ), (1, ), 'input')
+            buf156 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_105, x_107, x_108], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:66
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf145, arg99_1, buf152, arg100_1, arg101_1, buf156, 32768, 768, stream=raw_stream0)
+            del arg100_1
+            del arg101_1
+            assert_size_stride(arg103_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg102_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1441
+            extern_kernels.addmm(arg103_1, reinterpret_tensor(buf156, (32768, 768), (768, 1), 0), reinterpret_tensor(arg102_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf157)
+            del arg102_1
+            del arg103_1
+            # Topologically Sorted Source Nodes: [linear_32, reshape_16, qkv_8, unbind_8, x_109], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:68
+            buf158 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf157, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf157, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf157, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf157
+            buf159 = buf158[0]
+            assert_size_stride(buf159, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf159, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1461
+            buf164 = buf145; del buf145  # reuse
+            buf168 = reinterpret_tensor(buf159, (128, 256, 768), (196608, 768, 1), 0); del buf159  # reuse
+            # Topologically Sorted Source Nodes: [, x_105, x_107, x_111, x_113, x_114], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:70
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf164, arg99_1, buf152, arg105_1, buf163, arg106_1, arg107_1, buf168, 32768, 768, stream=raw_stream0)
+            del arg105_1
+            del arg106_1
+            del arg107_1
+            del arg99_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1480
+            assert_size_stride(arg109_1, (3072, ), (1, ), 'input')
+            buf170 = reinterpret_tensor(buf169, (128, 256, 3072), (786432, 3072, 1), 0); del buf169  # reuse
+            # Topologically Sorted Source Nodes: [, x_115, x_116], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:72
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf170, arg109_1, 100663296, stream=raw_stream0)
+            del arg109_1
+            assert_size_stride(arg110_1, (768, 3072), (3072, 1), 'input')
+            buf171 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_115, x_116, x_118], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1496
+            assert_size_stride(arg113_1, (768, ), (1, ), 'input')
+            buf175 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_118, x_120, x_121], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:74
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf164, arg111_1, buf171, arg112_1, arg113_1, buf175, 32768, 768, stream=raw_stream0)
+            del arg112_1
+            del arg113_1
+            assert_size_stride(arg115_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg114_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1509
+            extern_kernels.addmm(arg115_1, reinterpret_tensor(buf175, (32768, 768), (768, 1), 0), reinterpret_tensor(arg114_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf176)
+            del arg114_1
+            del arg115_1
+            # Topologically Sorted Source Nodes: [linear_36, reshape_18, qkv_9, unbind_9, x_122], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:76
+            buf177 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf176, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf176, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf176, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf176
+            buf178 = buf177[0]
+            assert_size_stride(buf178, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf178, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1529
+            buf183 = buf164; del buf164  # reuse
+            buf187 = reinterpret_tensor(buf178, (128, 256, 768), (196608, 768, 1), 0); del buf178  # reuse
+            # Topologically Sorted Source Nodes: [, x_118, x_120, x_124, x_126, x_127], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:78
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf183, arg111_1, buf171, arg117_1, buf182, arg118_1, arg119_1, buf187, 32768, 768, stream=raw_stream0)
+            del arg111_1
+            del arg117_1
+            del arg118_1
+            del arg119_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1548
+            assert_size_stride(arg121_1, (3072, ), (1, ), 'input')
+            buf189 = reinterpret_tensor(buf188, (128, 256, 3072), (786432, 3072, 1), 0); del buf188  # reuse
+            # Topologically Sorted Source Nodes: [, x_128, x_129], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:80
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf189, arg121_1, 100663296, stream=raw_stream0)
+            del arg121_1
+            assert_size_stride(arg122_1, (768, 3072), (3072, 1), 'input')
+            buf190 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_128, x_129, x_131], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1564
+            assert_size_stride(arg125_1, (768, ), (1, ), 'input')
+            buf194 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_131, x_133, x_134], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:82
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf183, arg123_1, buf190, arg124_1, arg125_1, buf194, 32768, 768, stream=raw_stream0)
+            del arg124_1
+            del arg125_1
+            assert_size_stride(arg127_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg126_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1577
+            extern_kernels.addmm(arg127_1, reinterpret_tensor(buf194, (32768, 768), (768, 1), 0), reinterpret_tensor(arg126_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf195)
+            del arg126_1
+            del arg127_1
+            # Topologically Sorted Source Nodes: [linear_40, reshape_20, qkv_10, unbind_10, x_135], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:84
+            buf196 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf195, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf195, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf195, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf195
+            buf197 = buf196[0]
+            assert_size_stride(buf197, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf197, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1597
+            buf202 = buf183; del buf183  # reuse
+            buf206 = reinterpret_tensor(buf197, (128, 256, 768), (196608, 768, 1), 0); del buf197  # reuse
+            # Topologically Sorted Source Nodes: [, x_131, x_133, x_137, x_139, x_140], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:86
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf202, arg123_1, buf190, arg129_1, buf201, arg130_1, arg131_1, buf206, 32768, 768, stream=raw_stream0)
+            del arg123_1
+            del arg129_1
+            del arg130_1
+            del arg131_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1616
+            assert_size_stride(arg133_1, (3072, ), (1, ), 'input')
+            buf208 = reinterpret_tensor(buf207, (128, 256, 3072), (786432, 3072, 1), 0); del buf207  # reuse
+            # Topologically Sorted Source Nodes: [, x_141, x_142], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:88
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf208, arg133_1, 100663296, stream=raw_stream0)
+            del arg133_1
+            assert_size_stride(arg134_1, (768, 3072), (3072, 1), 'input')
+            buf209 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_141, x_142, x_144], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1632
+            assert_size_stride(arg137_1, (768, ), (1, ), 'input')
+            buf213 = empty_strided_cuda((128, 256, 768), (196608, 768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_144, x_146, x_147], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_3:90
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_3.run(buf202, arg135_1, buf209, arg136_1, arg137_1, buf213, 32768, 768, stream=raw_stream0)
+            del arg136_1
+            del arg137_1
+            assert_size_stride(arg139_1, (2304, ), (1, ), 'input')
+            assert_size_stride(arg138_1, (2304, 768), (768, 1), 'input')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1645
+            extern_kernels.addmm(arg139_1, reinterpret_tensor(buf213, (32768, 768), (768, 1), 0), reinterpret_tensor(arg138_1, (768, 2304), (1, 768), 0), alpha=1, beta=1, out=buf214)
+            del arg138_1
+            del arg139_1
+            # Topologically Sorted Source Nodes: [linear_44, reshape_22, qkv_11, unbind_11, x_148], Original ATen: [aten.view, aten.permute, aten.unbind, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:92
+            buf215 = torch.ops.aten._scaled_dot_product_efficient_attention.default(reinterpret_tensor(buf214, (128, 12, 256, 64), (589824, 64, 2304, 1), 0), reinterpret_tensor(buf214, (128, 12, 256, 64), (589824, 64, 2304, 1), 768), reinterpret_tensor(buf214, (128, 12, 256, 64), (589824, 64, 2304, 1), 1536), None, False)
+            del buf214
+            buf216 = buf215[0]
+            assert_size_stride(buf216, (128, 12, 256, 64), (196608, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf216, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1665
+            buf221 = buf202; del buf202  # reuse
+            buf225 = reinterpret_tensor(buf216, (128, 256, 768), (196608, 768, 1), 0); del buf216  # reuse
+            # Topologically Sorted Source Nodes: [, x_144, x_146, x_150, x_152, x_153], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_4:94
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_4.run(buf221, arg135_1, buf209, arg141_1, buf220, arg142_1, arg143_1, buf225, 32768, 768, stream=raw_stream0)
+            del arg135_1
+            del arg141_1
+            del arg142_1
+            del arg143_1
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1684
+            assert_size_stride(arg145_1, (3072, ), (1, ), 'input')
+            buf227 = reinterpret_tensor(buf226, (128, 256, 3072), (786432, 3072, 1), 0); del buf226  # reuse
+            # Topologically Sorted Source Nodes: [, x_154, x_155], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_2:96
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_2.run(buf227, arg145_1, 100663296, stream=raw_stream0)
+            del arg145_1
+            assert_size_stride(arg146_1, (768, 3072), (3072, 1), 'input')
+            buf228 = empty_strided_cuda((32768, 768), (768, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [, x_154, x_155, x_157], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1700
+            assert_size_stride(arg149_1, (768, ), (1, ), 'input')
+            buf232 = buf221; del buf221  # reuse
+            # Topologically Sorted Source Nodes: [, x_157, x_159, x_160], Original ATen: [aten.addmm, aten.view, aten.add, aten.native_layer_norm]
+            # [Provenance debug handles] triton_per_fused_add_addmm_native_layer_norm_view_5:98
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused_add_addmm_native_layer_norm_view_5.run(buf232, arg147_1, buf228, arg148_1, arg149_1, 32768, 768, stream=raw_stream0)
+            del arg147_1
+            del arg148_1
+            del arg149_1
+            del buf228
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1727
+            assert_size_stride(arg152_1, (768, ), (1, ), 'input')
+            buf235 = reinterpret_tensor(buf234, (128, 12, 1, 64), (768, 64, 768, 1), 0); del buf234  # reuse
+            # Topologically Sorted Source Nodes: [linear_49, reshape_25, kv, unbind_12, linear_48, reshape_24, q_12, x_162], Original ATen: [aten.view, aten.permute, aten.unbind, aten._unsafe_view, aten.add, aten.transpose, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] triton_poi_fused__scaled_dot_product_efficient_attention__unsafe_view_add_permute_transpose_unbind_view_6:101
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused__scaled_dot_product_efficient_attention__unsafe_view_add_permute_transpose_unbind_view_6.run(buf235, arg152_1, 98304, stream=raw_stream0)
+            del arg152_1
+            # Topologically Sorted Source Nodes: [linear_49, reshape_25, kv, unbind_12, linear_48, reshape_24, q_12, x_162], Original ATen: [aten.view, aten.permute, aten.unbind, aten._unsafe_view, aten.add, aten.transpose, aten._scaled_dot_product_efficient_attention]
+            # [Provenance debug handles] torch.ops.aten._scaled_dot_product_efficient_attention.default:102
+            buf236 = torch.ops.aten._scaled_dot_product_efficient_attention.default(buf235, reinterpret_tensor(buf233, (128, 12, 256, 64), (393216, 64, 1536, 1), 0), reinterpret_tensor(buf233, (128, 12, 256, 64), (393216, 64, 1536, 1), 768), None, False)
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1737
+            del buf233
+            buf237 = buf236[0]
+            assert_size_stride(buf237, (128, 12, 1, 64), (768, 64, 768, 1), 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+            assert_alignment(buf237, 16, 'torch.ops.aten._scaled_dot_product_efficient_attention.default')
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1765
+            assert_size_stride(arg160_1, (3072, ), (1, ), 'input')
+            buf247 = reinterpret_tensor(buf246, (128, 1, 3072), (3072, 3072, 1), 0); del buf246  # reuse
+            # Topologically Sorted Source Nodes: [, x_167, x_168], Original ATen: [aten.addmm, aten.view, aten.gelu]
+            # [Provenance debug handles] triton_poi_fused_addmm_gelu_view_8:106
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_addmm_gelu_view_8.run(buf247, arg160_1, 393216, stream=raw_stream0)
+            del arg160_1
+            assert_size_stride(arg161_1, (768, 3072), (3072, 1), 'input')
+            buf248 = reinterpret_tensor(buf245, (128, 768), (768, 1), 0); del buf245  # reuse
+            # Topologically Sorted Source Nodes: [, x_167, x_168, x_170], Original ATen: [aten.addmm, aten.view, aten.gelu, aten.t]
+
+
+# Source: vit_base_patch16_siglip_256_Infer/GPU_g01_output_code.py:1779
+            assert_size_stride(arg162_1, (768, ), (1, ), 'input')
+            buf249 = reinterpret_tensor(buf241, (128, 1, 768), (768, 768, 1), 0); del buf241  # reuse
+            # Topologically Sorted Source Nodes: [x_164, , x_170, x_172], Original ATen: [aten.view, aten.addmm, aten.add]
+            # [Provenance debug handles] triton_poi_fused_add_addmm_view_9:108
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_add_addmm_view_9.run(buf249, arg162_1, buf248, 98304, stream=raw_stream0)
+            del arg162_1
+            del buf248
+        return (reinterpret_tensor(buf249, (128, 768), (768, 1), 0), )
