@@ -11,6 +11,8 @@ Electra 为 16.764 ms/步，LayoutLM 为 25.097 ms/步。
 
 本文记录 2026-10-31 的问题定位，不包含编译器修复或修复后的整模型验证。
 四个场景的基线用于说明提升比目标；根因分析只聚焦两个 Train 的首层 attention。
+与 GPU Inductor 的直接耗时差距及后续优化模块，见
+[2026-11-02 分模型汇总](electra-layoutlm-train-gpu-inductor-gap-20261102.md)。
 
 ## 数据口径和提升比目标
 

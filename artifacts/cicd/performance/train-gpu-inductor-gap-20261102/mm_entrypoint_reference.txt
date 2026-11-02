@@ -1,0 +1,52 @@
+=== torch_npu/_inductor/kernel/mm.py; local checkout reference only; not an installed-source identity; lines 977-998 ===
+977: def _register_npu_inductor_mm():
+978:     @register_lowering(aten.mm, type_promotion_kind=None)
+979:     def tuned_mm(mat1, mat2, *, layout=None):
+980:
+981:         m, n, k, layout, mat1, mat2 = mm_args(mat1, mat2, layout=layout)
+982:         name = "mm"
+983:
+984:         aten_layout = layout
+985:         if not inductor_config.max_autotune:
+986:             aten_layout = FlexibleLayout(
+987:                 device=layout.device, dtype=layout.dtype, size=layout.size
+988:             )
+989:
+990:         # options to tune from
+991:         choices = (
+992:             [aten_mm.bind((mat1, mat2), aten_layout)] if use_aten_gemm_kernels() else []
+993:         )
+994:         _, is_nonzero = _is_static_problem(layout)
+995:
+996:         is_contiguous_input = (
+997:             is_contiguous_striding(mat1.get_size(), mat1.get_stride())
+998:             and is_contiguous_striding(mat2.get_size(), mat2.get_stride())
+
+=== torch_npu/_inductor/kernel/mm.py; local checkout reference only; not an installed-source identity; lines 1131-1157 ===
+1131:     @register_lowering(aten.addmm, type_promotion_kind=None)
+1132:     def tuned_addmm(inp, mat1, mat2, *, alpha=1, beta=1, layout=None):
+1133:
+1134:         # Fallback addmm using fallback handler before mm_args(), if there is no valid catlass template.
+1135:         # In case, aten_addmm.bind would decompose addmm to broadcast + mm + add.
+1136:         shape1 = mat1.shape
+1137:         shape2 = mat2.shape
+1138:         bias_shape = inp.shape
+1139:         m0 = shape1[0]
+1140:         k0 = shape1[1]
+1141:         n0 = shape2[1]
+1142:
+1143:         if layout is None:
+1144:             from torch._inductor.ir import FixedLayout
+1145:
+1146:             layout_tmp = FixedLayout(
+1147:                 mat1.get_device(),
+1148:                 mat1.get_dtype(),
+1149:                 [m0, n0],
+1150:             )
+1151:
+1152:         static_shape_tmp, is_nonzero_tmp = _is_static_problem(layout_tmp if layout is None else layout)
+1153:
+1154:         if not (static_shape_tmp and is_nonzero_tmp):
+1155:             return fallback_handler(aten.addmm.default)(inp, mat1, mat2, alpha=alpha, beta=beta)
+1156:
+1157:         try:

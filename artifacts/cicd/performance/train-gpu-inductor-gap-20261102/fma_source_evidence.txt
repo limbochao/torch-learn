@@ -1,0 +1,182 @@
+=== torch/_inductor/decomposition.py; installed-source snapshot 2026-10-31; lines 1044-1064 ===
+1044: @register_decomposition(aten._softmax_backward_data.default)
+1045: @pw_cast_for_opmath
+1046: def _softmax_backward_data(
+1047:     grad_output: torch.Tensor,
+1048:     output: torch.Tensor,
+1049:     dim: int,
+1050:     input_dtype: torch.dtype,
+1051: ) -> torch.Tensor:
+1052:     new_grad_output = grad_output * output
+1053:     sum_new_grad = torch.sum(new_grad_output, dim=dim, keepdim=True)
+1054:     # grad_input = new_grad_output - output * sum_new_grad
+1055:     grad_input = inductor_prims.fma(-output, sum_new_grad, new_grad_output)
+1056:
+1057:     # CPU kernel doesn't respect input_dtype, but following check doesn't work for meta tensor
+1058:     # if grad_output.device == torch.device("cpu"):
+1059:     #     return grad_input.contiguous()
+1060:
+1061:     if grad_output.dtype != input_dtype:
+1062:         grad_input = grad_input.to(input_dtype)
+1063:     return grad_input.contiguous()
+1064:
+
+=== torch/_inductor/inductor_prims.py; installed-source snapshot 2026-10-31; lines 21-45 ===
+21: def make_prim(
+22:     schema: str,
+23:     impl_aten,
+24:     return_type=_prims.RETURN_TYPE.NEW,
+25:     doc: str = "",
+26:     tags: Sequence[torch.Tag] | None = None,
+27: ):
+28:     if isinstance(return_type, tuple):
+29:
+30:         def meta(*args, **kwargs):
+31:             return tuple(_prims.TensorMeta(o) for o in impl_aten(*args, **kwargs))
+32:
+33:     else:
+34:
+35:         def meta(*args, **kwargs):
+36:             return _prims.TensorMeta(impl_aten(*args, **kwargs))
+37:
+38:     return _prims._make_prim(
+39:         schema=schema,
+40:         return_type=return_type,
+41:         meta=meta,
+42:         impl_aten=impl_aten,
+43:         doc=doc,
+44:         tags=tags,
+45:     )
+
+=== torch/_inductor/inductor_prims.py; installed-source snapshot 2026-10-31; lines 207-212 ===
+207: fma = make_prim(
+208:     "fma(Tensor a, Tensor b, Tensor c) -> Tensor",
+209:     lambda a, b, c: (a * b) + c,
+210:     doc="Fused multiply add: fma(a, b, c) -> (a * b) + c without rounding after the multiplication",
+211:     tags=(torch.Tag.pointwise,),
+212: )
+
+=== torch/_prims/__init__.py; installed-source snapshot 2026-10-31; lines 280-302 ===
+280: def _make_prim(
+281:     *,
+282:     schema: str,
+283:     return_type: RETURN_TYPE | tuple[RETURN_TYPE, ...],
+284:     meta: Callable,
+285:     impl_aten: Callable,
+286:     doc: str,
+287:     tags: Sequence[torch.Tag] | None = None,
+288:     use_old_custom_ops_api: bool = False,
+289:     register_conj_neg_fallthrough: bool = False,
+290: ):
+291:     """
+292:     Creates a primitive operation.
+293:
+294:     """
+295:
+296:     def _prim_impl(*args, **kwargs):
+297:         # always run the meta function because aten implementation will
+298:         # typically accept more inputs (e.g., it will do promotion and
+299:         # broadcasting) which we want to reject
+300:         meta(*args, **kwargs)
+301:         return impl_aten(*args, **kwargs)
+302:
+
+=== torch_npu/_inductor/lowering_fallback_list.py; installed-source snapshot 2026-10-31; lines 356-366 ===
+356:     prims.erfcx.default,
+357:     prims.exp,
+358:     prims.exp.default,
+359:     prims.expm1,
+360:     prims.expm1.default,
+361:     prims.fma,
+362:     prims.fma.default,
+363:     prims.fmod,
+364:     prims.fmod.default,
+365:     prims.ge,
+366:     prims.ge.default,
+
+=== torch_npu/_inductor/lowering.py; installed-source snapshot 2026-10-31; lines 100-122 ===
+100: def npu_make_fallback(op, layout_constraint=None, warn=True, override_decomp=False):
+101:     if op in decompositions and not override_decomp:
+102:         raise RuntimeError(f"both a fallback and a decomp for same op: {op}")
+103:
+104:     def register_fallback(op_overload):
+105:         add_needs_realized_inputs(op_overload)
+106:         if layout_constraint is not None:
+107:             add_layout_constraint(op_overload, layout_constraint)
+108:         return register_lowering(op_overload, type_promotion_kind=None)(
+109:             fallback_handler(op_overload)
+110:         )
+111:
+112:     if isinstance(op, torch._ops.OpOverloadPacket):
+113:         for ol in op.overloads():
+114:             op_overload = getattr(op, ol)
+115:             register_fallback(op_overload)
+116:     elif isinstance(op, (torch._ops.OpOverload, torch._ops.HigherOrderOperator)):
+117:         register_fallback(op)
+118:     else:
+119:         raise RuntimeError(f"Unsupported fallback {op} with type {type(op)}")
+120:
+121: make_fallback = npu_make_fallback  # noqa: F811
+122:
+
+=== torch_npu/_inductor/lowering.py; installed-source snapshot 2026-10-31; lines 355-364 ===
+355:     # fallback
+356:     for op in lowering.lowerings:
+357:         if op in FALLBACK_LIST and op not in decompositions \
+358:                 and isinstance(op, (torch._ops.OpOverloadPacket, torch._ops.OpOverload, torch._ops.HigherOrderOperator)):
+359:             make_fallback(op)
+360:     log.info("[npu|inductor|lowering|fallback] with FALLBACK_LIST, len(lowerings): %s, "
+361:              "len(FALLBACK_LIST): %s, make_fallback finished.",
+362:              len(lowerings), len(FALLBACK_LIST))
+363:     log.info("[npu|inductor|lowering|fallback] len(NPU_EXTRA_FALLBACK_LIST): %s", len(NPU_EXTRA_FALLBACK_LIST))
+364:
+
+=== torch_npu/_inductor/decomposition.py; installed-source snapshot 2026-10-31; lines 608-631 ===
+608: def _override_softmax_backward_decomp_no_fma():
+609:     """Replace inductor's ``_softmax_backward_data`` decomposition so it avoids
+610:     ``inductor_prims.fma`` (materialised as prims.fma on NPU). Use the equivalent
+611:     ``new_grad_output - output * sum_new_grad`` so the kernel stays on mul/sub."""
+612:     from torch._inductor.decomposition import (
+613:         decompositions as _ind_decomps,
+614:         pw_cast_for_opmath,
+615:     )
+616:
+617:     @pw_cast_for_opmath
+618:     def _softmax_backward_data_no_fma(
+619:         grad_output: torch.Tensor,
+620:         output: torch.Tensor,
+621:         dim: int,
+622:         input_dtype: torch.dtype,
+623:     ) -> torch.Tensor:
+624:         new_grad_output = grad_output * output
+625:         sum_new_grad = torch.sum(new_grad_output, dim=dim, keepdim=True)
+626:         grad_input = new_grad_output - output * sum_new_grad
+627:         if grad_output.dtype != input_dtype:
+628:             grad_input = grad_input.to(input_dtype)
+629:         return grad_input.contiguous()
+630:
+631:     _ind_decomps[aten._softmax_backward_data.default] = _softmax_backward_data_no_fma
+
+=== torch_npu/_inductor/decomposition.py; installed-source snapshot 2026-10-31; lines 1085-1095 ===
+1085: def _register_triton_experimental_decompositions():
+1086:     """Install all triton_experimental decomposition-table overrides and prune the
+1087:     exclusion list. Called directly by ``_load_triton_experimental_backend``.
+1088:
+1089:     Mirrors the original in-order sequence: install the aten dispatcher impls,
+1090:     remove the fallback-preferred decompositions, clear the ``fast_random_decomps``
+1091:     lru cache (materialised with the old table), then install each override and
+1092:     clear the cache again so ``select_decomp_table`` rebuilds from the new table.
+1093:     """
+1094:     npu_decomps_to_exclude = [
+1095:         aten.convolution_backward,
+
+=== torch_npu/_inductor/decomposition.py; installed-source snapshot 2026-10-31; lines 1130-1138 ===
+1130:     # already be materialized with the old decompositions.
+1131:     from torch._inductor.decomposition import fast_random_decomps
+1132:     fast_random_decomps.cache_clear()
+1133:
+1134:     _override_matmul_should_fold_for_npu()
+1135:     _override_softmax_backward_decomp_no_fma()
+1136:     _override_safe_softmax_decomp()
+1137:     _override_plain_softmax_width_decomp()
+1138:     _override_gelu_decomp()
