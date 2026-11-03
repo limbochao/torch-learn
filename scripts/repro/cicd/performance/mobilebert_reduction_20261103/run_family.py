@@ -14,6 +14,7 @@ NAMES = {
     0: "add_sum_view_0",
     7: "mul_sum_view_7",
     9: "mul_sum_view_9",
+    11: "add_mul_sum_view_11",
     13: "add_mul_sum_view_13",
     20: "add_mul_sum_view_20",
 }
@@ -26,6 +27,8 @@ def main():
     parser.add_argument("--kinds", type=int, nargs="+", default=[9, 7, 13, 20, 0], choices=list(NAMES))
     parser.add_argument("--verify-compile-path", action="store_true")
     args = parser.parse_args()
+    if 11 in args.kinds and not args.verify_compile_path:
+        parser.error("The _11 cross-check requires --verify-compile-path; use run.py for its full experiment.")
     if os.environ.get("ASCEND_RT_VISIBLE_DEVICES") != str(args.physical_device):
         raise RuntimeError("Visible physical device does not match --physical-device")
     import torch
@@ -57,19 +60,21 @@ def main():
 
     for kind in args.kinds:
         width = 30522 if kind == 0 else 512 if kind == 20 else 128
-        dual = kind in (7, 13, 20)
-        input_count = {0: 2, 7: 2, 9: 1, 13: 6, 20: 5}[kind]
+        dual = kind in (7, 11, 13, 20)
+        input_count = {0: 2, 7: 2, 9: 1, 11: 3, 13: 6, 20: 5}[kind]
         cpu = [torch.randn((width,) if kind == 13 and i >= 4 else (128, 128, width)) for i in range(input_count)]
         inputs = [v.npu() for v in cpu]
 
         def expressions(values):
             a = values[0]
-            if kind in (0, 13, 20):
+            if kind in (0, 11, 13, 20):
                 a = a + values[1]
             if kind == 20:
                 a = (a + values[2]) + values[3]
             if kind == 7:
                 return a, a * values[1]
+            if kind == 11:
+                return a, a * values[2]
             if kind == 13:
                 return a, a * (values[2] + (values[3] * values[4] + values[5]))
             if kind == 20:
@@ -171,6 +176,8 @@ def main():
         recorder.install()
         recorder.start_capture()
         path = root / "artifacts/cicd/performance/mobilebert-reduction-20261103/family" / (NAMES[kind] + ".py")
+        if kind == 11:
+            path = path.parent.parent / "original_kernel.py"
         spec = importlib.util.spec_from_file_location("original_" + str(kind), path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -206,7 +213,8 @@ def main():
                     (target / ("kernel." + key)).write_text(binary.asm[key])
             (target / "metadata.json").write_text(json.dumps(binary.metadata._asdict(), indent=2, default=str))
 
-        save_binary("original", kernel.best_launcher.bin)
+        # The launcher keeps the binary in its generated function scope unless store_cubin is enabled.
+        save_binary("original", kernel.best_launcher.__globals__["bin"])
         if args.verify_compile_path:
             selected_tile = (selected["X0BLOCK"], selected["X0BLOCK_SUB"], selected["R1BLOCK_SUB"])
             matched_tiles = [selected_tile, (16, 16, 256), (32, 32, 128), (64, 64, 64)]

@@ -30,6 +30,7 @@ def main():
 
     windows = []
     eager_upper = {7: 0.0, 9: 0.0, 13: 0.0}
+    eager_20_upper = 0.0
     for step in range(10, 20):
         entries = [(i + 2, r) for i, r in enumerate(rows["Eager_NPU"]) if r["Step Id"] == str(step)]
         labels = [label(r["Name"]) for _, r in entries]
@@ -37,6 +38,14 @@ def main():
         # One 512-channel head pair, then eight NoNorm pairs per layer, for 24 layers.
         # The branch order is corroborated by the original backward FX and wrapper excerpts.
         assert len(pairs) == 193, (step, len(pairs))
+        for layer in range(24):
+            base = 1 + layer * 8
+            first_merge = [i for i in range(pairs[base + 4] + 4, pairs[base + 5]) if labels[i] == "A"]
+            assert len(first_merge) == 2
+            selected_indices = [first_merge[0], pairs[base + 6] - 1, pairs[base + 7] - 1]
+            assert [labels[i] for i in selected_indices] == list("AAA")
+            selected_indices += list(range(pairs[base + 7], pairs[base + 7] + 4))
+            eager_20_upper += sum(float(entries[i][1]["Duration(us)"]) for i in selected_indices) / 10000
         for ordinal, start in enumerate(pairs[1:]):
             kind = [7, 11, 11, 11, 13, 11, 7, 20][ordinal % 8]
             if kind not in [7, 13]:
@@ -147,6 +156,20 @@ def main():
         },
         "npu_duplicate_reduction_pairs": duplicates,
         "unproven_individual_gain_deficit": ["add_mul_sum_view_20", "add_sum_view_0"],
+        "add_mul_sum_view_20_schedule_control": {
+            "npu_eager_upper_ms_including_extra_dh_mul": eager_20_upper,
+            "gpu_eager_lower_ms": 24 * (3 * minima["add"] + minima["mul"] + 2 * minima["sum"]) / 1000,
+            "gpu_inductor_upper_ms": sum(
+                float(gpu_inductor[n]["Total Time(us)"])
+                for n in [
+                    "triton_red_fused_add_mul_sum_view_19",
+                    "triton_red_fused_add_embedding_dense_backward_mul_sum_view_21",
+                    "triton_red_fused_native_layer_norm_native_layer_norm_backward_nll_loss_forward_relu_sum_threshold_backward_view_6",
+                ]
+            )
+            / 10000,
+            "status": "Bounds do not prove NPU compiler-gain deficit versus GPU; no budget assigned.",
+        },
         "source_sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [*files.values(), source]},
     }
     args.output_root.mkdir(parents=True, exist_ok=True)
