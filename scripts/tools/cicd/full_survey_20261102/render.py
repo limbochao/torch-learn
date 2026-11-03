@@ -6,6 +6,7 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
+from statistics import median
 
 parser = argparse.ArgumentParser(description="Render the 2026-11-02 CICD performance snapshot.")
 parser.add_argument("--input-root", type=Path, required=True)
@@ -57,6 +58,27 @@ def nums(x):
 
 def short(s):
     return s.replace("|", "\\|")
+
+
+def common_issue_share_cells(samples, profiles):
+    def number(value):
+        return f"{value:.2f}" if value < 0.1 else f"{value:.1f}"
+
+    def typical_range(values):
+        typical = number(median(values)) + "%"
+        if len(values) == 1:
+            return typical
+        return f"{typical}（{number(min(values))}–{number(max(values))}%）"
+
+    costs = [100 * issue["share"] for _, issue in samples]
+    budgets = [100 * issue["model_reduction"] for _, issue in samples]
+    gap_shares = [
+        100 * issue["budget_ms"] / profiles[case]["whole_model"]["deficit_ms"]
+        for case, issue in samples
+        if profiles[case]["whole_model"]["deficit_ms"] > 0
+    ]
+    gap_share = f"{number(median(gap_shares))}%（{len(gap_shares)}例）" if gap_shares else "—"
+    return typical_range(costs), typical_range(budgets), gap_share
 
 
 # Full selected definitions, including metadata, plus actual run/fallback call sites.
@@ -391,8 +413,15 @@ text = [
     "",
     "## 共性问题及优化责任",
     "",
-    "| 具体问题 | 场景数 | 优化入口与 GPU 做法 |",
-    "| --- | ---: | --- |",
+    "以下占比按已列出该问题的场景逐个计算，再取中位数及最小–最大范围，不按跨模型毫秒数加权；仅有一个场景时列单值。",
+    "**问题耗时占比**为本项 kernel/区间耗时除以当前 NPU Inductor 整步耗时；"
+    "**劣化预算占比**为本项预算 B 除以同一个整步耗时，表示该项若达到局部目标可减少多少整步耗时。",
+    "**占整网缺口**为 B / D，其中 D = T_NI − T_NE × T_GI/T_GE，"
+    "只统计 D > 0 的场景，表示该项预算可解释多少达到 GPU 整网提升比所需的差距。"
+    "它与 kernel 耗时占比不同，可能因其他区域的收益抵消而超过 100%；各类存在重叠，不能相加。",
+    "",
+    "| 具体问题 | 场景数 | 问题耗时/整步：中位（范围） | 劣化预算/整步：中位（范围） | 占整网缺口：中位 | 优化入口与 GPU 做法 |",
+    "| --- | ---: | ---: | ---: | ---: | --- |",
 ]
 labels = {
     "attention_seed": (
@@ -440,7 +469,9 @@ labels = {
     ),
 }
 for kind, count in counts.most_common():
-    text.append(f"| {labels[kind][0]} | {count} | {labels[kind][1]} |")
+    samples = [(case, issue) for case, issue in allissues if issue["kind"] == kind]
+    cost_share, budget_share, gap_share = common_issue_share_cells(samples, DATA)
+    text.append(f"| {labels[kind][0]} | {count} | {cost_share} | {budget_share} | {gap_share} | {labels[kind][1]} |")
 text += [
     "",
     "归约类具体代码入口为 `NPUIndexTritonKernel.reduction`、`codegen_kernel`，配置侧为 `triton_config_npu_index` 与 `NPUCachingAutotuner.autotune_to_one_config`；融合检查入口为 NPU scheduling 的 `can_fuse` / `candidate_tilings`。这些入口定位到 Inductor 的具体功能模块；除历史 constexpr/FMA 机制外，不把首查模块写成已证实根因。相同 DSL/config 仍慢才能继续判断 Triton_ascend/npuir；外部 scatter/broadcast 则还涉及 CANN。",
