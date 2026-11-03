@@ -22,3 +22,7 @@ python <torch-learn>/scripts/repro/cicd/performance/fma_seed_validation/run.py \
 首层 attention 的 Grid1D/GridNpu 及 checker 日志。精度使用原 runner 的 `--accuracy --accu-summary`，
 保持同一模型、batch 和 FP32，不以编译成功代替精度通过。
 `environment.json` 保存版本、关键源码 SHA256、实际 lowering 入口以及安装文件未改动的检查。
+
+完成后运行 `summarize.py --job-root <job-root> --output <summary.json>`，
+按 CSV 的真实 Step Id 统计整步和逐 kernel duration，并单独统计 softmax backward 后的
+Mul/Add/Mul/Add 窗口；不使用主机 wall time 代替设备时间。
