@@ -13,6 +13,7 @@ from pathlib import Path
 import runpy
 import sys
 import textwrap
+import traceback
 
 
 def install_fma_list_hook():
@@ -133,6 +134,21 @@ def main():
         sys.meta_path.remove(finder)
     metadata['fma_fallback_after'] = loaded_entries
 
+    from torch_npu._inductor.codegen.scheduling import NPUTritonScheduling
+
+    fallback_events = []
+    original_codegen_node = NPUTritonScheduling.codegen_node
+
+    def record_codegen_node(self, node):
+        try:
+            return original_codegen_node(self, node)
+        except Exception:
+            fallback_events.append({'node': str(node), 'traceback': traceback.format_exc()})
+            (output / 'index_codegen_failures.json').write_text(json.dumps(fallback_events, indent=2) + '\n')
+            raise
+
+    NPUTritonScheduling.codegen_node = record_codegen_node
+
     if args.variant == 'bind_constexpr':
         from torch_npu._inductor.codegen.triton import NPUIndexTritonKernel
 
@@ -162,6 +178,7 @@ def main():
             hashlib.sha256(Path(p).read_bytes()).hexdigest() == sha
             for p, sha in metadata['source_sha256'].items()
         )
+        metadata['index_codegen_failure_count'] = len(fallback_events)
         (output / 'environment.json').write_text(json.dumps(metadata, indent=2) + '\n')
 
     atexit.register(finish)
