@@ -23,12 +23,13 @@ def main():
         runner_args = runner_args[1:]
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    logging.getLogger('torch_npu._inductor.codegen.npu_combined_scheduling').setLevel(logging.DEBUG)
 
     import torch
     import torch_npu
     import triton
     import transformers
+
+    logging.getLogger('torch_npu._inductor.codegen.npu_combined_scheduling').setLevel(logging.DEBUG)
 
     from torch._inductor import inductor_prims  # noqa: F401: register prims.fma
     from torch_npu._inductor import lowering_fallback_list

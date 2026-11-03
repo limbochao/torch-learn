@@ -27,6 +27,8 @@ python scripts/tools/cicd/full_survey_20261102/render.py \
 `render.py` 会更新 `docs/issue-logs/cicd/performance/models/` 的模型文档、全量总览和对应 artifacts；
 MobileBERT 的逐 kernel 深挖直接维护在对应模型文档的 `MOBILEBERT REDUCTION ANALYSIS` 标记区间内，
 重新生成时原样保留该区间；不再另设专项分析页面。不会改写历史分析或性能分类索引。
+FMA/attention 的实测补充维护在模型文档的 `CICD VALIDATION <case>:<kind>` 标记区间，
+总览实测摘要维护在 `CICD RUNTIME VALIDATION` 区间；重新生成时同样保留。
 只针对本次 40 模型/78 场景快照使用，手工补充的具体解释也属于该快照。
 
 NPU 按 CSV 中实际 Step Id 数量归一化，GPU 的聚合表按本批固定 10 步归一化。

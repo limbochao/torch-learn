@@ -236,6 +236,15 @@ def kernel_hint(a, dev, n):
 
 for model in sorted({a["model"] for a in DATA.values()}):
     model_path = DOC / "models" / (model + ".md")
+    validation_blocks = {}
+    if model_path.exists():
+        validation_blocks = {
+            found.group(1): found.group(0)
+            for found in re.finditer(
+                r"<!-- BEGIN CICD VALIDATION ([\w:.-]+) -->.*?<!-- END CICD VALIDATION \1 -->",
+                model_path.read_text(), flags=re.S,
+            )
+        }
     reduction_analysis = None
     if model == "MobileBertForMaskedLM" and model_path.exists():
         # Keep the kernel investigation in the model page when refreshing snapshot tables.
@@ -360,6 +369,9 @@ for model in sorted({a["model"] for a in DATA.values()}):
                     "历史机制证据：[首层 attention 定位](../electra-layoutlm-train-first-attention-20261031.md)、[FMA 源码调用链](../../../../../artifacts/cicd/performance/train-gpu-inductor-gap-20261102/fma_source_evidence.txt)。历史源码验证与当前 profile 版本身份未完整绑定；本批 wrapper 和调用序列复核见本节证据。",
                     "",
                 ]
+            validation = validation_blocks.get(case + ":" + z["kind"])
+            if validation:
+                text += [validation, ""]
         if case in SPECIAL:
             text += ["### 额外具体检查点", "", SPECIAL[case], ""]
         text += [
@@ -412,9 +424,21 @@ for model in sorted({a["model"] for a in DATA.values()}):
             "本轮仅在本地读取和复算，未连接 NPU_A5、未修复或跑卡。",
             "初筛在本地读取和复算，Train 参数梯度归约另有下文列明的 NPU_A5 单 kernel 实测。",
         ) for line in text]
+    elif validation_blocks:
+        text = [line.replace(
+            "本轮仅在本地读取和复算，未连接 NPU_A5、未修复或跑卡。",
+            "初筛在本地读取和复算；下文临时修改对照另有 NPU_A5 实测，原始统计不混入复测结果。",
+        ) for line in text]
     model_path.write_text("\n".join(text).rstrip("\n") + "\n")
 
 # Aggregate overview and complete coverage table.
+overview_path = DOC / "full-survey.md"
+overview_validation = None
+if overview_path.exists():
+    overview_validation = re.search(
+        r"<!-- BEGIN CICD RUNTIME VALIDATION -->.*?<!-- END CICD RUNTIME VALIDATION -->",
+        overview_path.read_text(), flags=re.S,
+    )
 allissues = [(c, z) for c, a in ANALYSIS.items() for z in a["issues"]]
 counts = Counter(z["kind"] for _, z in allissues)
 text = [
@@ -574,7 +598,10 @@ text += [
     "历史：[首层 attention 根因](electra-layoutlm-train-first-attention-20261031.md)。此前[两模型绝对耗时差分析](electra-layoutlm-train-gpu-inductor-gap-20261102.md)已标记口径被替代，其中 MM/AddMM 70.049 ms 不再作为编译收益优化依据。",
     "",
 ]
-(DOC / "full-survey.md").write_text("\n".join(text))
+if overview_validation:
+    position = text.index("## 比较方法与数字边界")
+    text[position:position] = [overview_validation.group(0), ""]
+overview_path.write_text("\n".join(text))
 print(
     "rendered",
     len(DATA),
