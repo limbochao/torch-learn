@@ -4,11 +4,24 @@ title: CICD 全量性能分析：编译收益差距与共性问题
 
 # CICD 全量性能分析：编译收益差距与共性问题
 
-本批共 **40 个模型、78 个场景**（Infer 40、Train 38），已逐场景读取四份设备耗时 CSV，并索引 **4,379 个生成 kernel 定义**及其 wrapper/FX。按模型分别归档，均分 Infer / Train。本轮没有访问 NPU_A5，没有修改编译器。
+本批共 **40 个模型、78 个场景**（Infer 40、Train 38），已逐场景读取四份设备耗时 CSV，并索引 **4,379 个生成 kernel 定义**及其 wrapper/FX。按模型分别归档，均分 Infer / Train。原始数据在本地完成粗筛；后续 NPU_A5 临时修改实测另见下方补充。
 
 保守局部筛选与已知重复执行/回退机制共列出 **88 个场景级检查项，覆盖 54 个场景**；每项都给出具体 kernel、代码位置、NPU/GPU 做法、占比及贡献预算。其余场景列出明确候选和缺失证据，不强行认定劣化。
 
 2026-11-03 补充：[MobileBERT 逐 kernel 深挖](models/MobileBertForMaskedLM.md#outer-reduction)已在指定环境与物理卡 1、2 实测；四组确认 IR 分段归约/候选问题，另两组不计入已确认单项缺口。约 50 ms/step 为小图外推。本文原 40 模型统计及粗筛预算保持不变。
+
+<!-- BEGIN CICD RUNTIME VALIDATION -->
+2026-11-04 补充：两项共性问题已于 2026-11-03 在 NPU_A5 物理卡 2、`pta_213_cicd` 完成 NPU 整网 A/B，均为 FP32/static、10 个稳定采样 step；两项独立训练 accuracy 均通过。
+
+| 问题与实测模型 | 具体入口 | 局部变化 ms/step | NPU Inductor 整步 ms | 整网净省 / 耗时下降 | 固定基线 Eager 折算提升比增量 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| [FMA：OPT Train](models/OPTForCausalLM.md#fma-fallback-validation) | NPU `lowering_fallback_list.py` 删除 FMA 两项 | 完整反向区间 54.936 → 18.499；重复第一对 16.907 → 0 | 301.702 → 266.179 | **35.523 ms / 11.77%** | **13.703 pp** |
+| [首层 attention：Electra Train](models/ElectraForCausalLM.md#attention-constexpr-validation) | `NPUIndexTritonKernel.codegen_kernel` 补齐 constexpr 常量 | 首层 `_4` 16.790 → 0.974 | 156.810 → 141.828 | **14.983 ms / 9.55%** | **11.847 pp** |
+
+FMA 的收益包含有效计算融合及中间写回减少，超过仅重复第一对的成本；attention 消除一个真实的 seed checker 失败，恢复多轴生成。两项都无需修改 Triton_ascend/npuir。具体生成 kernel、失败日志、精度与版本差异均归入对应模型原章节，没有新增专项分析文档。
+
+上表只报告两个场景实测，不替换下表 40 模型历史粗筛的跨场景中位数，也不向其他模型外推。提升比增量统一使用各自基线 Eager 作分母，排除两次 Eager 测量波动；详细 paired 提升比仍保存在模型文档。
+<!-- END CICD RUNTIME VALIDATION -->
 
 ## 比较方法与数字边界
 
@@ -38,8 +51,8 @@ title: CICD 全量性能分析：编译收益差距与共性问题
 | MobileBERT outer reduction：分段与候选问题 | 1 | 22.9% | 11.6% | 29.2%（1例） | 四组已确认 IR 分段/候选问题，另有 24 次重复 bias sum；`_20`、`_0` 单独保留边界。见[实测细分](models/MobileBertForMaskedLM.md#outer-reduction)；本行仍为七组历史粗筛。 |
 | Infer log_softmax→NLLLoss 完整矩阵写回 | 17 | 1.7%（0.07–10.6%） | 1.0%（0.04–8.3%） | 23.5%（10例） | NPU nll_loss_forward decomposition/lowering 使消费者留在外部调用；GPU 融合 target 提取和归约。 |
 | ReLU backward+bias sum | 4 | 6.4%（1.0–50.2%） | 3.0%（0.1–48.7%） | 12.9%（3例） | NPU pointwise/归约融合与并行映射；GPU 分拆或不同归约。 |
-| prims.fma metadata 第一组 Mul/Add 重复执行 | 20 | 1.7%（0.2–5.6%） | 1.7%（0.2–5.6%） | 8.7%（18例） | make_prim.meta 调用真实 impl_aten；_prim_impl 随后再次执行；GPU 融合在 kernel 内。已核对本批 wrapper 的 prims.fma 调用与 profile 连续调用窗口。 |
-| 首层 attention constexpr/checker 回退 | 2 | 8.9%（7.2–10.7%） | 3.0%（2.5–3.5%） | 8.6%（2例） | NPUIndexTritonKernel.codegen_kernel 的 constexpr 常量绑定及 checker 回退；GPU 无此首层异常。 |
+| prims.fma metadata 第一组 Mul/Add 重复执行 | 20 | 1.7%（0.2–5.6%） | 1.7%（0.2–5.6%） | 8.7%（18例） | make_prim.meta 调用真实 impl_aten；_prim_impl 随后再次执行；GPU 融合在 kernel 内。已核对本批 wrapper 的 prims.fma 调用与 profile 连续调用窗口。[OPT 删除 fallback 实测](models/OPTForCausalLM.md#fma-fallback-validation)整步下降 11.77%。 |
+| 首层 attention constexpr/checker 回退 | 2 | 8.9%（7.2–10.7%） | 3.0%（2.5–3.5%） | 8.6%（2例） | NPUIndexTritonKernel.codegen_kernel 的 constexpr 常量绑定及 checker 回退；GPU 无此首层异常。[Electra 实测](models/ElectraForCausalLM.md#attention-constexpr-validation)首层 16.790 → 0.974 ms。 |
 | 具体 sum kernel 的归约调度 | 5 | 3.8%（1.5–10.1%） | 3.6%（1.2–8.7%） | 8.2%（5例） | NPU codegen 归约维切分、多阶段选择；GPU sum kernel 作为保守费用上界。 |
 | LayerNorm backward 归约映射 | 5 | 1.6%（1.3–14.2%） | 0.6%（0.2–12.7%） | 5.9%（5例） | NPU reduction codegen/tiling/runtime autotune；GPU 采用不同归约拆分。 |
 | GELU 前向外部调用阻断 bias/pointwise 融合 | 16 | 2.0%（1.2–3.7%） | 0.2%（0.05–0.8%） | 2.6%（10例） | NPU activation lowering/fusion；GPU 含 GELU 的融合 kernel。 |
@@ -162,7 +175,7 @@ title: CICD 全量性能分析：编译收益差距与共性问题
 - [decomposition/fallback 源码参考](../../../../artifacts/cicd/performance/full-survey-20261102/component_policy_reference.txt)：历史安装源码的 loss/GELU 排除策略，以及本地 checkout 的 scatter fallback 和归约入口；入口参考不等于 profile 构建身份。
 - [输入文件 SHA256 清单](../../../../artifacts/cicd/performance/full-survey-20261102/source_manifest.json)覆盖原始 CSV、wrapper、FX，原始输入不上传，防止大体积/环境路径公开。
 - [本地复算脚本及用法](../../../../scripts/tools/cicd/full_survey_20261102/README.md)。脚本不导入 torch、不连接远端，只读用户提供数据。
-- 当前校验范围为全部 CSV 的单位/步数/batch、预算公式、40 模型/78 场景覆盖、已选择 kernel 的代码/调用证据和链接检查；没有修复性能/精度验证。
+- 当前校验范围为全部 CSV 的单位/步数/batch、预算公式、40 模型/78 场景覆盖、已选择 kernel 的代码/调用证据和链接检查；初筛本身没有修复验证；后续两项整网性能/精度实测见上方补充。
 - 后续只对选中的最大点补 GPU 逐调用 shape/stride、NPU/GPU selected config、固定输入单 kernel 与 IR；预算最大的 kernel 优先，避免再次泛化成整条反向链路。
 - PLBart Train、TrOCR Train 各有 3 个 GPU profile 名称未在本批 wrapper 匹配到定义，均已在模型页列明；需要补对应编译图，不基于这些缺失 DSL 新增算子族收益归因。
 

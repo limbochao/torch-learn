@@ -4,7 +4,8 @@
 结论直接维护在对应模型分析文档中。
 
 - `baseline`：保持原实现。
-- `no_fma_fallback`：在注册 NPU lowering 前，仅从 `FALLBACK_LIST` 删除 `prims.fma` 和其 default overload。
+- `no_fma_fallback`：在导入 torch/torch_npu 前安装单模块 source loader，仅从 `FALLBACK_LIST`
+  删除 `prims.fma` 和其 default overload，避免后端自动加载使修改发生在 lowering 注册之后。
 - `bind_constexpr`：仅在 `NPUIndexTritonKernel.codegen_kernel` 中补齐 `equal_1_arg_indices` 对应的常量值 1。
 
 在指定 TorchBench 容器工作目录激活环境，选择允许且空闲的物理卡后运行：
@@ -22,6 +23,11 @@ python <torch-learn>/scripts/repro/cicd/performance/fma_seed_validation/run.py \
 首层 attention 的 Grid1D/GridNpu 及 checker 日志。精度使用原 runner 的 `--accuracy --accu-summary`，
 保持同一模型、batch 和 FP32，不以编译成功代替精度通过。
 `environment.json` 保存版本、关键源码 SHA256、实际 lowering 入口以及安装文件未改动的检查。
+该 runner 的原 `--performance` 路径没有调用 `run_n_iterations`，单传 `--enable-profiler` 不会采样。
+脚本在原 `run_performance_test` 两个函数预热完成后，补充相同输入的 Eager/Inductor 设备采样：
+各执行 `iterations` 步，前 10 步 warmup；原性能计时流程继续执行。
+补充的函数源码与 SHA256 保存在 metadata；`index_codegen_failures.json` 保存回退前的异常。
+可先用 `--check-setup-only` 检查修改安装，不运行模型。
 
 完成后运行 `summarize.py --job-root <job-root> --output <summary.json>`，
 按 CSV 的真实 Step Id 统计整步和逐 kernel duration，并单独统计 softmax backward 后的

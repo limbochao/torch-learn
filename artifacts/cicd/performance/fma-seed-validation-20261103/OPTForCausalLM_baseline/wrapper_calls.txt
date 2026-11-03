@@ -1,0 +1,33 @@
+# Source: OPTForCausalLM__2_backward_11.5/output_code.py:1307
+            del permute_25
+            buf20 = buf19; del buf19  # reuse
+            buf22 = empty_strided_npu((24, 2048, 2048), (4194304, 2048, 1), torch.float32)
+            buf21 = empty_strided_npu((24, 2048, 1), (2048, 1, 49152), torch.float32)
+            # Topologically Sorted Source Nodes: [mul_16, sum_9, neg], Original ATen: [aten._softmax_backward_data]
+            raw_stream0 = get_raw_stream(0)
+            triton_per_fused__softmax_backward_data_7.run(buf20, div, buf22, buf21, 24, 2048, 2048, stream=raw_stream0)
+            del div
+            # Topologically Sorted Source Nodes: [neg, fma], Original ATen: [aten._softmax_backward_data]
+            # [Provenance debug handles] torch.ops.prims.fma.default:14
+            buf23 = torch.ops.prims.fma.default(buf22, buf21, buf20)
+            del buf20
+            del buf21
+
+# Source: OPTForCausalLM__2_backward_11.5/output_code.py:1320
+            del buf22
+            buf24 = buf23
+            assert_size_stride(buf24, (24, 2048, 2048), (4194304, 2048, 1), 'torch.ops.prims.fma.default')
+            assert_alignment(buf24, 16, 'torch.ops.prims.fma.default')
+
+# Source: OPTForCausalLM__2_backward_11.5/output_code.py:1324
+            del buf23
+            buf25 = reinterpret_tensor(buf24, (2, 12, 2048, 2048), (50331648, 4194304, 2048, 1), 0); del buf24  # reuse
+            # Topologically Sorted Source Nodes: [scalar_tensor, view_29, div_2, where_1, where_2], Original ATen: [aten.threshold_backward, aten.view, aten.div, aten.where, aten.masked_fill]
+            raw_stream0 = get_raw_stream(0)
+            triton_poi_fused_div_masked_fill_threshold_bac_8.run(buf25, lt, eq, 2, 12, 2048, 2048, stream=raw_stream0)
+            del eq
+            del lt
+            buf26 = empty_strided_npu((24, 64, 2048), (131072, 2048, 1), torch.float32)
+            # Topologically Sorted Source Nodes: [scalar_tensor, view_29, div_2, where_1, where_2, view_31, bmm_4], Original ATen: [aten.threshold_backward, aten.view, aten.div, aten.where, aten.masked_fill, aten.bmm]
+            # [Provenance debug handles] extern_kernels.bmm:15
+            extern_kernels.bmm(permute_26, reinterpret_tensor(buf25, (24, 2048, 2048), (4194304, 2048, 1), 0), out=buf26)

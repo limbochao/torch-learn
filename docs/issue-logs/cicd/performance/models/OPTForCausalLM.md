@@ -4,7 +4,7 @@ title: "CICD 性能分析：OPTForCausalLM"
 
 # OPTForCausalLM：Infer / Train 编译收益差距
 
-按各设备自身的 Eager→Inductor 提升比筛选。四份 profile 和本批 wrapper/FX 为用户提供的数据；本轮仅在本地读取和复算，未连接 NPU_A5、未修复或跑卡。
+按各设备自身的 Eager→Inductor 提升比筛选。四份 profile 和本批 wrapper/FX 为用户提供的数据；初筛在本地读取和复算；下文临时修改对照另有 NPU_A5 实测，原始统计不混入复测结果。
 
 局部预算、上界/下界的定义见[全量分析与共性问题](../full-survey.md)。以下“百分点”均指 NPU **整网提升比**的变化。操作族汇总用于保守筛选，实际要优化的 kernel 逐个列出；未对齐的候选单列，不将其绝对耗时当作收益。
 
@@ -160,6 +160,54 @@ GPU 对应实现/保守收费项：
 - `aclnnAdd_AddAiCore_Add`：外部调用；见 wrapper 调用边界。
 
 历史机制证据：[首层 attention 定位](../electra-layoutlm-train-first-attention-20261031.md)、[FMA 源码调用链](../../../../../artifacts/cicd/performance/train-gpu-inductor-gap-20261102/fma_source_evidence.txt)。历史源码验证与当前 profile 版本身份未完整绑定；本批 wrapper 和调用序列复核见本节证据。
+
+<!-- BEGIN CICD VALIDATION OPTForCausalLM_Train:fma_duplicate -->
+<a id="fma-fallback-validation"></a>
+
+#### 临时删除 FMA fallback：整网净省 35.523 ms/step
+
+**已验证的优化入口是 NPU Inductor `lowering_fallback_list.py`，只删除 `prims.fma`、`prims.fma.default` 两个条目。** 无需修改 Triton_ascend 或 npuir，本次即可消除重复调用并恢复有效计算的融合。
+
+实测在 2026-11-03 的 NPU_A5 物理卡 2、`pta_213_cicd` 上完成，2026-11-04 整理结果。场景为 Train、FP32、static、batch=2、sequence=2048，关闭 aclgraph。每份 profile 采样 10 个稳定 step，以下均为设备 kernel duration 之和，首次编译时间不计入。
+
+| 进程内配置 | Eager 实测 ms/step | Inductor 实测 ms/step | 本组提升比 `(E-I)/E` |
+| --- | ---: | ---: | ---: |
+| 原始 fallback 列表 | 259.228504 | 301.702054 | -16.38% |
+| 仅删除 FMA 两项 | 267.535271 | 266.179190 | 0.51% |
+
+**整网实际减少 35.522864 ms/step，设备整步耗时下降 11.77%。** 两组 Inductor 的稳定步范围分别为 301.554–301.862 ms 和 265.985–266.305 ms。
+两份 Eager 的调用次数逐 kernel 完全一致，但耗时有 3.20% 波动。因此，归因该修改对编译提升比的贡献时，固定使用基线 Eager=259.228504 ms：增量为 **13.703 个百分点**，折算提升比从 -16.38% 到 -2.68%；不能把表中混入 Eager 波动的全部提升比变化算作修复收益。
+
+**原文的 16.977438 ms 是重复第一对的历史成本，不是删除 fallback 的全部收益上限。** 本次重复第一对为 16.906731 ms，数值复现；但删除 fallback 还改变了有效计算的融合边界。按同一组 12 层调用对账：
+
+| 具体 kernel / 边界，均为每步合计 | 修改前 ms | 修改后 ms | 调用次数/step |
+| --- | ---: | ---: | ---: |
+| `triton_per_fused__softmax_backward_data_7` | 13.352061 | 7.254623 | 12 → 12 |
+| FMA 外部调用触发的 Mul/Add/Mul/Add | 33.528020 | 0 | 48 → 0 个设备调用 |
+| 原 `triton_poi_fused_div_masked_fill_threshold_bac_8` → 新 `triton_poi_fused__softmax_backward_data_div_ma_8` | 8.055639 | 11.243889 | 12 → 12 |
+| **上述完整区间** | **54.935720** | **18.498512** | — |
+
+四个外部算子的 33.528020 ms 中，第一对 **16.906731 ms** 是 metadata 重复执行，第二对 **16.621289 ms** 是有效 FMA 实现。修改后有效公式仍执行，只是移入新 `_8`；不能把四个调用全部消失理解为有效计算被删除。目标区间净省 **36.437208 ms**，其余 kernel 合计增加 0.914344 ms，最终整网净省 35.522864 ms。
+
+从 Inductor 生成代码看，旧 `_7` 同时写回完整矩阵 `u=p*g`、`-p` 和行和 `s=sum(u)`，供外部 `prims.fma` 消费。移除 fallback 后，现有 pointwise lowering 生效：新 `_7` 只写行和；新 `_8` 在使用元素时重算 `u`，直接执行：
+
+```python
+# 新 _8 中的原始 DSL，保持原格式
+                    tmp3 = -tmp2
+                    tmp6 = tmp5 * tmp2
+                    tmp7 = tl.fma(tmp3, tmp4, tmp6)
+```
+
+这里 `tmp2=p`、`tmp5=g`、`tmp4=s`，即 `g*p-p*s`，随后继续执行原有 div/masked-fill。归约 kernel 的矩阵中间结果写回减少，FMA 的有效 Mul/Add 也不再经过外部调用。这解释了为什么实际收益超过仅删除 metadata 第一对的 16.907 ms。
+
+**责任结论：NPU fallback 策略造成了外部执行边界；社区 `make_prim.meta` 在这个边界上执行真实实现，使第一对重复。** 本次仅调整 NPU fallback 列表，就复用了现有 `make_pointwise` lowering、scheduler 融合和 `tl.fma` codegen。它验证了这个优化入口的收益，没有修复社区 metadata 实现本身，也没有证据要求先修改 Triton_ascend/npuir。
+
+独立整网 accuracy 使用原 runner 的 FP32、batch=2、训练 2 步、默认 `tol=0.01`，结果为 **`pass_accuracy`**；logits 最大绝对误差 1.3113022e-5，梯度 196/196 通过、最大绝对误差 5.8484264e-5，更新后参数 196/196 通过。accuracy 中包含编译的 step 计时不用于上述性能结论。
+
+环境为 torch `2.13.0+cpu`、torch_npu `2.13.0.dev20261030`、Triton `3.6.0`、transformers `4.36.0`。安装的 codegen、lowering、fallback list 与 `test/cicd_benchmark@b3bd74035189` 一致；decomposition 有一份既存的 matmul backward view/squeeze 改动，两组都保留，见[版本校验](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/installed_identity.json)及[已有差异](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/decomposition_difference.patch)。全部修改仅在进程内生效；各组运行结束均确认安装源码和 runner 文件未变化。
+
+证据：[修改前完整 kernel](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/OPTForCausalLM_baseline/selected_kernels.txt)、[修改后完整 kernel](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/OPTForCausalLM_no_fma_fallback/selected_kernels.txt)、[旧调用边界](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/OPTForCausalLM_baseline/wrapper_calls.txt)、[新调用边界](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/OPTForCausalLM_no_fma_fallback/wrapper_calls.txt)、[逐次四算子窗口](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/OPTForCausalLM_baseline/fma_windows.csv)、[10 步统计](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/summary.json)、[accuracy 日志](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/OPTForCausalLM_no_fma_fallback_accuracy/run.log)、[临时实验脚本](../../../../../scripts/repro/cicd/performance/fma_seed_validation/README.md)。wrapper 中一个调用位置可被多层复用，次数以 profile 的 12 次/step 为准。
+<!-- END CICD VALIDATION OPTForCausalLM_Train:fma_duplicate -->
 
 ### 未计入收益的具体候选
 

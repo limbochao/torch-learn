@@ -448,7 +448,7 @@ text = [
     "",
     "# CICD 全量性能分析：编译收益差距与共性问题",
     "",
-    f"本批共 **40 个模型、78 个场景**（Infer 40、Train 38），已逐场景读取四份设备耗时 CSV，并索引 **4,379 个生成 kernel 定义**及其 wrapper/FX。按模型分别归档，均分 Infer / Train。本轮没有访问 NPU_A5，没有修改编译器。",
+    f"本批共 **40 个模型、78 个场景**（Infer 40、Train 38），已逐场景读取四份设备耗时 CSV，并索引 **4,379 个生成 kernel 定义**及其 wrapper/FX。按模型分别归档，均分 Infer / Train。原始数据在本地完成粗筛；后续 NPU_A5 临时修改实测另见下方补充。",
     "",
     f'保守局部筛选与已知重复执行/回退机制共列出 **{len(allissues)} 个场景级检查项，覆盖 {sum(bool(a["issues"]) for a in ANALYSIS.values())} 个场景**；每项都给出具体 kernel、代码位置、NPU/GPU 做法、占比及贡献预算。其余场景列出明确候选和缺失证据，不强行认定劣化。',
     "",
@@ -524,6 +524,16 @@ labels = {
         "NPU avg_pool2d lowering、pointwise tiling/runtime；先判断是否应回退 ACLNN。",
     ),
 }
+if overview_validation:
+    title, detail = labels["fma_duplicate"]
+    labels["fma_duplicate"] = (
+        title, detail + "[OPT 删除 fallback 实测](models/OPTForCausalLM.md#fma-fallback-validation)整步下降 11.77%。",
+    )
+    title, detail = labels["attention_seed"]
+    labels["attention_seed"] = (
+        title,
+        detail + "[Electra 实测](models/ElectraForCausalLM.md#attention-constexpr-validation)首层 16.790 → 0.974 ms。",
+    )
 common_rows = []
 for kind, count in counts.most_common():
     samples = [(case, issue) for case, issue in allissues if issue["kind"] == kind]
@@ -591,7 +601,7 @@ text += [
     "- [decomposition/fallback 源码参考](../../../../artifacts/cicd/performance/full-survey-20261102/component_policy_reference.txt)：历史安装源码的 loss/GELU 排除策略，以及本地 checkout 的 scatter fallback 和归约入口；入口参考不等于 profile 构建身份。",
     "- [输入文件 SHA256 清单](../../../../artifacts/cicd/performance/full-survey-20261102/source_manifest.json)覆盖原始 CSV、wrapper、FX，原始输入不上传，防止大体积/环境路径公开。",
     "- [本地复算脚本及用法](../../../../scripts/tools/cicd/full_survey_20261102/README.md)。脚本不导入 torch、不连接远端，只读用户提供数据。",
-    "- 当前校验范围为全部 CSV 的单位/步数/batch、预算公式、40 模型/78 场景覆盖、已选择 kernel 的代码/调用证据和链接检查；没有修复性能/精度验证。",
+    "- 当前校验范围为全部 CSV 的单位/步数/batch、预算公式、40 模型/78 场景覆盖、已选择 kernel 的代码/调用证据和链接检查；初筛本身没有修复验证；后续两项整网性能/精度实测见上方补充。",
     "- 后续只对选中的最大点补 GPU 逐调用 shape/stride、NPU/GPU selected config、固定输入单 kernel 与 IR；预算最大的 kernel 优先，避免再次泛化成整条反向链路。",
     "- PLBart Train、TrOCR Train 各有 3 个 GPU profile 名称未在本批 wrapper 匹配到定义，均已在模型页列明；需要补对应编译图，不基于这些缺失 DSL 新增算子族收益归因。",
     "",

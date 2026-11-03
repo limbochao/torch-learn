@@ -4,7 +4,7 @@ title: "CICD 性能分析：ElectraForCausalLM"
 
 # ElectraForCausalLM：Infer / Train 编译收益差距
 
-按各设备自身的 Eager→Inductor 提升比筛选。四份 profile 和本批 wrapper/FX 为用户提供的数据；本轮仅在本地读取和复算，未连接 NPU_A5、未修复或跑卡。
+按各设备自身的 Eager→Inductor 提升比筛选。四份 profile 和本批 wrapper/FX 为用户提供的数据；初筛在本地读取和复算；下文临时修改对照另有 NPU_A5 实测，原始统计不混入复测结果。
 
 局部预算、上界/下界的定义见[全量分析与共性问题](../full-survey.md)。以下“百分点”均指 NPU **整网提升比**的变化。操作族汇总用于保守筛选，实际要优化的 kernel 逐个列出；未对齐的候选单列，不将其绝对耗时当作收益。
 
@@ -195,6 +195,60 @@ GPU 对应实现/保守收费项：
 - `triton_per_fused__softmax_all_amax_div_isfinite_matmul_native_dropout_sub_4`：NPU_g02_output_code.py:416；输入 `f32[128, 512, 512][262144, 512, 1]npu:0`；size_hints=`{'x': 65536, 'r0_': 512}`；split_axis=`[0]`。
 
 历史机制证据：[首层 attention 定位](../electra-layoutlm-train-first-attention-20261031.md)、[FMA 源码调用链](../../../../../artifacts/cicd/performance/train-gpu-inductor-gap-20261102/fma_source_evidence.txt)。历史源码验证与当前 profile 版本身份未完整绑定；本批 wrapper 和调用序列复核见本节证据。
+
+<!-- BEGIN CICD VALIDATION ElectraForCausalLM_Train:attention_seed -->
+<a id="attention-constexpr-validation"></a>
+
+#### 补齐 seed constexpr：首层从 16.790 ms 降到 0.974 ms
+
+**已验证的责任模块是 NPU Inductor `NPUIndexTritonKernel.codegen_kernel`：遗漏了 signature 中等于 1 的 SizeArg 常量绑定。** 仅补齐这段元数据生成逻辑，就消除首层 checker 失败，恢复多轴 kernel；无需改动 Triton_ascend 或 npuir。
+
+2026-11-03 在 NPU_A5 物理卡 2、`pta_213_cicd` 实测，2026-11-04 整理。场景为 Train、FP32、static、batch=32、sequence=512，attention scores 为 `[32,4,512,512]`，关闭 aclgraph。两组分别采样 10 个稳定 step。
+
+| 进程内配置 | Eager 实测 ms/step | Inductor 实测 ms/step | 本组提升比 `(E-I)/E` |
+| --- | ---: | ---: | ---: |
+| 原始 codegen | 126.474829 | 156.810495 | -23.99% |
+| 仅补齐 constexpr 常量 | 126.288455 | 141.827617 | -12.30% |
+
+**整网净省 14.982878 ms/step，设备整步耗时下降 9.55%。** 固定用基线 Eager=126.474829 ms 归因，编译提升比增加 **11.847 个百分点**；统一该分母后为 -23.99% → -12.14%。两组 Inductor 的稳定步范围分别为 156.761–156.887 ms 和 141.678–142.120 ms。
+
+| 具体 kernel / 对照 | 修改前 ms/step | 修改后 ms/step | 次数/step |
+| --- | ---: | ---: | ---: |
+| 首层：`triton_per_fused__softmax_all_amax_div_isfinite_matmul_native_dropout_sub_4` → `triton_per_fused__softmax_all_amax_div_isfinit_4` | 16.790405 | 0.974007 | 1 → 1 |
+| 后续层：`triton_per_fused__softmax_all_amax_div_isfinit_7` 合计 | 10.704739 | 10.704843 | 11 → 11 |
+
+首层自身减少 **15.816398 ms/step**，耗时下降 94.20%、加速 17.24 倍；修复后与后续层每次约 0.973168 ms 一致。其余 kernel 合计增加 0.833520 ms，其中 `_addmm_matmul_backward_permute_3` 增加约 0.626 ms，因此整网净省略低于首层收益；没有将这部分变化计入首层收益。
+
+profile 将旧首层名字截为 `all_amax_div_isfinite_matmul_native_dropout_sub_4`，wrapper 中是上表完整名称。名字中的 `matmul` 来自节点 provenance；该生成 DSL 本身没有执行矩阵乘。
+
+本次直接记录了 **Index codegen 失败再进入 no-linear 回退**的异常：原始组在 `tl.load(in_ptr1 + load_seed_offset)` 报 `'NoneType' object has no attribute 'type'`；补齐常量后该事件消失。总 Index codegen 失败记录从 37 降为 36，其他 36 个既有事件未处理，不能表述为取消所有 no-linear 回退。
+
+临时补丁在 `NPUIndexTritonKernel.codegen_kernel` 的 `self.triton_meta = triton_meta` 前加入：
+
+```python
+from torch._inductor.codegen.triton_utils import equal_1_arg_indices
+for arg_num in equal_1_arg_indices(signature):
+    triton_meta["constants"][signature[arg_num].name] = 1
+```
+
+对应的生成路径变化为：
+
+| 检查点 | 原始组 | 补齐常量组 |
+| --- | --- | --- |
+| Index checker 的 `load_seed_offset` | signature 为 constexpr，但 constants 没有 1，TTIR 生成失败 | `constants={'load_seed_offset': 1}`，该失败消失 |
+| 最终首层 DSL | no-linear `Grid1D`，`x=65536, r0_=512`，`requires_no_linear_block_remap=True` | `GridNpu`，`z0=32,y1=4,x2=512,r3=512` |
+| 后续层 DSL | 正常多轴 `_7` | 保持正常多轴 `_7`，耗时基本一致 |
+
+**原始组最终的 Grid1D kernel 自身也含 `constants={'load_seed_offset': 1}`**，因为备用 codegen 已补齐常量；出错的是回退前的 Index checker，不能把最终备用 kernel 的 metadata 当作失败 checker 的 metadata。异常发生在 TTIR 生成阶段，后续设备 IR/npuir 尚未接收这个失败的 Index kernel。上述仅改 Inductor 元数据的 A/B 同时证明了触发原因与实际性能影响。
+
+本节先前的 **5.535434 ms** 是把全部 12 层费用计入首层后的保守四方筛选预算；**15.779243 ms** 是历史同设备后续层控制估算。本次 15.816398 ms 为首层修复实测、14.982878 ms 为整网净收益，四者口径不同，不能相加。
+
+独立整网 accuracy 保持 FP32、batch=32、训练 2 步及原 runner 默认 `tol=0.01`，结果为 **`pass_accuracy`**；logits 最大绝对误差 1.013279e-6，梯度 204/204 通过、最大绝对误差 8.5565262e-9，更新后参数 204/204 通过。accuracy 的编译计时不作为性能结果。
+
+软件版本为 torch `2.13.0+cpu`、torch_npu `2.13.0.dev20261030`、Triton `3.6.0`、transformers `4.36.0`。三个关键安装文件与 `test/cicd_benchmark@b3bd74035189` 一致；既存 matmul decomposition 差异在两组中保持一致，见[版本校验](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/installed_identity.json)和[已有差异](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/decomposition_difference.patch)。补丁只在当前进程生效，安装目录和 runner 文件校验均未变化。LayoutLM 有相同历史机制，本次未测其整网修复收益，不将 Electra 数值直接搬过去。
+
+证据：[原始首层及后续层 DSL](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_baseline/selected_kernels.txt)、[修改后 DSL](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr/selected_kernels.txt)、[失败记录](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_baseline/codegen_failures.json)、[修改后记录](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr/codegen_failures.json)、[临时 codegen 方法](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr/codegen_kernel_patched.py)、[10 步统计](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/summary.json)、[accuracy 日志](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr_accuracy/run.log)、[实验脚本](../../../../../scripts/repro/cicd/performance/fma_seed_validation/README.md)。
+<!-- END CICD VALIDATION ElectraForCausalLM_Train:attention_seed -->
 
 ### 3. NLLLossBackward→LogSoftmaxBackward 的完整中间矩阵
 
