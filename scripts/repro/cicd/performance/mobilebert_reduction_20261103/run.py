@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--regenerate", action="store_true")
+    parser.add_argument("--experiments", action="store_true")
     args = parser.parse_args()
     # Physical device is checked before importing a device backend.
     if os.environ.get("ASCEND_RT_VISIBLE_DEVICES") != "2":
@@ -95,9 +96,9 @@ def main():
     spec.loader.exec_module(module)
     kernel = module.triton_red_fused_add_mul_sum_view_11
     out = [torch.empty((1, 1, 128), device="npu") for _ in range(2)]
-    stream = torch_npu._C._npu_getCurrentRawStreamNoWait(0)
-
     def original():
+        # Graph capture switches the current stream; never cache its pointer before capture.
+        stream = torch_npu._C._npu_getCurrentRawStreamNoWait(0)
         kernel.run(*inputs, *out, 128, 16384, stream=stream)
 
     original()
@@ -106,6 +107,50 @@ def main():
     recorder.uninstall()
     bench("original", original, lambda: out)
     bench("eager_same_boundary", lambda: eager(*inputs), lambda: eager(*inputs))
+
+    if args.experiments:
+        from split_kernels import partial, finish
+
+        selected = result["original_selected_configs"][0]["selected_config"]
+        mode = selected["compile_mode"]
+        options = {"num_warps": selected["num_warps"], "num_stages": selected["num_stages"],
+                   "compile_mode": mode, "multibuffer": selected["multibuffer"]}
+
+        def save_binary(name, binary):
+            target = args.output / "ir" / name
+            target.mkdir(parents=True, exist_ok=True)
+            for key, value in binary.asm.items():
+                if isinstance(value, str):
+                    (target / ("kernel." + key)).write_text(value)
+            (target / "metadata.json").write_text(json.dumps(binary.metadata._asdict(), indent=2, default=str))
+
+        tiles = [(3, 1, 4096), (4, 4, 1024), (8, 8, 512), (16, 16, 256), (32, 32, 128)]
+        for block, xsub, rsub in tiles:
+            name = f"same_dsl_x{block}_xs{xsub}_rs{rsub}"
+
+            def fixed():
+                return kernel.fn[(triton.cdiv(128, block),)](
+                    *inputs, *out, 128, 16384, block, X0BLOCK_SUB=xsub, R1BLOCK_SUB=rsub, **options)
+
+            binary = fixed()
+            save_binary(name, binary)
+            bench(name, fixed, lambda: out)
+
+        for chunk in [128, 512, 2048]:
+            parts = triton.cdiv(16384, chunk)
+            buffers = [torch.empty((parts, 128), device="npu") for _ in range(2)]
+            name = f"two_stage_chunk{chunk}_xs32_rs128"
+
+            def split():
+                first = partial[(4, parts)](*inputs, *buffers, chunk, XBLOCK=32, RBLOCK=128, **options)
+                last = finish[(4,)](*buffers, *out, parts, XBLOCK=32, RBLOCK=triton.next_power_of_2(parts),
+                                   **options)
+                return first, last
+
+            first, last = split()
+            save_binary(name + "_partial", first)
+            save_binary(name + "_finish", last)
+            bench(name, split, lambda: out)
 
     if args.regenerate:
         torch._inductor.config.compile_threads = 1
@@ -117,6 +162,20 @@ def main():
         result["regenerated_selected_configs"] = recorder.stop_capture()
         recorder.uninstall()
         bench("regenerated", lambda: compiled(*inputs), lambda: compiled(*inputs))
+
+        if args.experiments:
+            def explicit_stages(a, b, c):
+                value = a + b
+                return (value.sum(1, keepdim=True).sum(0, keepdim=True),
+                        (value * c).sum(1, keepdim=True).sum(0, keepdim=True))
+
+            recorder.install()
+            recorder.start_capture()
+            staged = torch.compile(explicit_stages, fullgraph=True)
+            staged(*inputs)
+            result["explicit_stages_selected_configs"] = recorder.stop_capture()
+            recorder.uninstall()
+            bench("explicit_stages_codegen", lambda: staged(*inputs), lambda: staged(*inputs))
 
     (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
 
