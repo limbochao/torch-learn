@@ -8,6 +8,8 @@ title: "CICD 性能分析：MobileBertForMaskedLM"
 
 局部预算、上界/下界的定义见[全量分析与共性问题](../full-survey-20261102.md)。以下“百分点”均指 NPU **整网提升比**的变化。操作族汇总用于保守筛选，实际要优化的 kernel 逐个列出；未对齐的候选单列，不将其绝对耗时当作收益。
 
+2026-11-03 更新：[Train 参数梯度归约专项分析](../mobilebert-parameter-reduction-20261103.md)已在 NPU_A5 物理卡 2、`pta_213_cicd`、`test/cicd_benchmark` 对应安装版本复测，确认 IR 分段归约策略与 tiling 候选漏搜；下方原整网统计保持原批次口径。
+
 ## Infer
 
 Batch=128；四份数据均按 10 个采样 step 归一化为 ms/step。
@@ -58,7 +60,7 @@ Batch=128；四份数据均按 10 个采样 step 归一化为 ms/step。
 
 ### 1. add/mul/sum 参数梯度归约
 
-**优化入口：NPU Inductor scheduler、多输出归约 codegen/tiling。** 选中 kernel 同时归约输入及输入乘激活，形成参数梯度。检查沿 token/batch 维的多输出归约是否长循环或并行不足；不能把这个成本归为裸 MM 性能。
+**优化入口：NPU Inductor `ir.py::num_splits` 的 outer reduction 分段策略，以及 runtime `TileGenerator` 候选生成。** 2026-11-03 已对最大单项 `_11` 实测：未分段的 16384-token 归约为 246.390 μs/次；候选只覆盖窄通道 tile。显式两阶段 ATen 自动 codegen 为 22.544 μs/次。详见[专项定位](../mobilebert-parameter-reduction-20261103.md)；下表仍保留七组 kernel 的原操作族粗筛口径。
 
 | NPU 具体 kernel / 选定调用 | 调用次数/step | ms/step | 占 NPU Inductor 整步 |
 | --- | ---: | ---: | ---: |
@@ -161,7 +163,7 @@ GPU 对应实现/保守收费项：
 
 ### 额外具体检查点
 
-最大单项为 `triton_red_fused_add_mul_sum_view_11`（25.847 ms）：输入 f32[128,128,128]，先 add，再同时归约 add 的结果及其与激活的乘积，输出两个 128 维参数梯度。其 split_axis=[0] 仅沿 128 个输出通道分 program，token/batch 合并的 r1 维在程序内部循环。应改 NPUIndexTritonKernel.reduction、多输出归约融合与 triton_config_npu_index 的归约维切分；无需把此点归为 MM 差距。
+最大单项 `triton_red_fused_add_mul_sum_view_11`（25.847 ms，96 次/step）已在 2026-11-03 深挖：主要问题为 NPU Inductor `ir.py::num_splits` 未拆分长 outer reduction，以及 `TileGenerator` 遗漏宽通道 tile。原实现设备耗时 246.390 μs/次；同 DSL 固定 tile 为 103.624 μs，显式两阶段 ATen 自动 codegen 为 22.544 μs，两阶段 Triton 诊断版为 13.211 μs。源码、四方保守筛选与收益外推见[专项分析](../mobilebert-parameter-reduction-20261103.md)；没有修改框架或验证整网修复。
 
 ### 未计入收益的具体候选
 

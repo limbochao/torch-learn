@@ -17,3 +17,6 @@ title: CICD 性能分析
   历史源码与 checker 定位证据。
 - [两模型绝对耗时差历史分析](electra-layoutlm-train-gpu-inductor-gap-20261102.md)：
   已标记口径被替代，MM/AddMM 70.049 ms 不再作为编译优化依据。
+
+- [MobileBERT Train 参数梯度归约深挖](mobilebert-parameter-reduction-20261103.md)：
+  IR 分段归约策略与 tiling 候选漏搜，附指定分支单 kernel 实测、GPU 对照和收益估算。

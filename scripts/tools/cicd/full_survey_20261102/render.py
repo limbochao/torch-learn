@@ -196,7 +196,7 @@ SPECIAL = {
     "basic_gnn_edgecnn_Train": "`triton_red_fused_sum_threshold_backward_3` 的输入为 f32[200000,64]；split_axis=[0] 只沿 64 个输出通道分 program，200000 条边在 program 内 loop_r1 归约，并在同一循环写回 ReLU 导数。应在 NPUIndexTritonKernel.reduction / triton_config_npu_index 检查归约维拆分，或拆开 pointwise 与 bias sum 并采用多阶段归约。当前源码没有沿 edge 维分派独立 program；实际 tile/config 仍待补。",
     "deit_tiny_patch16_224.fb_in1k_Train": "`triton_red_fused_native_layer_norm_backward_vi_7` 计算参数梯度，按 192 个通道分 program，在 r1=25216 的循环中累计两个归约，load 索引为 x0+192*r1。这是参数梯度的大外轴归约，并非 LayerNorm 输入梯度的逐行归约。具体应检查 codegen 的归约维切分、多阶段参数梯度与双输出调度；不要泛化成所有 LayerNorm 都慢。",
     "lennard_jones_Train": "`triton_per_fused_sum_tanh_backward_2` 对 f32[4096,16] 计算 tanh 导数与列和；size_hints={x0:16,r1:4096}、split_axis=[0]，最多只有 16 个 x0 program（配置合并通道后还会更少），整个 4096 维在一个 persistent tile 内归约。优先优化小输出维情况下的分阶段归约/融合策略。GPU 把导数 pointwise 和 sum 分拆，避免把所有并行度压在 16 个输出上。",
-    "MobileBertForMaskedLM_Train": "最大单项为 `triton_red_fused_add_mul_sum_view_11`（25.847 ms）：输入 f32[128,128,128]，先 add，再同时归约 add 的结果及其与激活的乘积，输出两个 128 维参数梯度。其 split_axis=[0] 仅沿 128 个输出通道分 program，token/batch 合并的 r1 维在程序内部循环。应改 NPUIndexTritonKernel.reduction、多输出归约融合与 triton_config_npu_index 的归约维切分；无需把此点归为 MM 差距。",
+    "MobileBertForMaskedLM_Train": "最大单项 `triton_red_fused_add_mul_sum_view_11`（25.847 ms，96 次/step）已在 2026-11-03 深挖：主要问题为 NPU Inductor `ir.py::num_splits` 未拆分长 outer reduction，以及 `TileGenerator` 遗漏宽通道 tile。原实现设备耗时 246.390 μs/次；同 DSL 固定 tile 为 103.624 μs，显式两阶段 ATen 自动 codegen 为 22.544 μs，两阶段 Triton 诊断版为 13.211 μs。源码、四方保守筛选与收益外推见[专项分析](../mobilebert-parameter-reduction-20261103.md)；没有修改框架或验证整网修复。",
     "AlbertForMaskedLM_Train": "额外优先核对 `_20`（90.679 ms）和 `_17`（51.366 ms）。`_20` 的名字含 matmul_backward，实际 DSL 为多个 tl.sum、permute 和累加，并没有执行裸矩阵乘；其 x4/x5=64/64、r2/r3=4/512，外层 x4 使用 Python range。`_17` 同时读取 12 个来源并逐个归约。应检查共享参数梯度累加导致的多归约融合、codegen 轴映射和寄存器压力。GPU 采用多条 sum/transpose/activation 归约。当前没有把这两个 kernel 的完整语义逐调用对齐，不能把 142.044 ms 全部当作可回收收益。",
     "MobileBertForMaskedLM_Infer": "`triton_red_fused__log_softmax_12` 的 4.669 ms 是具体候选，但 GPU 的 prepare_softmax_online 已耗时约 6.105 ms，不能看到 NPU 比自身 Eager 慢就认定 GPU 有更高收益；该局部保守筛选未通过，暂不承诺优化预算。",
     "beit_base_patch16_224_Train": "`triton_per_fused__safe_softmax_add_clone_index_10` 为明确的大 kernel（34.230 ms），但 GPU Eager/Inductor 均使用 efficient_attention，不能拿 NPU softmax 单独对比 GPU 完整 attention。需要以两次 BMM 及 softmax/dropout 构成完整前向区域再比较；已确认的 metadata 重复调用独立计入前项。",
@@ -248,6 +248,11 @@ for model in sorted({a["model"] for a in DATA.values()}):
         "局部预算、上界/下界的定义见[全量分析与共性问题](../full-survey-20261102.md)。以下“百分点”均指 NPU **整网提升比**的变化。操作族汇总用于保守筛选，实际要优化的 kernel 逐个列出；未对齐的候选单列，不将其绝对耗时当作收益。",
         "",
     ]
+    if model == "MobileBertForMaskedLM":
+        text += [
+            "2026-11-03 更新：[Train 参数梯度归约专项分析](../mobilebert-parameter-reduction-20261103.md)已在 NPU_A5 物理卡 2、`pta_213_cicd`、`test/cicd_benchmark` 对应安装版本复测，确认 IR 分段归约策略与 tiling 候选漏搜；下方原整网统计保持原批次口径。",
+            "",
+        ]
     for mode in ["Infer", "Train"]:
         text += ["## " + mode, ""]
         case = model + "_" + mode
@@ -283,10 +288,14 @@ for model in sorted({a["model"] for a in DATA.values()}):
         if not zs["issues"]:
             text += ["本轮保守筛选没有确认局部提升比缺口。下面仍列出具体检查点；“没有确认”不等于没有优化空间。", ""]
         for i, z in enumerate(zs["issues"], 1):
+            component, detail = z["component"], z["detail"]
+            if case == "MobileBertForMaskedLM_Train" and z["kind"] == "affine_grad_reduce":
+                component = "NPU Inductor `ir.py::num_splits` 的 outer reduction 分段策略，以及 runtime `TileGenerator` 候选生成"
+                detail = "2026-11-03 已对最大单项 `_11` 实测：未分段的 16384-token 归约为 246.390 μs/次；候选只覆盖窄通道 tile。显式两阶段 ATen 自动 codegen 为 22.544 μs/次。详见[专项定位](../mobilebert-parameter-reduction-20261103.md)；下表仍保留七组 kernel 的原操作族粗筛口径。"
             text += [
                 f'### {i}. {z["title"]}',
                 "",
-                f'**优化入口：{z["component"]}。** {z["detail"]}',
+                f"**优化入口：{component}。** {detail}",
                 "",
                 "| NPU 具体 kernel / 选定调用 | 调用次数/step | ms/step | 占 NPU Inductor 整步 |",
                 "| --- | ---: | ---: | ---: |",
@@ -399,6 +408,8 @@ text = [
     "",
     f'保守局部筛选与已知重复执行/回退机制共列出 **{len(allissues)} 个场景级检查项，覆盖 {sum(bool(a["issues"]) for a in ANALYSIS.values())} 个场景**；每项都给出具体 kernel、代码位置、NPU/GPU 做法、占比及贡献预算。其余场景列出明确候选和缺失证据，不强行认定劣化。',
     "",
+    "2026-11-03 补充：[MobileBERT 参数梯度归约深挖](mobilebert-parameter-reduction-20261103.md)已在指定环境与物理卡 2 实测；确认 IR 分段归约策略和 tiling 候选漏搜。本文原 40 模型统计及预算保持不变。",
+    "",
     "## 比较方法与数字边界",
     "",
     "`r_N = 1 - N_I/N_E`，`r_G = 1 - G_I/G_E`。只筛选同一语义计算的 `r_N < r_G`；裸 MM/AddMM 若 GPU 编译侧本身没有收益，不以 NPU/GPU 绝对耗时差列为优化点。",
@@ -462,7 +473,7 @@ labels = {
     ),
     "affine_grad_reduce": (
         "MobileBERT add/mul 多输出归约",
-        "NPU 多输出 sum 的融合调度、归约轴映射；GPU 对应 add/mul/sum 生成实现。",
+        "NPU IR `num_splits` 未拆分 outer reduction、`TileGenerator` 漏搜；GPU 分段归约。见[实测深挖](mobilebert-parameter-reduction-20261103.md)。",
     ),
     "pool": (
         "NFNet avg_pool2d 生成实现",
@@ -484,7 +495,7 @@ for kind, count in counts.most_common():
 text.extend(row for _, row in sorted(common_rows, key=lambda item: item[0], reverse=True))
 text += [
     "",
-    "归约类具体代码入口为 `NPUIndexTritonKernel.reduction`、`codegen_kernel`，配置侧为 `triton_config_npu_index` 与 `NPUCachingAutotuner.autotune_to_one_config`；融合检查入口为 NPU scheduling 的 `can_fuse` / `candidate_tilings`。这些入口定位到 Inductor 的具体功能模块；除历史 constexpr/FMA 机制外，不把首查模块写成已证实根因。相同 DSL/config 仍慢才能继续判断 Triton_ascend/npuir；外部 scatter/broadcast 则还涉及 CANN。",
+    "归约类具体代码入口为 `NPUIndexTritonKernel.reduction`、`codegen_kernel`，配置侧为 `triton_config_npu_index` 与 `NPUCachingAutotuner.autotune_to_one_config`；融合检查入口为 NPU scheduling 的 `can_fuse` / `candidate_tilings`。这些入口定位到 Inductor 的具体功能模块；除已复核的 constexpr/FMA 机制及 MobileBERT 专项实测外，不把首查模块写成已证实根因。相同 DSL/config 仍慢才能继续判断 Triton_ascend/npuir；外部 scatter/broadcast 则还涉及 CANN。",
     "",
     "## 优先检查的具体 kernel",
     "",

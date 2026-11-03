@@ -1,0 +1,416 @@
+Source: test/cicd_benchmark @ b3bd7403518924a7cc1e7c470aa80ccfb4e38120
+Line numbers below refer to this commit; installed-file identity is recorded in environment.json.
+
+=== torch_npu/_inductor/ir.py:66-132 ===
+66: def reduction_split_factor(reduction_ranges):
+67:     def get_hint(x):
+68:         if isinstance(x, (int, float)):
+69:             return x
+70:         try:
+71:             return int(V.graph.sizevars.optimization_hint(x))
+72:         except Exception:
+73:             return 1
+74: 
+75:     ranges = [h for num in reduction_ranges if (h := get_hint(num)) > 1]
+76:     if not ranges:
+77:         return 1
+78:     return min(ranges)
+79: 
+80: def num_splits(
+81:     device,
+82:     dst_dtype,
+83:     src_dtype,
+84:     inner_fn,
+85:     ranges,
+86:     reduction_ranges,
+87:     reduction_type,
+88:     reduction_numel,
+89:     input_node=None,
+90: ):
+91:     def _is_static(x: object) -> bool:
+92:         return isinstance(x, (int, Integer))
+93: 
+94:     reduction_numel_hint = V.graph.sizevars.optimization_hint(reduction_numel)
+95:     numel_hint = V.graph.sizevars.optimization_hint(sympy_product(ranges))
+96:     if not (_is_static(reduction_numel_hint) and _is_static(numel_hint)):
+97:         # We don't support unbacked symints
+98:         return ReductionHint.DEFAULT, 1
+99: 
+100:     should_split = reduction_type == "scan" or (
+101:         not V.graph.has_feature(device, BackendFeature.REDUCE_TO_SINGLE_ELEMENT)
+102:         and reduction_type
+103:         not in (
+104:             "argmax",
+105:             "argmin",
+106:         )
+107:         and config.split_reductions
+108:     )
+109: 
+110:     if should_split:
+111:         inner_reduction_splits = reduction_split_factor
+112:     else:
+113: 
+114:         def inner_reduction_splits(reduction_ranges):
+115:             return 1
+116: 
+117:     if numel_hint == 1:
+118:         # A reduction whose reduction group has exactly ONE dynamic axis (any other
+119:         # reduction axes static): keep a single Reduction node (split==1) instead of
+120:         # a degenerate multilayer split; grid is forced to 1 in select_split_axis so
+121:         # it loops the runtime numel with a tail mask. Covers pure 1D
+122:         # (reduction_ranges == [n]) and full reduce with extra static reduction dims
+123:         # (e.g. [n, 1024] -> reduction_ranges == [n, 1024]).
+124:         num_dynamic_reduction = sum(1 for r in reduction_ranges if not _is_static(r))
+125:         if num_dynamic_reduction == 1:
+126:             return ReductionHint.INNER, 1
+127:         split = inner_reduction_splits(reduction_ranges)
+128:         return ReductionHint.INNER, split
+129:     return ReductionHint.DEFAULT, 1
+130: 
+131: def patch_num_splits():
+132:     Reduction.num_splits = num_splits
+
+=== torch_npu/_inductor/__init__.py:176-186 ===
+176:     from .fx_passes.graph_match_pass import (
+177:         post_grad_custom_pass_fuc,
+178:         pre_grad_custom_pass_fuc,
+179:     )
+180:     from .fx_passes.joint_graph import patch_constant_fold_uniform_value
+181:     from .experimental.python_wrapper_fast_launch.patch import patch_fast_launch
+182:     from .ir import patch_num_splits
+183:     from .kernel import (
+184:         _register_npu_inductor_addmm,
+185:         _register_npu_inductor_bmm,
+186:         _register_npu_inductor_flex_attention,
+
+=== torch_npu/_inductor/__init__.py:277-286 ===
+277:     patch_pattern_mm_plus_mm()
+278:     patch_inductor_choices()
+279:     patch_algorithm_selector()
+280:     patch_async_compile()
+281:     patch_scheduler()
+282:     patch_simplify()
+283:     patch_num_splits()
+284:     patch_loop_body()
+285:     patch_indexing()
+286:     patch_fixed_indexer()
+
+=== torch_npu/_inductor/runtime/tile_generator.py:130-154 ===
+130:         self.max_total_numel = functools.reduce(lambda x, y: x * y, self.blocks) if self.blocks else 1
+131:         self.tiny_kernel = self.max_total_numel < 128 * 1024
+132:         self.input_ptr_num = 3 if input_ptr_num == 0 else min(input_ptr_num, 3)
+133: 
+134:         local_mem_size = 128 * 1024 if self.npu_kernel_type == NPUKernelType.SIMT_ONLY else config.ub_size
+135:         self.max_numel_threshold = local_mem_size // self.input_ptr_num // self.dtype_bytes
+136:         self.stop_numel = min(self.max_numel_threshold, self.max_total_numel // config.num_vector_core) // 8
+137:         for axis, name in enumerate(self.axis_name):
+138:             if axis not in tiling_axis and axis not in split_axis:
+139:                 self.blocks[axis] = 1
+140:                 self.sub_blocks[axis] = 1
+141:                 continue
+142:             if axis in self.split_axis:
+143:                 self.block_name[axis] = f"{name.upper()}BLOCK"
+144:             if axis in self.tiling_axis:
+145:                 self.sub_block_name[axis] = f"{name.upper()}BLOCK_SUB"
+146: 
+147:         self.program_threshold = (
+148:             config.num_vector_core // 8
+149:             if self.tiny_kernel and self.npu_kernel_type != NPUKernelType.SIMT_ONLY
+150:             else config.num_vector_core // 2
+151:         )
+152:         self.program_threshold = min(self.max_total_numel // 128 - 1, self.program_threshold)
+153:         self.program_threshold = max(0, self.program_threshold)
+154:         self.npu_kernel_type = npu_kernel_type
+
+=== torch_npu/_inductor/runtime/tile_generator.py:195-207 ===
+195:     def calcu_last_split_blocks(self, axis):
+196:         splits = 1
+197:         for x in self.split_axis:
+198:             if x != axis:
+199:                 splits = splits * ((self.numels[x] + self.blocks[x] - 1) // self.blocks[x])
+200:             else:
+201:                 break
+202: 
+203:         last_splits = config.num_vector_core // splits
+204:         last_blocks = (self.numels[axis] + last_splits - 1) // last_splits
+205:         return last_blocks
+206: 
+207: 
+
+=== torch_npu/_inductor/runtime/tile_generator.py:350-435 ===
+350:     def descend_split_axis_inner(self, axis_index):
+351:         def calc_total_programs():
+352:             grids = []
+353:             for axis in self.split_axis:
+354:                 numel = self.numels[axis]
+355:                 block_size = self.blocks[axis]
+356:                 programs = (numel + block_size - 1) // block_size
+357:                 grids.append(programs)
+358: 
+359:             total_programs = functools.reduce(lambda x, y: x * y, grids) if grids else 1
+360:             return total_programs
+361: 
+362:         reached_stop_numel = False
+363:         slow_decend_split = False
+364:         axis = self.split_axis[axis_index]
+365: 
+366:         initial_total_programs = calc_total_programs()
+367:         can_add_initial_shape = (
+368:             self.blocks[axis] != 1
+369:             and not (self.persistent_reduction and self.axis_name[axis][0] == "r")
+370:             and initial_total_programs <= config.num_vector_core
+371:             and (initial_total_programs > self.program_threshold or self.dual_reduction)
+372:         )
+373:         if can_add_initial_shape:
+374:             self.add_to_configs(self.blocks)
+375: 
+376:         while True:
+377:             if axis_index + 1 < self.split_axis_num and not slow_decend_split:
+378:                 tmp_block = copy.deepcopy(self.blocks)
+379:                 tmp_sub_block = copy.deepcopy(self.sub_blocks)
+380:                 self.descend_split_axis_inner(axis_index + 1)
+381:                 self.blocks = tmp_block
+382:                 self.sub_blocks = tmp_sub_block
+383: 
+384:             for candi_block in self.candidate_blocks:
+385:                 if self.add_to_configs(candi_block):
+386:                     self.desecnd_all_low_dims_with_all_blocks()
+387: 
+388:             # tile numel reached threshold
+389:             total_numel = self.calculate_total_numel()
+390:             if total_numel <= self.stop_numel:
+391:                 if self.add_to_configs(self.blocks):
+392:                     self.desecnd_all_low_dims_with_all_blocks()
+393:                 reached_stop_numel = True
+394:                 break
+395: 
+396:             numel = self.blocks[axis]
+397:             if numel == 1:
+398:                 if self.add_to_configs(self.blocks):
+399:                     self.desecnd_all_low_dims_with_all_blocks()
+400:                 break
+401: 
+402:             if self.persistent_reduction and self.axis_name[axis][0] == "r":
+403:                 reached_stop_numel = True
+404:                 break
+405: 
+406:             if not slow_decend_split or self.npu_kernel_type == NPUKernelType.SIMT_ONLY:
+407:                 self.blocks[axis] = numel // 2
+408:                 self.sub_blocks[axis] = self.blocks[axis]
+409: 
+410:             else:
+411:                 step = numel // 4 if numel // 4 > 1 else 1
+412:                 self.blocks[axis] = numel - step
+413:                 self.sub_blocks[axis] = self.blocks[axis]
+414: 
+415:             total_programs = calc_total_programs()
+416:             if total_programs > config.num_vector_core:
+417:                 last_blocks = self.calcu_last_split_blocks(axis)
+418:                 if last_blocks != self.blocks[axis]:
+419:                     self.blocks[axis] = last_blocks
+420:                 if tuple(self.blocks) not in self.candidate_blocks:
+421:                     self.candidate_blocks.append(tuple(self.blocks))
+422:                     self.add_to_configs(self.candidate_blocks[-1])
+423:                 break
+424: 
+425:             if total_programs > self.program_threshold or self.dual_reduction:
+426:                 if len(self.candidate_blocks) > 2:
+427:                     self.candidate_blocks.pop(0)
+428:                 if tuple(self.blocks) not in self.candidate_blocks:
+429:                     self.candidate_blocks.append(tuple(self.blocks))
+430:                 if self.tiny_kernel:
+431:                     self.add_to_configs(list(self.blocks))
+432:                 slow_decend_split = (total_programs > config.num_vector_core // 2)
+433: 
+434:             total_programs = calc_total_programs()
+435:             if self.blocks[axis] == 1 and (total_programs > self.program_threshold or self.dual_reduction) and tuple(
+
+=== torch_npu/_inductor/runtime/triton_heuristics.py:1080-1150 ===
+1080:     def _precompile_config(self, cfg: Config) -> TritonCompileResultNpu:
+1081:         """Ahead of time compile a given autotuner config."""
+1082:         compile_meta = copy.deepcopy(self.triton_meta)
+1083:         cfg_kwargs = cfg.kwargs
+1084:         constexpr_arg_names = {self.fn.arg_names[i] for i in self.fn.constexprs}
+1085:         for k, v in cfg_kwargs.items():
+1086:             if k not in constexpr_arg_names:
+1087:                 continue
+1088:             compile_meta["constants"][k] = v
+1089: 
+1090:         for i in self.fn.constexprs:
+1091:             arg_name = self.fn.arg_names[i]
+1092:             if arg_name not in compile_meta["constants"] and (
+1093:                 arg_name == "num_warps" or arg_name == "num_stages"
+1094:             ):
+1095:                 compile_meta["constants"][arg_name] = getattr(cfg, arg_name)
+1096:         compile_meta["num_warps"] = cfg.num_warps
+1097:         compile_meta["num_stages"] = cfg.num_stages
+1098:         compile_meta["debug"] = (
+1099:             os.getenv("INDUCTOR_ASCEND_DEBUG", 'false').lower() in ('true', '1')
+1100:             and self.inductor_meta.get("assert_indirect_indexing", True)
+1101:             and not self.inductor_meta.get("is_hip", False)
+1102:         )
+1103: 
+1104:         compile_meta['compile_mode'] = (
+1105:             cfg_kwargs.get('compile_mode') or NPUKernelType.SIMT_TEMPLATE.compile_mode()
+1106:         )
+1107: 
+1108:         # device type will be "hip" rather than "cuda" here
+1109:         compile_meta["device_type"] = self.device_props.type
+1110:         compile_meta["cc"] = self.device_props.cc
+1111: 
+1112:         if not ASTSource:
+1113:             raise RuntimeError("Installed triton version too old, please upgrade")
+1114: 
+1115:         if compile_meta.get("configs", None):
+1116:             compile_args = (
+1117:                 ASTSource(
+1118:                     self.fn,
+1119:                     compile_meta["signature"],
+1120:                     compile_meta["constants"],
+1121:                     compile_meta["configs"][0],
+1122:                 ),
+1123:             )
+1124:         else:
+1125:             compile_args = (
+1126:                 ASTSource(
+1127:                     self.fn,
+1128:                     compile_meta["signature"],
+1129:                     compile_meta["constants"],
+1130:                 ),
+1131:             )
+1132: 
+1133:         cc_warp_size = 32
+1134:         target = GPUTarget(
+1135:             compile_meta["device_type"],
+1136:             compile_meta["cc"],
+1137:             cc_warp_size,
+1138:         )
+1139: 
+1140:         options = {
+1141:             "num_warps": compile_meta["num_warps"],
+1142:             "num_stages": compile_meta["num_stages"],
+1143:             "debug": compile_meta["debug"],
+1144:             "compile_mode": compile_meta['compile_mode'],
+1145:         }
+1146: 
+1147:         options = self.parse_triton_ascend_options(
+1148:             self.triton_meta.get("npu_compile_options", {}),
+1149:             options,
+1150:         )
+
+=== torch_npu/_inductor/runtime/triton_heuristics.py:3690-3804 ===
+3690:         return program_subblock_num * block_sub
+3691: 
+3692:     program_subblock_num = (
+3693:         total_subblock_num + expected_grid - 1
+3694:     ) // expected_grid
+3695:     effective_grid = (
+3696:         total_subblock_num + program_subblock_num - 1
+3697:     ) // program_subblock_num
+3698:     return (axis_numel + effective_grid - 1) // effective_grid
+3699: 
+3700: 
+3701: def _triton_config_npu_index_legacy(
+3702:     size_hints,
+3703:     inductor_meta,
+3704:     triton_meta=None,
+3705:     is_reduction=False,
+3706:     is_persistent_reduction=False,
+3707: ) -> List[Config]:
+3708:     num_warps = 1
+3709:     num_stages = 2
+3710:     configs = []
+3711:     split_axis = inductor_meta["split_axis"]
+3712:     tiling_axis = inductor_meta["tiling_axis"]
+3713:     no_loop_axis = inductor_meta.get("no_loop_axis", [])
+3714:     low_dims = inductor_meta["low_dims"]
+3715:     split_axis_dtype = inductor_meta["split_axis_dtype"]
+3716:     axis_names = inductor_meta["axis_names"]
+3717:     dual_reduction = inductor_meta["dual_reduction"]
+3718:     input_signature = triton_meta["signature"]
+3719:     input_ptr_num = len(list(filter(lambda k: 'ptr' in k, input_signature))) if triton_meta is not None else 0
+3720:     npu_kernel_type = NPUKernelType(inductor_meta.get("npu_kernel_type", "simd"))
+3721:     size_hints = [size_hints.get(axis_name, 1) for axis_name in axis_names]
+3722: 
+3723:     if npu_config.fasta_autotune:
+3724:         from .fasta_autotune import FastATileGenerator
+3725:         tile_generator = FastATileGenerator(size_hints, axis_names, tiling_axis, no_loop_axis, split_axis, low_dims,
+3726:                                             persistent_reduction=is_persistent_reduction,
+3727:                                             dtype=split_axis_dtype,
+3728:                                             npu_kernel_type=npu_kernel_type,
+3729:                                             input_ptr_num=input_ptr_num, dual_reduction=dual_reduction)
+3730:         configs = tile_generator.descend_split_tiling()
+3731:     else:
+3732:         tile_generator = TileGenerator(size_hints, axis_names, tiling_axis, no_loop_axis, split_axis, low_dims,
+3733:                                        persistent_reduction=is_persistent_reduction,
+3734:                                        dtype=split_axis_dtype,
+3735:                                        npu_kernel_type=npu_kernel_type,
+3736:                                        input_ptr_num=input_ptr_num, dual_reduction=dual_reduction)
+3737:         if npu_kernel_type == NPUKernelType.SIMD_SIMT_MIX:
+3738:             tile_generator.set_kernel_type(NPUKernelType.SIMT_ONLY)
+3739:             configs.extend(tile_generator.descend_split_tiling())
+3740:             tile_generator.set_kernel_type(NPUKernelType.SIMT_TEMPLATE)
+3741:             configs.extend(tile_generator.descend_split_tiling())
+3742:         else:
+3743:             configs = tile_generator.descend_split_tiling()
+3744: 
+3745:     if not configs:
+3746:         cfg = {}
+3747:         for x in split_axis:
+3748:             cfg[f"{axis_names[x].upper()}BLOCK"] = size_hints[x]
+3749:         for x in tiling_axis:
+3750:             cfg[f"{axis_names[x].upper()}BLOCK_SUB"] = size_hints[x]
+3751:         if not cfg:
+3752:             cfg["dummy"] = 1
+3753:         tmp = Config(cfg, num_warps=num_warps, num_stages=num_stages)
+3754:         configs.append(tmp)
+3755: 
+3756:     for cfg in configs:
+3757:         split_blocks = [None for x in split_axis]
+3758:         for i, axis in enumerate(split_axis):
+3759:             name = axis_names[axis]
+3760:             block_name = f"{name.upper()}BLOCK"
+3761:             split_blocks[i] = cfg.kwargs[block_name]
+3762:         cfg.kwargs["split_axis"] = tuple(split_axis)
+3763:         cfg.kwargs["split_blocks"] = tuple(split_blocks)
+3764: 
+3765:     _remap_fallback_block_subs(configs, inductor_meta)
+3766: 
+3767:     set_reduction_runtime_blocks_to_numel(configs, split_axis, axis_names, size_hints,
+3768:                                           inductor_meta.get("runtime_block_arg_names", ()))
+3769: 
+3770:     logging.debug("[%s], generate candidate tiling count: [%s]",
+3771:                   inductor_meta["kernel_name"],
+3772:                   len(configs))
+3773: 
+3774:     # if fast run, we prune the configs to the last max_num configs
+3775:     configs = brutal_prune_tiling_configs_if_fast_run(configs, inductor_meta)
+3776:     return configs
+3777: 
+3778: def _remap_fallback_block_subs(configs, inductor_meta):
+3779:     if inductor_meta.get("requires_no_linear_block_remap") is not True:
+3780:         return
+3781:     for tiling_cfg in configs:
+3782:         for name, value in list(tiling_cfg.kwargs.items()):
+3783:             if isinstance(name, str) and name.endswith("_SUB"):
+3784:                 tiling_cfg.kwargs[name.removesuffix("_SUB")] = value
+3785:                 tiling_cfg.kwargs.pop(name)
+3786: 
+3787: 
+3788: def strip_runtime_blocks_from_cfg(
+3789:     cfg: Config,
+3790:     runtime_block_arg_names: tuple[str, ...],
+3791: ) -> Config:
+3792:     cfg_dict = config_to_dict(cfg)
+3793:     if isinstance(cfg_dict, dict) and "kwargs" in cfg_dict:
+3794:         normalized = copy.deepcopy(cfg_dict["kwargs"])
+3795:         for key in ("num_warps", "num_stages", "num_ctas", "maxnreg"):
+3796:             if key in cfg_dict:
+3797:                 normalized[key] = cfg_dict[key]
+3798:     else:
+3799:         normalized = copy.deepcopy(cfg_dict)
+3800:     for name in runtime_block_arg_names:
+3801:         normalized.pop(name, None)
+3802:     if runtime_block_arg_names:
+3803:         # legacy tiling configs mirror runtime BLOCK values in split_blocks
+3804:         normalized.pop("split_blocks", None)

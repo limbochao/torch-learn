@@ -35,8 +35,10 @@ def main():
     torch.manual_seed(20261103)
     cpu = [torch.randn(128, 128, 128, dtype=torch.float32) for _ in range(3)]
     inputs = [value.npu() for value in cpu]
-    reference = ((cpu[0].double() + cpu[1].double()).sum((0, 1), keepdim=True),
-                 ((cpu[0].double() + cpu[1].double()) * cpu[2].double()).sum((0, 1), keepdim=True))
+    reference = (
+        (cpu[0].double() + cpu[1].double()).sum((0, 1), keepdim=True),
+        ((cpu[0].double() + cpu[1].double()) * cpu[2].double()).sum((0, 1), keepdim=True),
+    )
 
     def eager(a, b, c):
         value = a + b
@@ -96,8 +98,13 @@ def main():
             "max_abs_error_vs_cpu_fp64": check_result,
             "graph_replay_max_abs_error": graph_output_check,
         }
-        profile_names = {"original", "eager_same_boundary", "same_dsl_x16_xs16_rs256",
-                         "two_stage_chunk128_xs32_rs128", "explicit_stages_codegen"}
+        profile_names = {
+            "original",
+            "eager_same_boundary",
+            "same_dsl_x16_xs16_rs256",
+            "two_stage_chunk128_xs32_rs128",
+            "explicit_stages_codegen",
+        }
         if args.profile and name in profile_names:
             target = args.output / "profiles" / name
             with torch_npu.profiler.profile(
@@ -134,6 +141,7 @@ def main():
     spec.loader.exec_module(module)
     kernel = module.triton_red_fused_add_mul_sum_view_11
     out = [torch.empty((1, 1, 128), device="npu") for _ in range(2)]
+
     def original():
         # Graph capture switches the current stream; never cache its pointer before capture.
         stream = torch_npu._C._npu_getCurrentRawStreamNoWait(0)
@@ -145,10 +153,14 @@ def main():
     from torch_npu._inductor.runtime.triton_heuristics import triton_config_npu_index
 
     candidates = triton_config_npu_index(
-        {"x0": 128, "r1": 16384}, copy.deepcopy(kernel.inductor_meta),
-        copy.deepcopy(kernel.triton_meta), is_reduction=True)
+        {"x0": 128, "r1": 16384},
+        copy.deepcopy(kernel.inductor_meta),
+        copy.deepcopy(kernel.triton_meta),
+        is_reduction=True,
+    )
     result["generated_candidates"] = [
-        {**cfg.kwargs, "num_warps": cfg.num_warps, "num_stages": cfg.num_stages} for cfg in candidates]
+        {**cfg.kwargs, "num_warps": cfg.num_warps, "num_stages": cfg.num_stages} for cfg in candidates
+    ]
     recorder.uninstall()
     bench("original", original, lambda: out)
     bench("eager_same_boundary", lambda: eager(*inputs), lambda: eager(*inputs))
@@ -158,8 +170,12 @@ def main():
 
         selected = result["original_selected_configs"][0]["selected_config"]
         mode = selected["compile_mode"]
-        options = {"num_warps": selected["num_warps"], "num_stages": selected["num_stages"],
-                   "compile_mode": mode, "multibuffer": selected["multibuffer"]}
+        options = {
+            "num_warps": selected["num_warps"],
+            "num_stages": selected["num_stages"],
+            "compile_mode": mode,
+            "multibuffer": selected["multibuffer"],
+        }
 
         def save_binary(name, binary):
             target = args.output / "ir" / name
@@ -175,7 +191,8 @@ def main():
 
             def fixed():
                 return kernel.fn[(triton.cdiv(128, block),)](
-                    *inputs, *out, 128, 16384, block, X0BLOCK_SUB=xsub, R1BLOCK_SUB=rsub, **options)
+                    *inputs, *out, 128, 16384, block, X0BLOCK_SUB=xsub, R1BLOCK_SUB=rsub, **options
+                )
 
             binary = fixed()
             save_binary(name, binary)
@@ -188,8 +205,7 @@ def main():
 
             def split():
                 first = partial[(4, parts)](*inputs, *buffers, chunk, XBLOCK=32, RBLOCK=128, **options)
-                last = finish[(4,)](*buffers, *out, parts, XBLOCK=32, RBLOCK=triton.next_power_of_2(parts),
-                                   **options)
+                last = finish[(4,)](*buffers, *out, parts, XBLOCK=32, RBLOCK=triton.next_power_of_2(parts), **options)
                 return first, last
 
             first, last = split()
@@ -209,10 +225,13 @@ def main():
         bench("regenerated", lambda: compiled(*inputs), lambda: compiled(*inputs))
 
         if args.experiments:
+
             def explicit_stages(a, b, c):
                 value = a + b
-                return (value.sum(1, keepdim=True).sum(0, keepdim=True),
-                        (value * c).sum(1, keepdim=True).sum(0, keepdim=True))
+                return (
+                    value.sum(1, keepdim=True).sum(0, keepdim=True),
+                    (value * c).sum(1, keepdim=True).sum(0, keepdim=True),
+                )
 
             recorder.install()
             recorder.start_capture()
