@@ -5,6 +5,7 @@ import atexit
 import hashlib
 import inspect
 import json
+import logging
 import os
 from pathlib import Path
 import runpy
@@ -22,6 +23,7 @@ def main():
         runner_args = runner_args[1:]
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    logging.getLogger('torch_npu._inductor.codegen.npu_combined_scheduling').setLevel(logging.DEBUG)
 
     import torch
     import torch_npu
@@ -37,6 +39,7 @@ def main():
     )]
     metadata = {
         'variant': args.variant,
+        'harness_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'modules': {m.__name__: {'version': m.__version__, 'file': m.__file__}
                     for m in (torch, torch_npu, triton, transformers)},
         'source_sha256': {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
