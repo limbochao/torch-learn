@@ -9,7 +9,7 @@ title: CICD 性能分析
 逐项比较同一语义计算的局部提升比，不用 NPU/GPU Inductor 绝对耗时差给问题排序，
 也不用整网 Eager 比例缩放单个 kernel。
 
-- [全量分析与共性问题：40 个模型、78 个场景](full-survey-20261102.md)：按模型分别记录 Infer / Train，
+- [全量分析与共性问题：40 个模型、78 个场景](full-survey.md)：按模型分别记录 Infer / Train，
   具体列出 kernel、代码边界、GPU 做法、优化模块、耗时占比与整网贡献预算。
 - [ElectraForCausalLM](models/ElectraForCausalLM.md)、[LayoutLMForMaskedLM](models/LayoutLMForMaskedLM.md)：
   保留首层 attention 和 FMA 已定位点，补充符合新口径的具体问题。

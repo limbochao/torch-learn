@@ -253,7 +253,7 @@ for model in sorted({a["model"] for a in DATA.values()}):
         "",
         "按各设备自身的 Eager→Inductor 提升比筛选。四份 profile 和本批 wrapper/FX 为用户提供的数据；本轮仅在本地读取和复算，未连接 NPU_A5、未修复或跑卡。",
         "",
-        "局部预算、上界/下界的定义见[全量分析与共性问题](../full-survey-20261102.md)。以下“百分点”均指 NPU **整网提升比**的变化。操作族汇总用于保守筛选，实际要优化的 kernel 逐个列出；未对齐的候选单列，不将其绝对耗时当作收益。",
+        "局部预算、上界/下界的定义见[全量分析与共性问题](../full-survey.md)。以下“百分点”均指 NPU **整网提升比**的变化。操作族汇总用于保守筛选，实际要优化的 kernel 逐个列出；未对齐的候选单列，不将其绝对耗时当作收益。",
         "",
     ]
     if model == "MobileBertForMaskedLM":
@@ -574,7 +574,7 @@ text += [
     "历史：[首层 attention 根因](electra-layoutlm-train-first-attention-20261031.md)。此前[两模型绝对耗时差分析](electra-layoutlm-train-gpu-inductor-gap-20261102.md)已标记口径被替代，其中 MM/AddMM 70.049 ms 不再作为编译收益优化依据。",
     "",
 ]
-(DOC / "full-survey-20261102.md").write_text("\n".join(text))
+(DOC / "full-survey.md").write_text("\n".join(text))
 print(
     "rendered",
     len(DATA),

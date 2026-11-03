@@ -7,7 +7,7 @@ title: CICD 性能分析：两个 Train 对 GPU Inductor 的差距与优化模�
 > **历史分析，比较口径已被替代。** 本文按 NPU/GPU Inductor 绝对耗时差排序，
 > 不足以判断编译器收益差距。尤其是 MM/AddMM 的 70.049 ms，不再作为 Inductor 优化依据。
 > 当前应比较同一语义区域的 `r_N=1−N_I/N_E` 与 `r_G=1−G_I/G_E`。
-> 最新数据和具体 kernel、局部预算见 [全量分析](full-survey-20261102.md)、
+> 最新数据和具体 kernel、局部预算见 [全量分析](full-survey.md)、
 > [Electra](models/ElectraForCausalLM.md)、[LayoutLM](models/LayoutLMForMaskedLM.md)。
 > 以下保留历史数字及证据，不作为当前优先级结论。
 
