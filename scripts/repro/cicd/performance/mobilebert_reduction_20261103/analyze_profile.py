@@ -47,7 +47,7 @@ def main():
     n_i = sum(float(row["Duration(us)"]) for row in npu) / steps / 1000
     eager_gpu = {row["OP Type"]: row for row in rows["Eager_GPU"]}
     gpu = {row["OP Type"]: row for row in rows["Inductor_GPU"]}
-    charged_gpu = [kernel, "triton_red_fused_add_mul_sum_view_12", "triton_red_fused_sum_view_9"]
+    charged_gpu = [kernel, "triton_red_fused_add_mul_sum_view_18", "triton_red_fused_sum_view_9"]
     gpu_minima = {op: float(eager_gpu[op]["Min Time(us)"]) for op in ["add", "mul", "sum"]}
     g_e = 96 * (gpu_minima["add"] + gpu_minima["mul"] + 2 * gpu_minima["sum"]) / 1000
     g_i = sum(float(gpu[op]["Total Time(us)"]) for op in charged_gpu) / steps / 1000

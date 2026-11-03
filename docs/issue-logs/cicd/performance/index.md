@@ -20,3 +20,5 @@ title: CICD 性能分析
 
 - [MobileBERT Train 参数梯度归约深挖](mobilebert-parameter-reduction-20261103.md)：
   IR 分段归约策略与 tiling 候选漏搜，附指定分支单 kernel 实测、GPU 对照和收益估算。
+- [MobileBERT 其余归约逐 kernel 分析](mobilebert-remaining-reductions-20261103.md)：
+  `_9`、`_7`、`_13` 新增确认，`_20` 保留 GPU 收益核验边界，`_0` 分段无收益；含五组实测和整网外推。

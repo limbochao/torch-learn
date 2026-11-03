@@ -92,7 +92,7 @@ def main():
     names = {
         7: ["triton_red_fused_mul_sum_view_8", "triton_red_fused_add_mul_sum_view_12", "triton_red_fused_sum_view_9"],
         9: [
-            "triton_red_fused_mul_sum_view_8",
+            "triton_red_fused_add_mul_sum_view_18",
             "triton_red_fused_add_mul_sum_view_11",
             "triton_red_fused_add_mul_sum_view_12",
             "triton_red_fused_sum_view_9",
@@ -146,7 +146,31 @@ def main():
                         "pair_first_output": args2[2],
                     }
                 )
+    sequence = [
+        int(name.rsplit("_", 1)[1])
+        for name, _, _ in calls
+        if name
+        in {
+            "triton_red_fused_mul_sum_view_7",
+            "triton_red_fused_add_mul_sum_view_11",
+            "triton_red_fused_add_mul_sum_view_13",
+            "triton_red_fused_add_mul_sum_view_20",
+        }
+    ]
+    assert sequence == [7, 11, 11, 11, 13, 11, 7, 20] * 24
     assert len(duplicates) == 24
+    bias_calls = [entry for entry in calls if entry[0] == "triton_red_fused_mul_sum_view_9"]
+    duplicate_ordinals = [i for i, entry in enumerate(bias_calls) if entry[2] in {d["bias_line"] for d in duplicates}]
+    assert duplicate_ordinals == list(range(4, 168, 7))
+    duplicate_cost_us = 0.0
+    for step in range(10, 20):
+        bias_rows = [
+            r
+            for r in rows["Inductor_NPU"]
+            if r["Step Id"] == str(step) and r["Name"] == "triton_red_fused_mul_sum_view_9"
+        ]
+        assert len(bias_rows) == 168
+        duplicate_cost_us += sum(float(bias_rows[i]["Duration(us)"]) for i in duplicate_ordinals)
     result = {
         "profile_steps": 10,
         "bounds": bounds,
@@ -155,6 +179,7 @@ def main():
             str(kind): Counter(str(w["step"]) for w in windows if w["kind"] == kind) for kind in [7, 9, 13]
         },
         "npu_duplicate_reduction_pairs": duplicates,
+        "duplicate_bias_kernel_ms_per_step": duplicate_cost_us / 10000,
         "unproven_individual_gain_deficit": ["add_mul_sum_view_20", "add_sum_view_0"],
         "add_mul_sum_view_20_schedule_control": {
             "npu_eager_upper_ms_including_extra_dh_mul": eager_20_upper,

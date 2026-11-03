@@ -1,0 +1,133 @@
+module attributes {hacc.target = #hacc.target<"Ascend950PR_9579">, ssbuffer.insertionOptimization} {
+  func.func @partial(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg3: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg4: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg5: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg6: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg7: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg8: memref<?xf32> {tt.tensor_kind = 1 : i32}, %arg9: memref<?xf32> {tt.tensor_kind = 1 : i32}, %arg10: i32, %arg11: i32, %arg12: i32, %arg13: i32, %arg14: i32, %arg15: i32) attributes {SyncBlockLockArgIdx = 0 : i64, WorkspaceArgIdx = 1 : i64, global_kernel = "local", mix_mode = "aiv", parallel_mode = "simd"} {
+    %c16384_i32 = arith.constant 16384 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c128_i32 = arith.constant 128 : i32
+    %cst = arith.constant 0.000000e+00 : f32
+    %c0 = arith.constant 0 : index
+    %c128 = arith.constant 128 : index
+    %c32 = arith.constant 32 : index
+    %c32_i32 = arith.constant 32 : i32
+    %0 = tensor.empty() : tensor<128x32xf32>
+    %1 = linalg.fill ins(%cst : f32) outs(%0 : tensor<128x32xf32>) -> tensor<128x32xf32>
+    %2 = arith.muli %arg13, %c32_i32 : i32
+    %3 = arith.index_cast %2 : i32 to index
+    %reinterpret_cast = memref.reinterpret_cast %arg6 to offset: [%3], sizes: [1, 32], strides: [32, 1] : memref<?xf32> to memref<1x32xf32, strided<[32, 1], offset: ?>>
+    %alloc = memref.alloc() : memref<1x32xf32>
+    %4 = arith.addi %3, %c32 : index
+    %5 = arith.maxsi %3, %c128 : index
+    %6 = arith.minsi %4, %5 : index
+    %7 = arith.subi %6, %3 : index
+    %8 = arith.cmpi slt, %7, %c32 : index
+    scf.if %8 {
+      linalg.fill ins(%cst : f32) outs(%alloc : memref<1x32xf32>)
+    } {hivm.unlikely_condition}
+    %subview = memref.subview %reinterpret_cast[0, 0] [1, %7] [1, 1] : memref<1x32xf32, strided<[32, 1], offset: ?>> to memref<1x?xf32, strided<[32, 1], offset: ?>>
+    %subview_0 = memref.subview %alloc[0, 0] [1, %7] [1, 1] : memref<1x32xf32> to memref<1x?xf32, strided<[32, 1]>>
+    memref.copy %subview, %subview_0 : memref<1x?xf32, strided<[32, 1], offset: ?>> to memref<1x?xf32, strided<[32, 1]>>
+    %9 = bufferization.to_tensor %alloc restrict writable : memref<1x32xf32>
+    %reinterpret_cast_1 = memref.reinterpret_cast %arg7 to offset: [%3], sizes: [1, 32], strides: [32, 1] : memref<?xf32> to memref<1x32xf32, strided<[32, 1], offset: ?>>
+    %alloc_2 = memref.alloc() : memref<1x32xf32>
+    scf.if %8 {
+      linalg.fill ins(%cst : f32) outs(%alloc_2 : memref<1x32xf32>)
+    } {hivm.unlikely_condition}
+    %subview_3 = memref.subview %reinterpret_cast_1[0, 0] [1, %7] [1, 1] : memref<1x32xf32, strided<[32, 1], offset: ?>> to memref<1x?xf32, strided<[32, 1], offset: ?>>
+    %subview_4 = memref.subview %alloc_2[0, 0] [1, %7] [1, 1] : memref<1x32xf32> to memref<1x?xf32, strided<[32, 1]>>
+    memref.copy %subview_3, %subview_4 : memref<1x?xf32, strided<[32, 1], offset: ?>> to memref<1x?xf32, strided<[32, 1]>>
+    %10 = bufferization.to_tensor %alloc_2 restrict writable : memref<1x32xf32>
+    %11 = arith.muli %arg14, %c128_i32 : i32
+    %12 = arith.addi %arg14, %c1_i32 : i32
+    %13 = arith.muli %12, %c128_i32 : i32
+    %14 = arith.minsi %13, %c16384_i32 : i32
+    %15 = arith.index_cast %11 : i32 to index
+    %16 = arith.muli %15, %c128 : index
+    %17 = arith.addi %16, %3 : index
+    %reinterpret_cast_5 = memref.reinterpret_cast %arg2 to offset: [%17], sizes: [128, 32], strides: [128, 1] : memref<?xf32> to memref<128x32xf32, strided<[128, 1], offset: ?>>
+    %alloc_6 = memref.alloc() : memref<128x32xf32>
+    %18 = arith.addi %15, %c128 : index
+    %19 = arith.index_cast %14 : i32 to index
+    %20 = arith.maxsi %15, %19 : index
+    %21 = arith.minsi %18, %20 : index
+    %22 = arith.subi %21, %15 : index
+    %23 = arith.minsi %22, %c128 : index
+    %24 = arith.maxsi %23, %c0 : index
+    %25 = arith.minsi %7, %c32 : index
+    %26 = arith.maxsi %25, %c0 : index
+    %27 = arith.cmpi slt, %24, %c128 : index
+    %28 = arith.cmpi slt, %26, %c32 : index
+    %29 = arith.ori %27, %28 : i1
+    scf.if %29 {
+      linalg.fill ins(%cst : f32) outs(%alloc_6 : memref<128x32xf32>)
+    } {hivm.unlikely_condition}
+    %subview_7 = memref.subview %reinterpret_cast_5[0, 0] [%24, %26] [1, 1] : memref<128x32xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[128, 1], offset: ?>>
+    %subview_8 = memref.subview %alloc_6[0, 0] [%24, %26] [1, 1] : memref<128x32xf32> to memref<?x?xf32, strided<[32, 1]>>
+    memref.copy %subview_7, %subview_8 : memref<?x?xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[32, 1]>>
+    %30 = bufferization.to_tensor %alloc_6 restrict writable : memref<128x32xf32>
+    %reinterpret_cast_9 = memref.reinterpret_cast %arg3 to offset: [%17], sizes: [128, 32], strides: [128, 1] : memref<?xf32> to memref<128x32xf32, strided<[128, 1], offset: ?>>
+    %alloc_10 = memref.alloc() : memref<128x32xf32>
+    scf.if %29 {
+      linalg.fill ins(%cst : f32) outs(%alloc_10 : memref<128x32xf32>)
+    } {hivm.unlikely_condition}
+    %subview_11 = memref.subview %reinterpret_cast_9[0, 0] [%24, %26] [1, 1] : memref<128x32xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[128, 1], offset: ?>>
+    %subview_12 = memref.subview %alloc_10[0, 0] [%24, %26] [1, 1] : memref<128x32xf32> to memref<?x?xf32, strided<[32, 1]>>
+    memref.copy %subview_11, %subview_12 : memref<?x?xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[32, 1]>>
+    %31 = bufferization.to_tensor %alloc_10 restrict writable : memref<128x32xf32>
+    %32 = arith.addf %30, %31 : tensor<128x32xf32>
+    %33 = arith.addf %32, %1 : tensor<128x32xf32>
+    %extracted_slice = tensor.extract_slice %33[0, 0] [%24, %26] [1, 1] : tensor<128x32xf32> to tensor<?x?xf32>
+    %inserted_slice = tensor.insert_slice %extracted_slice into %1[0, 0] [%24, %26] [1, 1] : tensor<?x?xf32> into tensor<128x32xf32>
+    %reinterpret_cast_13 = memref.reinterpret_cast %arg4 to offset: [%17], sizes: [128, 32], strides: [128, 1] : memref<?xf32> to memref<128x32xf32, strided<[128, 1], offset: ?>>
+    %alloc_14 = memref.alloc() : memref<128x32xf32>
+    scf.if %29 {
+      linalg.fill ins(%cst : f32) outs(%alloc_14 : memref<128x32xf32>)
+    } {hivm.unlikely_condition}
+    %subview_15 = memref.subview %reinterpret_cast_13[0, 0] [%24, %26] [1, 1] : memref<128x32xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[128, 1], offset: ?>>
+    %subview_16 = memref.subview %alloc_14[0, 0] [%24, %26] [1, 1] : memref<128x32xf32> to memref<?x?xf32, strided<[32, 1]>>
+    memref.copy %subview_15, %subview_16 : memref<?x?xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[32, 1]>>
+    %34 = bufferization.to_tensor %alloc_14 restrict writable : memref<128x32xf32>
+    %reinterpret_cast_17 = memref.reinterpret_cast %arg5 to offset: [%17], sizes: [128, 32], strides: [128, 1] : memref<?xf32> to memref<128x32xf32, strided<[128, 1], offset: ?>>
+    %alloc_18 = memref.alloc() : memref<128x32xf32>
+    scf.if %29 {
+      linalg.fill ins(%cst : f32) outs(%alloc_18 : memref<128x32xf32>)
+    } {hivm.unlikely_condition}
+    %subview_19 = memref.subview %reinterpret_cast_17[0, 0] [%24, %26] [1, 1] : memref<128x32xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[128, 1], offset: ?>>
+    %subview_20 = memref.subview %alloc_18[0, 0] [%24, %26] [1, 1] : memref<128x32xf32> to memref<?x?xf32, strided<[32, 1]>>
+    memref.copy %subview_19, %subview_20 : memref<?x?xf32, strided<[128, 1], offset: ?>> to memref<?x?xf32, strided<[32, 1]>>
+    %35 = bufferization.to_tensor %alloc_18 restrict writable : memref<128x32xf32>
+    %collapsed = tensor.collapse_shape %9 [[0, 1]] : tensor<1x32xf32> into tensor<32xf32>
+    %broadcasted = linalg.broadcast ins(%collapsed : tensor<32xf32>) outs(%0 : tensor<128x32xf32>) dimensions = [0] 
+    %36 = arith.mulf %35, %broadcasted : tensor<128x32xf32>
+    %collapsed_21 = tensor.collapse_shape %10 [[0, 1]] : tensor<1x32xf32> into tensor<32xf32>
+    %broadcasted_22 = linalg.broadcast ins(%collapsed_21 : tensor<32xf32>) outs(%0 : tensor<128x32xf32>) dimensions = [0] 
+    %37 = arith.addf %36, %broadcasted_22 : tensor<128x32xf32>
+    %38 = arith.addf %34, %37 : tensor<128x32xf32>
+    %39 = arith.mulf %32, %38 : tensor<128x32xf32>
+    %40 = arith.addf %39, %1 : tensor<128x32xf32>
+    %extracted_slice_23 = tensor.extract_slice %40[0, 0] [%24, %26] [1, 1] : tensor<128x32xf32> to tensor<?x?xf32>
+    %inserted_slice_24 = tensor.insert_slice %extracted_slice_23 into %1[0, 0] [%24, %26] [1, 1] : tensor<?x?xf32> into tensor<128x32xf32>
+    %41 = arith.addi %15, %3 : index
+    %reinterpret_cast_25 = memref.reinterpret_cast %arg8 to offset: [%41], sizes: [1, 32], strides: [32, 1] : memref<?xf32> to memref<1x32xf32, strided<[32, 1], offset: ?>>
+    %42 = tensor.empty() : tensor<32xf32>
+    %43 = linalg.fill ins(%cst : f32) outs(%42 : tensor<32xf32>) -> tensor<32xf32>
+    %reduced = linalg.reduce ins(%inserted_slice : tensor<128x32xf32>) outs(%43 : tensor<32xf32>) dimensions = [0] 
+      (%in: f32, %init: f32) {
+        %44 = arith.addf %in, %init : f32
+        linalg.yield %44 : f32
+      }
+    %expanded = tensor.expand_shape %reduced [[0, 1]] output_shape [1, 32] : tensor<32xf32> into tensor<1x32xf32>
+    %extracted_slice_26 = tensor.extract_slice %expanded[0, 0] [1, %7] [1, 1] : tensor<1x32xf32> to tensor<1x?xf32>
+    %subview_27 = memref.subview %reinterpret_cast_25[0, 0] [1, %7] [1, 1] : memref<1x32xf32, strided<[32, 1], offset: ?>> to memref<1x?xf32, strided<[32, 1], offset: ?>>
+    bufferization.materialize_in_destination %extracted_slice_26 in writable %subview_27 : (tensor<1x?xf32>, memref<1x?xf32, strided<[32, 1], offset: ?>>) -> ()
+    %reinterpret_cast_28 = memref.reinterpret_cast %arg9 to offset: [%41], sizes: [1, 32], strides: [32, 1] : memref<?xf32> to memref<1x32xf32, strided<[32, 1], offset: ?>>
+    %reduced_29 = linalg.reduce ins(%inserted_slice_24 : tensor<128x32xf32>) outs(%43 : tensor<32xf32>) dimensions = [0] 
+      (%in: f32, %init: f32) {
+        %44 = arith.addf %in, %init : f32
+        linalg.yield %44 : f32
+      }
+    %expanded_30 = tensor.expand_shape %reduced_29 [[0, 1]] output_shape [1, 32] : tensor<32xf32> into tensor<1x32xf32>
+    %extracted_slice_31 = tensor.extract_slice %expanded_30[0, 0] [1, %7] [1, 1] : tensor<1x32xf32> to tensor<1x?xf32>
+    %subview_32 = memref.subview %reinterpret_cast_28[0, 0] [1, %7] [1, 1] : memref<1x32xf32, strided<[32, 1], offset: ?>> to memref<1x?xf32, strided<[32, 1], offset: ?>>
+    bufferization.materialize_in_destination %extracted_slice_31 in writable %subview_32 : (tensor<1x?xf32>, memref<1x?xf32, strided<[32, 1], offset: ?>>) -> ()
+    return
+  }
+}

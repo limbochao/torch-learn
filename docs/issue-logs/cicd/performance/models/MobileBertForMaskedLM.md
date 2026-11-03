@@ -8,7 +8,7 @@ title: "CICD 性能分析：MobileBertForMaskedLM"
 
 局部预算、上界/下界的定义见[全量分析与共性问题](../full-survey-20261102.md)。以下“百分点”均指 NPU **整网提升比**的变化。操作族汇总用于保守筛选，实际要优化的 kernel 逐个列出；未对齐的候选单列，不将其绝对耗时当作收益。
 
-2026-11-03 更新：[Train 参数梯度归约专项分析](../mobilebert-parameter-reduction-20261103.md)已在 NPU_A5 物理卡 2、`pta_213_cicd`、`test/cicd_benchmark` 对应安装版本复测，确认 IR 分段归约策略与 tiling 候选漏搜；下方原整网统计保持原批次口径。
+2026-11-03 更新：[首项分析](../mobilebert-parameter-reduction-20261103.md)及[其余归约分析](../mobilebert-remaining-reductions-20261103.md)已在物理卡 1、2、`pta_213_cicd`、`test/cicd_benchmark` 对应安装版本复测；下方仍是原七组粗筛统计，不能把 `_20`、`_0` 一并视为已确认单项问题。
 
 ## Infer
 
@@ -60,7 +60,7 @@ Batch=128；四份数据均按 10 个采样 step 归一化为 ms/step。
 
 ### 1. add/mul/sum 参数梯度归约
 
-**优化入口：NPU Inductor `ir.py::num_splits` 的 outer reduction 分段策略，以及 runtime `TileGenerator` 候选生成。** 2026-11-03 已对最大单项 `_11` 实测：未分段的 16384-token 归约为 246.390 μs/次；候选只覆盖窄通道 tile。显式两阶段 ATen 自动 codegen 为 22.544 μs/次。详见[专项定位](../mobilebert-parameter-reduction-20261103.md)；下表仍保留七组 kernel 的原操作族粗筛口径。
+**优化入口：NPU Inductor `ir.py::num_splits` 的 outer reduction 分段策略，以及 runtime `TileGenerator` 候选生成。** 2026-11-03 单项深挖确认 `_11`、`_9`、`_7`、`_13` 的归约计划/候选问题，并发现 24 次重复 bias sum。GPU 对位已纠正；`_20` 单项 GPU 收益缺口待确认，`_0` 实测不支持强行分段。详见[逐 kernel 定位](../mobilebert-remaining-reductions-20261103.md)；下表保留七组原操作族粗筛口径。
 
 | NPU 具体 kernel / 选定调用 | 调用次数/step | ms/step | 占 NPU Inductor 整步 |
 | --- | ---: | ---: | ---: |
@@ -163,7 +163,7 @@ GPU 对应实现/保守收费项：
 
 ### 额外具体检查点
 
-最大单项 `triton_red_fused_add_mul_sum_view_11`（25.847 ms，96 次/step）已在 2026-11-03 深挖：主要问题为 NPU Inductor `ir.py::num_splits` 未拆分长 outer reduction，以及 `TileGenerator` 遗漏宽通道 tile。原实现设备耗时 246.390 μs/次；同 DSL 固定 tile 为 103.624 μs，显式两阶段 ATen 自动 codegen 为 22.544 μs，两阶段 Triton 诊断版为 13.211 μs。源码、四方保守筛选与收益外推见[专项分析](../mobilebert-parameter-reduction-20261103.md)；没有修改框架或验证整网修复。
+除 `_5` 外六组归约已在指定分支复测：`_11`、`_9`、`_7`、`_13` 确认编译收益缺口，主要入口为 IR `num_splits` 和 `TileGenerator`。四组自动分段外推约 50 ms/step；另发现每步 24 次重复 bias sum。`_20` 有 NPU 可达性实测但 GPU 单项缺口未确认，`_0` 分段无收益，不能给七组统一归因。见[首项分析](../mobilebert-parameter-reduction-20261103.md)与[其余 kernel 分析](../mobilebert-remaining-reductions-20261103.md)；没有修改框架或验证整网修复。
 
 ### 未计入收益的具体候选
 

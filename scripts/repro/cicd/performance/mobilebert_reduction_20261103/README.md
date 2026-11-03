@@ -2,7 +2,8 @@
 
 在 NPU_A5 Docker 的 TorchBench 工作目录、`pta_213_cicd` 中运行。
 目标框架源码为 `test/cicd_benchmark`（`b3bd74035`），执行前确认关键安装文件与该快照一致。
-本脚本固定使用物理卡 2，禁止改成卡 4、5、6；启动前检查卡 2 空闲。
+原 `run.py` 固定使用物理卡 2；`run_family.py` 显式指定空闲的物理卡 1、2 或 3。
+禁止使用卡 4、5、6；启动前检查所选卡空闲，并遵守工作区的分时限制。
 
 ```bash
 source pta_213_cicd/env.sh
@@ -41,3 +42,39 @@ python <torch-learn>/scripts/repro/cicd/performance/mobilebert_reduction_2026110
 该脚本将 NPU Eager 的全部 168 个同型窗口作为目标 96 次的费用上界，
 GPU Eager 按必需操作数量乘各操作最小耗时作为下界；不把聚合平均值当作目标 shape 耗时。
 边界含义与源码结论见[专项文档](../../../../../docs/issue-logs/cicd/performance/mobilebert-parameter-reduction-20261103.md)。
+
+## 其余五组 kernel
+
+`run_family.py` 默认覆盖 `_9`、`_7`、`_13`、`_20`、`_0`，不运行 `_5`。
+按上面的环境激活方式，在目标卡空闲时执行：
+
+```bash
+export ASCEND_RT_VISIBLE_DEVICES=2
+python <torch-learn>/scripts/repro/cicd/performance/mobilebert_reduction_20261103/run_family.py \
+  --physical-device 2 --output <output>/diagnostic
+python <torch-learn>/scripts/repro/cicd/performance/mobilebert_reduction_20261103/run_family.py \
+  --physical-device 2 --verify-compile-path --kinds 9 7 13 20 0 11 --output <output>/verified
+```
+
+第一条包括普通 JIT 的固定 tile 和手写两阶段诊断实现。
+第二条通过原 `_precompile_config` 和 `make_launcher` 编译/运行指定 tile，
+保留原 signature、metadata、options 和 runtime block；输出原始及固定 tile 的 IR。
+`matched_selected` 用同一配置复编译，用于核对原始与重放的 TTIR 身份；它不是优化方案。
+`_11` 只在第二种模式中作为此前结论的交叉核验，完整实验仍使用原 `run.py`。
+
+每组输入依据原 DSL 分别构造；四个小通道场景使用 32 次 capture，`_0` 为 4 次，
+避免 capture 多个 Eager 2-GB 中间 tensor 耗尽显存。每项均 profile 10 次并收齐所有阶段，
+NaN 后重放与 FP64 累加参考校验始终启用。
+复核结果保留每次设备 duration 和 7 轮 Event 样本，不能忽略明显的环境争用或跨轮混用基线。
+
+原始四方数据可复算：
+
+```bash
+python <torch-learn>/scripts/repro/cicd/performance/mobilebert_reduction_20261103/analyze_family.py \
+  --input-root <perf>/MobileBertForMaskedLM_Train --output-root <output>/family_bounds
+```
+
+该脚本对 `_9` 收取全部线性 bias sum 超集，对 `_7`、`_13` 按 FX/执行顺序匹配窗口并额外收取 `dh` Mul。
+GPU 收取完整融合实现和全部 final sum，用必需 Eager 操作的最小耗时作下界。
+`_20` 的边界不能确认收益缺口，`_0` 也不列入单项缺口预算。
+计算口径、GPU 对位修正和整网外推见[剩余 kernel 分析](../../../../../docs/issue-logs/cicd/performance/mobilebert-remaining-reductions-20261103.md)。

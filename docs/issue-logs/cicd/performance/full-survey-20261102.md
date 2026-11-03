@@ -8,7 +8,7 @@ title: CICD 全量性能分析：编译收益差距与共性问题
 
 保守局部筛选与已知重复执行/回退机制共列出 **88 个场景级检查项，覆盖 54 个场景**；每项都给出具体 kernel、代码位置、NPU/GPU 做法、占比及贡献预算。其余场景列出明确候选和缺失证据，不强行认定劣化。
 
-2026-11-03 补充：[MobileBERT 参数梯度归约深挖](mobilebert-parameter-reduction-20261103.md)已在指定环境与物理卡 2 实测；确认 IR 分段归约策略和 tiling 候选漏搜。本文原 40 模型统计及预算保持不变。
+2026-11-03 补充：[MobileBERT 逐 kernel 深挖](mobilebert-remaining-reductions-20261103.md)已在指定环境与物理卡 1、2 实测；四组确认 IR 分段归约/候选问题，另两组不计入已确认单项缺口。约 50 ms/step 为小图外推。本文原 40 模型统计及粗筛预算保持不变。
 
 ## 比较方法与数字边界
 
@@ -35,7 +35,7 @@ title: CICD 全量性能分析：编译收益差距与共性问题
 | tanh backward+bias sum | 1 | 60.4% | 54.7% | 81.1%（1例） | NPU 输出维很小时的 program 并行度和分阶段归约；GPU pointwise/reduction 分拆。 |
 | GELU backward+bias sum | 4 | 4.2%（2.0–4.6%） | 3.4%（0.2–3.7%） | 32.1%（4例） | NPU 融合/归约 tiling；GPU 相应 fused/多阶段归约。 |
 | GNN scatter_add 与 gather/mul 分离 | 4 | 39.6%（25.3–58.3%） | 18.5%（10.1–27.2%） | 31.2%（4例） | NPU scatter_add lowering 和 scheduler fusion；GPU 生成含 scatter 的融合 kernel。 |
-| MobileBERT add/mul 多输出归约 | 1 | 22.9% | 11.6% | 29.2%（1例） | NPU IR `num_splits` 未拆分 outer reduction、`TileGenerator` 漏搜；GPU 分段归约。见[实测深挖](mobilebert-parameter-reduction-20261103.md)。 |
+| MobileBERT add/mul 多输出归约 | 1 | 22.9% | 11.6% | 29.2%（1例） | 四组已确认 IR 分段/候选问题，另有 24 次重复 bias sum；`_20`、`_0` 单独保留边界。见[实测细分](mobilebert-remaining-reductions-20261103.md)；本行仍为七组历史粗筛。 |
 | Infer log_softmax→NLLLoss 完整矩阵写回 | 17 | 1.7%（0.07–10.6%） | 1.0%（0.04–8.3%） | 23.5%（10例） | NPU nll_loss_forward decomposition/lowering 使消费者留在外部调用；GPU 融合 target 提取和归约。 |
 | ReLU backward+bias sum | 4 | 6.4%（1.0–50.2%） | 3.0%（0.1–48.7%） | 12.9%（3例） | NPU pointwise/归约融合与并行映射；GPU 分拆或不同归约。 |
 | prims.fma metadata 第一组 Mul/Add 重复执行 | 20 | 1.7%（0.2–5.6%） | 1.7%（0.2–5.6%） | 8.7%（18例） | make_prim.meta 调用真实 impl_aten；_prim_impl 随后再次执行；GPU 融合在 kernel 内。已核对本批 wrapper 的 prims.fma 调用与 profile 连续调用窗口。 |
