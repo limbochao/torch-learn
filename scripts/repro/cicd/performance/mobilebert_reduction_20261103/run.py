@@ -1,6 +1,8 @@
 """Replay MobileBERT NoNorm parameter reductions; diagnostics only, no installed-source patch."""
 
 import argparse
+import copy
+import csv
 import importlib.util
 import json
 import os
@@ -14,6 +16,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--regenerate", action="store_true")
     parser.add_argument("--experiments", action="store_true")
+    parser.add_argument("--profile", action="store_true")
     args = parser.parse_args()
     # Physical device is checked before importing a device backend.
     if os.environ.get("ASCEND_RT_VISIBLE_DEVICES") != "2":
@@ -70,6 +73,14 @@ def main():
             for _ in range(count):
                 fn()
         torch.npu.synchronize()
+        graph_output_check = None
+        if name == "original" or name.startswith(("same_dsl_", "two_stage_")):
+            # Prove the captured graph writes outputs, rather than timing an empty capture.
+            for value in out:
+                value.fill_(float("nan"))
+            graph.replay()
+            torch.npu.synchronize()
+            graph_output_check = check(out)
         samples = []
         for _ in range(7):
             begin = torch.npu.Event(enable_timing=True)
@@ -83,7 +94,34 @@ def main():
             "graph_event_us_per_call": statistics.median(samples),
             "samples_us": samples,
             "max_abs_error_vs_cpu_fp64": check_result,
+            "graph_replay_max_abs_error": graph_output_check,
         }
+        profile_names = {"original", "eager_same_boundary", "same_dsl_x16_xs16_rs256",
+                         "two_stage_chunk128_xs32_rs128", "explicit_stages_codegen"}
+        if args.profile and name in profile_names:
+            target = args.output / "profiles" / name
+            with torch_npu.profiler.profile(
+                activities=[torch_npu.profiler.ProfilerActivity.CPU, torch_npu.profiler.ProfilerActivity.NPU],
+                on_trace_ready=torch_npu.profiler.tensorboard_trace_handler(str(target)),
+            ):
+                for _ in range(10):
+                    fn()
+                torch.npu.synchronize()
+            files = list(target.rglob("kernel_details.csv"))
+            if len(files) != 1:
+                raise RuntimeError(f"Expected one kernel_details.csv, found {files}")
+            rows = list(csv.DictReader(files[0].open()))
+            groups = {}
+            for row in rows:
+                key = row["Name"]
+                entry = groups.setdefault(key, {"count": 0, "total_us": 0.0})
+                entry["count"] += 1
+                entry["total_us"] += float(row["Duration(us)"])
+            result["cases"][name]["profile"] = {
+                "calls": 10,
+                "device_us_per_call": sum(item["total_us"] for item in groups.values()) / 10,
+                "kernels": groups,
+            }
         print(name, result["cases"][name], flush=True)
         (args.output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
 
@@ -104,6 +142,13 @@ def main():
     original()
     result["original_selected_configs"] = recorder.stop_capture()
     result["original_launcher_config"] = repr(kernel.best_launcher.config)
+    from torch_npu._inductor.runtime.triton_heuristics import triton_config_npu_index
+
+    candidates = triton_config_npu_index(
+        {"x0": 128, "r1": 16384}, copy.deepcopy(kernel.inductor_meta),
+        copy.deepcopy(kernel.triton_meta), is_reduction=True)
+    result["generated_candidates"] = [
+        {**cfg.kwargs, "num_warps": cfg.num_warps, "num_stages": cfg.num_stages} for cfg in candidates]
     recorder.uninstall()
     bench("original", original, lambda: out)
     bench("eager_same_boundary", lambda: eager(*inputs), lambda: eager(*inputs))
