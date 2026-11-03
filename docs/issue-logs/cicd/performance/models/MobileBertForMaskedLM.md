@@ -59,15 +59,36 @@ Batch=128；四份数据均按 10 个采样 step 归一化为 ms/step。
 [NPU 完整 DSL](../../../../../artifacts/cicd/performance/full-survey-20261102/MobileBertForMaskedLM_Train/NPU_kernels.txt)、[GPU 完整 DSL](../../../../../artifacts/cicd/performance/full-survey-20261102/MobileBertForMaskedLM_Train/GPU_kernels.txt)、[NPU 调用边界](../../../../../artifacts/cicd/performance/full-survey-20261102/MobileBertForMaskedLM_Train/NPU_wrapper_calls.txt)、[GPU 调用边界](../../../../../artifacts/cicd/performance/full-survey-20261102/MobileBertForMaskedLM_Train/GPU_wrapper_calls.txt)。
 
 <!-- BEGIN MOBILEBERT REDUCTION ANALYSIS -->
-### 1. add/mul/sum 参数梯度归约
+<a id="outer-reduction"></a>
 
-**已确认 `_11`、`_9`、`_7`、`_13` 四组编译收益缺口，主要责任在 NPU Inductor 的归约计划和候选生成。**
-`_9`、`_7`、`_13` 采用显式两阶段 ATen 自动 codegen，单次设备耗时分别为 **7.343、20.005、25.957 μs**；
-按原调用次数外推，三组合计约 **28.96 ms/step**；加上 `_11`，四组合计约 **50.59 ms/step**。
-这是独立小图外推，没有修改框架、替换整网或实测整网提速。
+### 1. outer reduction：IR 分段计划缺失与 tiling 候选漏搜
 
-另外两组也完成了实验：`_20` 有分段优化空间，但现有 GPU Eager 聚合数据不足以确认其单项编译收益缺口；
-`_0` 的分段方案反而更慢，当前不列为已确认优化点。按要求，本轮未分析 `mul_sum_view_5`。
+**责任模块：NPU Inductor IR `ir.py::num_splits`，以及 runtime `tile_generator.py::TileGenerator`。**
+`_11`、`_9`、`_7`、`_13` 都是 `R=16384、X=128` 的 outer reduction：IR 未生成分段计划，
+runtime 候选又只覆盖很窄的 X tile。相同后端改用更宽 tile 或显式分段，实测均显著变快。
+四组自动分段的整网外推约 **50.59 ms/step**；尚未修改框架或做整网替换验证。
+
+**这里的 kernel 类型是 outer reduction，可融合 Add/Mul 等 pointwise。**
+把 contiguous 输入展平为 `[R,X]`，`R` 是归约维，`X` 是连续且保留到输出的维度。
+这类 kernel 沿外侧的 R 求和，输出 X 个结果；“参数梯度”只是该计算在模型中的用途。
+例如 `_11` 的数学表达式如下，代码用于解释语义，并非原始 DSL：
+
+```python
+# a, b, h: [R=16384, X=128]
+g = a + b
+out0 = g.sum(dim=0)        # [X=128]
+out1 = (g * h).sum(dim=0)  # [X=128]
+```
+
+七组都属于 outer reduction，但问题不能统一归因：
+
+| kernel 后缀 | R / X | 已确认的问题或分析边界 |
+| --- | --- | --- |
+| `_11`、`_9`、`_7`、`_13` | 16384 / 128 | IR 缺少分段计划；runtime 遗漏更快 tile |
+| `_9` 中的 24 次调用 | 16384 / 128 | 与 `_7` 重复求同一 Sum；IR 规范化 / scheduler / codegen 中的具体阻断点尚未定界 |
+| `_20` | 16384 / 512 | IR 分段方案有实测收益；当前 tile 搜索没有显示相同漏搜问题，GPU 单项收益差距仍待确认 |
+| `_0` | 16384 / 30522 | 当前实验未确认需要修复的模块；分段和所试 tile 均未胜过原实现 |
+| `_5` | 16384 / 512 | 按要求不分析 |
 
 本轮在 NPU_A5 Docker、`pta_213_cicd` 运行；诊断轮使用物理卡 **2**，同编译路径复核轮使用空闲物理卡 **1**，
 未使用卡 4、5、6。安装的 IR、codegen、runtime、tile generator、config 五个关键文件确认与
@@ -96,272 +117,224 @@ torch `2.13.0+cpu`、torch_npu `2.13.0.dev20261030`、Triton `3.6.0`，
 
 完整数值、真实 winner 和候选见[同路径复核][verified]、[诊断轮][diagnostic]。
 
-#### 为什么符合“NPU 编译提升比低于 GPU”
+#### 两个已定位模块分别有什么问题
 
-仍使用 `r = 1 - Inductor/Eager`，比较相同数学输出，按完整 GPU 融合实现收费。
-原 GPU CSV 没有逐次 shape，因此使用保守上下界，不用全部 `sum` 的平均耗时冒充目标 shape。
+**模块一：NPU Inductor IR，`torch_npu/_inductor/ir.py::num_splits`。**
+`patch_num_splits()` 将它安装到社区 `Reduction.num_splits`。
+源码在 `numel_hint == 1` 时才进入分段判断；保留输出元素数大于 1 时，直接返回
+`ReductionHint.DEFAULT, 1`。本次四组的 `numel_hint=128`，因此无论 R 长达 16384，
+IR 都只生成一阶段归约。仅开启 `config.split_reductions` 也无法改变这个分支。
+源码及补丁接入位置见[源码摘录][source]。
 
-| 已确认点 | NPU Eager 上界 / ms | NPU Inductor / ms | NPU 提升比上界 | GPU Eager 下界 / ms | GPU Inductor 上界 / ms | GPU 提升比下界 | 保守缺口 B / ms | 占整网缺口 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `_11` | 9.841717 | 25.847447 | −162.63% | 2.942976 | 3.093854 | −5.13% | 15.501171 | 13.22% |
-| `_9` | 3.655412 | 15.300343 | −318.57% | 1.908480 | 4.170746 | −118.54% | 7.311896 | 6.23% |
-| `_13` | 0.959258 | 8.921167 | −830.01% | 0.735744 | 1.879609 | −155.47% | 6.470545 | 5.52% |
-| `_7` | 1.635958 | 9.252472 | −465.57% | 1.144320 | 2.406344 | −110.29% | 5.812283 | 4.96% |
-
-四项均满足 **NPU 提升比的上界仍低于 GPU 的下界**，所以能够确认收益缺口。
-表内 GPU 数值是刻意放宽的下界，不表示 GPU 的真实提升比就是负值。
-`B = N_I - N_E × G_I/G_E`；“占整网缺口”分母为原整网 **117.294340 ms**。
-这些筛选边界与后面独立小图的可达性实测分开使用。
-
-NPU Eager 的取法有明确边界：
-
-- `_11`：将每步全部 **168 个** `Add → Sum → Mul → Mul → Sum` 连续窗口计入，
-  包含目标 96 次及其他同类工作，并多收输入梯度 Mul，得到 **9.841717 ms 上界**。
-  这不是目标 96 次的精确耗时，不能除以 96 当单次 Eager 时间。
-- `_9`：收取每步全部 **362 个**“两次矩阵乘后跟随的线性层 bias sum”，包括其他通道宽度。
-  这是目标 168 次的费用超集，只收 sum，得到 3.655412 ms 上界。
-- `_7`、`_13`：每个 step 都有 193 个 `Sum → Mul → Mul → Sum` 窗口。
-  首个为 512 通道 head；随后 24 层各 8 个 NoNorm 窗口，按 FX 与 wrapper 的分支顺序定位。
-  每层顺序为 `_7, _11, _11, _11, _13, _11, _7, _20`。
-  `_7` 取第 1、7 个，`_13` 取第 5 个及其紧邻的梯度 Add；均额外收取了不在目标输出内的 `dh` Mul。
-  这是依据执行序列匹配，不声称原 CSV 本身记录了逐次 shape。
-
-GPU Eager 下界：每次必需操作分别为 `_11: 1 Add + 1 Mul + 2 Sum`、`_9: 1 Sum`、`_7: 1 Mul + 2 Sum`、
-`_13: 1 Add + 1 Mul + 2 Sum`，乘原 GPU CSV 的全局最小耗时。
-GPU 编译费用则收以下完整 kernel，包含附带输出和其他工作的成本：
-
-| NPU 点 | GPU 对应完整实现，均包含全部 `sum_view_9` final sum |
-| --- | --- |
-| `_11` | `add_mul_sum_view_11`（72 次）、`add_mul_sum_view_18`（24 次） |
-| `_9` | `add_mul_sum_view_11`、`add_mul_sum_view_12`、`add_mul_sum_view_18` |
-| `_7` | `mul_sum_view_8`、`add_mul_sum_view_12` |
-| `_13` | `add_mul_sum_view_12` |
-
-GPU `_11` 和 `_18`、`_12` 内部分别包含多个参数梯度或 bias 梯度，不能按名称后缀一一对位。
-NPU `_11` 的 attention 分支对应 GPU `_18`；GPU `_12` 对应其他 NoNorm 分支，不能替换收费。
-`_11` 的 GPU compiled 费用为 `1.727827 + 0.563310 + 0.802718 = 3.093854 ms`，
-分别对应上述 72 次、24 次 partial 和保守收费的全部 576 次 final sum。
-GPU Eager 下界为 `96 × (6.816 + 1.120 + 2×11.360) μs = 2.942976 ms`。
-修正后的 `_11` 保守预算为 **15.501171 ms**，约占整步 **5.25%**、整网缺口 **13.22%**；
-对应整网提升比 **6.99 个百分点**。逐窗口复算见[首项边界][bound11]及[窗口明细][windows11]。
-这项修正影响四方费用映射，原 NPU 单 kernel 根因和性能实测不变。
-
-计算脚本、每个窗口的原 CSV 行号、文件 SHA256 见[分析脚本][analyze]、[窗口明细][windows]、[边界结果][bound]；
-FX 与两侧 wrapper 摘录见[映射证据][mapping]。GPU 融合费用及 NPU 超集存在重叠，不能直接相加这些分项预算。
-
-#### `_11`：NoNorm 参数梯度，IR 不分段且候选漏搜
-
-这是 MobileBERT NoNorm 的参数梯度。NoNorm 前向为 `y = h * gamma + beta`；
-反向将两路梯度相加得到 `g = a + b`，再计算：
+生成结果是 `split_axis=[0]`，program 只按 X 分派，每个 program 内循环处理完整 R。
+下面是 `_9` 的原始 DSL 连续摘录，保留原始格式：
 
 ```python
-dbeta = g.sum((0, 1), keepdim=True)
-dgamma = (g * h).sum((0, 1), keepdim=True)
+    x0_offset = tl.program_id(0) * X0BLOCK
+    base_x0= tl.arange(0, X0BLOCK_SUB)
+    loops_x0 = (X0BLOCK + X0BLOCK_SUB - 1) // X0BLOCK_SUB
+    base_r1= tl.arange(0, R1BLOCK_SUB)
+    loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB
+    for loop_x0 in range(loops_x0):
+        x0 = x0_offset + (loop_x0 * X0BLOCK_SUB) + base_x0[None,:]
+        x0_mask = x0 < min(X0BLOCK+x0_offset, x0_numel)
+        _tmp2 = tl.full([R1BLOCK_SUB, X0BLOCK_SUB], 0, tl.float32)
+        for loop_r1 in range(loops_r1):
+            r1 = (loop_r1 * R1BLOCK_SUB) + base_r1[:,None]
+            r1_mask = r1 < r1_numel
+            tmp0 = tl.load(in_ptr0 + (x0 + 128*r1), r1_mask & x0_mask, other=0.0)
+            tmp1 = tl.reshape(tmp0, [R1BLOCK_SUB, X0BLOCK_SUB])
+            tmp3 = _tmp2 + tmp1
+            _tmp2 = tl.where(tl.reshape((r1_mask & x0_mask), [R1BLOCK_SUB, X0BLOCK_SUB]), tmp3, _tmp2)
+        tmp2 = tl.sum(_tmp2, 0).reshape(1, X0BLOCK_SUB)
+        tl.store(out_ptr0 + (x0 ), tmp2, x0_mask)
 ```
 
-三个输入的物理布局均对应 contiguous FP32 `[128,128,128]`，
-其中一个 wrapper 输入先从 `[16384,128]` reshape；stride 为 `[16384,128,1]`。
-输出为两个 `[1,1,128]`，每个通道归约 `128 × 128 = 16384` 个 token。
-输入来自 MM 的结果缓冲区，但该 kernel 内没有矩阵乘。
+`tl.program_id(0)` 只影响 `x0`；`r1` 完全由 program 内的 `loop_r1` 遍历。
+最后 `tl.sum(_tmp2, 0)` 才生成完整结果。调整 `R1BLOCK_SUB` 只改变循环内 tile 大小，
+不会把 R 分给多个 program。
+需要 IR 提供的另一种计划是 **partial/final**：先让不同 program 处理不同 R 段并写部分和，
+再用 final reduction 合并部分和。显式两阶段 ATen 小图已经让同一后端生成了这种更快实现。
+因此这里定位的是 **IR 归约计划缺失**；上述 DSL 的循环结构是该计划的执行结果。
 
-原 backward wrapper 静态列出 **96 处 launch**，即 24 层、每层 4 次对应的 NoNorm 梯度归约；
-CSV 每个采样 step 也是 96 次，平均 269.244 μs/次。
-相邻 `triton_poi_fused_add_mul_view_12` 另做 `dh = g * gamma`，不在本 kernel 的 25.847 ms 内。
-完整[原始 DSL][original]、[原 wrapper 调用边界][calls]可对照上述输入和输出。
+**模块二：NPU Inductor runtime，`torch_npu/_inductor/runtime/tile_generator.py::TileGenerator`。**
+入口为 `runtime.triton_heuristics.triton_config_npu_index`，调用
+`TileGenerator.descend_split_tiling()`；具体候选策略在
+`descend_split_axis_inner()` / `descend_tiling_axis()`。
+本次小 X、长 R 场景的 `tiny_kernel=False`，`program_threshold=56/2=28`。
+`descend_split_axis_inner()` 的初始候选接纳条件包含
+`initial_total_programs > self.program_threshold or self.dual_reduction`；
+常规下降过程中，加入 `candidate_blocks` 的条件同样包含
+`total_programs > self.program_threshold or self.dual_reduction`，见[源码 350–435 行摘录][source]。
+本例 `dual_reduction=False`，X0BLOCK=16、32 分别只有 8、4 个 program，未通过该常规门槛。
+结合后续候选展开与资源过滤，四组最终各 24 个候选的 X0BLOCK 只有 3、4；
+更快的 `16/16/256`、`32/32/128` 没有进入最终搜索列表。
 
-这里的 add/mul/sum 都来自原模型反向语义。
-本问题涉及这些运算如何归约和调度；与此前 `prims.fma` metadata 重复执行 Mul/Add 是两个独立问题。
+本文配置简写依次为 **`X0BLOCK / X0BLOCK_SUB / R1BLOCK_SUB`**：
+第一项决定一个 program 覆盖多少 X，第二项决定循环内实际连续处理多少 X，第三项为循环内的 R tile。
+例如 `3/1/4096` 表示一个 program 最多串行处理 3 个 X，每次只处理 1 个连续 X。
+地址 `x0 + 128*r1` 下，单通道 tile 沿 R 的相邻值相隔 128 个 FP32 元素。
+改成较宽 X tile 可以同时访问多个连续元素；即使 program 数减少，实测仍明显更快。
+已知更快候选没有进入搜索，因此首先是 **候选覆盖不足**，还不能归为 autotune 在已有候选中计时选错。
 
-分支源码 `torch_npu/_inductor/ir.py::num_splits` 被
-`patch_num_splits()` 安装到社区 `Reduction.num_splits`。
-它只在 `numel_hint == 1` 时考虑分段；其余情况末尾直接：
+两个模块处在不同层次：IR 决定是否拆成多个阶段，runtime 决定某个阶段如何分 tile。
+同一批 kernel 的收益存在重叠，不能把“换 tile”和“分段”的完整收益相加。
 
-```python
-return ReductionHint.DEFAULT, 1
-```
+#### `_11`：IR 未拆分双输出归约；runtime 漏掉宽 X tile
 
-本例 `numel_hint=128`，因此归约长达 16384 也不分段。
-**仅开启 `config.split_reductions` 无法改变这个返回分支。**
-直接责任入口是 **NPU Inductor IR 的 `num_splits` / outer reduction 拆分策略**，
-需要让长 token 归约生成部分结果与 final sum，而不是只给单个 DSL 调一个更小的 R tile。
-源码及安装调用链见[源码证据][source]。
+**模块一：IR `num_splits`。** 两个输出各有 128 个元素，落入 `DEFAULT,1` 返回分支。
+生成 DSL 在同一个 `loop_r1` 中维护两个 accumulator，分别累加 `a+b` 和 `(a+b)*h`，
+完整 R 都由同一 program 处理，缺少跨 program 的 partial/final 计划。
 
-最终 DSL 的 `split_axis=[0]`，只有通道轴分 program；token 归约全部在 program 内完成。
-当前 winner 为：
+**模块二：runtime `TileGenerator`。** 原 winner 为 `3/1/4096`，grid 为 `ceil(128/3)=43`；
+一个 program 最多依次处理 3 个 X，每个 X 再做 4 轮 R 循环。
+24 个候选只覆盖 X0BLOCK 3、4，遗漏更快的宽 X tile。
+原 TTAdapter 也保留了 `memref<4096x1xf32, strided<[128,1]>>` 和循环，见[固定配置 IR][ir11]。
 
-```text
-X0BLOCK=3, X0BLOCK_SUB=1, R1BLOCK_SUB=4096
-grid=(ceil(128/3),1,1)=(43,1,1)
-compile_mode=simd_simt_template, num_warps=1, num_stages=2
-```
+**kernel 边界与证据。** 完整名称为 `triton_red_fused_add_mul_sum_view_11`，
+三个输入均对应 contiguous FP32 `[128,128,128]`，展平后是 `[16384,128]`。
+其数学表达式就是本节开头的两路 Sum；两个输出的实际 shape 为 `[1,1,128]`。
+原 wrapper 有 96 处 launch，对应 24 层、每层 4 次 NoNorm 参数梯度计算；
+相邻 `triton_poi_fused_add_mul_view_12` 另算 `dh=g*gamma`，不在本 kernel 成本内。
+见[原始 DSL][original]、[wrapper 调用边界][calls]。
 
-每个 program 串行处理最多 3 个通道；每个通道再做 4 次归约循环。
-每轮三路 load 的地址为 `x0 + 128*r1`，tile 为 `[4096,1]`，
-相邻 token 的地址相隔 128 个 FP32 元素，连续通道宽度仅 1。
-这同时限制了访问连续性和归约并行度；不能只用“43 个 program 少于 56 个核”解释全部差距。
-
-`runtime.triton_heuristics.triton_config_npu_index` 调用 `TileGenerator.descend_split_tiling()`。
-本例 `tiny_kernel=False`，`program_threshold=56/2=28`。
-`descend_split_axis_inner()` 的候选保留规则偏向超过该阈值的 program 数，
-在本例最终只留下 **24 个候选**：
-
-```text
-X0BLOCK ∈ {3,4}
-X0BLOCK_SUB ∈ {1,2,3,4}
-R1BLOCK_SUB ∈ {1024,2048,4096}（并非所有组合）
-multibuffer ∈ {False,True}
-```
-
-同编译路径复核保持原 signature、metadata 与 launcher，仅换 `32/32/128`，
-设备时间 **247.761 → 87.502 μs，快 2.83 倍**；显式两阶段 ATen 自动 codegen 为
-**22.487 μs，快 11.02 倍**，实际为 **1 次 partial + 2 次 final，共 3 次 launch**。
-见[首项自动 codegen][staged11]及[同路径复核][verified]。
-因此归约分段与候选漏搜分别有实验支持，收益有重叠，不能相加。
+**模块问题的实测验证。** 保持原 signature、metadata、launcher 路径，仅换 `32/32/128`：
+**247.761 → 87.502 μs，快 2.83 倍**；显式分段后自动 codegen 为
+**22.487 μs，快 11.02 倍**，实际为 **1 partial + 2 final，共 3 次 launch**。
+工程目标先用 **≤25 μs**；按每步 96 次外推，约节省 **21.626 ms/step**。
+见[自动 codegen][staged11]及[同路径复核][verified]。
 
 首轮诊断的原始实现、固定 `16/16/256`、自动分段、手写两阶段分别为
 246.390、103.624、22.544、13.211 μs，见[首轮结果][result11]。
-其中手写版为 1 partial + 1 合并 final，partial/final 分别为 11.544 / 1.667 μs；
-它是进一步调优参考，工程验收先用自动 codegen 的 **≤25 μs**。
-首轮同边界 NPU Eager 为 26.312 μs，仅用于因果控制，不能替代前面的 GPU 四方比较。
-后面的整网外推统一采用复核轮差值，避免混用两轮基线。
+手写版合并了两路 final，仅 2 次 launch，partial/final 为 11.544 / 1.667 μs，作为后续调优参考。
+本文整网外推统一采用复核轮差值。实际后端 `parallel_mode=simd`，
+不能根据 `npu_kernel_type=simt_template` 的名称推定在跑纯 SIMT。
 
-[首项固定配置 IR][ir11] 中，原配置 TTAdapter 保留
-`memref<4096x1xf32, strided<[128,1]>>` 及循环。
-实际 `parallel_mode=simd`，不能根据 `npu_kernel_type=simt_template` 名称判断在跑纯 SIMT。
-相同 Triton_ascend/npuir 后端已执行更快的上游计划，主要责任应先落在
-**NPU Inductor IR `num_splits` 和 `TileGenerator.descend_split_axis_inner/descend_tiling_axis`**；
-本轮没有证明下层已无优化空间，也没有发现必须先修下层的固定 DSL/config 缺陷。
+#### `_9`：IR 未拆分单输出归约；runtime 漏候选；另有重复 Sum
 
-#### `_9`：纯 bias sum，长归约之外还有重复扫描
+**模块一：IR `num_splits`。** 单输出仍保留 X=128，因而不分段。
+前述原始 DSL 只有一个 accumulator，按 `x0+128*r1` 读取整个 R，再 `tl.sum(...,0)`。
+完整名称虽为 `triton_red_fused_mul_sum_view_9`，实际 DSL 已没有 Mul，
+只计算 contiguous FP32 `[16384,128]` 的 `sum(dim=0)`，输出 `[1,128]`，每步 168 次。
 
-**完整名称：`triton_red_fused_mul_sum_view_9`。** 名称含 `mul`，但实际 DSL 没有乘法。
-它读取 contiguous FP32 `[16384,128]`，按 token 求和，输出 `[1,128]`，一步 **168 次**。
-乘法由前一个 pointwise kernel 完成；这里只剩 `sum_r A[r,x]`。
+**模块二：runtime `TileGenerator`。** 原 winner `3/1/8192`，grid 43；
+实际连续 X tile 仅 1，24 个候选的 X0BLOCK 只有 3、4。
+同路径补入 `16/16/256`，**93.397 → 29.860 μs，快 3.13 倍**；
+显式分段自动生成 1 partial + 1 final，合计 **7.343 μs，快 12.72 倍**。
+工程目标 **≤8 μs**；168 次外推约节省 **14.457 ms/step**。
+见[原始 DSL][dsl9]、[自动 codegen][stage9]。
 
-原 winner 为 `X0BLOCK=3, X0BLOCK_SUB=1, R1BLOCK_SUB=8192`，grid 为 43。
-每个 program 最多循环处理 3 个通道，每个通道再串行处理 16384 个 token。
-实际 tile 只有 1 个连续通道，load 地址为 `x + 128*r`。
-**24 个自动候选仅覆盖 X0BLOCK 3、4**，遗漏实测更快的 `16/16/256`。
-同 signature、metadata 和编译入口，仅换此 tile 就从 93.397 降到 29.860 μs，快 **3.13 倍**。
+**另一个优化点：等价归约复用，具体阻断模块尚未定界。**
+原 wrapper 第一层第 2176 行 `_9.run(buf64,buf67,...)` 与第 2299 行
+`_7.run(buf64,addmm_346,buf98,buf99,...)` 的第一路都计算同一个 `buf64.sum`。
+输入在两次调用之间没有改写，输出分别为 `[1,128]` 和 `[1,1,128]`。
+这种关系在 24 层重复。GPU `_12` 的 DSL 将同一个 partial `tmp24` 写给两个输出，复用了归约。
+见[FX / wrapper / GPU DSL 映射证据][mapping]。
 
-继续显式分段为 `[128 个 token 组,128 个通道]` 的部分和，再 final sum，
-自动生成两个 kernel，合计 **7.343 μs，快 12.72 倍**。
-因此先优化 **NPU Inductor `ir.py::num_splits` 的分段计划、`TileGenerator` 的候选范围**。
-已证明下层能够执行更快实现，没有将此问题归给 Triton_ascend 或 npuir 的证据。
+已确认的是 **NPU 生成了两次等价扫描**；尚未确定是 IR 对 reshape/keepdim 的规范化未识别等价，
+还是 scheduler 的融合条件阻止合并，或 codegen 没有复用相同表达式，不能把三者都写成已确认根因。
+需要沿这三处继续定界；优化后仍需保留两个梯度各自的存储，不能让不同参数的 `.grad` 共享可变 buffer。
 
-另有 **24 次重复归约**：第一层 wrapper 的 `_9.run(buf64,buf67,...)` 在原文件第 2176 行；
-第 2299 行 `_7.run(buf64,addmm_346,buf98,buf99,...)` 的第一路再次求同一个 `buf64.sum`。
-两个输出的 shape 分别为 `[1,128]` 和 `[1,1,128]`，均最终返回参数梯度；输入在两次调用之间没有改写。
-这组关系在 24 层重复。GPU `_12` 则将同一个 partial sum 值 `tmp24` 写到两个输出，复用归约计算。
+对应 24 次 `_9` 的原 profile 成本为 **2.168733 ms/step，占整网缺口 1.85%**，
+这是取消重复扫描的成本上限，还需扣除必要的独立写回。
+若先做分段，残余成本只有约 `24×7.343 μs=0.176 ms`；不能再把原 2.169 ms 加到分段收益中。
 
-这部分应检查 **Inductor IR 对 reshape/keepdim 后等价归约的规范化、scheduler 融合及 codegen 表达式复用**。
-现有证据定位了重复计算边界，尚未在 scheduler 上插桩确定具体哪条拒绝规则。
-优化应保留两个梯度输出各自的存储，不能直接让两个参数的 `.grad` 共享可变 buffer。
+#### `_7`：IR 未拆分双输出归约；runtime 漏掉宽 X tile
 
-按对应 24 次原 profile 精确收费，这些 `_9` 调用合计 **2.168733 ms/step**，占整网缺口 **1.85%**；
-这是取消重复扫描的成本上限，尚未扣除必要的独立写回。
-若先完成分段，剩下只约 `24 × 7.343 μs = 0.176 ms`，不能再把原 2.169 ms 加到分段收益上。
-
-原始 [DSL][dsl9] 与[自动两阶段 codegen][stage9]均已归档。
-
-#### `_7`：两路 NoNorm 参数梯度，缺少分段
-
-**完整名称：`triton_red_fused_mul_sum_view_7`。** 输入 `g,h` 均为 FP32 contiguous `[128,128,128]`：
+**模块一：IR `num_splits`。** 两路输出保留 X=128，均没有 partial/final 计划。
+DSL 在同一 `loop_r1` 内累加输入及输入乘另一张量，并在循环后分别 `tl.sum(...,0)`。
+输入 `g,h` 为 contiguous FP32 `[128,128,128]`，数学表达式为：
 
 ```python
-dbeta = g.sum((0, 1), keepdim=True)
-dgamma = (g * h).sum((0, 1), keepdim=True)
+out0 = g.sum((0, 1), keepdim=True)
+out1 = (g * h).sum((0, 1), keepdim=True)
 ```
 
-一步 **48 次**，每层 2 次。GPU 对应 `_8` 的 24 次和 `_12` 内另 24 次，均先做 128-token partial。
-NPU 原 winner 为 `3/1/4096`，24 个候选仍只有 X0BLOCK 3、4。
-同路径固定 `32/32/128` 后 **173.668 → 61.922 μs，快 2.80 倍**；
-两阶段 ATen 自动生成 **20.005 μs，快 8.68 倍**。
+**模块二：runtime `TileGenerator`。** 原 winner `3/1/4096`，24 个候选的 X0BLOCK 只有 3、4，
+遗漏更快的 `32/32/128`，与 `_11` 属于同一种候选覆盖问题。
 
-具体责任为 **IR `num_splits` 未把小输出长归约展开成 partial/final，以及 `TileGenerator` 漏候选**。
-自动方案实际为 **1 次 partial + 2 次 final，共 3 次 launch**；不能把两个 kernel 名当成两次调用。
-手写两路 final 合并的诊断版为 **10.995 μs**，是进一步调优参考；先以自动 codegen 的约 20–22 μs 为工程目标。
+**kernel 边界与实测。** 完整名称 `triton_red_fused_mul_sum_view_7`，每层 2 次、每步 48 次。
+仅换 tile：**173.668 → 61.922 μs，快 2.80 倍**；
+显式分段自动 codegen 为 **20.005 μs，快 8.68 倍**，实际 1 partial + 2 final。
+工程目标 **≤22 μs**；48 次外推约节省 **7.376 ms/step**。
+两路 final 合并的手写诊断版为 10.995 μs，仅作为后续调优参考。
 首轮与复核轮的自动结果分别为 19.875、20.005 μs，量级一致。
+见[原始 DSL][dsl7]、[自动 codegen][stage7]；GPU `_8` 和 `_12` 对应部分均先做 partial 再 final。
 
-见[原始 DSL][dsl7]、[自动两阶段 codegen][stage7]。不同输出并非模型外新增运算；
-GPU 将 `dh=g*gamma` 等相邻输出融合，NPU 采用不同边界，四方费用已对这些附带工作保守收费。
+#### `_13`：IR 未拆分带 pointwise 重计算的归约；runtime 漏候选
 
-#### `_13`：额外重计算不是 323 μs 的充分解释
-
-**完整名称：`triton_red_fused_add_mul_sum_view_13`。** 每层 1 次，一步 **24 次**。
-四个大输入为 FP32 contiguous `[128,128,128]`，另有两个 `[128]` 通道参数：
+**模块一：IR `num_splits`。** 输出 X=128 未分段，DSL 把全部 pointwise 和两路归约放在完整 R 循环中。
+完整名称 `triton_red_fused_add_mul_sum_view_13`，每步 24 次；四个大输入为
+contiguous FP32 `[128,128,128]`，另有两个 `[128]` 参数。其数学表达式为：
 
 ```python
 g = a + b
 h = c + (d * scale + bias)
-dbeta = g.sum((0, 1), keepdim=True)
-dgamma = (g * h).sum((0, 1), keepdim=True)
+out0 = g.sum((0, 1), keepdim=True)
+out1 = (g * h).sum((0, 1), keepdim=True)
 ```
 
-`d*scale+bias` 和残差 Add 是 FX graph 已存在的前向表达式重计算，Eager 反向通常使用保存的 `h`；
-GPU `_12` 同样含这些重计算，不能仅因 NPU 多见 Add/Mul 就断定其错误或为新增模型计算。
-本轮没有进一步确认具体 AOT 分区规则，也不把重计算本身单列为已确认缺陷。
+DSL 中的 `tmp9=tmp7*tmp8`、`tmp11=tmp9+tmp10`、`tmp12=tmp6+tmp11` 对应 `h` 的重计算，
+随后 `tmp13=tmp2*tmp12` 进入第二路归约。完整原始格式见[DSL][dsl13]。
+问题是这组表达式没有跨 program 分段；保留所有表达式不变的两阶段实测已明显更快。
 
-真正的性能证据是保持全部表达式不变：原 winner `3/1/4096` 的 **323.062 μs**，
-仅换 `16/16/256` 降到 **134.058 μs，快 2.41 倍**；
-显式两阶段 ATen 自动 codegen 降到 **25.957 μs，快 12.45 倍**。
-诊断版仍执行全部重计算，合计 **15.349 μs**。
+**模块二：runtime `TileGenerator`。** 原 winner `3/1/4096`，24 个候选只覆盖 X0BLOCK 3、4。
+保持同一 DSL，仅补入 `16/16/256`：**323.062 → 134.058 μs，快 2.41 倍**；
+显式分段自动 codegen 为 **25.957 μs，快 12.45 倍**，1 partial + 2 final。
+24 次外推约节省 **7.131 ms/step**，见[自动 codegen][stage13]。
 
-因此主要优化入口是 **NPU Inductor IR 长归约拆分与 TileGenerator**。
-它比 `_7` 多读两个大输入并执行更多 pointwise，合理目标应单独实测，不能复用 `_11` 的 13 μs 目标。
-自动方案两轮为 **40.851、25.957 μs**，记录到的 selected config 相同，运行上下文存在波动，
-本轮未继续定界该波动，不能归为候选变化。初期按 **不高于 41 μs** 验收，
-约 26–30 μs 作为进一步稳定测量后的目标。均为 1 partial + 2 final。
+**尚未确认为问题的模块：AOTAutograd 重计算策略。**
+`d*scale+bias` 与残差 Add 是 FX graph 已有的前向表达式重计算，GPU `_12` 也含相同工作。
+本轮没有定界具体 AOT 分区规则，不能因为这里多出 Add/Mul 就认定为额外缺陷。
+上述分段和换 tile 实验均保留这些计算，收益不依赖删除重计算。
 
-见[原始 DSL][dsl13]、[两阶段 codegen][stage13]、两轮[完整配置][verified]。
+自动分段两轮为 **40.851、25.957 μs**，selected config 相同，运行波动尚未定界。
+初期按 **≤41 μs** 验收，稳定测量后再争取 26–30 μs。
+手写诊断版为 15.349 μs，仅作后续参考，不能直接采用 `_11` 的目标。
 
-#### `_20`：分段可快约一倍，但还不能按 GPU 缺口立项
+#### `_20`：IR 分段计划有优化空间；未确认 runtime 候选问题
 
-**完整名称：`triton_red_fused_add_mul_sum_view_20`。** 五个大输入均为 FP32 `[128,128,512]`：
+**模块：IR `num_splits`。** 此处保留 X=512，同样直接返回不分段。
+DSL 在一个完整 R 循环内读入五个大输入、合并四路输入，再执行两路 Sum；
+地址随 R 前进的步长为 512，数学表达式为：
 
 ```python
 g = ((a + b) + c) + d
-dbeta = g.sum((0, 1), keepdim=True)
-dgamma = (g * h).sum((0, 1), keepdim=True)
+out0 = g.sum((0, 1), keepdim=True)
+out1 = (g * h).sum((0, 1), keepdim=True)
 ```
 
-一步 **24 次**。GPU 对应 `_19` 的 23 次，以及带 embedding 附加工作的 `_21` 的 1 次，再完成 final sum。
-NPU 原 20 个候选的 X0BLOCK 已是 **16**，复核 winner 为 `16/16/128`，grid 32。
-原实现 **184.514 μs**；同路径换 `32/32/128` 仅 **183.639 μs**，不足 1%，
-不支持把它归为前三组相同的“漏掉宽通道 tile”问题。
+完整名称 `triton_red_fused_add_mul_sum_view_20`，输入 FP32 `[128,128,512]`，每步 24 次。
+原实现 **184.514 μs**；显式分段自动 codegen 为 **97.704 μs，快 1.89 倍**，
+说明 IR 应有分段与不分段的可比较计划。见[原始 DSL][dsl20]、[自动 codegen][stage20]。
 
-显式两阶段自动 codegen 为 **97.704 μs**，约快 **1.89 倍**，说明 **IR 分段计划**仍有优化空间。
-相同输入的 Eager 对照为 225.300 μs；这个 NPU 控制实验用于说明可达性，不能代替 GPU 提升比对比。
+**runtime 边界：没有实测支持相同的候选漏搜归因。**
+原 20 个候选的 X0BLOCK 已为 16，winner `16/16/128`，grid 32。
+同路径换 `32/32/128` 为 **183.639 μs**，改善不足 1%。
+所以这里的已验证空间主要来自分段，而非 `_11` 等四组的宽 X tile 漏搜。
 
-原整网 schedule 匹配的 NPU Eager 费用上界为 **5.522489 ms**，含 3 次梯度 Add、两次 Sum、
-参数梯度 Mul，并额外收取一次 `dh` Mul；NPU Inductor 为 **5.468952 ms**，提升比上界约 **+0.97%**。
-GPU Eager 只按全局最小耗时收费，得到 1.062912 ms 下界；完整融合实现与 final sum 收到 7.050452 ms 上界。
-这些边界**不能证明** NPU 提升比低于 GPU；需要 GPU 侧这些 512 通道 Add/Mul/Sum 的逐次 shape/timing 或同边界实测。
+24 次同轮差值外推约 **2.083 ms/step，占整步 0.71%**。
+当前还缺 GPU 侧同边界数据，暂不计入前述四组优先收益。
+首轮手写版 78.655 μs 仅作参考；首轮原始基线波动较大，不用于收益外推。
 
-若单独采用自动分段，同轮差值外推为 **2.083 ms/step**，约占整步 0.71%；
-这是有条件的 NPU 优化空间，**不计入当前已确认 GPU 缺口的四组优先收益**。
-手写诊断版首轮 78.655 μs，仅作进一步上限参考，不能把不同轮的原始基线混用来承诺收益。
-见[原始 DSL][dsl20]、[自动 codegen][stage20]。
+#### `_0`：未确认 IR 或 runtime 缺陷；宽输出场景不宜直接套用分段
 
-#### `_0`：通道很宽，当前分段没有收益
+**模块结论：当前证据不支持把 IR 不分段或 runtime 选定 tile 判为缺陷。**
+完整名称 `triton_red_fused_add_sum_view_0`，两个 contiguous FP32 输入 `[128,128,30522]`，
+展平后为 `[R=16384,X=30522]`；计算 `(a+b).sum((0,1),keepdim=True)`，每步一次。
+逻辑输入读取约 4.001 GB。
 
-**完整名称：`triton_red_fused_add_sum_view_0`。** 两个输入为 FP32 contiguous `[128,128,30522]`，
-输出 `(a+b).sum((0,1),keepdim=True)`，一步 **1 次**。
-逻辑输入读取约 4.001 GB，远大于前述 128 通道 kernel。
+**IR 行为与实验。** 当前仍为一阶段归约，但显式分段自动 codegen 为 **2733.418 μs**，
+比原实现 **2547.143 μs 慢 7.31%**；三种手写分段约为 2741.898、2664.295、2705.270 μs，均未胜出。
+R 虽然同样长，X 已很大，原计划有足够的 X 方向并行度；增加部分和还会引入中间存储与 final 阶段。
+因此未来修改 `num_splits` 时，应保留不分段选项，并考虑输出宽度、布局与中间流量。
 
-84 个候选的 X0BLOCK 为 552、720、960；winner 为 **552/552/32**，grid 已有 **56 个 program**，
-连续通道 tile 也很宽。这里并不存在“只有单通道 tile、program 不足”的同一证据。
+**runtime 行为与实验。** 84 个候选的 X0BLOCK 为 552、720、960，winner `552/552/32`，
+grid 已有 56 个 program，连续 X tile 也是 552。
+这里不存在前四组“连续 X 只有 1、候选只覆盖 3/4”的证据。
+同配置重放为 2547.690 μs，本轮其他 tile 最好仍需 3540.150 μs。
 
-- 原实现及同配置重放分别为 **2547.143、2547.690 μs**。
-- 仅换本轮测试的 tile，最好也要 **3540.150 μs**，更慢。
-- 显式两阶段 ATen 为 **2733.418 μs**，比原实现慢 **7.31%**。
-- 三种手写分段分别约 2741.898、2664.295、2705.270 μs，均未胜过原实现。
-- 同边界 Eager Add+Sum 为 5689.651 μs；本次 NPU 编译已有约 **55.23%** 提升。
-
-GPU 对应的大融合 bias-sum kernel 还重算 loss/log-softmax backward 表达式，且输入布局有 30528 的行 stride；
-不能把其 2.686653 ms 与 NPU 2.585491 ms 直接相减判定问题，更不能据此判断两个设备的编译提升比。
-本轮未找到胜过原实现的方案，也未确认单项 GPU 收益缺口，**优化收益计 0**。
-IR 策略应对输出宽度、布局和额外中间流量做选择，不能给所有长 outer reduction 无条件分段。
+本轮没有找到胜过原实现的方案，**优化收益计 0**；也未确认应由 Triton_ascend/npuir 修复的问题。
 见[原始 DSL][dsl0]、[分段 codegen][stage0]。
 
 #### 实测如何排除编译入口和计时干扰
@@ -379,10 +352,8 @@ IR 策略应对输出宽度、布局和额外中间流量做选择，不能给�
 复核 **42 个 case** 全部通过；逐次 profile duration、Event 样本和误差均保存在[结果][verified]。
 共享环境出现过其他任务，未宣称持续独占；原始重放一致性和双口径结果用于发现明显干扰。
 
-原 IR `num_splits` 对非单元素输出直接返回 `DEFAULT,1`，使这些小输出归约缺少 partial/final 计划；
-原源码证据见[源码摘录][source]。
-同一个 Triton_ascend/npuir 后端已经执行了显著更快的上游计划，当前首先应改 Inductor。
-这不等于证明下层已无优化空间；本轮没有发现必须先修下层的固定 DSL/config 缺陷。
+同一个 Triton_ascend/npuir 后端已经执行了显著更快的上游计划，因此首先优化 Inductor IR 和候选生成。
+本轮没有证明下层已无优化空间，也没有确认固定 DSL/config 的下层缺陷。
 
 可复现脚本为 [run_family.py][run]，命令及计时说明见[README][readme]；
 原始和固定配置 TTIR、TTAdapter、生成 C++ 见[复核 IR][ir]，身份和精度汇总见[validation][validation]。
@@ -417,10 +388,7 @@ IR 策略应对输出宽度、布局和额外中间流量做选择，不能给�
 [env]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/family/environment.json
 [verified]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/family/verified_result.json
 [diagnostic]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/family/diagnostic_result.json
-[bound]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/family/profile_bound.json
-[windows]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/family/eager_windows.csv
 [mapping]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/family/mapping_evidence.txt
-[analyze]: ../../../../../scripts/repro/cicd/performance/mobilebert_reduction_20261103/analyze_family.py
 [source]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/source_evidence.txt
 [run]: ../../../../../scripts/repro/cicd/performance/mobilebert_reduction_20261103/run_family.py
 [readme]: ../../../../../scripts/repro/cicd/performance/mobilebert_reduction_20261103/README.md
@@ -442,8 +410,6 @@ IR 策略应对输出宽度、布局和额外中间流量做选择，不能给�
 [staged11]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/staged_output_code.py
 [result11]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/result.json
 [ir11]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/ir
-[bound11]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/profile_bound.json
-[windows11]: ../../../../../artifacts/cicd/performance/mobilebert-reduction-20261103/eager_windows.csv
 <!-- END MOBILEBERT REDUCTION ANALYSIS -->
 
 ### 2. prims.fma metadata 重复执行第一组 Mul/Add

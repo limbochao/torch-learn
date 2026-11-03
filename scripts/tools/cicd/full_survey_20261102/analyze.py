@@ -162,10 +162,11 @@ for case, a in DATA.items():
         ),
         (
             "affine_grad_reduce",
-            "add/mul/sum 参数梯度归约",
+            "outer reduction：IR 分段计划缺失与 tiling 候选漏搜",
             {"sum", "add", "mul"},
-            "NPU Inductor scheduler、多输出归约 codegen/tiling",
-            "选中 kernel 同时归约输入及输入乘激活，形成参数梯度。检查沿 token/batch 维的多输出归约是否长循环或并行不足；不能把这个成本归为裸 MM 性能。",
+            "NPU Inductor IR `num_splits` 与 runtime `TileGenerator`",
+            "MobileBERT Train 的四组 R=16384、X=128 outer reduction 缺少 partial/final 计划，"
+            "且候选遗漏更快的宽 X tile；逐 kernel 证据及其他宽度的边界见模型文档。",
         ),
         (
             "sum",

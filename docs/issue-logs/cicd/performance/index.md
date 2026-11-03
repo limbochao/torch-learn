@@ -19,5 +19,5 @@ title: CICD 性能分析
   已标记口径被替代，MM/AddMM 70.049 ms 不再作为编译优化依据。
 
 - [MobileBertForMaskedLM](models/MobileBertForMaskedLM.md#train)：
-  Train 第一项统一记录六组归约的逐 kernel 分析、IR 分段策略、候选漏搜、重复 bias sum 及整网收益估算；
+  Train 第一项按 Inductor IR、runtime 候选生成、等价归约复用分别解释 outer reduction 问题，附 DSL 与收益估算；
   `_20` 保留 GPU 收益核验边界，`_0` 分段无收益。

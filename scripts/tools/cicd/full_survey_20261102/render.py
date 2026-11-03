@@ -428,7 +428,7 @@ text = [
     "",
     f'保守局部筛选与已知重复执行/回退机制共列出 **{len(allissues)} 个场景级检查项，覆盖 {sum(bool(a["issues"]) for a in ANALYSIS.values())} 个场景**；每项都给出具体 kernel、代码位置、NPU/GPU 做法、占比及贡献预算。其余场景列出明确候选和缺失证据，不强行认定劣化。',
     "",
-    "2026-11-03 补充：[MobileBERT 逐 kernel 深挖](models/MobileBertForMaskedLM.md#1-addmulsum-参数梯度归约)已在指定环境与物理卡 1、2 实测；四组确认 IR 分段归约/候选问题，另两组不计入已确认单项缺口。约 50 ms/step 为小图外推。本文原 40 模型统计及粗筛预算保持不变。",
+    "2026-11-03 补充：[MobileBERT 逐 kernel 深挖](models/MobileBertForMaskedLM.md#outer-reduction)已在指定环境与物理卡 1、2 实测；四组确认 IR 分段归约/候选问题，另两组不计入已确认单项缺口。约 50 ms/step 为小图外推。本文原 40 模型统计及粗筛预算保持不变。",
     "",
     "## 比较方法与数字边界",
     "",
@@ -492,8 +492,8 @@ labels = {
         "NPU 输出维很小时的 program 并行度和分阶段归约；GPU pointwise/reduction 分拆。",
     ),
     "affine_grad_reduce": (
-        "MobileBERT add/mul 多输出归约",
-        "四组已确认 IR 分段/候选问题，另有 24 次重复 bias sum；`_20`、`_0` 单独保留边界。见[实测细分](models/MobileBertForMaskedLM.md#1-addmulsum-参数梯度归约)；本行仍为七组历史粗筛。",
+        "MobileBERT outer reduction：分段与候选问题",
+        "四组已确认 IR 分段/候选问题，另有 24 次重复 bias sum；`_20`、`_0` 单独保留边界。见[实测细分](models/MobileBertForMaskedLM.md#outer-reduction)；本行仍为七组历史粗筛。",
     ),
     "pool": (
         "NFNet avg_pool2d 生成实现",
