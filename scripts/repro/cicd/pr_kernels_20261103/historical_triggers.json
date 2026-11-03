@@ -1,0 +1,354 @@
+[
+  {
+    "problem_id": 1,
+    "case": "pr48545/01_persistent_threshold",
+    "trigger_conditions": "Ascend950; original 81-input Albert graph, R=2048, X=4096; keep persistent selection enabled. Original static performance X tile is already 1. Do not remove branches or shrink R.",
+    "failure_signature": "ub overflow for original persistent R=2048; repaired selection caps the base threshold at 1024",
+    "sources": [
+      {
+        "repository_source": "artifacts/cicd/four_model_matrix_20261020/analysis/Albert_configs/static_results.json",
+        "sha256": "442a5f3bb9a56597b4582b4025568d8c7c1df376de368e5987a5162b508bae78",
+        "excerpt": [
+          {
+            "case": "s_train_perf",
+            "variant": "original",
+            "constants": "{(86,): 1}",
+            "options": "{'num_warps': 1, 'num_stages': 2, 'debug': False, 'compile_mode': 'simd_simt_template', 'multibuffer': False}",
+            "status": "FAIL",
+            "seconds": 4.709987679030746,
+            "error_signature": "ub overflow"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "problem_id": 2,
+    "case": "pr48475/02_contiguous_sum",
+    "trigger_conditions": "Original BERT static backward ATen graph, float32[48,128,64]; preserve both outputs. Old generated persistent sum incorrectly flattens preserved X5 together with R2/R3.",
+    "failure_signature": "tl.reshape(tmp0, [R2BLOCK_SUB* R3BLOCK_SUB* X5BLOCK_SUB]) followed by tl.sum(tmp1, 0)",
+    "sources": [
+      {
+        "repository_source": "artifacts/cicd/four_model_matrix_20261020/kernel_sources/BERT_pytorch/s_train_acc/BERT_pytorch__0_backward_3.1/triton_per_fused_clone_matmul_backward_sum_tra_11.py",
+        "sha256": "09e6b3f703755f01cc273bd460f6d40dcbda579ebd6c7c5927df41c17c496fd3",
+        "excerpt": [
+          "                tmp1 = tl.reshape(tmp0, [R2BLOCK_SUB* R3BLOCK_SUB* X5BLOCK_SUB])",
+          "                tmp3 = triton_helpers.promote_to_tensor(tl.sum(tmp1, 0))"
+        ]
+      }
+    ]
+  },
+  {
+    "problem_id": 3,
+    "case": "pr48475/03_ub_retry_pooling",
+    "trigger_conditions": "Historical NFNet pooling float32[128,256,72,72], dynamic=True. Replay the supplied pointwise DSL with the original candidate set (minimum XBLOCK=4096); do not use the unrelated index-path DSL.",
+    "failure_signature": "original 20 candidates fail; retry appends 2048/1024/512/256 and compiles them",
+    "sources": [
+      {
+        "repository_source": "artifacts/cicd/ub_overflow_retry_20261024/validation_summary.json",
+        "sha256": "aec52e01f782ce2ad352a6fc46051067ccaf7d319ad7ef507ae2c287ca25c7bb",
+        "excerpt": {
+          "executed_commit": "66ac52720767d146826efa6fa77fbea9577d6613",
+          "candidate_generator_file_identical_to_documented_commit": true,
+          "device_family": "Ascend 950 / A5",
+          "initial_config_count": 20,
+          "initial_tile_sizes": [
+            4096,
+            8192,
+            16384,
+            32768
+          ],
+          "original_and_vf_failed_attempts": 40,
+          "all_failures_ub_overflow": true,
+          "minimum_tile": 4096,
+          "minimum_required_bits": 2097152,
+          "available_bits": 1769472,
+          "estimated_target_volume": 2764,
+          "extra_configs": [
+            {
+              "XBLOCK": 2048,
+              "compile_status": "PASS"
+            },
+            {
+              "XBLOCK": 1024,
+              "compile_status": "PASS"
+            },
+            {
+              "XBLOCK": 512,
+              "compile_status": "PASS"
+            },
+            {
+              "XBLOCK": 256,
+              "compile_status": "PASS"
+            }
+          ],
+          "final_config_count": 24,
+          "total_compile_attempts": 44,
+          "device_kernel_launched": false,
+          "vf_option_warning": "Ascend compile option 'enable_vf_fusion' is deprecated and will be removed in a future release; it is ignored; this switch is no longer forwarded to the NPU compiler."
+        }
+      },
+      {
+        "capture": "ub_overflow_retry_20261023/validation/results/nfnet_baseline/result.json",
+        "sha256": "db29c581c4d4b550c71a596500e3cbf8a8d4f93f07ac789c4d77f96b42167ba8",
+        "excerpt": {
+          "status": "COMPILE_FAIL",
+          "kernel": "triton_poi_fused__native_batch_norm_legit_avg_pool2d_convolution_view_21",
+          "versions": {
+            "torch": "2.13.0+cpu",
+            "torch_npu": "2.13.0.dev20261019",
+            "triton": "3.6.0"
+          },
+          "initial_count": 20
+        }
+      },
+      {
+        "capture": "ub_overflow_retry_20261023/validation/results/nfnet_patched/result.json",
+        "sha256": "b10a76a2eb20b8bf58db207ea2ce99919febdc22fc2fee75aa6194b795c40cc6",
+        "excerpt": {
+          "status": "PASS",
+          "kernel": "triton_poi_fused__native_batch_norm_legit_avg_pool2d_convolution_view_21",
+          "versions": {
+            "torch": "2.13.0+cpu",
+            "torch_npu": "2.13.0.dev20261019",
+            "triton": "3.6.0"
+          },
+          "initial_count": 20,
+          "retry_attempted": true,
+          "final_count": 24,
+          "compiled_configs": [
+            {
+              "XBLOCK": 2048,
+              "compile_mode": "simd_simt_template",
+              "multibuffer": false,
+              "split_axis": [
+                0
+              ],
+              "split_blocks": [
+                2097152
+              ]
+            },
+            {
+              "XBLOCK": 1024,
+              "compile_mode": "simd_simt_template",
+              "multibuffer": false,
+              "split_axis": [
+                0
+              ],
+              "split_blocks": [
+                2097152
+              ]
+            },
+            {
+              "XBLOCK": 512,
+              "compile_mode": "simd_simt_template",
+              "multibuffer": false,
+              "split_axis": [
+                0
+              ],
+              "split_blocks": [
+                2097152
+              ]
+            },
+            {
+              "XBLOCK": 256,
+              "compile_mode": "simd_simt_template",
+              "multibuffer": false,
+              "split_axis": [
+                0
+              ],
+              "split_blocks": [
+                2097152
+              ]
+            }
+          ],
+          "checks": [
+            {
+              "config": {
+                "XBLOCK": 2048,
+                "compile_mode": "simd_simt_template",
+                "multibuffer": false,
+                "split_axis": [
+                  0
+                ],
+                "split_blocks": [
+                  2097152
+                ]
+              },
+              "max_abs": 0.0
+            },
+            {
+              "config": {
+                "XBLOCK": 1024,
+                "compile_mode": "simd_simt_template",
+                "multibuffer": false,
+                "split_axis": [
+                  0
+                ],
+                "split_blocks": [
+                  2097152
+                ]
+              },
+              "max_abs": 0.0
+            },
+            {
+              "config": {
+                "XBLOCK": 512,
+                "compile_mode": "simd_simt_template",
+                "multibuffer": false,
+                "split_axis": [
+                  0
+                ],
+                "split_blocks": [
+                  2097152
+                ]
+              },
+              "max_abs": 0.0
+            },
+            {
+              "config": {
+                "XBLOCK": 256,
+                "compile_mode": "simd_simt_template",
+                "multibuffer": false,
+                "split_axis": [
+                  0
+                ],
+                "split_blocks": [
+                  2097152
+                ]
+              },
+              "max_abs": 0.0
+            }
+          ],
+          "inputs": [
+            {
+              "shape": [
+                128,
+                256,
+                72,
+                72
+              ],
+              "stride": [
+                1327104,
+                5184,
+                72,
+                1
+              ],
+              "dtype": "torch.float32"
+            },
+            {
+              "shape": [
+                128,
+                256,
+                36,
+                36
+              ],
+              "stride": [
+                331776,
+                1296,
+                36,
+                1
+              ],
+              "dtype": "torch.float32"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "problem_id": 4,
+    "case": "pr48475/04_nolinear_fusion",
+    "trigger_conditions": "Use the NFNet-derived 1x1 stride=32 conv training graph with the old combined scheduler (dc67771ff2); other Python modules match the validated branch baseline. Natural fallback fails at the first input (2,16,224,224). No injected codegen failure is used.",
+    "failure_signature": "NotImplementedError: unexpected group",
+    "sources": [
+      {
+        "repository_source": "artifacts/cicd/nolinear_fusion_recheck_20261024/npu/parent_control.txt",
+        "sha256": "2291cdba9a4cdf6ae04477ba648815742a278bc4aff9a6508596f93d9ac8c59d",
+        "excerpt": [
+          "PASS eager_forward_backward batch=2 height=224",
+          "torch._inductor.exc.InductorError: NotImplementedError: unexpected group: (s14*s4, (((s43 - 1)//32))**2 + 2*(((s43 - 1)//32)) + 1) != (s14*s4*(((s43 - 1)//32))**2 + 2*s14*s4*(((s43 - 1)//32)) + s14*s4, 1)"
+        ]
+      }
+    ]
+  },
+  {
+    "problem_id": 5,
+    "case": "pr48448/05_reduction_mask",
+    "trigger_conditions": "Keep CPU int64 sizes=(7,16,9), tensor.tolist(), capture_scalar_outputs=True, and float32[32] input. Use pre-dd35816d26 codegen/triton.py; all other runtime modules held equal in the historical control.",
+    "failure_signature": "r0_mask exists but tl.load(in_ptr0 + (r0), None) and unmasked tl.sum read beyond length 7",
+    "sources": [
+      {
+        "repository_source": "artifacts/npu-inductor-boundary-20261028/pr48448-split-with-sizes/summary.json",
+        "sha256": "eadd9ed4b35aaca950d1392cc400e79ff4b952ff8bc4c5a85c5390dee5427535",
+        "excerpt": {
+          "pr": "https://gitcode.com/Ascend/pytorch/merge_requests/48448",
+          "commit": "dd35816d26c7cb8721521ce9e6860dba8858f743",
+          "merge_time_beijing": "2026-10-23 20:37:31 +08:00",
+          "tested_at": "2026-10-29",
+          "changed_module_only": "torch_npu._inductor.codegen.triton",
+          "other_modules": "same installed torch_npu 2.13.0.dev20261028; identical native-build guards in all three runs",
+          "test_source_sha256": "8ad6d566fbf065705e797bc94083426727872428d1e5358b73c3217b97039a29",
+          "test": "test_unbacked_symints.py::TestUnbackedSymintsPRIVATEUSE1::test_split_with_sizes_npu",
+          "before": "FAIL: expected -5.14039945602417, actual -6.655652046203613; absolute difference 1.5152525901794434",
+          "after": "PASS",
+          "current": "PASS",
+          "responsible_change": "retain unproven persistent reduction axis masks and apply reduction identity before summing",
+          "pr_identification_source": "local Ascend/pytorch merged commit message; public page could not be read through web tool",
+          "scope": "one Python module before/after PR on the same current runtime, not complete historical wheel builds"
+        }
+      }
+    ]
+  },
+  {
+    "problem_id": 6,
+    "case": "pr48448/06_symbolic_strides",
+    "trigger_conditions": "Use the same two-shape training graph; fix preceding scheduler blockers and restore the old Layout modulo proof. The second (3,16,256,256) backward exposes the invalid symbolic range.",
+    "failure_signature": "ValueRangeError: Invalid ranges [0:-1]",
+    "sources": [
+      {
+        "repository_source": "artifacts/cicd/model_fixes_20261020/layout_checks/probe.txt",
+        "sha256": "29a7e5004f13e5172abc11bfb5342fc952dbde7df2befd844d5f415955dcc4be",
+        "excerpt": [
+          "  args[10]: [True, True, False]ValueRangeError: Invalid ranges [0:-1]"
+        ]
+      },
+      {
+        "repository_source": "artifacts/cicd/model_fixes_20261020/upstream_stride_20261023/baseline_original_modulo.txt",
+        "sha256": "35e1994565a7bfebd1da8ec77007f7b810a64646a8eae7020eeb6a493f27f7eb",
+        "excerpt": [
+          "torch.utils._sympy.value_ranges.ValueRangeError: Invalid ranges [0:-1]",
+          "torch.utils._sympy.value_ranges.ValueRangeError: Invalid ranges [0:-1]"
+        ]
+      }
+    ]
+  },
+  {
+    "problem_id": 7,
+    "case": "pr48448/07_range_split",
+    "trigger_conditions": "Use the same two-shape training graph with stride proof already corrected and old range splitting. CantSplit TypeError may be caught during an index attempt, so inspect index debug logs even if the full graph returns PASS. IndexError has separate direct-helper evidence.",
+    "failure_signature": "TypeError: CantSplit.__init__() missing 2 required positional arguments: 'expr' and 'remaining'",
+    "sources": [
+      {
+        "repository_source": "artifacts/cicd/model_fixes_20261020/layout_checks_v7/fixed_training.txt",
+        "sha256": "ceb7a8444356a31b9940697b0e41b2fb721be2fb8c96f3053e8e42810ad2d80b",
+        "excerpt": [
+          "PASS dynamic=True batch=2 height=224",
+          "W1020 22:47:40.098000 1268624 site-packages/torch/_functorch/_aot_autograd/graph_compile.py:2384] [0/1] torch._inductor.exc.InductorError: TypeError: CantSplit.__init__() missing 2 required positional arguments: 'expr' and 'remaining'",
+          "PASS dynamic=True batch=3 height=256"
+        ]
+      },
+      {
+        "repository_source": "artifacts/cicd/model_fixes_20261020/layout_checks_v8/baseline_range_unit.txt",
+        "sha256": "f7dd510d6d5d4aa1e34d0b9f19ae118989e6d4bd07e717e6f6c43a44364cdb13",
+        "excerpt": [
+          "TypeError: CantSplit.__init__() missing 2 required positional arguments: 'expr' and 'remaining'",
+          "TypeError: CantSplit.__init__() missing 2 required positional arguments: 'expr' and 'remaining'",
+          "TypeError: CantSplit.__init__() missing 2 required positional arguments: 'expr' and 'remaining'",
+          "IndexError: list index out of range",
+          "TypeError: CantSplit.__init__() missing 2 required positional arguments: 'expr' and 'remaining'"
+        ]
+      }
+    ]
+  }
+]
