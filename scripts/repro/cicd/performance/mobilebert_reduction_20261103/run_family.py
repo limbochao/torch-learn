@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--physical-device", type=int, required=True, choices=[1, 2, 3])
     parser.add_argument("--kinds", type=int, nargs="+", default=[9, 7, 13, 20, 0], choices=list(NAMES))
+    parser.add_argument("--verify-compile-path", action="store_true")
     args = parser.parse_args()
     if os.environ.get("ASCEND_RT_VISIBLE_DEVICES") != str(args.physical_device):
         raise RuntimeError("Visible physical device does not match --physical-device")
@@ -154,9 +155,10 @@ def main():
                 raise RuntimeError(f"Expected one profiler CSV: {files}")
             groups = {}
             for row in csv.DictReader(files[0].open()):
-                item = groups.setdefault(row["Name"], {"count": 0, "total_us": 0.0})
+                item = groups.setdefault(row["Name"], {"count": 0, "total_us": 0.0, "samples_us": []})
                 item["count"] += 1
                 item["total_us"] += float(row["Duration(us)"])
+                item["samples_us"].append(float(row["Duration(us)"]))
             entry["profile"] = {
                 "calls": 10,
                 "kernels": groups,
@@ -204,10 +206,30 @@ def main():
                     (target / ("kernel." + key)).write_text(binary.asm[key])
             (target / "metadata.json").write_text(json.dumps(binary.metadata._asdict(), indent=2, default=str))
 
+        save_binary("original", kernel.best_launcher.bin)
+        if args.verify_compile_path:
+            selected_tile = (selected["X0BLOCK"], selected["X0BLOCK_SUB"], selected["R1BLOCK_SUB"])
+            matched_tiles = [selected_tile, (16, 16, 256), (32, 32, 128), (64, 64, 64)]
+            if kind == 0:
+                matched_tiles = [selected_tile, (128, 128, 32), (256, 256, 16), (512, 512, 8)]
+            for index, (xb, xs, rb) in enumerate(matched_tiles):
+                cfg = copy.deepcopy(kernel.best_candidate_config)
+                cfg.kwargs.update(X0BLOCK=xb, X0BLOCK_SUB=xs, R1BLOCK_SUB=rb, split_blocks=[xb])
+                compiled_result = kernel._precompile_config(cfg)
+                launcher = compiled_result.make_launcher()
+                name = "matched_selected" if index == 0 else f"matched_x{xb}_r{rb}"
+
+                def matched():
+                    stream = torch_npu._C._npu_getCurrentRawStreamNoWait(0)
+                    return launcher(*inputs, *out, width, 16384, xb, stream=stream)
+
+                save_binary(name, compiled_result.kernel)
+                bench(name, matched, out)
+
         tiles = [(16, 256), (32, 128), (64, 64)]
         if kind == 0:
             tiles += [(128, 32), (256, 16), (512, 8), (1024, 4)]
-        for xb, rb in tiles:
+        for xb, rb in ([] if args.verify_compile_path else tiles):
             name = f"same_dsl_x{xb}_r{rb}"
 
             def fixed():
@@ -221,7 +243,7 @@ def main():
 
         padded_inputs = inputs + [inputs[0]] * (6 - len(inputs))
         padded_outputs = out + out[:1] if not dual else out
-        for chunk in [128, 512, 2048]:
+        for chunk in ([] if args.verify_compile_path else [128, 512, 2048]):
             parts = triton.cdiv(16384, chunk)
             buffers = [torch.empty((parts, width), device="npu") for _ in range(2 if dual else 1)]
             padded_buffers = buffers + buffers[:1] if not dual else buffers
@@ -250,7 +272,9 @@ def main():
         recorder.uninstall()
         bench("aten_explicit_stages", lambda: compiled(*inputs))
         save()
-        del compiled, inputs, out, buffers, padded_inputs, padded_outputs, padded_buffers
+        del compiled, inputs, out, padded_inputs, padded_outputs
+        if not args.verify_compile_path:
+            del buffers, padded_buffers
         torch.npu.empty_cache()
 
 
