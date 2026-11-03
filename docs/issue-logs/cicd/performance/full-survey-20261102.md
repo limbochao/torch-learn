@@ -22,25 +22,26 @@ title: CICD 全量性能分析：编译收益差距与共性问题
 
 ## 共性问题及优化责任
 
+本表按“占整网缺口”的中位数降序排列。
 以下占比按已列出该问题的场景逐个计算，再取中位数及最小–最大范围，不按跨模型毫秒数加权；仅有一个场景时列单值。
 **问题耗时占比**为本项 kernel/区间耗时除以当前 NPU Inductor 整步耗时；**劣化预算占比**为本项预算 B 除以同一个整步耗时，表示该项若达到局部目标可减少多少整步耗时。
 **占整网缺口**为 B / D，其中 D = T_NI − T_NE × T_GI/T_GE，只统计 D > 0 的场景，表示该项预算可解释多少达到 GPU 整网提升比所需的差距。它与 kernel 耗时占比不同，可能因其他区域的收益抵消而超过 100%；各类存在重叠，不能相加。
 
 | 具体问题 | 场景数 | 问题耗时/整步：中位（范围） | 劣化预算/整步：中位（范围） | 占整网缺口：中位 | 优化入口与 GPU 做法 |
 | --- | ---: | ---: | ---: | ---: | --- |
-| prims.fma metadata 第一组 Mul/Add 重复执行 | 20 | 1.7%（0.2–5.6%） | 1.7%（0.2–5.6%） | 8.7%（18例） | make_prim.meta 调用真实 impl_aten；_prim_impl 随后再次执行；GPU 融合在 kernel 内。已核对本批 wrapper 的 prims.fma 调用与 profile 连续调用窗口。 |
+| NFNet avg_pool2d 生成实现 | 1 | 15.0% | 14.4% | 84.4%（1例） | NPU avg_pool2d lowering、pointwise tiling/runtime；先判断是否应回退 ACLNN。 |
+| tanh backward+bias sum | 1 | 60.4% | 54.7% | 81.1%（1例） | NPU 输出维很小时的 program 并行度和分阶段归约；GPU pointwise/reduction 分拆。 |
+| GELU backward+bias sum | 4 | 4.2%（2.0–4.6%） | 3.4%（0.2–3.7%） | 32.1%（4例） | NPU 融合/归约 tiling；GPU 相应 fused/多阶段归约。 |
+| GNN scatter_add 与 gather/mul 分离 | 4 | 39.6%（25.3–58.3%） | 18.5%（10.1–27.2%） | 31.2%（4例） | NPU scatter_add lowering 和 scheduler fusion；GPU 生成含 scatter 的融合 kernel。 |
+| MobileBERT add/mul 多输出归约 | 1 | 22.9% | 11.6% | 29.2%（1例） | NPU 多输出 sum 的融合调度、归约轴映射；GPU 对应 add/mul/sum 生成实现。 |
 | Infer log_softmax→NLLLoss 完整矩阵写回 | 17 | 1.7%（0.07–10.6%） | 1.0%（0.04–8.3%） | 23.5%（10例） | NPU nll_loss_forward decomposition/lowering 使消费者留在外部调用；GPU 融合 target 提取和归约。 |
-| GELU 前向外部调用阻断 bias/pointwise 融合 | 16 | 2.0%（1.2–3.7%） | 0.2%（0.05–0.8%） | 2.6%（10例） | NPU activation lowering/fusion；GPU 含 GELU 的融合 kernel。 |
-| Train NLLLossBackward→LogSoftmaxBackward 完整 dlogP | 8 | 1.0%（0.05–3.9%） | 0.08%（0.01–0.8%） | 0.4%（8例） | NPU 两条 decomposition/lowering 边界；GPU loss derivative 融合。 |
+| ReLU backward+bias sum | 4 | 6.4%（1.0–50.2%） | 3.0%（0.1–48.7%） | 12.9%（3例） | NPU pointwise/归约融合与并行映射；GPU 分拆或不同归约。 |
+| prims.fma metadata 第一组 Mul/Add 重复执行 | 20 | 1.7%（0.2–5.6%） | 1.7%（0.2–5.6%） | 8.7%（18例） | make_prim.meta 调用真实 impl_aten；_prim_impl 随后再次执行；GPU 融合在 kernel 内。已核对本批 wrapper 的 prims.fma 调用与 profile 连续调用窗口。 |
+| 首层 attention constexpr/checker 回退 | 2 | 8.9%（7.2–10.7%） | 3.0%（2.5–3.5%） | 8.6%（2例） | NPUIndexTritonKernel.codegen_kernel 的 constexpr 常量绑定及 checker 回退；GPU 无此首层异常。 |
 | 具体 sum kernel 的归约调度 | 5 | 3.8%（1.5–10.1%） | 3.6%（1.2–8.7%） | 8.2%（5例） | NPU codegen 归约维切分、多阶段选择；GPU sum kernel 作为保守费用上界。 |
 | LayerNorm backward 归约映射 | 5 | 1.6%（1.3–14.2%） | 0.6%（0.2–12.7%） | 5.9%（5例） | NPU reduction codegen/tiling/runtime autotune；GPU 采用不同归约拆分。 |
-| GELU backward+bias sum | 4 | 4.2%（2.0–4.6%） | 3.4%（0.2–3.7%） | 32.1%（4例） | NPU 融合/归约 tiling；GPU 相应 fused/多阶段归约。 |
-| ReLU backward+bias sum | 4 | 6.4%（1.0–50.2%） | 3.0%（0.1–48.7%） | 12.9%（3例） | NPU pointwise/归约融合与并行映射；GPU 分拆或不同归约。 |
-| GNN scatter_add 与 gather/mul 分离 | 4 | 39.6%（25.3–58.3%） | 18.5%（10.1–27.2%） | 31.2%（4例） | NPU scatter_add lowering 和 scheduler fusion；GPU 生成含 scatter 的融合 kernel。 |
-| 首层 attention constexpr/checker 回退 | 2 | 8.9%（7.2–10.7%） | 3.0%（2.5–3.5%） | 8.6%（2例） | NPUIndexTritonKernel.codegen_kernel 的 constexpr 常量绑定及 checker 回退；GPU 无此首层异常。 |
-| MobileBERT add/mul 多输出归约 | 1 | 22.9% | 11.6% | 29.2%（1例） | NPU 多输出 sum 的融合调度、归约轴映射；GPU 对应 add/mul/sum 生成实现。 |
-| tanh backward+bias sum | 1 | 60.4% | 54.7% | 81.1%（1例） | NPU 输出维很小时的 program 并行度和分阶段归约；GPU pointwise/reduction 分拆。 |
-| NFNet avg_pool2d 生成实现 | 1 | 15.0% | 14.4% | 84.4%（1例） | NPU avg_pool2d lowering、pointwise tiling/runtime；先判断是否应回退 ACLNN。 |
+| GELU 前向外部调用阻断 bias/pointwise 融合 | 16 | 2.0%（1.2–3.7%） | 0.2%（0.05–0.8%） | 2.6%（10例） | NPU activation lowering/fusion；GPU 含 GELU 的融合 kernel。 |
+| Train NLLLossBackward→LogSoftmaxBackward 完整 dlogP | 8 | 1.0%（0.05–3.9%） | 0.08%（0.01–0.8%） | 0.4%（8例） | NPU 两条 decomposition/lowering 边界；GPU loss derivative 融合。 |
 
 归约类具体代码入口为 `NPUIndexTritonKernel.reduction`、`codegen_kernel`，配置侧为 `triton_config_npu_index` 与 `NPUCachingAutotuner.autotune_to_one_config`；融合检查入口为 NPU scheduling 的 `can_fuse` / `candidate_tilings`。这些入口定位到 Inductor 的具体功能模块；除历史 constexpr/FMA 机制外，不把首查模块写成已证实根因。相同 DSL/config 仍慢才能继续判断 Triton_ascend/npuir；外部 scatter/broadcast 则还涉及 CANN。
 

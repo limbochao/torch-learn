@@ -413,6 +413,7 @@ text = [
     "",
     "## 共性问题及优化责任",
     "",
+    "本表按“占整网缺口”的中位数降序排列。",
     "以下占比按已列出该问题的场景逐个计算，再取中位数及最小–最大范围，不按跨模型毫秒数加权；仅有一个场景时列单值。",
     "**问题耗时占比**为本项 kernel/区间耗时除以当前 NPU Inductor 整步耗时；"
     "**劣化预算占比**为本项预算 B 除以同一个整步耗时，表示该项若达到局部目标可减少多少整步耗时。",
@@ -468,10 +469,19 @@ labels = {
         "NPU avg_pool2d lowering、pointwise tiling/runtime；先判断是否应回退 ACLNN。",
     ),
 }
+common_rows = []
 for kind, count in counts.most_common():
     samples = [(case, issue) for case, issue in allissues if issue["kind"] == kind]
     cost_share, budget_share, gap_share = common_issue_share_cells(samples, DATA)
-    text.append(f"| {labels[kind][0]} | {count} | {cost_share} | {budget_share} | {gap_share} | {labels[kind][1]} |")
+    gap_values = [
+        issue["budget_ms"] / DATA[case]["whole_model"]["deficit_ms"]
+        for case, issue in samples
+        if DATA[case]["whole_model"]["deficit_ms"] > 0
+    ]
+    sort_share = median(gap_values) if gap_values else float("-inf")
+    row = f"| {labels[kind][0]} | {count} | {cost_share} | {budget_share} | {gap_share} | {labels[kind][1]} |"
+    common_rows.append((sort_share, row))
+text.extend(row for _, row in sorted(common_rows, key=lambda item: item[0], reverse=True))
 text += [
     "",
     "归约类具体代码入口为 `NPUIndexTritonKernel.reduction`、`codegen_kernel`，配置侧为 `triton_config_npu_index` 与 `NPUCachingAutotuner.autotune_to_one_config`；融合检查入口为 NPU scheduling 的 `can_fuse` / `candidate_tilings`。这些入口定位到 Inductor 的具体功能模块；除历史 constexpr/FMA 机制外，不把首查模块写成已证实根因。相同 DSL/config 仍慢才能继续判断 Triton_ascend/npuir；外部 scatter/broadcast 则还涉及 CANN。",
