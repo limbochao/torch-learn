@@ -18,7 +18,6 @@ title: CICD 性能分析
 - [两模型绝对耗时差历史分析](electra-layoutlm-train-gpu-inductor-gap-20261102.md)：
   已标记口径被替代，MM/AddMM 70.049 ms 不再作为编译优化依据。
 
-- [MobileBERT Train 参数梯度归约深挖](mobilebert-parameter-reduction-20261103.md)：
-  IR 分段归约策略与 tiling 候选漏搜，附指定分支单 kernel 实测、GPU 对照和收益估算。
-- [MobileBERT 其余归约逐 kernel 分析](mobilebert-remaining-reductions-20261103.md)：
-  `_9`、`_7`、`_13` 新增确认，`_20` 保留 GPU 收益核验边界，`_0` 分段无收益；含五组实测和整网外推。
+- [MobileBertForMaskedLM](models/MobileBertForMaskedLM.md#train)：
+  Train 第一项统一记录六组归约的逐 kernel 分析、IR 分段策略、候选漏搜、重复 bias sum 及整网收益估算；
+  `_20` 保留 GPU 收益核验边界，`_0` 分段无收益。

@@ -41,7 +41,7 @@ python <torch-learn>/scripts/repro/cicd/performance/mobilebert_reduction_2026110
 
 该脚本将 NPU Eager 的全部 168 个同型窗口作为目标 96 次的费用上界，
 GPU Eager 按必需操作数量乘各操作最小耗时作为下界；不把聚合平均值当作目标 shape 耗时。
-边界含义与源码结论见[专项文档](../../../../../docs/issue-logs/cicd/performance/mobilebert-parameter-reduction-20261103.md)。
+边界含义与源码结论见[模型分析文档](../../../../../docs/issue-logs/cicd/performance/models/MobileBertForMaskedLM.md#1-addmulsum-参数梯度归约)。
 
 ## 其余五组 kernel
 
@@ -77,4 +77,4 @@ python <torch-learn>/scripts/repro/cicd/performance/mobilebert_reduction_2026110
 该脚本对 `_9` 收取全部线性 bias sum 超集，对 `_7`、`_13` 按 FX/执行顺序匹配窗口并额外收取 `dh` Mul。
 GPU 收取完整融合实现和全部 final sum，用必需 Eager 操作的最小耗时作下界。
 `_20` 的边界不能确认收益缺口，`_0` 也不列入单项缺口预算。
-计算口径、GPU 对位修正和整网外推见[剩余 kernel 分析](../../../../../docs/issue-logs/cicd/performance/mobilebert-remaining-reductions-20261103.md)。
+计算口径、GPU 对位修正和整网外推见[模型逐 kernel 分析](../../../../../docs/issue-logs/cicd/performance/models/MobileBertForMaskedLM.md#1-addmulsum-参数梯度归约)。
