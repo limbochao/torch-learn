@@ -17,8 +17,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runner', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--variant', choices=['baseline', 'split', 'scatter', 'both'], required=True)
+    parser.add_argument('--variant', choices=['baseline', 'split', 'scatter', 'both', 'pool-fallback'], required=True)
     parser.add_argument('--split-relu-only', action='store_true')
+    parser.add_argument('--split-min-reduction', type=int, default=8192)
     args, argv = parser.parse_known_args()
     if argv[:1] == ['--']:
         argv = argv[1:]
@@ -72,6 +73,13 @@ def main():
     changes['split_reductions_config'] = torch._inductor.config.split_reductions
     original = ir.Reduction.num_splits
     changes['original_num_splits'] = inspect.getsource(original)
+    changes['split_min_reduction'] = args.split_min_reduction
+    if args.variant == 'pool-fallback':
+        # Implementation-selection control, not a production fallback policy.
+        op = torch.ops.aten.avg_pool2d.default
+        changes['original_pool_lowering'] = inspect.getsource(lowering.lowerings[op])
+        lowering.lowerings[op] = lowering.fallback_handler(op, add_to_fallback_set=False)
+        changes['pool_lowering'] = inspect.getsource(lowering.lowerings[op])
     if args.variant in ('split', 'both'):
         def num_splits(device, dst_dtype, src_dtype, inner_fn, ranges, reduction_ranges,
                        reduction_type, reduction_numel, input_node=None):
@@ -85,7 +93,7 @@ def main():
                 allowed = getattr(producer, 'target', None) == torch.ops.aten.where.self
             # Experimental outer-reduction policy. No changes to other reductions.
             if (device.type == 'npu' and reduction_type == 'sum' and 1 < n <= 128
-                    and r >= 8192 and allowed):
+                    and r >= args.split_min_reduction and allowed):
                 split = min(256, (int(r) + 511) // 512)
                 changes['split_events'].append({'node': str(node), 'producer': str(node.args[0]),
                                                 'n': int(n), 'r': int(r), 'split': split})
