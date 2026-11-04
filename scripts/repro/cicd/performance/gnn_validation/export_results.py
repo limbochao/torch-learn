@@ -35,6 +35,7 @@ def main():
 
     export(args.job / 'summary.json', Path('summary.json'))
     export(args.job / 'selected_configs.json', Path('selected_configs.json'))
+    export(args.job / 'runner_identity.json', Path('runner_identity.json'))
     for case in sorted(args.job.iterdir()):
         if not case.is_dir() or not case.name.startswith(('micro_', 'basic_gnn_')):
             continue

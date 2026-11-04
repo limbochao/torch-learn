@@ -60,6 +60,12 @@ def main():
         'ir.py', 'config.py', 'lowering.py', 'lowering_fallback_list.py', 'codegen/triton.py',
         'codegen/scheduling.py', 'runtime/triton_heuristics.py')]
     changes['source_sha256'] = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+    changes['harness_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    changes['run_environment'] = {name: os.environ.get(name) for name in (
+        'ASCEND_RT_VISIBLE_DEVICES', 'TORCHINDUCTOR_CACHE_DIR', 'TRITON_CACHE_DIR',
+        'TORCHINDUCTOR_NPU_BACKEND', 'TORCHINDUCTOR_COMPILE_THREADS', 'TORCHNPU_PRECOMPILE_THREADS')}
+    compiler = Path(triton.__file__).parent / 'backends/ascend/compiler.py'
+    changes['triton_compiler_sha256'] = hashlib.sha256(compiler.read_bytes()).hexdigest()
     changes['versions'] = {m.__name__: m.__version__ for m in (torch, torch_npu, triton)}
     changes['argv'] = argv
     changes['scatter_lowering'] = inspect.getsource(lowering.lowerings[torch.ops.aten.scatter_add.default])
