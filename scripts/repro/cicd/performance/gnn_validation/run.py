@@ -117,13 +117,13 @@ def main():
     spec.loader.exec_module(module)
     name = 'triton_red_fused_sum_threshold_backward_3' if relu else 'triton_red_fused_sum_0'
     kernel = getattr(module, name)
-    stream = torch_npu._C._npu_getCurrentRawStreamNoWait(0)
     recorder = BestTilingRecorder('npu')
     recorder.install()
     recorder.start_capture()
     # Original ReLU kernel mutates its activation argument. Always copy it afresh,
     # including timed iterations, to preserve the original activation predicate.
     def original():
+        stream = torch_npu._C._npu_getCurrentRawStreamNoWait(0)
         if relu:
             output.copy_(a)
             kernel.run(output, g, reduced, 64, rows, stream=stream)
