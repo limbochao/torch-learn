@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--device', type=int, choices=[1, 2, 3], required=True)
-    parser.add_argument('--case', choices=['edgecnn', 'gcn', 'scatter'], required=True)
+    parser.add_argument('--case', choices=['edgecnn', 'gcn', 'scatter', 'pool'], required=True)
     args = parser.parse_args()
     assert os.environ.get('ASCEND_RT_VISIBLE_DEVICES') == str(args.device)
     import torch
@@ -75,6 +75,43 @@ def main():
             result['cases'][name] = {'error': traceback.format_exc()}
             print(name, result['cases'][name], flush=True)
         save()
+
+    if args.case == 'pool':
+        cpu = torch.randn(128, 1536, 14, 14)
+        x = cpu.npu()
+        reference = (torch.nn.functional.avg_pool2d(cpu.double(), 2, 2),)
+        output = torch.empty((128, 1536, 7, 7), device='npu')
+        path = root / 'artifacts/cicd/performance/gnn-validation/original/pool.py'
+        spec = importlib.util.spec_from_file_location('original_pool', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        kernel = module.triton_poi_fused_avg_pool2d_42
+        recorder = BestTilingRecorder('npu')
+        recorder.install()
+        recorder.start_capture()
+
+        def original_pool():
+            stream = torch_npu._C._npu_getCurrentRawStreamNoWait(0)
+            kernel.run(x, output, 1376256, 7, stream=stream)
+            return (output,)
+
+        original_pool()
+        result['selected'] = recorder.stop_capture()
+        recorder.uninstall()
+        bench('original', original_pool, reference)
+        eager_pool = lambda x: torch.nn.functional.avg_pool2d(x, 2, 2)
+        bench('eager_same_boundary', lambda: (eager_pool(x),), reference)
+        compiled = torch.compile(eager_pool, fullgraph=True)
+        bench('regenerated', lambda: (compiled(x),), reference)
+        for mode in ['simd_simt_template', 'simt_only']:
+            for sub in [32, 128]:
+                def fixed_pool():
+                    kernel.fn[(56,)](x, output, 1376256, 7, 24576, Y0BLOCK_SUB=sub,
+                                     compile_mode=mode, num_warps=32 if mode == 'simt_only' else 1,
+                                     num_stages=2, multibuffer=False)
+                    return (output,)
+                bench(f'same_dsl_{mode}_sub{sub}', fixed_pool, reference)
+        return
 
     if args.case == 'scatter':
         edges = 209978
