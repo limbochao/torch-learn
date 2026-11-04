@@ -32,12 +32,13 @@ def finish(P, O, PARTS: tl.constexpr, XB: tl.constexpr, RB: tl.constexpr):
 
 @triton.jit
 def scatter_message(X, E, W, O, EDGES: tl.constexpr, BLOCK: tl.constexpr):
-    i = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-    edge = i // 64
-    c = i % 64
-    mask = edge < EDGES
-    src = tl.load(E + edge, mask, other=0)
-    dst = tl.load(E + EDGES + edge, mask, other=0)
-    weight = tl.load(W + edge, mask, other=0)
-    val = tl.load(X + src * 64 + c, mask, other=0)
-    tl.atomic_add(O + dst * 64 + c, weight * val, mask, sem="relaxed")
+    for block in range(tl.program_id(0), tl.cdiv(EDGES * 64, BLOCK), tl.num_programs(0)):
+        i = block * BLOCK + tl.arange(0, BLOCK)
+        edge = i // 64
+        c = i % 64
+        mask = edge < EDGES
+        src = tl.load(E + edge, mask, other=0)
+        dst = tl.load(E + EDGES + edge, mask, other=0)
+        weight = tl.load(W + edge, mask, other=0)
+        val = tl.load(X + src * 64 + c, mask, other=0)
+        tl.atomic_add(O + dst * 64 + c, weight * val, mask, sem="relaxed")

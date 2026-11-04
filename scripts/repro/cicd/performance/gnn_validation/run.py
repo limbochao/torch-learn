@@ -94,12 +94,13 @@ def main():
         compiled = torch.compile(eager, fullgraph=True)
         bench('compiled_fallback', lambda: (compiled(x, edge, weight),), (ref,))
         out = torch.empty_like(x)
-        for block in [256, 1024, 2048]:
-            def fused():
-                out.zero_()
-                scatter_message[(triton.cdiv(edges * 64, block),)](x, edge, weight, out, edges, block)
-                return (out,)
-            bench(f'fused_atomic_b{block}', fused, (ref,))
+        for mode in ['simd_simt_template', 'simt_only']:
+            for block in [256, 1024, 2048]:
+                def fused():
+                    out.zero_()
+                    scatter_message[(56,)](x, edge, weight, out, edges, block, compile_mode=mode)
+                    return (out,)
+                bench(f'fused_atomic_{mode}_b{block}', fused, (ref,))
         return
 
     relu = args.case == 'edgecnn'
