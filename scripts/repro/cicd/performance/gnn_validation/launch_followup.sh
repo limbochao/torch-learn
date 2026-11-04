@@ -17,10 +17,11 @@ if [ "$group" = small ]; then
 elif [ "$group" = pool ]; then
   export ASCEND_RT_VISIBLE_DEVICES=2
   specs=('nfnet_l0 training baseline' 'nfnet_l0 training pool-fallback')
-elif [ "$group" = sage-recheck ]; then
+elif [ "$group" = small-recheck ]; then
   export ASCEND_RT_VISIBLE_DEVICES=3
   specs=('basic_gnn_sage training baseline' 'basic_gnn_sage training scatter'
-         'basic_gnn_sage training baseline')
+         'basic_gnn_sage training baseline' 'lennard_jones training baseline'
+         'lennard_jones training split' 'lennard_jones training baseline')
   kinds=(performance)
 else
   exit 2
@@ -31,14 +32,14 @@ for kind in "${kinds[@]}"; do
     read -r model mode variant <<< "$spec"
     run=$job/${model}_${mode}_${variant}
     cache=$run/cache
-    if [ "$group" = sage-recheck ]; then
+    if [ "$group" = small-recheck ]; then
       index=$((index + 1))
       run=${run}_recheck$index
     fi
     if [ "$kind" = accuracy ]; then run=${run}_accuracy; fi
     mkdir -p "$run"
     cache_group=$group
-    if [ "$group" = sage-recheck ]; then cache_group=small; fi
+    if [ "$group" = small-recheck ]; then cache_group=small; fi
     export TORCHINDUCTOR_CACHE_DIR=$cache TRITON_CACHE_DIR=$job/triton_cache_$cache_group
     export TORCH_COMPILE_DEBUG_DIR=$run/debug
     echo "${model}_${mode}_${variant}_${kind}" > "$job/${group}_current"
