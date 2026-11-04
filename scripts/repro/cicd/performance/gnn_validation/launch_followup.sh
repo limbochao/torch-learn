@@ -8,6 +8,7 @@ export TORCHINDUCTOR_NPU_BACKEND=triton
 export TORCHINDUCTOR_COMPILE_THREADS=1 TORCHNPU_PRECOMPILE_THREADS=8
 export TORCHINDUCTOR_FX_GRAPH_CACHE=0 TORCH_COMPILE_DEBUG=1
 export OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTHONUNBUFFERED=1
+kinds=(performance accuracy)
 if [ "$group" = small ]; then
   export ASCEND_RT_VISIBLE_DEVICES=3
   specs=('basic_gnn_sage inference baseline' 'basic_gnn_sage inference scatter'
@@ -16,17 +17,29 @@ if [ "$group" = small ]; then
 elif [ "$group" = pool ]; then
   export ASCEND_RT_VISIBLE_DEVICES=2
   specs=('nfnet_l0 training baseline' 'nfnet_l0 training pool-fallback')
+elif [ "$group" = sage-recheck ]; then
+  export ASCEND_RT_VISIBLE_DEVICES=3
+  specs=('basic_gnn_sage training baseline' 'basic_gnn_sage training scatter'
+         'basic_gnn_sage training baseline')
+  kinds=(performance)
 else
   exit 2
 fi
-for kind in performance accuracy; do
+index=0
+for kind in "${kinds[@]}"; do
   for spec in "${specs[@]}"; do
     read -r model mode variant <<< "$spec"
     run=$job/${model}_${mode}_${variant}
     cache=$run/cache
+    if [ "$group" = sage-recheck ]; then
+      index=$((index + 1))
+      run=${run}_recheck$index
+    fi
     if [ "$kind" = accuracy ]; then run=${run}_accuracy; fi
     mkdir -p "$run"
-    export TORCHINDUCTOR_CACHE_DIR=$cache TRITON_CACHE_DIR=$job/triton_cache_$group
+    cache_group=$group
+    if [ "$group" = sage-recheck ]; then cache_group=small; fi
+    export TORCHINDUCTOR_CACHE_DIR=$cache TRITON_CACHE_DIR=$job/triton_cache_$cache_group
     export TORCH_COMPILE_DEBUG_DIR=$run/debug
     echo "${model}_${mode}_${variant}_${kind}" > "$job/${group}_current"
     extra=()
