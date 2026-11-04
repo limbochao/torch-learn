@@ -201,6 +201,8 @@ GPU 对应实现/保守收费项：
 
 #### 补齐 seed constexpr：首层从 16.790 ms 降到 0.974 ms
 
+修复记录：[Index seed constexpr 修复说明](../../fixes/index-triton-seed-constexpr-fix.md)，包含正式补丁、PR / Issue、修复前后 kernel 与性能验证。
+
 **已验证的责任模块是 NPU Inductor `NPUIndexTritonKernel.codegen_kernel`：遗漏了 signature 中等于 1 的 SizeArg 常量绑定。** 仅补齐这段元数据生成逻辑，就消除首层 checker 失败，恢复多轴 kernel；无需改动 Triton_ascend 或 npuir。
 
 2026-11-03 在 NPU_A5 物理卡 2、`pta_213_cicd` 实测，2026-11-04 整理。场景为 Train、FP32、static、batch=32、sequence=512，attention scores 为 `[32,4,512,512]`，关闭 aclgraph。两组分别采样 10 个稳定 step。
@@ -248,8 +250,6 @@ for arg_num in equal_1_arg_indices(signature):
 软件版本为 torch `2.13.0+cpu`、torch_npu `2.13.0.dev20261030`、Triton `3.6.0`、transformers `4.36.0`。三个关键安装文件与 `test/cicd_benchmark@b3bd74035189` 一致；既存 matmul decomposition 差异在两组中保持一致，见[版本校验](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/installed_identity.json)和[已有差异](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/decomposition_difference.patch)。补丁只在当前进程生效，安装目录和 runner 文件校验均未变化。LayoutLM 有相同历史机制，本次未测其整网修复收益，不将 Electra 数值直接搬过去。
 
 证据：[原始首层及后续层 DSL](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_baseline/selected_kernels.txt)、[修改后 DSL](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr/selected_kernels.txt)、[失败记录](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_baseline/codegen_failures.json)、[修改后记录](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr/codegen_failures.json)、[临时 codegen 方法](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr/codegen_kernel_patched.py)、[10 步统计](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/summary.json)、[accuracy 日志](../../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_bind_constexpr_accuracy/run.log)、[实验脚本](../../../../../scripts/repro/cicd/performance/fma_seed_validation/README.md)。
-正式补丁现已基于最新 master 建立独立分支；分支、修改范围与修复前后 kernel 对照见
-[Index seed constexpr 修复说明](../index-triton-seed-constexpr-fix.md)。本节性能数字仍为上述指定版本的实测。
 <!-- END CICD VALIDATION ElectraForCausalLM_Train:attention_seed -->
 
 ### 3. NLLLossBackward→LogSoftmaxBackward 的完整中间矩阵

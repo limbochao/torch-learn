@@ -10,7 +10,7 @@ Index checker 生成 TTIR 失败后进入 no-linear 回退，首层 kernel 从�
 补齐与社区 codegen 一致的元数据规则后，首层恢复多轴生成，整步设备耗时减少 **14.983 ms / 9.55%**。
 
 本文直接给出错误、关键 DSL、修复规则和性能结果；完整日志与完整 kernel 作为辅助证据。
-模型历史分析仍维护在 [Electra 原章节](models/ElectraForCausalLM.md#attention-constexpr-validation)。
+模型历史分析仍维护在 [Electra 原章节](../performance/models/ElectraForCausalLM.md#attention-constexpr-validation)。
 
 ## 修复分支与验证版本
 
@@ -334,7 +334,7 @@ python test/_inductor/test_index_triton_constants.py
 [source-identity]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/source_identity.json
 [metadata-repro]: ../../../../scripts/repro/cicd/performance/fma_seed_validation/validate_index_constants.py
 [model-repro]: ../../../../scripts/repro/cicd/performance/fma_seed_validation/README.md
-[history]: electra-layoutlm-train-first-attention-20261031.md
+[history]: ../performance/electra-layoutlm-train-first-attention-20261031.md
 [identity]: ../../../../artifacts/cicd/performance/fma-seed-validation-20261103/installed_identity.json
 [decomp]: ../../../../artifacts/cicd/performance/fma-seed-validation-20261103/decomposition_difference.patch
 [before-kernel]: ../../../../artifacts/cicd/performance/fma-seed-validation-20261103/ElectraForCausalLM_baseline/selected_kernels.txt

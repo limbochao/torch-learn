@@ -27,6 +27,18 @@ title: 问题定位日志
 记录 Eager / Inductor 的提升比对比，明确劣化 kernel、耗时差距、责任模块和验证范围。
 </article>
 
+<article class="tl-feature tl-card-accent-blue" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">CICD</span>
+  <span class="tl-badge">Fix</span>
+  <span class="tl-badge">Validation</span>
+</div>
+
+### [CICD 问题修复](cicd/fixes/index.html)
+
+记录具体问题的修复方案、代码改动、修复前后 kernel 和模型验证结果。
+</article>
+
 <article class="tl-feature tl-card-accent-rose" markdown="1">
 <div class="tl-meta">
   <span class="tl-badge">Codegen</span>
