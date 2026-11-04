@@ -15,6 +15,18 @@ title: 问题定位日志
 </div>
 
 <div class="tl-card-grid tl-card-grid-two" markdown="1">
+<article class="tl-feature tl-card-accent-rose" markdown="1">
+<div class="tl-meta">
+  <span class="tl-badge">Codegen</span>
+  <span class="tl-badge">BF16</span>
+  <span class="tl-badge">Accuracy</span>
+</div>
+
+### [BF16 融合计算的中间舍入与 emulate_precision_casts](codegen/bf16-pointwise-rounding-emulate-precision-casts.html)
+
+用连续加法解释 eager 与融合计算的舍入差异，记录源码边界、Triton 产物及 combo 精度复测。
+</article>
+
 <article class="tl-feature tl-card-accent-amber" markdown="1">
 <div class="tl-meta">
   <span class="tl-badge">CICD</span>

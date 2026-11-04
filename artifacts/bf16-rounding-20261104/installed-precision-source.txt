@@ -1,0 +1,79 @@
+torch/_inductor/config.py
+836: # Mode to emulate PyTorch eager numerics when doing lower precision compute
+837: # (fp16, bf16).  PyTorch eager computes bf16/fp16 by upcasting inputs to fp32
+838: # and downcasting after.  When two low precision operators are fused together,
+839: # Inductor will elide the downcast-upcast pairs (effectively a precision
+840: # truncation) that would occur between these two operators.  Typically,
+841: # Inductor's behavior should be closer to fp64 ref numerics.  However, with
+842: # this knob you can ensure the downcast-upcast are preserved so that you can
+843: # emulate the eager numerics.
+844: emulate_precision_casts = (
+845:     os.environ.get("TORCHINDUCTOR_EMULATE_PRECISION_CASTS", "0") == "1"
+846: )
+
+torch/fx/experimental/proxy_tensor.py
+937: def _maybe_record_pointwise_barrier(
+938:     func: object, proxy_mode: ProxyTorchDispatchMode
+939: ) -> None:
+940:     """
+941:     Records operators whose tensor outputs or inputs are fp16/bf16 so downstream pointwise code can
+942:     emulate eager's rounding behavior when emulate_precision_casts is enabled.
+943:     """
+944:     if proxy_mode.decomp_layers or not proxy_mode.emulate_precision_casts:
+945:         return
+946:
+947:     if not isinstance(func, torch._ops.OpOverload):
+948:         return
+949:
+950:     last_node = next(iter(reversed(proxy_mode.tracer.graph.nodes)))
+951:     t = last_node.meta.get("val")
+952:     low_pr_fp = (torch.bfloat16, torch.float16)
+953:
+954:     output_low_precision = isinstance(t, torch.Tensor) and t.dtype in low_pr_fp
+955:
+956:     if not output_low_precision:
+957:         for input_node in last_node.all_input_nodes:
+958:             val = input_node.meta.get("val") if hasattr(input_node, "meta") else None
+959:             if isinstance(val, torch.Tensor) and val.dtype in low_pr_fp:
+960:                 output_low_precision = True
+961:                 break
+962:
+963:     if not output_low_precision:
+964:         return
+965:
+966:     last_node.meta["low_precision_pointwise_barrier"] = True
+
+torch/_inductor/lowering.py
+657:         # in tracing, we will annotate pointwise nodes that correspond to the output of
+658:         # a pointwise node that would have been run in eager. intermediary pointwise nodes
+659:         # during decompositions are not annotated.
+660:         low_pr_fp = (torch.bfloat16, torch.float16)
+661:         emulate_precision_casts = (
+662:             V.graph is not None
+663:             and getattr(V.graph, "current_node", None) is not None
+664:             and V.graph.current_node.meta is not None
+665:             and V.graph.current_node.meta.get("low_precision_pointwise_barrier", False)
+666:         )
+667:         emulate_output_cast = emulate_precision_casts and dtype in low_pr_fp
+668:
+669:         def inner_fn(index):
+670:             assert len(index) == len(ranges), f"wrong ndim {index} {ranges}"
+671:             if dtype == torch.bool and override_fn_when_input_bool is not None:
+672:                 return override_fn_when_input_bool(*[load(index) for load in loaders])
+673:             else:
+674:                 inputs_loaded = []
+675:                 for inp_index, load in enumerate(loaders):
+676:                     out = load(index)
+677:                     inp_dtype = inputs[inp_index].get_dtype()
+678:                     if emulate_precision_casts and inp_dtype in low_pr_fp:
+679:                         downcast = ops.to_dtype(out, inp_dtype, use_compute_types=False)
+680:                         out = ops.to_dtype(downcast, inp_dtype)
+681:                     inputs_loaded.append(out)
+682:
+683:                 out = fn(*inputs_loaded)
+684:                 if emulate_output_cast:
+685:                     # fp16/bf16 kernels are computed in fp32. Casting down to fp16/bf16 here,
+686:                     # then upcasting again, to emulate casts that eager would do.
+687:                     downcast = ops.to_dtype(out, dtype, use_compute_types=False)
+688:                     return ops.to_dtype(downcast, dtype)
+689:                 return out
