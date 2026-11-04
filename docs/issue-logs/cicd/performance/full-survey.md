@@ -33,6 +33,23 @@ FMA 的收益包含有效计算融合及中间写回减少，超过仅重复第�
 GCN Train 组合复测为 **0.878719 ms**，同轮前后原实现为 1.332182 / 1.373426 ms，合计净省 **0.453–0.495 ms**；不把独立收益相加。复测 sum 局部收益可重复，整步受其他未改 atomic kernel 成本波动影响。两模型具体生成 DSL、最终配置、四方历史背景及全部复测明细都在原模型章节。
 
 这些验证均无需修改 Triton_ascend/npuir；scatter 已有 autotune 选到 `simt_only`，无需先重写 scheduler。EdgeCNN 修改后仍是负编译提升比，GCN Infer 约 43.80%、Train 组合约 63.44%，仍未达到历史 GPU 对应的 50.07% / 73.01% / 72.37%。原统计的共性占比、局部预算保持历史口径，不混入本次不同基线实测。
+
+2026-11-05 补充：沿用两类小改动验证 SAGE、Lennard-Jones；另对 NFNet 最慢 pooling 做精确小图验证。
+模型性能组均为 FP32/static、关闭 aclgraph、10 个设备 profile step。
+SAGE Infer/Train 和 Lennard-Jones Train 的原始/改动共六组独立 accuracy 全部通过。
+
+| 模型与具体 kernel/区间 | 已确认的改动模块 | 本轮实测收益 | NPU 编译提升比与历史 GPU 参考 |
+| --- | --- | --- | --- |
+| [SAGE Infer：消息 index_select→scatter](models/basic_gnn_sage.md#scatter-infer-validation) | `lowering_fallback_list.py` 移除五项 scatter 注册，恢复现有 lowering/融合 | 整步 **0.618005 → 0.332504 ms**，净省 **0.285501 ms / 46.20%** | 固定基线 Eager：**-3.19% → 44.48%**；GPU **68.40%**，未追平 |
+| [SAGE Train：三次消息 index_select→scatter](models/basic_gnn_sage.md#scatter-train-validation) | 同上；没有修改 bias sum | 同卡前后基线 **1.152910 / 1.175722 ms**，改动后 **0.953353 ms**；净省 **0.199558–0.222369 ms / 17.31–18.91%** | 固定前后 Eager 均值：**27.74% → 40.84%**；GPU **64.78%**，未追平 |
+| [Lennard-Jones Train：四处 tanh 导数/bias sum](models/lennard_jones.md#tanh-bias-validation) | `ir.py::num_splits`：小输出 outer reduction 改为分段计划，现有 scheduler 生成 pointwise 与两阶段 sum | 首轮局部 **0.189314 → 0.020327 ms**；整步 **0.269425 → 0.100832 ms**；同卡复测净省 **0.171323–0.174458 ms / 62.74–63.16%** | 首轮固定 Eager：**20.37%**，复测 **20.83%**；历史 GPU **19.64%**，当前固定场景略高，余量小 |
+| [NFNet Train：`_avg_pool2d_42`](models/nfnet_l0.md#pool-selection-validation) | `aten.avg_pool2d.default` lowering 实现选择；其次是 template/SIMT 候选 | **局部**原 kernel **12.534630 → compiled fallback 0.127196 ms/次**；SIMT-only 仍为 **0.303762 ms**；整网收益未测得 | fallback 与同批 Eager 0.126680 ms 基本持平；不能据此宣称追平 GPU 的操作族提升比 |
+
+首轮模型组在物理卡 3，SAGE Train/Lennard-Jones 的 baseline→variant→baseline 复测在物理卡 2，
+NFNet 小图在物理卡 1；每个对照组内设备相同，未使用物理卡 4、5、6。
+SAGE Train 首轮变体 Eager 异常已保留，不用其分母报告提升比，以上采用同卡前后复测。
+NFNet 整网编译约 18 分钟后主动停止，尚无整网 performance/accuracy；八组局部输出检查均通过。
+所有改动为进程内实验，安装文件未改；不将以上实测与下方历史预算相加，GPU 本轮未重测。
 <!-- END CICD RUNTIME VALIDATION -->
 
 ## 比较方法与数字边界
@@ -56,10 +73,10 @@ GCN Train 组合复测为 **0.878719 ms**，同轮前后原实现为 1.332182 / 
 
 | 具体问题 | 场景数 | 问题耗时/整步：中位（范围） | 劣化预算/整步：中位（范围） | 占整网缺口：中位 | 优化入口与 GPU 做法 |
 | --- | ---: | ---: | ---: | ---: | --- |
-| NFNet avg_pool2d 生成实现 | 1 | 15.0% | 14.4% | 84.4%（1例） | NPU avg_pool2d lowering、pointwise tiling/runtime；先判断是否应回退 ACLNN。 |
-| tanh backward+bias sum | 1 | 60.4% | 54.7% | 81.1%（1例） | NPU 输出维很小时的 program 并行度和分阶段归约；GPU pointwise/reduction 分拆。 |
+| NFNet avg_pool2d 生成实现 | 1 | 15.0% | 14.4% | 84.4%（1例） | Inductor lowering 实现选择已通过[小图验证](models/nfnet_l0.md#pool-selection-validation)：12.535 → 0.127 ms/次；整网未测得。template/SIMT 配置及下层原因另保留边界。 |
+| tanh backward+bias sum | 1 | 60.4% | 54.7% | 81.1%（1例） | 已确认 `ir.py::num_splits` 小输出单阶段计划限制连续访存；[Lennard-Jones 实测](models/lennard_jones.md#tanh-bias-validation)四处改为 pointwise + 两阶段 sum，整步省约 0.17 ms。 |
 | GELU backward+bias sum | 4 | 4.2%（2.0–4.6%） | 3.4%（0.2–3.7%） | 32.1%（4例） | NPU 融合/归约 tiling；GPU 相应 fused/多阶段归约。 |
-| GNN scatter_add 与 gather/mul 分离 | 4 | 39.6%（25.3–58.3%） | 18.5%（10.1–27.2%） | 31.2%（4例） | GCN 已确认 fallback list 五项屏蔽现有 lowering；恢复后自动融合并选到 SIMT。见[实测](models/basic_gnn_gcn.md#scatter-fusion-validation)；其他模型未外推。 |
+| GNN scatter_add 与消息 gather 分离 | 4 | 39.6%（25.3–58.3%） | 18.5%（10.1–27.2%） | 31.2%（4例） | GCN、SAGE 均确认 fallback list 五项屏蔽现有 lowering；恢复后自动融合并选到 SIMT。[GCN](models/basic_gnn_gcn.md#scatter-fusion-validation) 包含消息权重 mul，[SAGE](models/basic_gnn_sage.md#scatter-infer-validation) 为无权重消息 gather。 |
 | MobileBERT outer reduction：分段与候选问题 | 1 | 22.9% | 11.6% | 29.2%（1例） | 四组已确认 IR 分段/候选问题，另有 24 次重复 bias sum；`_20`、`_0` 单独保留边界。见[实测细分](models/MobileBertForMaskedLM.md#outer-reduction)；本行仍为七组历史粗筛。 |
 | Infer log_softmax→NLLLoss 完整矩阵写回 | 17 | 1.7%（0.07–10.6%） | 1.0%（0.04–8.3%） | 23.5%（10例） | NPU nll_loss_forward decomposition/lowering 使消费者留在外部调用；GPU 融合 target 提取和归约。 |
 | ReLU backward+bias sum | 4 | 6.4%（1.0–50.2%） | 3.0%（0.1–48.7%） | 12.9%（3例） | EdgeCNN 已确认 `ir.py::num_splits` 未拆长归约，见[实测](models/basic_gnn_edgecnn.md#relu-bias-validation)；其他场景仍需单独验证。 |

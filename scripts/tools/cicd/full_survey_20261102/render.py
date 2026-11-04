@@ -321,6 +321,18 @@ for model in sorted({a["model"] for a in DATA.values()}):
                 title = "Inductor IR 未拆分 linear bias 梯度的 outer sum"
                 component = "NPU Inductor `ir.py::num_splits`"
                 detail = "这是 [10000,64] 沿节点维的 bias 梯度 sum，不是 scatter 内部归约；输出 64 时未分段。局部与整网收益边界见下方实测。"
+            elif case.startswith("basic_gnn_sage_") and z["kind"] == "scatter":
+                title = "Inductor scatter fallback 阻断 index_select 融合"
+                component = "NPU Inductor `lowering_fallback_list.py`"
+                detail = "五项 scatter 注册屏蔽现有 lowering；SAGE 消息为无权重 index_select，Infer 末层还融合 ReLU。Infer/Train 整网实测见下文，Train bias sum 未改。"
+            elif case == "lennard_jones_Train" and z["kind"] == "tanh_grad_reduce":
+                title = "Inductor IR 的 bias sum 单阶段计划限制 tanh backward 访存"
+                component = "NPU Inductor `ir.py::num_splits`"
+                detail = "输出 16 个元素时仍选单阶段归约；分段后现有 scheduler 生成独立 pointwise 和两阶段 sum。四处归约及同卡整网复测见下文。"
+            elif case == "nfnet_l0_Train" and z["kind"] == "pool":
+                title = "Inductor avg_pool2d lowering 的实现选择与 template 配置"
+                component = "Inductor `lowering.lowerings[aten.avg_pool2d.default]`"
+                detail = "最慢 `_42` 的 compiled ACLNN fallback 小图已验证；SIMT-only 仍慢于 ACLNN。整网编译主动中止，未测得整网收益，下层内部原因待定界。"
             if case == "MobileBertForMaskedLM_Train" and z["kind"] == "affine_grad_reduce":
                 component = "NPU Inductor `ir.py::num_splits` 的 outer reduction 分段策略，以及 runtime `TileGenerator` 候选生成"
                 detail = "2026-11-03 单项深挖确认 `_11`、`_9`、`_7`、`_13` 的归约计划/候选问题，并发现 24 次重复 bias sum。GPU 对位已纠正；`_20` 单项 GPU 收益缺口待确认，`_0` 实测不支持强行分段。下表为七组原操作族粗筛口径，模型文档已有的逐 kernel 分析优先保留。"
@@ -384,7 +396,8 @@ for model in sorted({a["model"] for a in DATA.values()}):
             validation = validation_blocks.get(case + ":" + z["kind"])
             if validation:
                 text += [validation, ""]
-        if case in SPECIAL:
+        measured_special = any(case + ":" + kind in validation_blocks for kind in ("pool", "tanh_grad_reduce"))
+        if case in SPECIAL and not measured_special:
             text += ["### 额外具体检查点", "", SPECIAL[case], ""]
         text += [
             "### 未计入收益的具体候选",
@@ -398,6 +411,12 @@ for model in sorted({a["model"] for a in DATA.values()}):
         if model == "basic_gnn_gcn" and validation_blocks:
             remaining_candidates = [c for c in remaining_candidates if c["name"] not in (
                 "triton_poi_fused_index_select_mul_select_view_1", "triton_poi_fused_new_zeros_0")]
+        if case + ":scatter" in validation_blocks and model == "basic_gnn_sage":
+            remaining_candidates = [c for c in remaining_candidates if c["name"] not in (
+                "triton_poi_fused_index_select_select_3", "triton_poi_fused_add_addmm_index_select_relu_s_7")]
+        if case + ":tanh_grad_reduce" in validation_blocks and model == "lennard_jones":
+            remaining_candidates = [c for c in remaining_candidates
+                                    if c["name"] != "triton_per_fused_mm_sum_t_tanh_backward_1"]
         for c in remaining_candidates:
             fs = set(c["aten"])
             if any("softmax" in f for f in fs):
@@ -445,7 +464,7 @@ for model in sorted({a["model"] for a in DATA.values()}):
             "本轮仅在本地读取和复算，未连接 NPU_A5、未修复或跑卡。",
             "初筛在本地读取和复算；下文临时修改对照另有 NPU_A5 实测，原始统计不混入复测结果。",
         ) for line in text]
-    if model in ("basic_gnn_edgecnn", "basic_gnn_gcn"):
+    if model in ("basic_gnn_edgecnn", "basic_gnn_gcn", "basic_gnn_sage", "lennard_jones", "nfnet_l0"):
         text = [line for line in text if not line.startswith("判定依据：")]
     model_path.write_text("\n".join(text).rstrip("\n") + "\n")
 
@@ -552,6 +571,24 @@ if overview_validation:
         title,
         detail + "[Electra 实测](models/ElectraForCausalLM.md#attention-constexpr-validation)首层 16.790 → 0.974 ms。",
     )
+    if "scatter-infer-validation" in overview_validation.group(0):
+        labels["scatter"] = (
+            "GNN scatter_add 与消息 gather 分离",
+            "GCN、SAGE 均确认 fallback list 五项屏蔽现有 lowering；恢复后自动融合并选到 SIMT。"
+            "[GCN](models/basic_gnn_gcn.md#scatter-fusion-validation) 包含消息权重 mul，"
+            "[SAGE](models/basic_gnn_sage.md#scatter-infer-validation) 为无权重消息 gather。",
+        )
+        labels["tanh_grad_reduce"] = (
+            "tanh backward+bias sum",
+            "已确认 `ir.py::num_splits` 小输出单阶段计划限制连续访存；"
+            "[Lennard-Jones 实测](models/lennard_jones.md#tanh-bias-validation)四处改为 pointwise + 两阶段 sum，"
+            "整步省约 0.17 ms。",
+        )
+        labels["pool"] = (
+            "NFNet avg_pool2d 生成实现",
+            "Inductor lowering 实现选择已通过[小图验证](models/nfnet_l0.md#pool-selection-validation)："
+            "12.535 → 0.127 ms/次；整网未测得。template/SIMT 配置及下层原因另保留边界。",
+        )
 common_rows = []
 for kind, count in counts.most_common():
     samples = [(case, issue) for case, issue in allissues if issue["kind"] == kind]
