@@ -1,7 +1,6 @@
 """Same-boundary GNN kernel experiments; no installed-source changes."""
 
 import argparse
-import copy
 import importlib.util
 import json
 import os
@@ -98,7 +97,16 @@ def main():
             for block in [256, 1024, 2048]:
                 def fused():
                     out.zero_()
-                    scatter_message[(56,)](x, edge, weight, out, edges, block, compile_mode=mode)
+                    binary = scatter_message[(56,)](x, edge, weight, out, edges, block, compile_mode=mode)
+                    target = args.output / 'ir' / f'{mode}_b{block}'
+                    if not target.exists():
+                        target.mkdir(parents=True)
+                        for key in ['source', 'ttir', 'ttadapter']:
+                            if key in binary.asm:
+                                (target / f'kernel.{key}').write_text(binary.asm[key])
+                        metadata = binary.metadata._asdict()
+                        metadata['asm_keys'] = list(binary.asm)
+                        (target / 'metadata.json').write_text(json.dumps(metadata, indent=2, default=str))
                     return (out,)
                 bench(f'fused_atomic_{mode}_b{block}', fused, (ref,))
         return
