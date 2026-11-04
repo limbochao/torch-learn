@@ -111,6 +111,22 @@ def main():
                                      num_stages=2, multibuffer=False)
                     return (output,)
                 bench(f'same_dsl_{mode}_sub{sub}', fixed_pool, reference)
+        from torch._inductor import lowering
+        op = torch.ops.aten.avg_pool2d.default
+        saved = lowering.lowerings[op]
+        lowering.lowerings[op] = lowering.fallback_handler(op, add_to_fallback_set=False)
+        torch._dynamo.reset()
+
+        def fallback_pool(x):
+            return torch.ops.aten.avg_pool2d.default(x, [2, 2], [2, 2])
+
+        try:
+            # A graph-cache hit would ignore the process-local lowering experiment.
+            with torch._inductor.config.patch(fx_graph_cache=False):
+                fallback = torch.compile(fallback_pool, fullgraph=True)
+                bench('compiled_acl_fallback', lambda: (fallback(x),), reference)
+        finally:
+            lowering.lowerings[op] = saved
         return
 
     if args.case == 'scatter':
