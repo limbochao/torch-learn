@@ -14,7 +14,9 @@ def main():
     from torch._inductor.runtime.autotune_cache import AutotuneCache
 
     result = {}
-    for case in sorted(args.job.glob('basic_gnn_*')):
+    for case in sorted(args.job.iterdir()):
+        if not (case / 'metadata/environment.json').exists():
+            continue
         records = []
         for source in (case / 'cache').rglob('*.py'):
             text = source.read_text()

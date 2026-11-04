@@ -26,6 +26,8 @@ def main():
         for username in usernames:
             if len(username) >= 6:
                 text = text.replace(username, '<user>')
+        text = re.sub(r'<user>_\d+_20\d+_ascend_pt', '<profile-trace>', text)
+        text = re.sub(r'(\[(?:INFO|WARNING|ERROR|DEBUG)\]\s+)\[\d+\]', r'\1[pid]', text)
         text = re.sub(r'(?m)^# kernel path:.*$', '# kernel path: <generated-cache>', text)
         text = re.sub(r"('backend_hash': )'[^']+'", r"\1'<build-hash>'", text)
         target = args.output / destination
@@ -38,7 +40,7 @@ def main():
     export(args.job / 'selected_configs.json', Path('selected_configs.json'))
     export(args.job / 'runner_identity.json', Path('runner_identity.json'))
     for case in sorted(args.job.iterdir()):
-        if not case.is_dir() or not case.name.startswith(('micro_', 'basic_gnn_')):
+        if not case.is_dir() or not case.name.startswith(('micro_', 'basic_gnn_', 'lennard_jones_', 'nfnet_l0_')):
             continue
         # The initial micro run used a stale raw stream during capture. Retain only
         # the corrected run; failed graph-output checks must never become timing evidence.

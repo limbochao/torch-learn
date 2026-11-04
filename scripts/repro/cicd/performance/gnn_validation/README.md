@@ -60,3 +60,15 @@ GCN Train 另按 baseline→split→scatter→both→baseline 复测，复用各
 已经排除其计时。修正为在 capture 内取 stream 后，重新检查 NaN 覆盖、replay 输出与 CPU FP64 参考。
 `export_results.py` 去敏个人路径和 backend hash，保持 generated DSL 排版；
 `manifest.json` 同时记录远端原文件与去敏文件 SHA256。精度组只保留 CSV、日志和环境，避免重复保存生成图。
+
+
+2026-11-05 的小改动扩展沿用本脚本，不覆盖 11-04 结果：
+
+- SAGE Infer/Train：仅 `scatter`，保持五项 fallback 过滤，比较原安装版。
+- Lennard-Jones Train：`split --split-min-reduction 4096`，其余分段策略不变。
+- NFNet Train：`pool-fallback` 临时把 `aten.avg_pool2d.default` lowering 换为现有
+  `fallback_handler`，作为实现选择对照，不作为最终生产策略。
+
+`launch_followup.sh <job> small|pool` 从已激活的专用 TorchBench workspace 启动，
+两组分别固定使用物理卡 3 / 2，启动前须确认这两张卡空闲。
+脚本依次保存原始组/变体的 performance 和 accuracy；shape、batch、dtype 不因性能而缩小。
