@@ -46,7 +46,7 @@ def main():
         # the corrected run; failed graph-output checks must never become timing evidence.
         if case.name.startswith('micro_') and not case.name.endswith('_verified'):
             continue
-        for name in ['result.json', 'exitcode', 'benchmark.csv', 'accuracy.csv', 'run.log']:
+        for name in ['result.json', 'exitcode', 'status.json', 'benchmark.csv', 'accuracy.csv', 'run.log']:
             export(case / name, Path(case.name) / name)
         export(case / 'metadata/environment.json', Path(case.name) / 'environment.json')
         for profile in case.glob('profile/**/kernel_details.csv'):

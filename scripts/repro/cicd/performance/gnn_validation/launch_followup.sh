@@ -26,6 +26,9 @@ elif [ "$group" = small-recheck ]; then
 else
   exit 2
 fi
+if [ -n "${3:-}" ]; then
+  case "$3" in 1|2|3) export ASCEND_RT_VISIBLE_DEVICES=$3 ;; *) exit 2 ;; esac
+fi
 index=0
 for kind in "${kinds[@]}"; do
   for spec in "${specs[@]}"; do
