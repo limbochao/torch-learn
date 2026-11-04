@@ -32,3 +32,17 @@ python <torch-learn>/scripts/repro/cicd/performance/fma_seed_validation/run.py \
 完成后运行 `summarize.py --job-root <job-root> --output <summary.json>`，
 按 CSV 的真实 Step Id 统计整步和逐 kernel duration，并单独统计 softmax backward 后的
 Mul/Add/Mul/Add 窗口；不使用主机 wall time 代替设备时间。
+
+`validate_index_constants.py` 用于在保留安装版本的环境中，加载 master 修复前后的完整
+`NPUIndexTritonKernel.codegen_kernel` 方法，执行修复提交中的元数据回归测试：
+
+```bash
+python <torch-learn>/scripts/repro/cicd/performance/fma_seed_validation/validate_index_constants.py \
+  --before <master-codegen.py> --after <fixed-codegen.py> \
+  --test-file <fixed-repo>/test/_inductor/test_index_triton_constants.py \
+  --test-support-dir <fixed-repo>/test --output-dir <metadata-results>
+```
+
+输入文件应从文档指定的基线/修复提交提取；脚本记录源码 SHA256，要求原始组 3 项失败、
+修复组 3 项通过，并检查安装文件未变化。只回放进程内方法、构造元数据，不编译/运行设备 kernel，
+也不将结果表述为完整 master 构建或整网性能回归。

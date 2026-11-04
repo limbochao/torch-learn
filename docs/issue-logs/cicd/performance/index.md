@@ -15,6 +15,8 @@ title: CICD 性能分析
   保留首层 attention 和 FMA 已定位点，补充符合新口径的具体问题。
 - [Train 首层 attention 的 constexpr/checker 根因](electra-layoutlm-train-first-attention-20261031.md)：
   历史源码与 checker 定位证据。
+- [Index seed constexpr 修复与性能验证](index-triton-seed-constexpr-fix.md)：
+  最新 master 修复分支、修复前后完整 kernel、Electra 整步收益和精度证据。
 - [两模型绝对耗时差历史分析](electra-layoutlm-train-gpu-inductor-gap-20261102.md)：
   已标记口径被替代，MM/AddMM 70.049 ms 不再作为编译优化依据。
 
