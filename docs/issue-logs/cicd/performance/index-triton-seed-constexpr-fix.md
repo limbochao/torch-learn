@@ -68,10 +68,23 @@ for arg_num in equal_1_arg_indices(signature):
 ```
 
 完整修改及回归测试见[修复 patch][patch]和[修复提交][commit]。
-社区 CUDA 的 `TritonKernel.codegen_kernel` 已有相同循环，NPU 旧 codegen 路径也已有这类处理；
-本次补齐的是 Index 路径。社区参考：
+社区 CUDA 的 `TritonKernel.codegen_kernel` 已有相同循环；本次补齐的是 NPU Index 路径。
+社区参考：
 [seed load](https://github.com/pytorch/pytorch/blob/main/torch/_inductor/codegen/triton.py)、
 [signature / equal-to-one 判断](https://github.com/pytorch/pytorch/blob/main/torch/_inductor/codegen/triton_utils.py)。
+
+NPU 其他路径的具体位置如下，链接固定到本修复分支的 `ca3407d2e4`。这三处在本次修复前已存在：
+
+| NPU 路径 | 类 / 函数和源码位置 | 如何获得常量绑定 |
+| --- | --- | --- |
+| no-linear，正是本问题的备用路径 | [`codegen/triton.py::NPUTritonKernel.codegen_kernel`][npu-no-linear]，第 976 行 | 调用 `super().codegen_kernel()`，由社区父类 `TritonKernel.codegen_kernel` 填充 constants，随后只补充 NPU inductor metadata |
+| `triton_experimental` | [`triton_experimental/codegen/triton.py::NPUTritonKernel.codegen_kernel`][npu-experimental]，第 4731–4732 行 | 自己显式执行上面的 `equal_1_arg_indices` 循环 |
+| template 的 metadata 生成，`use_jit=False` | [`select_algorithm.py::NPUTritonTemplateKernel.jit_lines`][npu-template]，第 1159–1160 行 | 自己显式执行同一循环；`use_jit=True` 分支提前返回，不经过这里 |
+
+no-linear 对应的调度类为 `NPUNoLinearTritonScheduling`，其 `kernel_type=NPUTritonKernel`；
+Index 调度的 `kernel_type=NPUIndexTritonKernel`，见[调度类映射][npu-scheduling]。
+因此，“旧路径已有处理”在这里具体指 **no-linear 继承父类的实现**，并非同文件中又显式写了一份循环。
+Index 类独立重写了元数据构造，遗漏了父类中的这一步，这也解释了为什么备用 kernel 能正常绑定同一个 offset。
 
 规则处理所有经过该 Index codegen、静态等于 1 的 `SizeArg`，并不限于名字为 `load_seed_offset` 的参数。
 值为 0、2 等的 seed offset 及动态参数不由该循环加入 constants；原有随机数公式和 seed 数组选择保持其语义。
@@ -155,6 +168,10 @@ python test/_inductor/test_index_triton_constants.py
 [branch]: https://gitcode.com/luqichao/pytorch_new/tree/fix/inductor-index-constexpr-constants
 [commit]: https://gitcode.com/luqichao/pytorch_new/commit/4515e5af0c7388374a2ea17599523cac8c4b4c31
 [test]: https://gitcode.com/luqichao/pytorch_new/blob/ca3407d2e4/test/_inductor/test_index_triton_constants.py
+[npu-no-linear]: https://gitcode.com/luqichao/pytorch_new/blob/ca3407d2e4/torch_npu/_inductor/codegen/triton.py#L976
+[npu-experimental]: https://gitcode.com/luqichao/pytorch_new/blob/ca3407d2e4/torch_npu/_inductor/triton_experimental/codegen/triton.py#L4731
+[npu-template]: https://gitcode.com/luqichao/pytorch_new/blob/ca3407d2e4/torch_npu/_inductor/select_algorithm.py#L1159
+[npu-scheduling]: https://gitcode.com/luqichao/pytorch_new/blob/ca3407d2e4/torch_npu/_inductor/codegen/scheduling.py#L158
 [patch]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/fix.patch
 [metadata-result]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/result.json
 [metadata-before]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/before.txt
