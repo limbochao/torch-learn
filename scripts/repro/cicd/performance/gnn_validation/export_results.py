@@ -27,6 +27,8 @@ def main():
             if len(username) >= 6:
                 text = text.replace(username, '<user>')
         text = re.sub(r'<user>_\d+_20\d+_ascend_pt', '<profile-trace>', text)
+        text = re.sub(r'run_20\d[\d_]*-pid_\d+', '<debug-trace>', text)
+        text = re.sub(r'(?m)^([A-Z]\d{4} [\d:.]+) \d+(?= site-packages/)', r'\1 [pid]', text)
         text = re.sub(r'(\[(?:INFO|WARNING|ERROR|DEBUG)\]\s+)\[\d+\]', r'\1[pid]', text)
         text = re.sub(r'(?m)^# kernel path:.*$', '# kernel path: <generated-cache>', text)
         text = re.sub(r"('backend_hash': )'[^']+'", r"\1'<build-hash>'", text)
