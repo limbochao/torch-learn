@@ -27,6 +27,7 @@ def main():
             if len(username) >= 6:
                 text = text.replace(username, '<user>')
         text = re.sub(r'(?m)^# kernel path:.*$', '# kernel path: <generated-cache>', text)
+        text = re.sub(r"('backend_hash': )'[^']+'", r"\1'<build-hash>'", text)
         target = args.output / destination
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text)
@@ -49,7 +50,9 @@ def main():
         for profile in case.glob('profile/**/kernel_details.csv'):
             phase = 'dynamo' if 'dynamo' in profile.parts else 'eager'
             export(profile, Path(case.name) / 'profiles' / (phase + '.csv'))
-        for generated in case.glob('debug/**/output_code.py'):
+        # Accuracy CSV/logs establish the result; duplicate accuracy graphs add no evidence.
+        generated_graphs = [] if case.name.endswith('_accuracy') else case.glob('debug/**/output_code.py')
+        for generated in generated_graphs:
             graph = generated.parent.name
             for name in ['output_code.py', 'fx_graph_readable.py', 'ir_pre_fusion.txt', 'ir_post_fusion.txt']:
                 export(generated.parent / name, Path(case.name) / 'graphs' / graph / name)

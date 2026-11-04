@@ -49,3 +49,14 @@ GCN 使用 `--only basic_gnn_gcn`，不传 `--split-relu-only`；推理改为 `-
 设备 profile 按真实 Step Id 汇总 kernel duration，不用主机 wall time 替代设备时间。
 精度验证使用相同变体与原 runner 的 `--accuracy --accu-summary`。
 `environment.json` 保存实际软件版本、原安装源码 SHA256、实验拆分事件和安装文件未修改检查。
+
+GCN Train 另按 baseline→split→scatter→both→baseline 复测，复用各变体第一轮的 kernel cache
+和最终配置，单独保存新 debug/profile。不能把不同批次的局部节省量直接相加；开始和结束 baseline
+用于显示未改 kernel 的波动范围。`selected_configs.json` 记录最终 autotune winner，
+复测对应原变体缓存中的记录；`source_identity.json` 对齐安装版与指定分支，
+`runner_identity.json` 单独记录 runner checkout 和文件哈希。
+
+归档只保留 `micro_*_verified`：早期小图在 graph capture 外取得 raw stream，输出检查未通过，
+已经排除其计时。修正为在 capture 内取 stream 后，重新检查 NaN 覆盖、replay 输出与 CPU FP64 参考。
+`export_results.py` 去敏个人路径和 backend hash，保持 generated DSL 排版；
+`manifest.json` 同时记录远端原文件与去敏文件 SHA256。精度组只保留 CSV、日志和环境，避免重复保存生成图。

@@ -1,0 +1,81 @@
+{
+  "variant": "both",
+  "removed": [
+    "aten.scatter_add,",
+    "aten.scatter_add.default,",
+    "aten.scatter_add.out,",
+    "aten.scatter_add_,",
+    "aten.scatter_add_.default,"
+  ],
+  "split_events": [
+    {
+      "node": "sum_1",
+      "producer": "tangents_1",
+      "n": 64,
+      "r": 10000,
+      "split": 20
+    },
+    {
+      "node": "sum_1",
+      "producer": "tangents_1",
+      "n": 64,
+      "r": 10000,
+      "split": 20
+    },
+    {
+      "node": "sum_1",
+      "producer": "tangents_1",
+      "n": 64,
+      "r": 10000,
+      "split": 20
+    }
+  ],
+  "source_sha256": {
+    "<home>/miniforge3/envs/pta_213_cicd/lib/python3.11/site-packages/torch_npu/_inductor/ir.py": "4ff8b729adab7c1f99b30677ed22eff26f15e01be9cb18a9f96923892f65edd3",
+    "<home>/miniforge3/envs/pta_213_cicd/lib/python3.11/site-packages/torch_npu/_inductor/config.py": "38ac0ba1961292e0e2c51dab7708748b93af0adb8f8968ee132d218439cb35c7",
+    "<home>/miniforge3/envs/pta_213_cicd/lib/python3.11/site-packages/torch_npu/_inductor/lowering.py": "918fff3e31e0507c44203789f0ef683c5d067296b1260c57ccfb56a1f4d94de5",
+    "<home>/miniforge3/envs/pta_213_cicd/lib/python3.11/site-packages/torch_npu/_inductor/lowering_fallback_list.py": "cf3bea3db27b6d6446935703eca35ef9ead9f1267afd8654e0bde1e9d8abc485",
+    "<home>/miniforge3/envs/pta_213_cicd/lib/python3.11/site-packages/torch_npu/_inductor/codegen/triton.py": "c20a429709cf100cb7c5591ad7696792af8259c271fe2ff5515ef32c7b351373",
+    "<home>/miniforge3/envs/pta_213_cicd/lib/python3.11/site-packages/torch_npu/_inductor/codegen/scheduling.py": "221ddea6fa2776078c9759197a3c3456ad236e69691548a434ba0f0eb37fd35e",
+    "<home>/miniforge3/envs/pta_213_cicd/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py": "2661d5e00b1ff6a7844a1f7927468b37c53f7e5e23d7f6b210dd22406c32627c"
+  },
+  "versions": {
+    "torch": "2.13.0+cpu",
+    "torch_npu": "2.13.0.dev20261030",
+    "triton": "3.6.0"
+  },
+  "argv": [
+    "--only",
+    "basic_gnn_gcn",
+    "--device",
+    "npu",
+    "--training",
+    "--performance",
+    "--float32",
+    "--batch-size",
+    "1",
+    "--backend",
+    "inductor",
+    "--npu-backend",
+    "triton",
+    "--disable-aclgraph",
+    "--iterations",
+    "20",
+    "--repeat",
+    "3",
+    "--enable-profiler",
+    "0",
+    "--prof-output-path",
+    "<job>/basic_gnn_gcn_training_both/profile",
+    "--output",
+    "<job>/basic_gnn_gcn_training_both/benchmark.csv"
+  ],
+  "scatter_lowering": "@register_lowering(aten.scatter_add, type_promotion_kind=None)\ndef scatter_add(x, dim: int, index, src):\n    return scatter_add_(clone(x), dim, index, src)\n",
+  "split_reductions_config": true,
+  "original_num_splits": "def num_splits(\n    device,\n    dst_dtype,\n    src_dtype,\n    inner_fn,\n    ranges,\n    reduction_ranges,\n    reduction_type,\n    reduction_numel,\n    input_node=None,\n):\n    def _is_static(x: object) -> bool:\n        return isinstance(x, (int, Integer))\n\n    reduction_numel_hint = V.graph.sizevars.optimization_hint(reduction_numel)\n    numel_hint = V.graph.sizevars.optimization_hint(sympy_product(ranges))\n    if not (_is_static(reduction_numel_hint) and _is_static(numel_hint)):\n        # We don't support unbacked symints\n        return ReductionHint.DEFAULT, 1\n\n    should_split = reduction_type == \"scan\" or (\n        not V.graph.has_feature(device, BackendFeature.REDUCE_TO_SINGLE_ELEMENT)\n        and reduction_type\n        not in (\n            \"argmax\",\n            \"argmin\",\n        )\n        and config.split_reductions\n    )\n\n    if should_split:\n        inner_reduction_splits = reduction_split_factor\n    else:\n\n        def inner_reduction_splits(reduction_ranges):\n            return 1\n\n    if numel_hint == 1:\n        # A reduction whose reduction group has exactly ONE dynamic axis (any other\n        # reduction axes static): keep a single Reduction node (split==1) instead of\n        # a degenerate multilayer split; grid is forced to 1 in select_split_axis so\n        # it loops the runtime numel with a tail mask. Covers pure 1D\n        # (reduction_ranges == [n]) and full reduce with extra static reduction dims\n        # (e.g. [n, 1024] -> reduction_ranges == [n, 1024]).\n        num_dynamic_reduction = sum(1 for r in reduction_ranges if not _is_static(r))\n        if num_dynamic_reduction == 1:\n            return ReductionHint.INNER, 1\n        split = inner_reduction_splits(reduction_ranges)\n        return ReductionHint.INNER, split\n    return ReductionHint.DEFAULT, 1\n",
+  "profiler": {
+    "original_sha256": "198333a1aea9fed37185914edcb70b89d79a635315c479de0a2e21732653a524",
+    "patched_sha256": "d71327eff19e3af2464e3596d658c2323c85d0408249e2a245873515e19bc082"
+  },
+  "source_unchanged": true
+}

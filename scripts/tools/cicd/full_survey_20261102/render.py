@@ -193,7 +193,6 @@ with (ART / "issues.csv").open("w") as f:
 # Extra candidate analysis is specific to generated statements, not a claim of a measured regression.
 SPECIAL = {
     "nfnet_l0_Train": "`triton_poi_fused_avg_pool2d_42` 对 f32[128,1536,14,14] 做 2×2/stride=2 pooling。DSL 将输出组织成 y0=1376256、x1=7，固定 X1BLOCK_SUB=7，只沿 y0 分配 program，每个输出用四条 stride=2 load，再加和除 4；没有复杂数学运算。优先核对宽度 7 的非整齐 tile、y0 分块和实际生成的访存/向量指令。资料可确认是这个生成实现异常，尚不能区分 tile 选择与 Triton_ascend/npuir 编译质量。",
-    "basic_gnn_edgecnn_Train": "`triton_red_fused_sum_threshold_backward_3` 的输入为 f32[200000,64]；split_axis=[0] 只沿 64 个输出通道分 program，200000 条边在 program 内 loop_r1 归约，并在同一循环写回 ReLU 导数。应在 NPUIndexTritonKernel.reduction / triton_config_npu_index 检查归约维拆分，或拆开 pointwise 与 bias sum 并采用多阶段归约。当前源码没有沿 edge 维分派独立 program；实际 tile/config 仍待补。",
     "deit_tiny_patch16_224.fb_in1k_Train": "`triton_red_fused_native_layer_norm_backward_vi_7` 计算参数梯度，按 192 个通道分 program，在 r1=25216 的循环中累计两个归约，load 索引为 x0+192*r1。这是参数梯度的大外轴归约，并非 LayerNorm 输入梯度的逐行归约。具体应检查 codegen 的归约维切分、多阶段参数梯度与双输出调度；不要泛化成所有 LayerNorm 都慢。",
     "lennard_jones_Train": "`triton_per_fused_sum_tanh_backward_2` 对 f32[4096,16] 计算 tanh 导数与列和；size_hints={x0:16,r1:4096}、split_axis=[0]，最多只有 16 个 x0 program（配置合并通道后还会更少），整个 4096 维在一个 persistent tile 内归约。优先优化小输出维情况下的分阶段归约/融合策略。GPU 把导数 pointwise 和 sum 分拆，避免把所有并行度压在 16 个输出上。",
     "AlbertForMaskedLM_Train": "额外优先核对 `_20`（90.679 ms）和 `_17`（51.366 ms）。`_20` 的名字含 matmul_backward，实际 DSL 为多个 tl.sum、permute 和累加，并没有执行裸矩阵乘；其 x4/x5=64/64、r2/r3=4/512，外层 x4 使用 Python range。`_17` 同时读取 12 个来源并逐个归约。应检查共享参数梯度累加导致的多归约融合、codegen 轴映射和寄存器压力。GPU 采用多条 sum/transpose/activation 归约。当前没有把这两个 kernel 的完整语义逐调用对齐，不能把 142.044 ms 全部当作可回收收益。",
@@ -309,11 +308,24 @@ for model in sorted({a["model"] for a in DATA.values()}):
                 text += [reduction_analysis.group(0), ""]
                 continue
             component, detail = z["component"], z["detail"]
+            title = z["title"]
+            if case == "basic_gnn_edgecnn_Train" and z["kind"] == "relu_grad_reduce":
+                title = "Inductor IR 未拆分 ReLU backward 后的长 sum"
+                component = "NPU Inductor `ir.py::num_splits`"
+                detail = "输出 64 个通道、归约长度 200000 时仍为单阶段；2026-11-04 已通过 IR 分段获得整网收益，详见下方保留的实测章节。"
+            elif case.startswith("basic_gnn_gcn_") and z["kind"] == "scatter":
+                title = "Inductor fallback list 阻断 scatter_add 与 gather/mul 融合"
+                component = "NPU Inductor `lowering_fallback_list.py`"
+                detail = "五项 scatter 注册屏蔽已有社区 lowering；临时移除后现有 scheduler/codegen 已能融合并取得整网收益，实测见下文。"
+            elif case == "basic_gnn_gcn_Train" and z["kind"] == "sum":
+                title = "Inductor IR 未拆分 linear bias 梯度的 outer sum"
+                component = "NPU Inductor `ir.py::num_splits`"
+                detail = "这是 [10000,64] 沿节点维的 bias 梯度 sum，不是 scatter 内部归约；输出 64 时未分段。局部与整网收益边界见下方实测。"
             if case == "MobileBertForMaskedLM_Train" and z["kind"] == "affine_grad_reduce":
                 component = "NPU Inductor `ir.py::num_splits` 的 outer reduction 分段策略，以及 runtime `TileGenerator` 候选生成"
                 detail = "2026-11-03 单项深挖确认 `_11`、`_9`、`_7`、`_13` 的归约计划/候选问题，并发现 24 次重复 bias sum。GPU 对位已纠正；`_20` 单项 GPU 收益缺口待确认，`_0` 实测不支持强行分段。下表为七组原操作族粗筛口径，模型文档已有的逐 kernel 分析优先保留。"
             text += [
-                f'### {i}. {z["title"]}',
+                f'### {i}. {title}',
                 "",
                 f"**优化入口：{component}。** {detail}",
                 "",
@@ -382,7 +394,11 @@ for model in sorted({a["model"] for a in DATA.values()}):
             "| NPU kernel | ms/step / 调用次数 | 整步占比 | 具体检查入口 |",
             "| --- | ---: | ---: | --- |",
         ]
-        for c in zs["candidates"]:
+        remaining_candidates = zs["candidates"]
+        if model == "basic_gnn_gcn" and validation_blocks:
+            remaining_candidates = [c for c in remaining_candidates if c["name"] not in (
+                "triton_poi_fused_index_select_mul_select_view_1", "triton_poi_fused_new_zeros_0")]
+        for c in remaining_candidates:
             fs = set(c["aten"])
             if any("softmax" in f for f in fs):
                 where = "NPU Inductor softmax/attention lowering 与 reduction tiling；先统一完整 attention 或 loss 边界"
@@ -400,7 +416,7 @@ for model in sorted({a["model"] for a in DATA.values()}):
                 f'| {code(short(full(a,"NPU",c["name"])))} | {c["ms"]:.6f} / {c["count"]:.1f} | {pct(c["share"])} | {where} |'
             )
         text += [""]
-        for c in zs["candidates"]:
+        for c in remaining_candidates:
             text += [
                 "- "
                 + code(full(a, "NPU", c["name"]))
@@ -429,6 +445,8 @@ for model in sorted({a["model"] for a in DATA.values()}):
             "本轮仅在本地读取和复算，未连接 NPU_A5、未修复或跑卡。",
             "初筛在本地读取和复算；下文临时修改对照另有 NPU_A5 实测，原始统计不混入复测结果。",
         ) for line in text]
+    if model in ("basic_gnn_edgecnn", "basic_gnn_gcn"):
+        text = [line for line in text if not line.startswith("判定依据：")]
     model_path.write_text("\n".join(text).rstrip("\n") + "\n")
 
 # Aggregate overview and complete coverage table.

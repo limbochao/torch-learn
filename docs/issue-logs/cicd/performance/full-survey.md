@@ -21,6 +21,18 @@ title: CICD 全量性能分析：编译收益差距与共性问题
 FMA 的收益包含有效计算融合及中间写回减少，超过仅重复第一对的成本；attention 消除一个真实的 seed checker 失败，恢复多轴生成。两项都无需修改 Triton_ascend/npuir。具体生成 kernel、失败日志、精度与版本差异均归入对应模型原章节，没有新增专项分析文档。
 
 上表只报告两个场景实测，不替换下表 40 模型历史粗筛的跨场景中位数，也不向其他模型外推。提升比增量统一使用各自基线 Eager 作分母，排除两次 Eager 测量波动；详细 paired 提升比仍保存在模型文档。
+
+2026-11-04 补充：GNN 三项已在 NPU_A5 **物理卡 3**、`pta_213_cicd` 完成整网验证；改动为进程内 hook，安装源码未变化。七组独立 accuracy 全部通过，未使用物理卡 4、5、6。
+
+| 具体问题 | 已确认需要修改的模块 | 同语义局部 ms/step | NPU 整步收益 |
+| --- | --- | ---: | --- |
+| [EdgeCNN Train：ReLU backward 后 bias sum](models/basic_gnn_edgecnn.md#relu-bias-validation) | NPU Inductor `ir.py::num_splits`：小输出长归约没有分段 | 8.435799 → 0.243939 | **17.210226 → 9.047840 ms，净省 8.162386 ms / 47.43%** |
+| [GCN Infer / Train：scatter 融合](models/basic_gnn_gcn.md#scatter-fusion-validation) | `lowering_fallback_list.py`：五项 scatter 注册屏蔽现有 lowering | Infer 完整 gather/mul/清零/scatter：0.599812 → 0.340504 | Infer **0.767982 → 0.483013 ms，省 0.284970 ms / 37.11%**；Train 首轮 **1.287585 → 0.958072 ms，省 0.329513 ms / 25.59%** |
+| [GCN Train：linear bias 的 outer sum](models/basic_gnn_gcn.md#bias-sum-validation) | `ir.py::num_splits`：64 通道输出返回单阶段计划 | 首轮 0.134403 → 0.015098 | 单独改动首轮仅省 **0.028091 ms**；同配置复测省 **0.139–0.180 ms**；已有 scatter 改动后再加 split，实测再省 **0.077767 ms** |
+
+GCN Train 组合复测为 **0.878719 ms**，同轮前后原实现为 1.332182 / 1.373426 ms，合计净省 **0.453–0.495 ms**；不把独立收益相加。复测 sum 局部收益可重复，整步受其他未改 atomic kernel 成本波动影响。两模型具体生成 DSL、最终配置、四方历史背景及全部复测明细都在原模型章节。
+
+这些验证均无需修改 Triton_ascend/npuir；scatter 已有 autotune 选到 `simt_only`，无需先重写 scheduler。EdgeCNN 修改后仍是负编译提升比，GCN Infer 约 43.80%、Train 组合约 63.44%，仍未达到历史 GPU 对应的 50.07% / 73.01% / 72.37%。原统计的共性占比、局部预算保持历史口径，不混入本次不同基线实测。
 <!-- END CICD RUNTIME VALIDATION -->
 
 ## 比较方法与数字边界
@@ -47,18 +59,18 @@ FMA 的收益包含有效计算融合及中间写回减少，超过仅重复第�
 | NFNet avg_pool2d 生成实现 | 1 | 15.0% | 14.4% | 84.4%（1例） | NPU avg_pool2d lowering、pointwise tiling/runtime；先判断是否应回退 ACLNN。 |
 | tanh backward+bias sum | 1 | 60.4% | 54.7% | 81.1%（1例） | NPU 输出维很小时的 program 并行度和分阶段归约；GPU pointwise/reduction 分拆。 |
 | GELU backward+bias sum | 4 | 4.2%（2.0–4.6%） | 3.4%（0.2–3.7%） | 32.1%（4例） | NPU 融合/归约 tiling；GPU 相应 fused/多阶段归约。 |
-| GNN scatter_add 与 gather/mul 分离 | 4 | 39.6%（25.3–58.3%） | 18.5%（10.1–27.2%） | 31.2%（4例） | NPU scatter_add lowering 和 scheduler fusion；GPU 生成含 scatter 的融合 kernel。 |
+| GNN scatter_add 与 gather/mul 分离 | 4 | 39.6%（25.3–58.3%） | 18.5%（10.1–27.2%） | 31.2%（4例） | GCN 已确认 fallback list 五项屏蔽现有 lowering；恢复后自动融合并选到 SIMT。见[实测](models/basic_gnn_gcn.md#scatter-fusion-validation)；其他模型未外推。 |
 | MobileBERT outer reduction：分段与候选问题 | 1 | 22.9% | 11.6% | 29.2%（1例） | 四组已确认 IR 分段/候选问题，另有 24 次重复 bias sum；`_20`、`_0` 单独保留边界。见[实测细分](models/MobileBertForMaskedLM.md#outer-reduction)；本行仍为七组历史粗筛。 |
 | Infer log_softmax→NLLLoss 完整矩阵写回 | 17 | 1.7%（0.07–10.6%） | 1.0%（0.04–8.3%） | 23.5%（10例） | NPU nll_loss_forward decomposition/lowering 使消费者留在外部调用；GPU 融合 target 提取和归约。 |
-| ReLU backward+bias sum | 4 | 6.4%（1.0–50.2%） | 3.0%（0.1–48.7%） | 12.9%（3例） | NPU pointwise/归约融合与并行映射；GPU 分拆或不同归约。 |
+| ReLU backward+bias sum | 4 | 6.4%（1.0–50.2%） | 3.0%（0.1–48.7%） | 12.9%（3例） | EdgeCNN 已确认 `ir.py::num_splits` 未拆长归约，见[实测](models/basic_gnn_edgecnn.md#relu-bias-validation)；其他场景仍需单独验证。 |
 | prims.fma metadata 第一组 Mul/Add 重复执行 | 20 | 1.7%（0.2–5.6%） | 1.7%（0.2–5.6%） | 8.7%（18例） | make_prim.meta 调用真实 impl_aten；_prim_impl 随后再次执行；GPU 融合在 kernel 内。已核对本批 wrapper 的 prims.fma 调用与 profile 连续调用窗口。[OPT 删除 fallback 实测](models/OPTForCausalLM.md#fma-fallback-validation)整步下降 11.77%。 |
 | 首层 attention constexpr/checker 回退 | 2 | 8.9%（7.2–10.7%） | 3.0%（2.5–3.5%） | 8.6%（2例） | NPUIndexTritonKernel.codegen_kernel 的 constexpr 常量绑定及 checker 回退；GPU 无此首层异常。[Electra 实测](models/ElectraForCausalLM.md#attention-constexpr-validation)首层 16.790 → 0.974 ms。 |
-| 具体 sum kernel 的归约调度 | 5 | 3.8%（1.5–10.1%） | 3.6%（1.2–8.7%） | 8.2%（5例） | NPU codegen 归约维切分、多阶段选择；GPU sum kernel 作为保守费用上界。 |
+| 具体 sum kernel 的归约调度 | 5 | 3.8%（1.5–10.1%） | 3.6%（1.2–8.7%） | 8.2%（5例） | GCN bias sum 已确认 `ir.py::num_splits`，局部节省不等于整步净省，见[实测](models/basic_gnn_gcn.md#bias-sum-validation)；其他 sum 未外推。 |
 | LayerNorm backward 归约映射 | 5 | 1.6%（1.3–14.2%） | 0.6%（0.2–12.7%） | 5.9%（5例） | NPU reduction codegen/tiling/runtime autotune；GPU 采用不同归约拆分。 |
 | GELU 前向外部调用阻断 bias/pointwise 融合 | 16 | 2.0%（1.2–3.7%） | 0.2%（0.05–0.8%） | 2.6%（10例） | NPU activation lowering/fusion；GPU 含 GELU 的融合 kernel。 |
 | Train NLLLossBackward→LogSoftmaxBackward 完整 dlogP | 8 | 1.0%（0.05–3.9%） | 0.08%（0.01–0.8%） | 0.4%（8例） | NPU 两条 decomposition/lowering 边界；GPU loss derivative 融合。 |
 
-归约类具体代码入口为 `NPUIndexTritonKernel.reduction`、`codegen_kernel`，配置侧为 `triton_config_npu_index` 与 `NPUCachingAutotuner.autotune_to_one_config`；融合检查入口为 NPU scheduling 的 `can_fuse` / `candidate_tilings`。这些入口定位到 Inductor 的具体功能模块；除已复核的 constexpr/FMA 机制及 MobileBERT 专项实测外，不把首查模块写成已证实根因。相同 DSL/config 仍慢才能继续判断 Triton_ascend/npuir；外部 scatter/broadcast 则还涉及 CANN。
+归约类具体代码入口为 `NPUIndexTritonKernel.reduction`、`codegen_kernel`，配置侧为 `triton_config_npu_index` 与 `NPUCachingAutotuner.autotune_to_one_config`；融合检查入口为 NPU scheduling 的 `can_fuse` / `candidate_tilings`。这些入口定位到 Inductor 的具体功能模块；除已复核的 constexpr/FMA 机制、MobileBERT 与上述 GNN 实测外，不把首查模块写成已证实根因。相同 DSL/config 仍慢才能继续判断 Triton_ascend/npuir；外部 scatter/broadcast 则还涉及 CANN。
 
 ## 优先检查的具体 kernel
 

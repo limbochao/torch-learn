@@ -1,0 +1,55 @@
+#map = affine_map<(d0) -> (d0)>
+module attributes {hacc.target = #hacc.target<"Ascend950PR_9579">, ssbuffer.insertionOptimization} {
+  func.func private @triton_indirect_load(memref<?xi64>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xi64>) -> tensor<1024xi64> attributes {isVolatile = true}
+  func.func private @triton_indirect_load_0(memref<?xi64>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xi64>) -> tensor<1024xi64> attributes {isVolatile = true}
+  func.func private @triton_indirect_load_1(memref<?xf32>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xf32>) -> tensor<1024xf32> attributes {isVolatile = true}
+  func.func private @triton_indirect_load_2(memref<?xf32>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xf32>) -> tensor<1024xf32> attributes {isVolatile = true}
+  func.func @scatter_message(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg3: memref<?xi64> {tt.tensor_kind = 0 : i32}, %arg4: memref<?xf32> {tt.tensor_kind = 0 : i32}, %arg5: memref<?xf32>, %arg6: i32, %arg7: i32, %arg8: i32, %arg9: i32, %arg10: i32, %arg11: i32) attributes {SyncBlockLockArgIdx = 0 : i64, WorkspaceArgIdx = 1 : i64, global_kernel = "local", mix_mode = "aiv", parallel_mode = "mix_simd_simt"} {
+    %c1024_i32 = arith.constant 1024 : i32
+    %c64_i32 = arith.constant 64 : i32
+    %c13124_i32 = arith.constant 13124 : i32
+    %cst = arith.constant 0.000000e+00 : f32
+    %c0_i64 = arith.constant 0 : i64
+    %c64_i64 = arith.constant 64 : i64
+    %c209978_i32 = arith.constant 209978 : i32
+    %c209978_i64 = arith.constant 209978 : i64
+    %0 = tensor.empty() : tensor<1024xi64>
+    %1 = linalg.fill ins(%c209978_i64 : i64) outs(%0 : tensor<1024xi64>) -> tensor<1024xi64>
+    %2 = tensor.empty() : tensor<1024xi32>
+    %3 = linalg.fill ins(%c209978_i32 : i32) outs(%2 : tensor<1024xi32>) -> tensor<1024xi32>
+    %4 = linalg.fill ins(%c64_i64 : i64) outs(%0 : tensor<1024xi64>) -> tensor<1024xi64>
+    %5 = linalg.fill ins(%c0_i64 : i64) outs(%0 : tensor<1024xi64>) -> tensor<1024xi64>
+    %6 = tensor.empty() : tensor<1024xf32>
+    %7 = linalg.fill ins(%cst : f32) outs(%6 : tensor<1024xf32>) -> tensor<1024xf32>
+    %8 = linalg.fill ins(%c64_i32 : i32) outs(%2 : tensor<1024xi32>) -> tensor<1024xi32>
+    %9 = linalg.generic {indexing_maps = [#map], iterator_types = ["parallel"]} outs(%2 : tensor<1024xi32>) attrs =  {tt.from_make_range, tt.make_range_offset = 0 : index, tt.make_range_size = 1024 : index} {
+    ^bb0(%out: i32):
+      %10 = linalg.index 0 : index
+      %11 = arith.index_cast %10 : index to i32
+      linalg.yield %11 : i32
+    } -> tensor<1024xi32>
+    scf.for %arg12 = %arg9 to %c13124_i32 step %arg6  : i32 {
+      %10 = arith.muli %arg12, %c1024_i32 : i32
+      %11 = linalg.fill ins(%10 : i32) outs(%2 : tensor<1024xi32>) -> tensor<1024xi32>
+      %12 = arith.addi %11, %9 : tensor<1024xi32>
+      %13 = arith.divsi %12, %8 : tensor<1024xi32>
+      %14 = arith.remsi %12, %8 : tensor<1024xi32>
+      %15 = arith.cmpi slt, %13, %3 : tensor<1024xi32>
+      %16 = arith.extsi %13 : tensor<1024xi32> to tensor<1024xi64>
+      %17 = func.call @triton_indirect_load(%arg3, %16, %15, %5) {isVolatile = true} : (memref<?xi64>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xi64>) -> tensor<1024xi64>
+      %18 = arith.addi %16, %1 : tensor<1024xi64>
+      %19 = func.call @triton_indirect_load_0(%arg3, %18, %15, %5) {isVolatile = true} : (memref<?xi64>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xi64>) -> tensor<1024xi64>
+      %20 = func.call @triton_indirect_load_1(%arg4, %16, %15, %7) {isVolatile = true} : (memref<?xf32>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xf32>) -> tensor<1024xf32>
+      %21 = arith.muli %17, %4 : tensor<1024xi64>
+      %22 = arith.extsi %14 : tensor<1024xi32> to tensor<1024xi64>
+      %23 = arith.addi %21, %22 : tensor<1024xi64>
+      %24 = func.call @triton_indirect_load_2(%arg2, %23, %15, %7) {isVolatile = true} : (memref<?xf32>, tensor<1024xi64>, tensor<1024xi1>, tensor<1024xf32>) -> tensor<1024xf32>
+      %25 = arith.muli %19, %4 : tensor<1024xi64>
+      %26 = arith.addi %25, %22 : tensor<1024xi64>
+      %27 = arith.mulf %20, %24 : tensor<1024xf32>
+      %28 = arith.extui %15 : tensor<1024xi1> to tensor<1024xi8>
+      %29 = hivm.hir.custom {extra_attr = "operate=add", gm_addr_args_indices = array<i32: 0>, hivm.pipe = #hivm.pipe<PIPE_V>, hivm.tcore_type = #hivm.tcore_type<VECTOR>, hivm.vf_mode = #hivm.vf_mode<SIMT>, symbol = "__builtin_indirect_atomic"} "__builtin_indirect_atomic" ins(%arg5, %26, %27, %28 : memref<?xf32>, tensor<1024xi64>, tensor<1024xf32>, tensor<1024xi8>) outs(%7 : tensor<1024xf32>) -> tensor<1024xf32>
+    }
+    return
+  }
+}
