@@ -1,0 +1,69 @@
+=================================== FAILURES ===================================
+_____________ ComboKernelDynamicShapesTests.test_helper_fn_defined _____________
+test_combo_kernels.py:1286: in test_helper_fn_defined
+    out_compiled, code = run_and_get_code(fn_c, *inps)
+<site-packages>/torch/_inductor/utils.py:2385: in run_and_get_code
+    result = fn(*args, **kwargs)
+<site-packages>/torch/_dynamo/eval_frame.py:967: in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+<site-packages>/torch/_inductor/compile_fx.py:1019: in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+<site-packages>/torch/_inductor/compile_fx.py:1003: in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+<site-packages>/torch/_inductor/compile_fx.py:1766: in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+<site-packages>/torch/_inductor/compile_fx.py:1537: in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+<site-packages>/torch/_inductor/graph.py:2416: in compile_to_module
+    return self._compile_to_module()
+<site-packages>/torch/_inductor/graph.py:2422: in _compile_to_module
+    self.codegen_with_cpp_wrapper() if self.cpp_wrapper else self.codegen()
+<site-packages>/torch/_inductor/graph.py:2354: in codegen
+    self._update_scheduler()
+<site-packages>/torch/_inductor/graph.py:2348: in _update_scheduler
+    self.scheduler = Scheduler(self.operations)
+<site-packages>/torch/_inductor/scheduler.py:2765: in __init__
+    self._init(nodes)
+<site-packages>/torch/_inductor/scheduler.py:2865: in _init
+    self.create_combo_kernel_nodes(num_ck_nodes=None)
+<site-packages>/torch/_inductor/scheduler.py:4209: in create_combo_kernel_nodes
+    if not self.speedup_by_combo_kernel(node_list):
+<site-packages>/torch/_inductor/scheduler.py:6363: in speedup_by_combo_kernel
+    ms2, ms2_clone, _path2_list = self.benchmark_combo_kernel(subkernel_nodes)
+<site-packages>/torch/_inductor/scheduler.py:6312: in benchmark_combo_kernel
+    return backend.benchmark_combo_kernel(node_list)
+<site-packages>/torch/_inductor/codegen/cuda_combined_scheduling.py:162: in benchmark_combo_kernel
+    return self._triton_scheduling.benchmark_combo_kernel(node_list)
+<site-packages>/torch/_inductor/codegen/triton.py:6198: in benchmark_combo_kernel
+    call(wrapped_jit_function.clone_args(*args)[0])
+<inductor-cache>/yr/cyrrmzt3aoprtcpef6g326txddvmkvy4kxwbod2pqyqknl3hpmht.py:127: in call
+    triton_.run(*args, stream=stream0)
+<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py:1804: in run
+    self.autotune(*args, stream=stream, benchmark_run=benchmark_run, **kwargs)
+<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py:1862: in autotune
+    self.precompile()
+<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py:776: in precompile
+    self._precompile_parallel(warm_cache_only, reload_kernel)
+<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py:852: in _precompile_parallel
+    self._precompile_worker_parallel()
+<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py:1342: in _precompile_worker_parallel
+    self._precompile_current_configs(self._precompile_configs_parallel)
+<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py:1022: in _precompile_current_configs
+    compile_results = compile_fn(compile_configs)
+<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py:1325: in _precompile_configs_parallel
+    raise NoTritonConfigsError(
+E   torch._inductor.exc.InductorError: NoTritonConfigsError: No valid triton configs for kernel triton_. CompilationError: at 72:58:
+E           base_r1= tl.arange(0, R1BLOCK_SUB).to(tl.int64)
+E           loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB
+E           for loop_x0 in range(loops_x0):
+E               x0 = x0_offset + (loop_x0 * X0BLOCK_SUB) + base_x0[:,None]
+E               x0_mask = x0 < min(X0BLOCK+x0_offset, x0_numel)
+E               for loop_r1 in range(loops_r1):
+E                   r1 = (loop_r1 * R1BLOCK_SUB) + base_r1[None,:]
+E                   r1_mask = r1 < r1_numel
+E                   tmp11 = tl.load(in_ptr2 + (r1 + ks1*x0), r1_mask & x0_mask, other=0.0)
+E                   tmp12 = tmp11.to(tl.float32)
+E                   tmp13 = tl.broadcast_to(tmp12, [X0BLOCK_SUB, R1BLOCK_SUB])
+E                   tmp15, = tl.associative_scan((tmp13,), 1, _triton_helper_fn_add0)
+E                                                             ^
+E   NameError('_triton_helper_fn_add0 is not defined')

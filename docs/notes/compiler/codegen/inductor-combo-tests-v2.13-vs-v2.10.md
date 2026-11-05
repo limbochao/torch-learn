@@ -12,7 +12,8 @@ title: PyTorch v2.13.0 Combo/Foreach 用例在 v2.10.0 的存在性核对
 按“文件名 + 函数名”去重后，共 108 项：54 个已有独立测试方法、3 个已有嵌套函数名、
 51 个未找到同名定义的测试方法。原清单的 8 条重复记录均来自嵌套函数。
 
-可下载 [CSV 完整表格](inductor-combo-tests-v2.13-vs-v2.10.csv)，包含测试文件、函数名、类型、版本存在性、缺失用例的能力分析、直接运行判断及 NPU 实测结果。
+可下载 [CSV 完整表格](inductor-combo-tests-v2.13-vs-v2.10.csv)，
+包含测试文件、函数名、类型、版本存在性、缺失用例的能力分析、直接运行判断、NPU 实测结果及修复 commit。
 
 ## 核对口径与证据
 
@@ -35,7 +36,7 @@ title: PyTorch v2.13.0 Combo/Foreach 用例在 v2.10.0 的存在性核对
   `test_user_streams.py` 在 v2.10.0 中整文件不存在。
 - 所有 116 条记录均能对应到 v2.13.0 定义；保留清单中的 CUDA、XPU、CPU 名称，不按设备重新筛选。
 - 存在性基于上游标签源码；直接运行兼容性结合用户提供的 2.10 NPU 报错及本地 2.13 NPU 测试文件核查。
-  原始文件兼容性以静态分析及此前两个收集失败日志为依据；本轮临时适配后的 NPU 实测另列两列。
+  原始文件兼容性以静态分析及此前两个收集失败日志为依据；临时适配后的 NPU 实测与修复 commit 另列。
 
 ## 按文件汇总
 
@@ -183,14 +184,19 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 
 ## NPU_A5 功能验证（2.10 分支）
 
-验证日期：2026-11-05。**已完成全部 62 个候选方法、409 个核定参数化实例。**
-按源方法统计：44 个全部通过、18 个失败；按参数化实例统计：389 个通过、20 个失败、0 个跳过。
-全部 pytest 进程已结束；表中使用最终功能复测状态，两个测试侧阻塞的首次失败日志单独保留。
+验证日期：2026-11-05。**基线已完成全部 62 个候选方法、409 个核定参数化实例。**
+基线按源方法统计：44 个全部通过、18 个失败；按实例统计：389 个通过、20 个失败、0 个跳过。
+随后应用 F1 修复，定向复测 6 个方法、6 个实例，5 个通过、1 个出现新的 F8 阻塞。
+再基于 F1 应用 F3 修复，复测 7 个原 F3 方法，6 个通过、1 个越过 F3 后出现 F9；
+另复测两个此前通过的 F1 方法，均通过，不重复计数。
+合并未复测项的基线结果后，当前为 **55 个方法通过、7 个失败；400 个实例通过、9 个失败、0 个跳过**。
+这是基线、F1 与 F3 定向复测结果的合并统计，未重新执行全部 409 个实例；表中使用各方法最新的实测状态。
+两个测试侧阻塞的首次失败日志和原始基线结果继续保留。
 
 | 测试文件 | 方法通过 / 总数 | 实例通过 / 总数 |
 | --- | ---: | ---: |
 | test_torchinductor.py | 2 / 4 | 2 / 6 |
-| test_combo_kernels.py | 15 / 29 | 15 / 29 |
+| test_combo_kernels.py | 26 / 29 | 26 / 29 |
 | test_foreach.py | 27 / 27 | 372 / 372 |
 | test_unbacked_symints.py | 0 / 1 | 0 / 1 |
 | test_provenance_tracing.py | 0 / 1 | 0 / 1 |
@@ -218,6 +224,45 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 逐实例结果、源码快照、校验和及适配 diff 位于
 [实测证据目录](../../../../artifacts/combo-ut-210-npu-a5-20261105/)。
 
+### F1 修复与定向复测
+
+- 修复提交：`6c6454567f795cb580ca07da68884e15bdd16c6a`，已推送至 `pytorch_new` 的 origin。
+  开发分支为 `fix/v2.10.0-combo-benchmark-dynamic-args`，基于上述 `e32cdebf77` 基线。
+  最终提交只保留 `NPUComboKernel.kernel_benchmark_extra_args()` 的 11 行修复代码，不包含新增测试。
+- 复测日期及环境与基线相同；沿用原测试适配，未关闭原用例的 Combo benchmark，
+  保留原输入、输出、突变及精度检查。
+  通过进程内方法替换加载候选源码，不修改共享安装包；实测文件 SHA-256 与最终修复提交中的文件一致。
+  实测发生在提交整理前，后续只删除了新增测试，修复代码未变；不能把安装包版本号写成已安装该提交。
+- 五个动态激活、二维 blocking、mutated、no-autotune 及 round-robin 方法修复后通过，
+  对应行记录修复 commit。`test_combo_kernel_size_hint_failure` 的 F1 已消除，
+  但执行生成 wrapper 时触发 F8，仍记失败；该行的 commit 只表示已应用 F1 修复。
+- 生成代码核对：动态激活 benchmark 的 `get_args()` 现在返回 14 个用户参数，
+  包含此前缺失的 6 个动态尺寸，与 kernel 用户参数数量和顺序一致；运行时块参数由 launcher 补充。
+  unbacked benchmark 也已补齐四个动态尺寸，随后执行阶段才发生 `u0` 未绑定错误。
+
+复测逐阶段报告、生成代码及源码对照见
+[F1 修复证据](../../../../artifacts/combo-f1-benchmark-fix-20261105/)。
+
+### F3 修复与定向复测
+
+- 修复提交：`e578ec524d592475fd52702b975ce03d1a95bbf2`，基于 F1 提交 `6c6454567f`，
+  已推送至 origin 分支 `fix/v2.10.0-combo-partition-numellist`。
+  仅修改 `NPUComboKernel.horizontal_partition()` 及其类型导入，新增 25 行、删除 3 行，没有新增测试。
+- 社区自定义分区期间，将 NPU `NumelList` 转换为 SymPy 乘积表达式；通过 `finally`
+  恢复原始分组对象，保留 NPU 后续 codegen 所需的各维信息。动态尺寸保留符号表达式，未强制转为整数。
+- 2026-11-05 在相同 NPU_A5 Docker 和基线安装包上沿用既有测试适配，使用物理卡 2、3。
+  进程内加载 F3 分区方法及已有 F1 benchmark 方法，未修改共享安装包；候选文件 SHA-256
+  与最终提交一致，安装源码的 8 项校验仍匹配基线。保留原输入、输出和精度检查，未关闭 Combo benchmark。
+- 原 F3 的 7 个方法全部越过 `NumelList.xreplace` 错误，其中 6 个完整通过；
+  `test_helper_fn_defined` 在后续 Combo Triton 编译中因缺少 scan helper 定义失败，记录为 F9。
+  7 个方法共观察到 13 次分区调用，原始分组对象均已恢复。
+- F1 回归 `test_dynamic_shapes_2d_blocking`、`test_dynamic_shapes_activations` 均通过，
+  另观察到 6 次分区调用及原分组恢复。它们仍归入此前的 F1 修复结果，不增加通过方法总数。
+
+逐阶段结果、分区观察、生成 kernel 和源码对照见
+[F3 修复与 F9 证据](../../../../artifacts/combo-f3-partition-fix-20261105/README.md)。
+本次分析沿用上述已完成的远程复测证据，没有新增远程运行，也没有修复 F9。
+
 ### 已确认的失败原因
 
 - **F1（6 个方法）：动态 Combo benchmark 入口缺参数。** 动态激活用例在预运行阶段报 launcher 缺少尺寸和块参数。
@@ -225,7 +270,8 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
   但该 benchmark 文件的 `get_args()` 只生成 6 个张量和 2 个基础符号，没有补上新增尺寸。
   NPU 的 `add_numel_to_args()` 使用轴名生成动态参数，继承的
   `kernel_benchmark_extra_args()` 仍按社区 range tree 的前缀寻找参数，导致 benchmark 输入不完整。
-  该失败发生在数值比较前，不能归为精度不一致；本轮未修复安装包。
+  基线失败发生在数值比较前，不能归为精度不一致。
+  后续 F1 修复使 5 个方法通过，剩余 1 个方法越过该错误后暴露 F8，详见上述定向复测。
 - **F2（1 个方法）：归约 store 的指针和值类型不匹配。** `test_combo_kernel_per_config_subkernel_red`
   对两个 `(32, 64, 128)` 张量沿 `(0, 2)` 求和。生成代码将归约结果经
   `triton_helpers.promote_to_tensor()` 转为块类型，却用标量 `out_ptr0 + x0` 执行 `tl.store`，
@@ -237,14 +283,27 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
   Combo benchmark 分区调用继承的社区长归约分类逻辑，直接把 `n.group[-1][-1]` 传给
   `shape_env.has_hint()`；后者按标量表达式调用 `xreplace`，触发
   `AttributeError: NumelList object has no attribute xreplace`。属于编译阶段的前后端接口差异。
+  已由 `e578ec524d` 修复并复测：6 个通过，剩余 1 个出现独立的 F9，不能将该方法记为通过。
 
-- **F4（1 个方法）：池化索引变换解包失败。** `split_expression()` 对 floor 除法的子项再次构造 `FloorDiv`，
-  从调用栈和源码看，化简后的表达式未保证有两个参数；`eliminate_zero_term()` 直接解包 `term.args`，
-  触发 `not enough values to unpack (expected 2, got 0)`。Combo 开关两分支均失败，
-  不能只归因于 Combo 融合。
-- **F5（1 个方法）：随机数索引类型不匹配。** 生成代码将 `base_x0` 转为 `tl.int64`，
-  随机数路径却检查索引 `tmp1.dtype == tl.int32`，触发 Triton 编译期断言。
-  Combo 开关两分支均失败，尚未执行到随机数确定性比较。
+- **F4（1 个方法）：池化在线性与非线性路径分别失败。** `Combo=True` 进入 NPU 访存线性化的
+  `transform_dims_in_indexing()`，经 `split_expression()` 构造 `FloorDiv` 子项后，
+  `eliminate_zero_term()` 未检查化简结果类型便解包 `term.args`，
+  触发 `not enough values to unpack (expected 2, got 0)`，属于线性化索引变换阶段的错误。
+  `Combo=False` 的最终栈则进入 `_nolinear_triton_scheduling`，在 CSE 的
+  `assert output_shape is not None` 处失败；不能将其也记为上述解包错误。
+  普通节点调度源码会捕获线性 codegen 异常并回退非线性路径，但当前日志未记录被捕获的异常，
+  尚不能确认该分支此前是否也遇到了同一个线性化错误。
+  该 shape 断言还涉及版本适配：2.13 测试类新增开启 `runtime_triton_shape_assert`，
+  而 2.10 的 `ShapePropagationOpsHandler.index_expr()` 返回 `None`，CSE 检查直接断言其非空。
+  因此 `Combo=False` 应先按测试检查与旧框架不兼容处理，不能直接判为 NPU 普通功能缺陷。
+  两个分支均未完成数值比较。
+- **F5（1 个方法）：随机数在两个参数分支的失败不同。** `Combo=True` 生成代码将 `base_x0`
+  转为 `tl.int64`，启用的 dtype 检查却断言 `tmp1.dtype == tl.int32`，触发 Triton 编译期断言。
+  这是轴索引与 dtype 检查元数据的一致性问题；生成代码调用随机函数前还将索引转为 `tl.uint32`，
+  当前不能据此认定随机数算法或数值结果错误。
+  `Combo=False` 未进入该 Triton 编译错误，而是在非线性路径的 CSE 中触发
+  `assert output_shape is not None`，与 F4 的该分支一样先按 shape 检查版本适配处理。
+  两个分支均尚未执行到随机数确定性比较。
 
 - **F6（1 个方法）：eager 不支持目标内存格式。** block_size 用例的第一步为
   `contiguous(memory_format=torch.channels_last)`，NPU eager 直接报告仅支持 contiguous memory format。
@@ -255,6 +314,69 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
   与预期的 kernel 到 `relu/sigmoid/tanh` 映射不符。该方法先测 Inductor、再测 AOTI，
   因前者断言失败，AOTI 分支未执行；此项是追溯元数据失败，未报告数值不一致。
 
+- **F8（F1 修复后新增记录，1 个方法）：benchmark 尺寸收集向真实 wrapper 写入提前求值语句。**
+  `test_combo_kernel_size_hint_failure` 已完成编译和 Combo benchmark，
+  随后在执行 wrapper 时抛出 `UnboundLocalError: cannot access local variable 'u0'`。
+  生成代码保留了如下顺序，`u0` 要等 `nonzero` 执行后才能确定：
+
+  ```python
+  _x0_numel = 1 + u0
+  _x0_numel = 2*u0
+  _x0_numel = u0 + ((-1)*s77)
+  with torch.npu.utils.device(0):
+      torch.npu.set_device(0)
+      # Topologically Sorted Source Nodes: [nz], Original ATen: [aten.nonzero]
+      buf0 = torch.ops.aten.nonzero.default(arg1_1)
+      u0 = buf0.size(0)
+  ```
+
+  源码链路为普通 `TritonKernel.kernel_benchmark_extra_args()`
+  → `add_numel_to_call_args("", ...)`
+  → NPU `generate_node_numel_expr("", ...)`。
+  对 `u0 + 1` 等复合尺寸，NPU helper 无条件调用 `self.writeline()`，
+  因而在生成 benchmark 参数时向真实 wrapper 插入 `_x0_numel` 赋值。
+  空 kernel 名字正是 benchmark 收集路径的标记；社区 `generate_numel_expr()`
+  对空名字只返回参数对象，不写 wrapper，NPU helper 缺少对应处理。
+  这解释了三条无 kernel 名前缀的赋值及其错误位置；最终 Combo 正常调用直接传尺寸表达式，
+  并不需要这些提前赋值。
+
+  **归类：与 F1～F7 的既有失败原因不同，新增 F8；属于 NPU wrapper 与 benchmark 的适配问题，应该修复。**
+  `e32cdebf77` 基线中的上述两个 NPU 方法已包含同样逻辑，F1 提交未修改它们；
+  因此是基线中已有、越过 F1 后实际暴露的缺陷，不是这次补动态参数新写入的 wrapper 行。
+  目前只在该用例确认触发；未额外做禁用 Combo 等对照运行，不能扩大为所有 unbacked 场景都失败。
+  建议让 benchmark 尺寸收集不产生 wrapper 写入，保留正常 kernel 调用的尺寸生成；本次仅分析，未修复 F8。
+  完整 wrapper 与四段版本化源码保存在 F1 修复证据目录。
+
+- **F9（F3 修复后新增记录，1 个方法）：NPU Combo 漏写子 kernel 的 scan helper 定义。**
+  `test_helper_fn_defined` 计算 `x.sum(1), y.mean(1), z.cumsum(1)`，输入为连续 float32 张量，
+  shape 分别为 `(16, 128)`、`(32, 128)`、`(32, 256)`。
+  失败发生在 Combo benchmark 的 Triton 编译阶段，外层为 `NoTritonConfigsError`，
+  内层为 `NameError('_triton_helper_fn_add0 is not defined')`；尚未完成最终输出比较。
+
+  scan 即前缀累计计算。此处 `cumsum` 通过 `tl.associative_scan` 调用加法 helper，
+  需要在同一 generated module 的全局作用域定义该函数。已保存的独立 scan kernel 有 1 个定义、1 次调用，
+  Combo kernel 有 0 个定义、1 次调用，失败语句为：
+
+  ```python
+  tmp15, = tl.associative_scan((tmp13,), 1, _triton_helper_fn_add0)
+  ```
+
+  源码链路为 NPU `scan()` 调用继承的 `TritonKernel._lift_helper()`，后者生成函数定义并登记到
+  `sub_kernel.helper_functions`；普通 NPU kernel 会输出该集合。
+  上游 2.10 的 `ComboKernel.codegen_kernel()` 也会遍历各子 kernel 的 helper，按完整定义去重，
+  然后输出到主 kernel 之前。NPU `NPUComboKernel.codegen_kernel()` 重写了生成流程，
+  只拼接子 kernel body，遗漏 helper 集合的输出，造成调用存在而定义缺失。
+
+  **归类：NPU Inductor Combo codegen 缺陷，应该修复；与 F1～F8 根因不同。**
+  已比较基线 `e32cdebf77`、F1 `6c6454567f`、F3 `e578ec524d` 的该方法，语法树完全一致；
+  缺陷在基线中已有，F3 仅使该用例到达后续失败阶段。上游 2.10 已有相应生成逻辑，
+  不是依赖 2.13 新接口，也不能根据外层异常归因为 tiling 配置不足或 Triton 不支持 cumsum。
+  当前仅确认此用例触发；其他需要动态 helper 的 Combo 路径可能受影响，尚未逐项验证。
+
+  建议在 NPU Combo 中补齐子 kernel helper 的收集、去重及输出，放在 Combo 主 kernel 之前，
+  复用上游行为，不为该函数名添加特例。修复后仍需复测此用例的输出、helper 定义及多子 kernel 去重，
+  并检查是否有后续错误；本次只分析和记录，F9 尚未修复。
+
 动态 grid 用例最初因上游 `ProfilerActivity` 没有 `NPU` 成员失败；
 移除 CUDA profiler/grid 检查并保留两组动态形状的原始输出断言后，复测通过。
 首次日志保存在证据目录的 `attempt1_profiler/`。
@@ -263,7 +385,9 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 
 ## 逐项对照表
 
-存在性及直接运行列保留原始文件口径；新增两列记录临时适配后的功能验证，二者不能混用。
+存在性及直接运行列保留未应用修复的原始文件口径；实测及修复 commit 列记录临时适配后的最新功能验证，二者不能混用。
+修复后通过的行记录对应 commit；仍失败的 unbacked 和 helper 行分别注明仅修复 F1、F3，
+对应的 F8、F9 尚未修复。
 
 “通过”以全部目标参数化实例完成为条件，跳过不计为通过。
 
@@ -276,6 +400,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -285,6 +410,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 </tbody>
@@ -299,6 +425,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -308,7 +435,8 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：文件导入 2.10 缺少的 highest_precision_float</td>
 <td>失败（0/2）</td>
-<td>F4：池化索引化简后参数数目变化，NPU 索引变换解包失败（含 Combo=False）</td>
+<td>—</td>
+<td>F4：Combo=True 线性化索引拆分解包失败；Combo=False 非线性路径 output_shape 断言失败</td>
 </tr>
 <tr>
 <td><code>test_mean</code></td>
@@ -317,6 +445,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：文件导入 2.10 缺少的 highest_precision_float</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_rand_like_deterministic</code></td>
@@ -324,7 +453,8 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：文件导入 2.10 缺少的 highest_precision_float</td>
 <td>失败（0/2）</td>
-<td>F5：随机数索引生成 int64，与内核 int32 断言冲突（含 Combo=False）</td>
+<td>—</td>
+<td>F5：Combo=True 索引 dtype 检查不一致；Combo=False 触发旧框架 shape 检查断言</td>
 </tr>
 <tr>
 <td><code>test_combo_kernel_store_mask</code></td>
@@ -332,6 +462,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -340,6 +471,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：文件导入 2.10 缺少的 highest_precision_float</td>
 <td>通过（1/1）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 </tbody>
@@ -354,6 +486,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -364,6 +497,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_activations</code></td>
@@ -371,6 +505,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -380,6 +515,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_reduce</code></td>
@@ -387,6 +523,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -396,6 +533,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_mutated</code></td>
@@ -403,6 +541,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -412,6 +551,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_2d_blocking_partitioning</code></td>
@@ -420,6 +560,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_persistent_reduction_size_hint</code></td>
@@ -427,6 +568,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -435,6 +577,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -443,6 +586,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -451,6 +595,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -459,6 +604,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -468,6 +614,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>—</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_combo_kernel_per_config_subkernel_per</code></td>
@@ -475,6 +622,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>通过（1/1）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -484,6 +632,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>—</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_combo_kernel_per_config_subkernel_red</code></td>
@@ -491,6 +640,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>失败（0/1）</td>
+<td>—</td>
 <td>F2：归约结果为块类型、store 指针为标量，Triton 编译失败</td>
 </tr>
 <tr>
@@ -499,6 +649,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -507,6 +658,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -515,6 +667,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>失败（0/1）</td>
+<td>—</td>
 <td>F6：NPU eager 不支持 channels_last contiguous，参考输出阶段即失败</td>
 </tr>
 <tr>
@@ -523,6 +676,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -532,6 +686,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>—</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_combo_kernel_yz_overflow</code></td>
@@ -539,6 +694,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -547,6 +703,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -555,6 +712,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -563,6 +721,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -572,6 +731,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_activations</code></td>
@@ -579,6 +739,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -586,8 +747,9 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F3：Combo 分区将 NPU NumelList 作为标量表达式处理，编译失败</td>
+<td>修复后通过（1/1）</td>
+<td>e578ec524d</td>
+<td>原 F3：分区不兼容 NumelList；修复后输出检查通过</td>
 </tr>
 <tr>
 <td><code>test_reduce</code></td>
@@ -595,6 +757,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -604,6 +767,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_mutated</code></td>
@@ -611,6 +775,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -620,6 +785,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_mutated</code></td>
@@ -627,6 +793,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -636,14 +803,16 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：导入缺少 requires_xpu_and_triton</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_persistent_reduction_no_x_dim</code></td>
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F3：Combo 分区将 NPU NumelList 作为标量表达式处理，编译失败</td>
+<td>修复后通过（1/1）</td>
+<td>e578ec524d</td>
+<td>原 F3：分区不兼容 NumelList；修复后输出检查通过</td>
 </tr>
 <tr>
 <td><code>test_combo_kernel_per_subkernel_reduction_hint</code></td>
@@ -651,6 +820,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -659,6 +829,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -667,6 +838,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>通过（1/1）</td>
+<td>—</td>
 <td>移除 CUDA profiler/grid 检查；保留原输出比较</td>
 </tr>
 <tr>
@@ -674,8 +846,9 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F1：动态 benchmark 入口缺尺寸参数，预运行失败</td>
+<td>修复后通过（1/1）</td>
+<td>6c6454567f</td>
+<td>原 F1：动态 benchmark 缺尺寸参数；修复后输出/突变检查通过</td>
 </tr>
 <tr>
 <td><code>test_activations</code></td>
@@ -683,6 +856,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -690,16 +864,18 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>存在（差异：kernel 数 7～8→6）</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F1：动态 benchmark 入口缺尺寸参数，预运行失败</td>
+<td>修复后通过（1/1）</td>
+<td>6c6454567f</td>
+<td>原 F1：动态 benchmark 缺尺寸参数；修复后输出/突变检查通过</td>
 </tr>
 <tr>
 <td><code>test_dynamic_shapes_reduce</code></td>
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F3：Combo 分区将 NPU NumelList 作为标量表达式处理，编译失败</td>
+<td>修复后通过（1/1）</td>
+<td>e578ec524d</td>
+<td>原 F3：分区不兼容 NumelList；修复后输出检查通过</td>
 </tr>
 <tr>
 <td><code>test_reduce</code></td>
@@ -707,6 +883,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -714,8 +891,9 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>存在（差异：增加 XPU 跳过条件）</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F1：动态 benchmark 入口缺尺寸参数，预运行失败</td>
+<td>修复后通过（1/1）</td>
+<td>6c6454567f</td>
+<td>原 F1：动态 benchmark 缺尺寸参数；修复后输出/突变检查通过</td>
 </tr>
 <tr>
 <td><code>test_mutated</code></td>
@@ -723,6 +901,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -730,8 +909,9 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>存在（差异：kernel 数=5 改为源码编译调用数=1）</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F1：动态 benchmark 入口缺尺寸参数，预运行失败</td>
+<td>修复后通过（1/1）</td>
+<td>6c6454567f</td>
+<td>原 F1：动态 benchmark 缺尺寸参数；修复后输出/突变检查通过</td>
 </tr>
 <tr>
 <td><code>test_activations</code></td>
@@ -739,6 +919,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>嵌套</td>
 <td>不适用：嵌套函数；所属文件同样导入失败</td>
 <td>随外层方法验证</td>
+<td>—</td>
 <td>嵌套函数，不独立计数</td>
 </tr>
 <tr>
@@ -746,32 +927,36 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F3：Combo 分区将 NPU NumelList 作为标量表达式处理，编译失败</td>
+<td>修复后通过（1/1）</td>
+<td>e578ec524d</td>
+<td>原 F3：分区不兼容 NumelList；修复后输出检查通过</td>
 </tr>
 <tr>
 <td><code>test_dynamic_shapes_persistent_reduction_no_x_dim_2</code></td>
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F3：Combo 分区将 NPU NumelList 作为标量表达式处理，编译失败</td>
+<td>修复后通过（1/1）</td>
+<td>e578ec524d</td>
+<td>原 F3：分区不兼容 NumelList；修复后输出检查通过</td>
 </tr>
 <tr>
 <td><code>test_dynamic_shapes_2d_blocking_round_robin</code></td>
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F1：动态 benchmark 入口缺尺寸参数，预运行失败</td>
+<td>修复后通过（1/1）</td>
+<td>6c6454567f</td>
+<td>原 F1：动态 benchmark 缺尺寸参数；修复后输出/突变检查通过</td>
 </tr>
 <tr>
 <td><code>test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda</code></td>
 <td>存在（差异：装饰器仅限 CUDA）</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F3：Combo 分区将 NPU NumelList 作为标量表达式处理，编译失败</td>
+<td>修复后通过（1/1）</td>
+<td>e578ec524d</td>
+<td>原 F3：分区不兼容 NumelList；修复后输出检查通过</td>
 </tr>
 <tr>
 <td><code>test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu</code></td>
@@ -779,6 +964,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>XPU 专项，不在 NPU 验证范围</td>
 </tr>
 <tr>
@@ -787,6 +973,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -795,6 +982,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -802,8 +990,9 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>一致</td>
 <td>有</td>
 <td>否：导入缺少 requires_xpu_and_triton</td>
-<td>失败（0/1）</td>
-<td>F3：Combo 分区将 NPU NumelList 作为标量表达式处理，编译失败</td>
+<td>修复后仍失败（0/1）</td>
+<td>e578ec524d（仅修复 F3，F9 未修复）</td>
+<td>F3 已修复；新增 F9：NPU Combo 漏写 scan helper 定义，Triton 编译报 NameError</td>
 </tr>
 <tr>
 <td><code>test_pdl_codegen_in_combo_kernel</code></td>
@@ -811,6 +1000,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -819,6 +1009,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -827,6 +1018,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -835,6 +1027,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -843,6 +1036,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -851,6 +1045,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -859,6 +1054,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -867,6 +1063,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -875,6 +1072,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -883,6 +1081,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -891,6 +1090,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -899,6 +1099,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -907,6 +1108,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -915,6 +1117,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -923,6 +1126,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -931,6 +1135,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -939,6 +1144,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -947,6 +1153,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -955,6 +1162,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -964,6 +1172,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>—</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_benchmark_combo_kernel_emits_real_num_gb</code></td>
@@ -971,6 +1180,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -979,6 +1189,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 </tbody>
@@ -993,6 +1204,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -1003,6 +1215,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（32/32）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_single_scalar</code></td>
@@ -1010,6 +1223,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（16/16）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1019,6 +1233,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（16/16）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_scheduler_fusion_list</code></td>
@@ -1026,6 +1241,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（32/32）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1035,6 +1251,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（16/16）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_broadcasting</code></td>
@@ -1042,6 +1259,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（16/16）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1051,6 +1269,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（20/20）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_kernel_split_arg_limit_list</code></td>
@@ -1058,6 +1277,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（16/16）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1067,6 +1287,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（20/20）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_non_foreach_producer_list</code></td>
@@ -1074,6 +1295,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（32/32）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1083,6 +1305,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（16/16）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_non_foreach_consumer_producer_list</code></td>
@@ -1090,6 +1313,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（32/32）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1099,6 +1323,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（16/16）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_enable_dynamic_shapes_python_wrapper</code></td>
@@ -1106,6 +1331,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（1/1）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1115,6 +1341,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_fuse_concat</code></td>
@@ -1122,6 +1349,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（1/1）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1131,6 +1359,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（20/20）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_2d_blocking_partitioning_elems</code></td>
@@ -1138,6 +1367,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（20/20）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1147,6 +1377,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（20/20）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_reinplacing</code></td>
@@ -1154,6 +1385,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（4/4）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1163,6 +1395,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（4/4）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_reinplacing_mut_after</code></td>
@@ -1170,6 +1403,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（4/4）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 <tr>
@@ -1179,6 +1413,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_2d_block_no_mixed_sizes_no_mask</code></td>
@@ -1187,6 +1422,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（1/1）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_2d_block_mixed_sizes_with_mask</code></td>
@@ -1194,6 +1430,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（1/1）</td>
+<td>—</td>
 <td>数值通过；移除 CUDA foreach 生成代码结构断言</td>
 </tr>
 <tr>
@@ -1203,6 +1440,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（10/10）</td>
 <td>—</td>
+<td>—</td>
 </tr>
 <tr>
 <td><code>test_foreach_map_backward_unary</code></td>
@@ -1210,6 +1448,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖文件导入失败，且缺少 _foreach_clone</td>
 <td>通过（4/4）</td>
+<td>—</td>
 <td>—</td>
 </tr>
 </tbody>
@@ -1224,6 +1463,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -1233,6 +1473,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 <tr>
@@ -1241,6 +1482,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 </tbody>
@@ -1255,6 +1497,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -1263,8 +1506,9 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>一致</td>
 <td>有</td>
 <td>否：本轮 NPU 实测 Combo benchmark 缺动态尺寸参数</td>
-<td>失败（0/1）</td>
-<td>F1：动态 benchmark 入口缺尺寸参数，预运行失败</td>
+<td>修复后仍失败（0/1）</td>
+<td>6c6454567f（仅修复 F1，F8 未修复）</td>
+<td>F1 已修复；新增 F8：benchmark 收集尺寸时污染 wrapper，u0 在 nonzero 绑定前使用</td>
 </tr>
 </tbody>
 </table>
@@ -1278,6 +1522,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -1287,6 +1532,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>否：依赖的 test_torchinductor 导入失败</td>
 <td>失败（0/1）</td>
+<td>—</td>
 <td>F7：Inductor 运行后追溯映射 cppCodeToPost 为空；AOTI 分支未执行</td>
 </tr>
 </tbody>
@@ -1301,6 +1547,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <th>v2.13.0</th>
 <th>2.13 用例能否直接在 2.10 运行</th>
 <th>NPU_A5通过情况</th>
+<th>修复commit</th>
 <th>失败原因分析</th>
 </tr></thead>
 <tbody>
@@ -1310,6 +1557,7 @@ pytest -vs test_combo_kernels.py -k test_activation_functions
 <td>有</td>
 <td>—</td>
 <td>未运行</td>
+<td>—</td>
 <td>缺新增能力或场景修复，按范围排除</td>
 </tr>
 </tbody>
