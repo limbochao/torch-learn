@@ -14,6 +14,7 @@ import runpy
 import sys
 import textwrap
 import unittest
+from unittest import mock
 
 
 def method_source(path):
@@ -36,10 +37,14 @@ def main():
     parser.add_argument("--test-file", type=Path, required=True)
     parser.add_argument("--test-support-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--expect-before-failures", type=int, default=3)
+    parser.add_argument("--expect-after-failures", type=int, default=0)
+    parser.add_argument("--signature-protocol", choices=["auto", "legacy", "attrs-dict"], default="auto")
     args = parser.parse_args()
 
     import torch
     import torch_npu
+    from torch._inductor.codegen import triton_utils
     from torch._inductor.codegen.triton_utils import equal_1_arg_indices
     from torch_npu._inductor.codegen import triton as codegen
 
@@ -53,8 +58,16 @@ def main():
         "torch": torch.__version__, "torch_npu": torch_npu.__version__,
         "test_sha256": sha256(args.test_file), "installed_codegen_sha256": installed_sha,
         "validation_scope": "process-local codegen method; metadata only; no device launch",
+        "native_uses_attrs_dict": triton_utils.triton_version_uses_attrs_dict(),
+        "signature_protocol": args.signature_protocol,
         "variants": {},
     }
+    protocol_patch = None
+    if args.signature_protocol != "auto":
+        protocol_patch = mock.patch.object(
+            triton_utils, "triton_version_uses_attrs_dict", return_value=args.signature_protocol == "attrs-dict"
+        )
+        protocol_patch.start()
     try:
         for label, path in (("before", args.before), ("after", args.after)):
             namespace = dict(vars(codegen), equal_1_arg_indices=equal_1_arg_indices)
@@ -70,13 +83,16 @@ def main():
                 "skipped": len(result.skipped), "passed": result.wasSuccessful(),
             }
     finally:
+        if protocol_patch is not None:
+            protocol_patch.stop()
         codegen.NPUIndexTritonKernel.codegen_kernel = original
         report["installed_source_unchanged"] = sha256(installed_source) == installed_sha
     (args.output_dir / "result.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
     before, after = report["variants"]["before"], report["variants"]["after"]
-    assert before["failures"] == 3 and before["errors"] == 0, before
-    assert after["passed"] and after["tests_run"] == 3 and after["skipped"] == 0, after
+    assert before["failures"] == args.expect_before_failures and before["errors"] == 0, before
+    assert after["failures"] == args.expect_after_failures and after["errors"] == 0, after
+    assert after["tests_run"] == 3 and after["skipped"] == 0, after
     assert report["installed_source_unchanged"]
 
 
