@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="28.703" timestamp="2026-11-05T13:31:20.397232+08:00" hostname="l30023782"><testcase classname="test_combo_kernels.ComboKernelDynamicShapesTests" name="test_dynamic_shapes_activations_no_autotune" time="27.409"><properties><property name="source_case" value="test_dynamic_shapes_activations_no_autotune" /><property name="source_file" value="test_combo_kernels.py" /></properties><failure message="torch._inductor.exc.InductorError: RuntimeError: PreRun [triton_], candidate: c0&#10; variant [Y0BLOCK_SUB: 16, X1BLOCK_SUB: 16, compile_mode: simd_simt_template, multibuffer: False, split_axis: (0,), num_warps: 1, num_ctas: 1, num_stages: 2, maxnreg: None] runtime_blocks [(10,)] &#10; err: launcher() missing 6 required positional arguments: 'x1_numel_0', 'y0_numel_1', 'x1_numel_1', 'y0_numel_2', 'x1_numel_2', and 'Y0BLOCK'&#10;&#10;Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=&quot;+dynamo&quot;&#10;&#10;&#10;To execute this test, run the following from the base repo dir:&#10;    python test_combo_kernels.py ComboKernelDynamicShapesTests.test_dynamic_shapes_activations_no_autotune&#10;&#10;This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0">test_combo_kernels.py:1149: in test_dynamic_shapes_activations_no_autotune
+    out_compiled, code = run_and_get_code(torch.compile(test_activations), *inps)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/utils.py:2385: in run_and_get_code
+    result = fn(*args, **kwargs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:967: in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1019: in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1003: in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1766: in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1537: in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/graph.py:2416: in compile_to_module
+    return self._compile_to_module()
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/graph.py:2422: in _compile_to_module
+    self.codegen_with_cpp_wrapper() if self.cpp_wrapper else self.codegen()
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/graph.py:2354: in codegen
+    self._update_scheduler()
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/graph.py:2348: in _update_scheduler
+    self.scheduler = Scheduler(self.operations)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/scheduler.py:2765: in __init__
+    self._init(nodes)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/scheduler.py:2865: in _init
+    self.create_combo_kernel_nodes(num_ck_nodes=None)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/scheduler.py:4209: in create_combo_kernel_nodes
+    if not self.speedup_by_combo_kernel(node_list):
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/scheduler.py:6363: in speedup_by_combo_kernel
+    ms2, ms2_clone, _path2_list = self.benchmark_combo_kernel(subkernel_nodes)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/scheduler.py:6312: in benchmark_combo_kernel
+    return backend.benchmark_combo_kernel(node_list)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/codegen/cuda_combined_scheduling.py:162: in benchmark_combo_kernel
+    return self._triton_scheduling.benchmark_combo_kernel(node_list)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/codegen/triton.py:6198: in benchmark_combo_kernel
+    call(wrapped_jit_function.clone_args(*args)[0])
+../../../cache/device1/am/camqfwpshqubjpmxxi4uhcwbesonmtc6etokima6r3dnee5ldgzc.py:109: in call
+    triton_.run(*args, stream=stream0)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:1804: in run
+    self.autotune(*args, stream=stream, benchmark_run=benchmark_run, **kwargs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:1899: in autotune
+    self.autotune_to_one_config(*args, **kwargs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:1669: in autotune_to_one_config
+    timings = self._benchmark_candidate_entries(*args, **kwargs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:1571: in _benchmark_candidate_entries
+    raise RuntimeError(prerun_log_str)
+E   torch._inductor.exc.InductorError: RuntimeError: PreRun [triton_], candidate: c0
+E    variant [Y0BLOCK_SUB: 16, X1BLOCK_SUB: 16, compile_mode: simd_simt_template, multibuffer: False, split_axis: (0,), num_warps: 1, num_ctas: 1, num_stages: 2, maxnreg: None] runtime_blocks [(10,)] 
+E    err: launcher() missing 6 required positional arguments: 'x1_numel_0', 'y0_numel_1', 'x1_numel_1', 'y0_numel_2', 'x1_numel_2', and 'Y0BLOCK'
+E   
+E   Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"
+E   
+E   
+E   To execute this test, run the following from the base repo dir:
+E       python test_combo_kernels.py ComboKernelDynamicShapesTests.test_dynamic_shapes_activations_no_autotune
+E   
+E   This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0</failure></testcase></testsuite></testsuites>

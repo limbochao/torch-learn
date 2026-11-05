@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.077" timestamp="2026-11-05T13:09:04.090645+08:00" hostname="l30023782"><testcase classname="test_combo_kernels.ComboKernelTests" name="test_combo_kernel_per_config_subkernel_red" time="0.649"><properties><property name="source_case" value="test_combo_kernel_per_config_subkernel_red" /><property name="source_file" value="test_combo_kernels.py" /></properties><failure message="torch._inductor.exc.InductorError: NoTritonConfigsError: No valid triton configs for kernel triton_per_fused_0. CompilationError: at 26:16:&#10;        base_r1= tl.arange(0, R1BLOCK_SUB).to(tl.int64)&#10;        loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB&#10;        for x0 in range(x0_offset, min(x0_offset + X0BLOCK, x0_numel)):&#10;            for loop_r2 in range(loops_r2):&#10;                r2 = base_r2[:,None]&#10;                r2_mask = r2 &lt; r2_numel&#10;                r1 = base_r1[None,:]&#10;                r1_mask = r1 &lt; r1_numel&#10;                tmp0 = tl.load(in_ptr0 + (r1 + 128*x0 + 8192*r2), None)&#10;                tmp1 = tl.reshape(tmp0, [R2BLOCK_SUB* R1BLOCK_SUB])&#10;                tmp3 = triton_helpers.promote_to_tensor(tl.sum(tmp1, 0))&#10;                tl.store(out_ptr0 + (x0 ), tmp3, None)&#10;                ^&#10;Value argument cannot be block type if pointer argument is not a block &#10;Stack trace:Traceback (most recent call last):&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/core.py&quot;, line 43, in wrapper&#10;    return fn(*args, **kwargs)&#10;           ^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/core.py&quot;, line 2233, in store&#10;    return _semantic.store(pointer, value, mask, boundary_check, cache_modifier, eviction_policy)&#10;           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/semantic.py&quot;, line 1362, in store&#10;    return self._store_legacy(ptr, val, mask, boundary_check, cache, eviction)&#10;           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/semantic.py&quot;, line 1314, in _store_legacy&#10;    raise ValueError(&quot;Value argument cannot be block type if pointer argument is not a block&quot;)&#10;ValueError: Value argument cannot be block type if pointer argument is not a block&#10;&#10;The above exception was the direct cause of the following exception:&#10;&#10;Traceback (most recent call last):&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py&quot;, line 1299, in worker&#10;    return self._precompile_config(kernel_config)&#10;           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py&quot;, line 1141, in _precompile_config&#10;    binary = triton.compile(*compile_args, **compile_kwargs)&#10;             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/triton/compiler/compiler.py&quot;, line 329, in compile&#10;    module = src.make_ir(target, options, codegen_fns, module_map, context)&#10;             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/triton/compiler/compiler.py&quot;, line 84, in make_ir&#10;    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,&#10;           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/usr/local/python3.11.15/lib/python3.11/site-packages/triton/backends/ascend/dtype_guard.py&quot;, line 529, in call_function&#10;    return original_call_function(self, node, fn, args, kws)&#10;           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;triton.compiler.errors.CompilationError: at 26:16:&#10;        base_r1= tl.arange(0, R1BLOCK_SUB).to(tl.int64)&#10;        loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB&#10;        for x0 in range(x0_offset, min(x0_offset + X0BLOCK, x0_numel)):&#10;            for loop_r2 in range(loops_r2):&#10;                r2 = base_r2[:,None]&#10;                r2_mask = r2 &lt; r2_numel&#10;                r1 = base_r1[None,:]&#10;                r1_mask = r1 &lt; r1_numel&#10;                tmp0 = tl.load(in_ptr0 + (r1 + 128*x0 + 8192*r2), None)&#10;                tmp1 = tl.reshape(tmp0, [R2BLOCK_SUB* R1BLOCK_SUB])&#10;                tmp3 = triton_helpers.promote_to_tensor(tl.sum(tmp1, 0))&#10;                tl.store(out_ptr0 + (x0 ), tmp3, None)&#10;                ^&#10;Value argument cannot be block type if pointer argument is not a block&#10;&#10;&#10;Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=&quot;+dynamo&quot;&#10;&#10;&#10;To execute this test, run the following from the base repo dir:&#10;    python test_combo_kernels.py ComboKernelTests.test_combo_kernel_per_config_subkernel_red&#10;&#10;This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0">test_combo_kernels.py:471: in test_combo_kernel_per_config_subkernel_red
+    out_compiled, code = run_and_get_code(fn_c, *inps)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/utils.py:2385: in run_and_get_code
+    result = fn(*args, **kwargs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:967: in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1019: in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1003: in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1766: in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/compile_fx.py:1537: in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/graph.py:2416: in compile_to_module
+    return self._compile_to_module()
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/graph.py:2426: in _compile_to_module
+    mod = self._compile_to_module_lines(wrapper_code)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/graph.py:2501: in _compile_to_module_lines
+    mod = PyCodeCache.load_by_key_path(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/codecache.py:3674: in load_by_key_path
+    mod = _reload_python_module(key, path, set_sys_modules=in_toplevel)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/runtime/compile_tasks.py:35: in _reload_python_module
+    exec(code, mod.__dict__, mod.__dict__)
+../../../cache/device3/5m/c5mkwybm3z6kl3gt77plnk4nmrnnr7bc526lsqwex3b2yiyzn63z.py:47: in &lt;module&gt;
+    triton_per_fused_0 = async_compile.triton('triton_per_fused_0', '''
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch/_inductor/async_compile.py:477: in triton
+    kernel.precompile(
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:776: in precompile
+    self._precompile_parallel(warm_cache_only, reload_kernel)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:852: in _precompile_parallel
+    self._precompile_worker_parallel()
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:1342: in _precompile_worker_parallel
+    self._precompile_current_configs(self._precompile_configs_parallel)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:1022: in _precompile_current_configs
+    compile_results = compile_fn(compile_configs)
+/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py:1325: in _precompile_configs_parallel
+    raise NoTritonConfigsError(
+E   torch._inductor.exc.InductorError: NoTritonConfigsError: No valid triton configs for kernel triton_per_fused_0. CompilationError: at 26:16:
+E           base_r1= tl.arange(0, R1BLOCK_SUB).to(tl.int64)
+E           loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB
+E           for x0 in range(x0_offset, min(x0_offset + X0BLOCK, x0_numel)):
+E               for loop_r2 in range(loops_r2):
+E                   r2 = base_r2[:,None]
+E                   r2_mask = r2 &lt; r2_numel
+E                   r1 = base_r1[None,:]
+E                   r1_mask = r1 &lt; r1_numel
+E                   tmp0 = tl.load(in_ptr0 + (r1 + 128*x0 + 8192*r2), None)
+E                   tmp1 = tl.reshape(tmp0, [R2BLOCK_SUB* R1BLOCK_SUB])
+E                   tmp3 = triton_helpers.promote_to_tensor(tl.sum(tmp1, 0))
+E                   tl.store(out_ptr0 + (x0 ), tmp3, None)
+E                   ^
+E   Value argument cannot be block type if pointer argument is not a block 
+E   Stack trace:Traceback (most recent call last):
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/core.py", line 43, in wrapper
+E       return fn(*args, **kwargs)
+E              ^^^^^^^^^^^^^^^^^^^
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/core.py", line 2233, in store
+E       return _semantic.store(pointer, value, mask, boundary_check, cache_modifier, eviction_policy)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/semantic.py", line 1362, in store
+E       return self._store_legacy(ptr, val, mask, boundary_check, cache, eviction)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/triton/language/semantic.py", line 1314, in _store_legacy
+E       raise ValueError("Value argument cannot be block type if pointer argument is not a block")
+E   ValueError: Value argument cannot be block type if pointer argument is not a block
+E   
+E   The above exception was the direct cause of the following exception:
+E   
+E   Traceback (most recent call last):
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py", line 1299, in worker
+E       return self._precompile_config(kernel_config)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/torch_npu/_inductor/runtime/triton_heuristics.py", line 1141, in _precompile_config
+E       binary = triton.compile(*compile_args, **compile_kwargs)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/triton/compiler/compiler.py", line 329, in compile
+E       module = src.make_ir(target, options, codegen_fns, module_map, context)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/triton/compiler/compiler.py", line 84, in make_ir
+E       return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/usr/local/python3.11.15/lib/python3.11/site-packages/triton/backends/ascend/dtype_guard.py", line 529, in call_function
+E       return original_call_function(self, node, fn, args, kws)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   triton.compiler.errors.CompilationError: at 26:16:
+E           base_r1= tl.arange(0, R1BLOCK_SUB).to(tl.int64)
+E           loops_r1 = (r1_numel + R1BLOCK_SUB - 1) // R1BLOCK_SUB
+E           for x0 in range(x0_offset, min(x0_offset + X0BLOCK, x0_numel)):
+E               for loop_r2 in range(loops_r2):
+E                   r2 = base_r2[:,None]
+E                   r2_mask = r2 &lt; r2_numel
+E                   r1 = base_r1[None,:]
+E                   r1_mask = r1 &lt; r1_numel
+E                   tmp0 = tl.load(in_ptr0 + (r1 + 128*x0 + 8192*r2), None)
+E                   tmp1 = tl.reshape(tmp0, [R2BLOCK_SUB* R1BLOCK_SUB])
+E                   tmp3 = triton_helpers.promote_to_tensor(tl.sum(tmp1, 0))
+E                   tl.store(out_ptr0 + (x0 ), tmp3, None)
+E                   ^
+E   Value argument cannot be block type if pointer argument is not a block
+E   
+E   
+E   Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"
+E   
+E   
+E   To execute this test, run the following from the base repo dir:
+E       python test_combo_kernels.py ComboKernelTests.test_combo_kernel_per_config_subkernel_red
+E   
+E   This message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0</failure></testcase></testsuite></testsuites>

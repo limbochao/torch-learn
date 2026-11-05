@@ -29,6 +29,10 @@ title: 学习笔记
       <p>说明 Triton pointwise 为什么大于狭义 elementwise，并列出 broadcast、view/reindex、mask、copy、fill 等子类。</p>
     </div>
     <div>
+      <a href="compiler/codegen/inductor-combo-tests-v2.13-vs-v2.10.html">v2.13.0 Combo/Foreach 用例在 v2.10.0 的存在性核对</a>
+      <p>逐项核对 116 条记录及 2.10 支持范围，汇总 NPU_A5 的 409 个实例结果，附 CSV 表格。</p>
+    </div>
+    <div>
       <a href="compiler/symbolic-group/inductor-symbolic-group-v2.10.html">torch_npu v2.10.0 Symbolic Group 实现</a>
       <p>仅依据 v2.10.0 线上代码说明准入、代表 shape、candidate plan、autotune 和 dispatch。</p>
     </div>
