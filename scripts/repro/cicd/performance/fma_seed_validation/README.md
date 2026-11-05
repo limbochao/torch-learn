@@ -46,3 +46,23 @@ python <torch-learn>/scripts/repro/cicd/performance/fma_seed_validation/validate
 输入文件应从文档指定的基线/修复提交提取；脚本记录源码 SHA256，要求原始组 3 项失败、
 修复组 3 项通过，并检查安装文件未变化。只回放进程内方法、构造元数据，不编译/运行设备 kernel，
 也不将结果表述为完整 master 构建或整网性能回归。
+
+PR49024 的门禁修正 `bbb51aa4a8` 显式覆盖 legacy / attrs-dict 两种 signature 协议。
+使用该提交的新测试文件时，增加 `--expect-before-failures 6`：原始方法在两种协议下各有三个
+子场景缺少常量，新方法应为 3 个测试、10 个子场景全部通过。
+
+```bash
+python <torch-learn>/scripts/repro/cicd/performance/fma_seed_validation/validate_index_constants.py \
+  --before <master-codegen.py> --after <fixed-codegen.py> \
+  --test-file <bbb51aa4a8-repo>/test/_inductor/test_index_triton_constants.py \
+  --test-support-dir <bbb51aa4a8-repo>/test --output-dir <metadata-results> \
+  --expect-before-failures 6
+```
+
+用 `20c8be6356` 的旧测试复现门禁断言时，增加
+`--signature-protocol legacy --expect-after-failures 3`。
+脚本会强制真实 `signature_of` 走 legacy 能力分支，检查旧用例在常量补齐后仍出现三处
+`i32 != constexpr`。此时控制脚本退出 0 表示成功复现预期失败，JSON 中旧用例的 `passed` 仍为 false。
+`--signature-protocol attrs-dict` 可强制另一分支，默认 `auto` 保持环境原生能力判断；
+新测试内部会分别覆盖 False/True，不受外层默认协议限制。
+这些开关只作用于 metadata 测试，不用于修改模型运行或底层编译行为。

@@ -18,7 +18,8 @@ Index checker 生成 TTIR 失败后进入 no-linear 回退，首层 kernel 从�
 | --- | --- |
 | 分支基线 | 2026-11-04 获取的 `Ascend/pytorch:master`，`6c43e4db2375daa873829c175976602088fe392e` |
 | 修复分支 | [`fix/inductor-index-constexpr-constants`][branch] |
-| 合并后唯一提交 | [`20c8be6356b7ebd532da050277c8a0ee709d87d2`][commit]，包含修复和回归测试 |
+| 原始合并提交 | [`20c8be6356b7ebd532da050277c8a0ee709d87d2`][commit]，包含修复和回归测试 |
+| 门禁测试修正 | [`bbb51aa4a8046bb91bd94abbbec83032c787b5cb`][gate-commit]，覆盖两种 Triton signature 协议，仅改测试 |
 | PR / Issue | [PR !49024](https://gitcode.com/Ascend/pytorch/merge_requests/49024) → `Ascend/pytorch:master`；已结构化关联 [Issue #5855](https://gitcode.com/Ascend/pytorch/issues/5855) |
 | 修改范围 | `torch_npu/_inductor/codegen/triton.py` 增加 5 行；新增 3 个元数据回归测试 |
 | 性能与模型精度实测 | 2026-11-03，`test/cicd_benchmark@b3bd74035189` 对应安装文件，进程内补齐常量 |
@@ -41,7 +42,8 @@ seed offset 是随机种子数组的下标。本场景的 FX 为 `inductor_looku
 ```
 
 `in_ptr1` 指向种子数组，`load_seed_offset=1` 选择其中一个元素；真正的随机 seed 仍在运行时读取。
-社区 `signature_of` 将静态等于 1 的 `SizeArg` 标记为 `constexpr`，codegen 必须同时提供常量值。
+本次性能验证使用 attrs-dict 协议，社区 `signature_of` 将静态等于 1 的 `SizeArg` 标记为
+`constexpr`，codegen 必须同时提供常量值；legacy 协议仍保留 `i32`，也需要同样的常量绑定。
 
 原 Index 路径留下如下矛盾：
 
@@ -105,7 +107,7 @@ constants = {"load_seed_offset": 1, "static_size": 1}
 seed 数组中的随机值仍由 `tl.load` 读取；只有“选择数组哪一项”这个静态下标获得了编译期绑定。
 precomputed symbol 必须先还原为整数表达式，随后这条规则才能识别它，这也是修复放置位置与回归用例的依据。
 
-完整修改及回归测试见[修复 patch][patch]和[修复提交][commit]。
+原始生产修复与首版测试见[修复 patch][patch]和[修复提交][commit]；测试的协议兼容性修正见下文门禁章节。
 社区 CUDA 的 `TritonKernel.codegen_kernel` 已有相同循环；本次补齐的是 NPU Index 路径。
 社区参考：
 [seed load](https://github.com/pytorch/pytorch/blob/main/torch/_inductor/codegen/triton.py)、
@@ -313,16 +315,83 @@ precomputed symbol 还原为 1 三类条件。
 python test/_inductor/test_index_triton_constants.py
 ```
 
-本次保留原安装版本，使用[方法级回放脚本][metadata-repro]加载 master 修复前后方法执行相同测试；
+2026-11-04 首轮保留原安装版本，使用[方法级回放脚本][metadata-repro]加载 master 修复前后方法，
+执行 `20c8be6356` 的首版测试，环境原生协议为 attrs-dict；
 结果为修复前 **3 项失败、0 error**，修复后 **3 项通过、0 skipped**；安装源码 SHA256 未变化。
 见[回归汇总][metadata-result]、[修改前日志][metadata-before]、[修改后日志][metadata-after]和
 [提交与文件 SHA256][source-identity]。这验证正式补丁的常量绑定行为，不代表完整 master 构建回归。
 模型 A/B 的采样和 accuracy 使用[既有实验脚本][model-repro]，基线选择 `baseline`，
 修复组选择 `bind_constexpr`；各组使用独立 cache / debug 目录，保留生成代码。
 
+## PR49024 门禁：测试错误地固定为 attrs-dict 签名
+
+2026-11-04 门禁的三个失败均为测试中的 signature 断言，精简错误如下：
+
+```text
+test_other_static_ones_are_bound_without_specializing_dynamic_args
+test_precomputed_one_is_bound_after_signature_rewrite
+test_seed_offset_one_has_a_constant_value_before_ttir (offset=1)
+    AssertionError: 'i32' != 'constexpr'
+Ran 3 tests; FAILED (failures=3)
+```
+
+三处都是先检查 `metadata["constants"]`、再检查 signature；前一个断言已经通过。
+责任模块是 **`test/_inductor/test_index_triton_constants.py` 的协议兼容性**。
+先前回归只在 attrs-dict 环境验证，遗漏了 legacy 分支。
+决定签名类型的是社区 `torch._inductor.codegen.triton_utils.signature_of` 中的能力判断，
+核心条件为：
+
+```python
+elif _arg_equals_1(arg) and triton_version_uses_attrs_dict():
+    return "constexpr"
+```
+
+| Triton metadata 协议 | 静态 1 的 signature | 两条路径都要求的 constants |
+| --- | --- | --- |
+| attrs-dict | `constexpr` | `{parameter_name: 1}` |
+| legacy / 非 attrs-dict | `i32`（本用例 index dtype 为 int32） | `{parameter_name: 1}` |
+
+因此不能把“常量已经绑定”一律写成“signature 必须为 constexpr”。
+门禁日志未提供完整 Triton 构建版本；本次在现有环境强制走 legacy 能力分支，
+复现了相同的三处断言错误，不据此猜测门禁的具体版本号。
+
+提交 `bbb51aa4a8` 只改测试：mock `triton_version_uses_attrs_dict()` 的 False/True 两种返回值，
+保留真实 `signature_to_meta` 和 `NPUIndexTritonKernel.codegen_kernel`，分别检查合法的
+`i32` / `constexpr` 签名与完全相同的常量绑定规则。
+seed offset=0/1/2、其他静态 1、动态参数和 precomputed 还原为 1，合计 **3 个测试、10 个子场景**。
+还检查 offset=0/2 与动态参数始终保留 `i32`，不被误特化。
+没有放宽 constants 断言、修改生产 codegen、改版本标记或跳过门禁用例。
+
+2026-11-05 在 `pta_213_cicd`、torch 2.13.0+cpu、torch_npu 2.13.0.dev20261030、
+Triton 3.6.0 的进程内 metadata 回放结果：
+
+| 测试与生产方法组合 | 结果 |
+| --- | --- |
+| 旧测试 + 已补常量的生产方法 + 强制 legacy 协议 | **3 个失败**，全部为 `i32 != constexpr`，复现门禁现象 |
+| 新测试 + 已补常量的生产方法，两种协议 | **3 个测试通过、10 个子场景通过，0 skipped / 0 error** |
+| 新测试 + 未补常量的原始方法，两种协议 | **6 个子场景失败**，仍能检出原始常量遗漏 |
+
+这里仅模拟协议能力判断并构造 metadata，没有安装另一套 Triton、运行设备 kernel 或重测整网性能；
+安装源码 SHA256 未变化。旧用例失败是预期的复现结果，不能把控制脚本返回 0 误读为旧用例通过。
+修正已推送到 PR 原分支，API 核对 PR head 为 `bbb51aa4a8`；完整门禁是否通过仍以新一轮 CI 为准。
+
+[门禁原始错误去敏摘录][gate-ci]、[旧测试 legacy 完整失败][gate-old-failure]、
+[旧测试复现汇总][gate-old-result]、[新测试通过日志][gate-new-pass]、
+[原始缺陷仍被检出][gate-new-failure]、[新测试验证汇总][gate-new-result]、
+[提交与输入 SHA256][gate-identity]。复现参数见[脚本说明][gate-repro]。
+
 [branch]: https://gitcode.com/luqichao/pytorch_new/tree/fix/inductor-index-constexpr-constants
+[gate-commit]: https://gitcode.com/luqichao/pytorch_new/commit/bbb51aa4a8046bb91bd94abbbec83032c787b5cb
 [commit]: https://gitcode.com/luqichao/pytorch_new/commit/20c8be6356b7ebd532da050277c8a0ee709d87d2
-[test]: https://gitcode.com/luqichao/pytorch_new/blob/20c8be6356b7ebd532da050277c8a0ee709d87d2/test/_inductor/test_index_triton_constants.py
+[test]: https://gitcode.com/luqichao/pytorch_new/blob/bbb51aa4a8046bb91bd94abbbec83032c787b5cb/test/_inductor/test_index_triton_constants.py
+[gate-ci]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/ci_failure.txt
+[gate-old-failure]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/old_test_legacy/after.txt
+[gate-old-result]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/old_test_legacy/result.json
+[gate-new-pass]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/new_test_both_protocols/after.txt
+[gate-new-failure]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/new_test_both_protocols/before.txt
+[gate-new-result]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/new_test_both_protocols/result.json
+[gate-identity]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/inputs/identity.json
+[gate-repro]: ../../../../scripts/repro/cicd/performance/fma_seed_validation/README.md
 [npu-no-linear]: https://gitcode.com/luqichao/pytorch_new/blob/20c8be6356b7ebd532da050277c8a0ee709d87d2/torch_npu/_inductor/codegen/triton.py#L976
 [npu-experimental]: https://gitcode.com/luqichao/pytorch_new/blob/20c8be6356b7ebd532da050277c8a0ee709d87d2/torch_npu/_inductor/triton_experimental/codegen/triton.py#L4731
 [npu-template]: https://gitcode.com/luqichao/pytorch_new/blob/20c8be6356b7ebd532da050277c8a0ee709d87d2/torch_npu/_inductor/select_algorithm.py#L1159
