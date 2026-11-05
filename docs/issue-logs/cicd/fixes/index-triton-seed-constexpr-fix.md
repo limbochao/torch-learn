@@ -18,8 +18,9 @@ Index checker 生成 TTIR 失败后进入 no-linear 回退，首层 kernel 从�
 | --- | --- |
 | 分支基线 | 2026-11-04 获取的 `Ascend/pytorch:master`，`6c43e4db2375daa873829c175976602088fe392e` |
 | 修复分支 | [`fix/inductor-index-constexpr-constants`][branch] |
-| 原始合并提交 | [`20c8be6356b7ebd532da050277c8a0ee709d87d2`][commit]，包含修复和回归测试 |
-| 门禁测试修正 | [`bbb51aa4a8046bb91bd94abbbec83032c787b5cb`][gate-commit]，覆盖两种 Triton signature 协议，仅改测试 |
+| 当前 PR 唯一提交 | [`26b2fc7eff6d7115001a2e318e15323ddc2b67f2`][squash-commit]，包含生产修复及两种协议的回归测试 |
+| 历史生产修复提交 | [`20c8be6356b7ebd532da050277c8a0ee709d87d2`][commit]，包含修复和回归测试 |
+| 历史门禁测试修正 | [`bbb51aa4a8046bb91bd94abbbec83032c787b5cb`][gate-commit]，覆盖两种 Triton signature 协议，仅改测试 |
 | PR / Issue | [PR !49024](https://gitcode.com/Ascend/pytorch/merge_requests/49024) → `Ascend/pytorch:master`；已结构化关联 [Issue #5855](https://gitcode.com/Ascend/pytorch/issues/5855) |
 | 修改范围 | `torch_npu/_inductor/codegen/triton.py` 增加 5 行；新增 3 个元数据回归测试 |
 | 性能与模型精度实测 | 2026-11-03，`test/cicd_benchmark@b3bd74035189` 对应安装文件，进程内补齐常量 |
@@ -27,7 +28,9 @@ Index checker 生成 TTIR 失败后进入 no-linear 回退，首层 kernel 从�
 
 **下文性能数值来自 2026-11-03 的临时补丁 A/B，不是重建整个最新 master 后的整网实测。**
 两次使用的修复核心均为同一段 `equal_1_arg_indices` 常量绑定；master 回归验证该正式改动的元数据行为。
-原 `4515e5af0c`、`ca3407d2e4` 已 rebase 合并为上述单提交；合并前后文件树完全一致，原回归证据仍对应相同源码。
+原 `4515e5af0c`、`ca3407d2e4` 先合并为 `20c8be6356`；门禁修正 `bbb51aa4a8` 随后与其
+再次 rebase 合并为当前唯一提交 `26b2fc7eff`。后一次合并前后整棵文件树完全一致，
+两种协议的回归证据仍对应相同源码，未重复跑设备测试。
 原性能环境另有既存 matmul backward decomposition 修改，两组保持一致，见
 [安装文件身份][identity]和[既存差异][decomp]。
 
@@ -373,17 +376,20 @@ Triton 3.6.0 的进程内 metadata 回放结果：
 
 这里仅模拟协议能力判断并构造 metadata，没有安装另一套 Triton、运行设备 kernel 或重测整网性能；
 安装源码 SHA256 未变化。旧用例失败是预期的复现结果，不能把控制脚本返回 0 误读为旧用例通过。
-修正已推送到 PR 原分支，API 核对 PR head 为 `bbb51aa4a8`；完整门禁是否通过仍以新一轮 CI 为准。
+门禁修正与原生产修复已合并为唯一提交 `26b2fc7eff`，并更新 PR 原分支；
+两次提交合并前后的 tree 均为 `5d172d00627194b80fd8ce48ed603219fb494905`，源码内容不变。
+完整门禁是否通过仍以新一轮 CI 为准。
 
 [门禁原始错误去敏摘录][gate-ci]、[旧测试 legacy 完整失败][gate-old-failure]、
 [旧测试复现汇总][gate-old-result]、[新测试通过日志][gate-new-pass]、
 [原始缺陷仍被检出][gate-new-failure]、[新测试验证汇总][gate-new-result]、
 [提交与输入 SHA256][gate-identity]。复现参数见[脚本说明][gate-repro]。
 
+[squash-commit]: https://gitcode.com/luqichao/pytorch_new/commit/26b2fc7eff6d7115001a2e318e15323ddc2b67f2
 [branch]: https://gitcode.com/luqichao/pytorch_new/tree/fix/inductor-index-constexpr-constants
 [gate-commit]: https://gitcode.com/luqichao/pytorch_new/commit/bbb51aa4a8046bb91bd94abbbec83032c787b5cb
 [commit]: https://gitcode.com/luqichao/pytorch_new/commit/20c8be6356b7ebd532da050277c8a0ee709d87d2
-[test]: https://gitcode.com/luqichao/pytorch_new/blob/bbb51aa4a8046bb91bd94abbbec83032c787b5cb/test/_inductor/test_index_triton_constants.py
+[test]: https://gitcode.com/luqichao/pytorch_new/blob/26b2fc7eff6d7115001a2e318e15323ddc2b67f2/test/_inductor/test_index_triton_constants.py
 [gate-ci]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/ci_failure.txt
 [gate-old-failure]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/old_test_legacy/after.txt
 [gate-old-result]: ../../../../artifacts/cicd/performance/index-triton-seed-constexpr-fix/gate-20261105/old_test_legacy/result.json
