@@ -10,6 +10,13 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 可下载 [CSV 表格](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
 [上游版本对照总表](inductor-combo-tests-v2.13-vs-v2.10.md) 保留最初的版本对照与旧修复历史。
 
+<!-- combo-full-run -->
+当前修复分支已提交 [PR !7](https://gitcode.com/liujm2001/pytorch/merge_requests/7)。
+安装源码 `a8dcca84bf` 的全量任务已于 2026-11-06 23:57（北京时间）启动，范围为 62 个方法、409 个实例。
+下表暂保留已完成的历史结果；定时任务首次于 11 月 7 日 01:03 检查，随后每 30 分钟一次，完成后统一刷新并推送。
+启动与定时配置见 [本轮任务记录](../../../../artifacts/combo-full-a8dcca84bf-20261106/README.md)。
+<!-- /combo-full-run -->
+
 ## 最新 F4 优化与复测
 
 F4 已整理为单个提交 `53f8af09f144aaaec685562acd4c3a3ffaffb71a`，开发分支最新提交为 `a8dcca84bf52e8a3e0c46aa46c2a4f663875f10e`，已推送 origin。

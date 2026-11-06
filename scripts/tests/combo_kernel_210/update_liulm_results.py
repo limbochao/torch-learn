@@ -2,6 +2,7 @@
 import argparse
 from collections import Counter, defaultdict
 import csv
+from datetime import date
 import json
 from pathlib import Path
 import re
@@ -78,6 +79,13 @@ def analysis(method, fallback):
     log = method.get("execution_log", "") + "\n".join(x.get("longrepr", "") for x in method["failures"])
     if "Too many streams" in log or "207005" in log:
         return "环境执行异常：采集用例时 NPU stream 资源不足（207005），未进入用例；不能判为代码缺陷，需复测"
+    if method.get("fresh_failure_analysis"):
+        if method["returncode"] not in (0, 1) or method["completed_instances"] != method["expected_instances"]:
+            return "本轮执行异常，实例未完整记录；见本轮执行日志，不能计为功能通过或失败"
+        if method["counts"].get("skipped", 0):
+            return "本轮有跳过实例，跳过不计为通过；原因见本轮报告"
+        errors = [s[2:].strip() for s in log.splitlines() if s.startswith("E ") and "Error" in s]
+        return "本轮全量失败，待按新日志分析：" + next(iter(errors), "见本轮报告")[:180]
     if "out_ptr1 is not defined" in log:
         return "F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认"
     if name in KNOWN:
@@ -128,6 +136,7 @@ def main():
             result["validation_context"] = context
             for method in result["methods"]:
                 method["fix_commit"] = context.get("fix_commits", {}).get(method["name"])
+                method["fresh_failure_analysis"] = context.get("fresh_failure_analysis", False)
                 if not method["job_finished"]:
                     continue
                 if method["returncode"] not in (0, 1):
@@ -239,13 +248,52 @@ def main():
         for problem, names in problem_cases.items():
             tested = [m for m in result["methods"] if m["name"] in names]
             if {m["name"] for m in tested} == names and all(passed(m) for m in tested):
-                body = re.sub(r'\| ' + problem + r' \|[^\n]*\n', '', body)
+                start = body.index("## 当前仍存在的问题")
+                end = body.find("\n## ", start + 1)
+                end = len(body) if end < 0 else end
+                section = re.sub(r'\| ' + problem + r' \|[^\n]*\n', '', body[start:end])
+                body = body[:start] + section + body[end:]
         stream_retest = next((m for m in result["methods"] if m["name"] == "test_round_robin_dispatch"), None)
         if stream_retest and stream_retest["completed_instances"] == stream_retest["expected_instances"]:
             body = re.sub(r'\| 环境执行异常 \|[^\n]*\n', '', body)
             new_state = "通过" if passed(stream_retest) else "有效执行后功能失败，原因见复测表"
             body = body.replace("因此不是 409 个实例均已完成验证，stream 异常项仍需复测。",
                                 f"原全量的 stream 资源异常本轮未再出现；该方法复测{new_state}，不再作为环境阻塞。")
+        context = result.get("validation_context", {})
+        if context.get("full_suite_run"):
+            commit = context["installed_commit"]
+            count = result["instance_counts"]
+            body = re.sub(r"验证日期：[0-9-]+", "验证日期：" + date.today().isoformat(), body, count=1)
+            body = re.sub(r"\n<!-- combo-full-run -->.*?<!-- /combo-full-run -->\n", "\n", body, flags=re.S)
+            if "## 最新全量复测" in body:
+                start = body.index("## 最新全量复测")
+                end = body.index("\n## ", start + 1)
+                body = body[:start] + body[end:]
+            full_intro = ("## 最新全量复测\n\n"
+                          f"启动源码提交 `{commit}`，[查看 PR]({context['pr_url']})。\n"
+                          f"本轮按 {len(selected)} 个方法、{result['expected_instances']} 个实例启动，"
+                          f"实际记录 {result['completed_instances']} 个实例；"
+                          f"实例通过 {count.get('passed', 0)}、失败 {count.get('failed', 0)}、"
+                          f"跳过 {count.get('skipped', 0)}。数值断言和测试适配未变更，"
+                          "没有加载函数修复或 F3 overlay。当前逐项结果均来自本轮，历史定向记录保留在后文。\n\n")
+            body = body.replace("## 最新 F4 优化与复测", "## F4 优化与历史定向复测", 1)
+            position = body.index("\n## ")
+            body = body[:position] + "\n" + full_intro + body[position:]
+            start = body.index("## 当前仍存在的问题")
+            end = body.find("\n## ", start + 1)
+            end = len(body) if end < 0 else end
+            unresolved = [r for r in rows if (r["测试文件"], r["函数名"]) in selected
+                          and not r["最新结果"].startswith("通过")]
+            problems = ("本轮全量未全部通过的用例如下；失败原因只依据本轮日志，"
+                        "尚未完成源码分析的项明确标为待分析。\n\n"
+                        + markdown_table(unresolved, ["测试文件", "函数名", "最新结果", "当前分析"])
+                        if unresolved else "本轮全量所有实例通过，没有新增失败项。")
+            body = body[:start] + "## 当前仍存在的问题\n\n" + problems + "\n" + body[end:]
+            full_line = (f"| {commit[:10]} 完整全量 | {sum(passed(m) for m in result['methods'])} / 62 | "
+                         f"{count.get('passed', 0)} / {result['expected_instances']} | 统一安装源码的本轮全量 |\n")
+            body = re.sub(r'\| ' + re.escape(commit[:10]) + r' 完整全量 \|[^\n]*\n', '', body)
+            position = body.index('\n“原 e32+F1/F3 结果”')
+            body = body[:position].rstrip() + "\n" + full_line + body[position:]
     doc.write_text(body)
     readme = art / "README.md"
     content = re.sub(r'(`[A-Fa-f0-9]{40}`。)[^\n]*', lambda m: m[1] + text, readme.read_text(), count=1)

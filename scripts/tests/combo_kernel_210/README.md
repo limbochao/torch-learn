@@ -16,6 +16,45 @@
 导出的是提交中的文件，未复制本地未跟踪文件。测试树放在上述工作目录的
 `Community-Use-Case-Testing/v2.13.0/inductor_npu`。
 
+## 当前修复分支：全量执行与定时检查
+
+当前 PR 为 [!7](https://gitcode.com/liujm2001/pytorch/merge_requests/7)，安装源码 `a8dcca84bf`，
+F3 已合入基线，不使用 `--with-f3`。全量仍为核定的 62 个方法、409 个实例。
+[本次启动配置](../../../artifacts/combo-full-a8dcca84bf-20261106/README.md)记录实际版本、实例和定时器。
+
+`prepare_validation.py` 可以复用已适配的测试 phase，创建全新的运行目录和缓存。
+将它及现有 run/export/capture 脚本复制到远端同一输入目录后执行：
+
+```bash
+python prepare_validation.py --template <adapted-template-phase> --root <fresh-phase> \
+    --manifest <selected-methods.json> --expected-nodes <approved-node-ids.json> \
+    --source-hashes <expected-source-sha256.json> --context <validation-context.json> \
+    --devices 4,5,6 --detach
+```
+
+`--expected-nodes` 为完整 node ID 字符串列表；`--source-hashes` 为安装相对路径到 SHA256 的映射。
+`--context` 必须包含 `installed_commit`，并设置 `with_f3_overlay: false`；
+全量另外设置 `full_suite_run: true`、`fresh_failure_analysis: true` 和 `pr_url`。
+`fix_commits` 按方法名记录修复提交，通过项会在表格中标注。
+准备阶段拒绝复用已有目录或使用与提交不符的安装源码；收集后同时核对实例数量和完整节点集合。
+
+结果检查可以使用用户 systemd 定时器，每次只检查一次状态，不持续轮询：
+
+```bash
+systemd-run --user --unit=<unique-check-unit> --on-active=1h --on-unit-active=30min \
+    --property=Type=oneshot --property=TimeoutStartSec=30min \
+    /usr/bin/python3 <torch-learn>/scripts/tests/combo_kernel_210/publish_retest.py \
+    --host NPU_A5 --remote-phase <fresh-remote-phase> --raw-root <fresh-local-raw-dir> \
+    --repo <torch-learn> --once --stop-timer <unique-check-unit>.timer
+```
+
+本次定时器是 `combo-full-a8dcca84bf-20261106.timer`，首次检查为 2026-11-07 01:03（北京时间）。
+完成后统一归档、校验、更新表格并推送，随后停止定时器。功能失败仍正常记为失败；
+执行异常或未完整结束不会记为通过。新失败先记录实际日志摘要，不沿用已经修复的历史原因。
+若全量控制器或源码完整性检查报错，先保存证据，状态记为 `validation_error`，保留旧表并停止定时器。
+`publisher_status.json` 保存等待状态、最终统计和文档提交；服务日志可用
+`journalctl --user -u <unique-check-unit>.service` 查看，无需重复读取 pytest 日志。
+
 ## 后台一键执行与自动收尾
 
 liulm 最新结果见 [基线表](../../../docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md)。

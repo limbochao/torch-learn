@@ -93,6 +93,11 @@ def main():
                 root / "Community-Use-Case-Testing/v2.13.0/inductor_npu", "collection.log")
         nodes = json.loads((out / "collection.json").read_text())
         assert args.expected_instances is None or len(nodes) == args.expected_instances
+        expected_nodes = root / "expected_nodes.json"
+        if expected_nodes.exists():
+            approved = json.loads(expected_nodes.read_text())
+            assert len(approved) == len(set(approved)) == len(nodes)
+            assert set(approved) == {row["nodeid"] for row in nodes}, "Collected test scope changed"
         env.pop("COMBO_COLLECTION_JSON")
         save("testing", expected_methods=len(selected), expected_instances=len(nodes))
         execute([sys.executable, "-u", "run_combo_selected.py"], root, "driver.log")

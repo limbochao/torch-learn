@@ -1,9 +1,11 @@
 """Wait for one run_validation.py phase, archive its evidence and publish refreshed latest results."""
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -23,7 +25,11 @@ def main():
     parser.add_argument("--artifact", default="combo-liulm-0fd5a10-20261106")
     parser.add_argument("--interval", type=int, default=120)
     parser.add_argument("--detach", action="store_true")
+    parser.add_argument("--once", action="store_true", help="Check once for a systemd timer; return if still running")
+    parser.add_argument("--stop-timer", help="Stop this user timer after results have been published")
     args = parser.parse_args()
+    if args.stop_timer:
+        assert re.fullmatch(r"[A-Za-z0-9_.-]+\.timer", args.stop_timer), "Invalid user timer name"
     args.raw_root.mkdir(parents=True, exist_ok=True)
     if args.detach:
         command = [sys.executable, str(Path(__file__).resolve()), *[x for x in sys.argv[1:] if x != "--detach"]]
@@ -31,6 +37,22 @@ def main():
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         (args.raw_root / "publisher.pid").write_text(str(process.pid) + "\n")
         print(json.dumps({"pid": process.pid, "status": str(args.raw_root / "publisher_status.json")}))
+        return
+
+    lock = (args.raw_root / "publisher.lock").open("w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit("A publisher is already running for this phase")
+
+    def stop_timer():
+        if args.stop_timer:
+            subprocess.run(["systemctl", "--user", "stop", args.stop_timer], check=True)
+
+    status_file = args.raw_root / "publisher_status.json"
+    terminal_states = {"complete", "published_with_execution_errors", "validation_error"}
+    if status_file.exists() and json.loads(status_file.read_text()).get("state") in terminal_states:
+        stop_timer()
         return
 
     def status(state, **extra):
@@ -43,7 +65,7 @@ def main():
     try:
         status("waiting_for_retest")
         probe = ("import json;from pathlib import Path;p=Path(" + repr(args.remote_phase) + ");"
-                 "print('RETEST_STATUS='+ (p/'validation_status.json').read_text().replace('\\n',''))")
+                 "print('RETEST_STATUS='+json.dumps(json.loads((p/'validation_status.json').read_text())))")
         while True:
             output = subprocess.check_output(["ssh", args.host, "python -c " + shlex.quote(probe)],
                                              text=True, timeout=60)
@@ -51,12 +73,20 @@ def main():
                                     if x.startswith("RETEST_STATUS=")))
             if state["stage"] in {"complete", "error"}:
                 break
+            if args.once:
+                status("waiting_for_retest", validation_state=state)
+                return
             time.sleep(max(60, args.interval))
         status("archiving_retest", validation_state=state)
         archive = ".retest-evidence.tar.gz"
-        command = ("cd " + shlex.quote(args.remote_phase) + " && tar -czf " + archive
-                   + " evidence validation_status.json combo_npu_a5_selected.json expected_nodes.json"
-                   + " expected_source_sha256.json validation.log && sha256sum " + archive)
+        bundle_script = ("import hashlib,tarfile;from pathlib import Path;p=Path(" + repr(args.remote_phase)
+                         + ");names=['evidence','validation_status.json','combo_npu_a5_selected.json',"
+                         "'expected_nodes.json','expected_source_sha256.json','validation.log',"
+                         "'validation_context.json'];t=tarfile.open(p/" + repr(archive) + ",'w:gz');"
+                         "[t.add(p/n,arcname=n) for n in names if (p/n).exists()];t.close();"
+                         "print(hashlib.sha256((p/" + repr(archive) + ").read_bytes()).hexdigest()+'  '"
+                         + "+" + repr(archive) + ")")
+        command = "python -c " + shlex.quote(bundle_script)
         output = subprocess.check_output(["ssh", args.host, command], text=True, timeout=180)
         expected_hash = next(x.split()[0] for x in output.splitlines() if x.endswith("  " + archive))
         bundle = args.raw_root / archive
@@ -93,6 +123,13 @@ def main():
             receipts.append({"artifact": str(relative), "original_sha256": hashlib.sha256(raw).hexdigest(),
                              "archived_sha256": hashlib.sha256(content.encode()).hexdigest()})
         (destination / "archive_manifest.json").write_text(json.dumps(receipts, indent=2) + "\n")
+        context_path = destination / "validation_context.json"
+        context = json.loads(context_path.read_text()) if context_path.exists() else {}
+        if context.get("full_suite_run") and state["stage"] != "complete":
+            status("validation_error", validation_state=state, archived_evidence=str(destination),
+                   reason="Full validation or source integrity failed; live result table was not updated")
+            stop_timer()
+            return
         result = json.loads((destination / "functional_results.json").read_text())
         if state["stage"] == "complete":
             check = json.loads((destination / "integrity_checks.json").read_text())
@@ -101,12 +138,16 @@ def main():
             collected = json.loads((destination / "collection.json").read_text())
             assert set(expected) == {x["nodeid"] for x in collected}
             assert result["expected_instances"] == result["completed_instances"] == len(expected)
-            audits = list(destination.glob("audit.test_*.jsonl"))
-            assert len(audits) == len(result["methods"])
-            for path in audits:
-                events = [json.loads(line) for line in path.read_text().splitlines()]
-                assert any(e.get("event") == "existing_fix_loaded" and e.get("source_sha256")
-                           == "510a63aa914a3384d68d5aac662aab05c7919f21584f109e04fdcc1476fcd77c" for e in events)
+            if state.get("with_f3"):
+                audits = list(destination.glob("audit.test_*.jsonl"))
+                assert len(audits) == len(result["methods"])
+                for path in audits:
+                    events = [json.loads(line) for line in path.read_text().splitlines()]
+                    assert any(e.get("event") == "existing_fix_loaded" and e.get("source_sha256")
+                               == "510a63aa914a3384d68d5aac662aab05c7919f21584f109e04fdcc1476fcd77c"
+                               for e in events)
+            if context:
+                assert context.get("with_f3_overlay", False) == state.get("with_f3", False)
         index = destination.parent / "index.json"
         phases = json.loads(index.read_text()) if index.exists() else []
         if phase not in phases:
@@ -131,7 +172,9 @@ def main():
         git("add", "-f", "--", *scopes, env=env)
         git("diff", "--cached", "--check", "--", *scopes[1:], env=env)
         if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=args.repo, env=env).returncode:
-            git("commit", "-m", "docs: record new-package plus F3 failure retest", env=env)
+            message = ("docs: record Combo full validation for " + context["installed_commit"][:10]
+                       if context.get("full_suite_run") else "docs: record Combo targeted validation")
+            git("commit", "-m", message, env=env)
             git("reset", "HEAD", "--", *scopes)
         assert before == other_index()
         commit = git("rev-parse", "HEAD").decode().strip()
@@ -146,6 +189,7 @@ def main():
                 time.sleep(3)
         status("complete" if state["stage"] == "complete" else "published_with_execution_errors",
                commit=commit, counts=result["instance_counts"], phase=phase)
+        stop_timer()
     except Exception as error:
         status("error", error=repr(error))
         raise
