@@ -33,6 +33,10 @@ title: 学习笔记
       <p>逐项核对 116 条记录及 2.10 支持范围，汇总 NPU_A5 的 409 个实例结果，附 CSV 表格。</p>
     </div>
     <div>
+      <a href="compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.html">liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测</a>
+      <p>单独记录 liulm 新能力基线的 62 个方法、409 个实例复测情况，并与旧基线结果对照。</p>
+    </div>
+    <div>
       <a href="compiler/symbolic-group/inductor-symbolic-group-v2.10.html">torch_npu v2.10.0 Symbolic Group 实现</a>
       <p>仅依据 v2.10.0 线上代码说明准入、代表 shape、candidate plan、autotune 和 dispatch。</p>
     </div>
