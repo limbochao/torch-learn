@@ -198,7 +198,14 @@ def main():
         assert before == unrelated_index(), "Unrelated staging changed"
         commit = git("rev-parse", "HEAD").decode().strip()
         git("push", "origin", "HEAD:main")
-        remote = git("ls-remote", "origin", "refs/heads/main").decode().split()[0]
+        for attempt in range(3):
+            try:
+                remote = git("ls-remote", "origin", "refs/heads/main").decode().split()[0]
+                break
+            except subprocess.CalledProcessError:
+                if attempt == 2:
+                    raise
+                time.sleep(3)
         assert remote == commit
         status("published_with_execution_errors" if execution_error else "complete",
                commit=commit, summary=summary, raw_archive_sha256=expected_hash)

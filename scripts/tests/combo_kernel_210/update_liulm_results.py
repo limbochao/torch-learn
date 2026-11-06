@@ -19,6 +19,7 @@ KNOWN = {
     "test_triton_kernel_to_post_grad_tracing_combo_kernel": "F7 仍存在：provenance 映射为空，AOTI 未执行；后置",
     "test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda": "F10 仍存在：mean 输出被后续 sum store 覆盖，精度失败；最优先分析",
     "test_helper_fn_defined": "F9 已修复：helper 用例实际 Combo 路径通过，不再分析；F3 错误未再出现",
+    "test_mean": "F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认",
 }
 F3 = {"test_reduce_benchmark", "test_persistent_reduction_no_x_dim", "test_dynamic_shapes_reduce",
       "test_dynamic_shapes_persistent_reduction_no_x_dim", "test_dynamic_shapes_persistent_reduction_no_x_dim_2"}
@@ -78,9 +79,9 @@ def analysis(method, fallback):
         return "环境执行异常：采集用例时 NPU stream 资源不足（207005），未进入用例；不能判为代码缺陷，需复测"
     if "out_ptr1 is not defined" in log:
         return "F11 全量新增：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认"
-    if name in KNOWN:
-        if passed(method) or not fallback.startswith("F9"):
-            return KNOWN[name]
+    if name in KNOWN and (not passed(method) or name in {
+            "test_helper_fn_defined", "test_combo_kernel_per_config_subkernel_red"}):
+        return KNOWN[name]
     if name in F3 and passed(method):
         return "F3 修复后通过，NumelList 分区错误未再出现，不再分析"
     if passed(method):

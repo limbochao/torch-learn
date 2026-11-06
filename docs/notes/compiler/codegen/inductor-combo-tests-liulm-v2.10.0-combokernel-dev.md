@@ -63,12 +63,16 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
 ## 当前仍存在的问题
 
+全量 62 个方法均已结束：52 个通过、9 个失败、1 个因环境采集异常未有效执行；408/409 个实例产生有效结果，其中 397 个通过、11 个失败。
+因此不是 409 个实例均已完成验证，stream 异常项仍需复测。
+
 以下结论只针对新包叠加 F3 的实际执行。F1、F3、F9 在对应已完成的复测中未再出现，移出待分析范围。
 F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`，见 [PR !4](https://gitcode.com/liujm2001/pytorch/merge_requests/4)；本轮仍使用与该方法逻辑一致的 overlay。
 
 | 问题 | 当前状态 | 后续处理 |
 | --- | --- | --- |
 | F10 | 混合动态归约的 mean 被后续 sum store 覆盖，定向和最新全量均精度失败 | 最优先；成功执行后返回错误结果 |
+| F12 | 全量新增：test_mean 第二个输出 8/8 元素不一致，相对误差约 7 | 应定位；是否与 F10 同源待确认 |
 | F8 | wrapper 在 nonzero 绑定 u0 前使用 u0，定向和最新全量均失败 | 优先；尺寸收集的 wrapper 副作用仍在 |
 | F11 | 全量新增：test_mutated_benchmark、test_dynamic_shapes_mutated 的 store 使用未声明 out_ptr1 | 应定位；编译错误已确认，是否与 F10 属于同一状态传播问题尚未确认 |
 | F4 | Combo 索引化简错误仍被记录，回退后两个开关分支均被 output_shape 断言阻塞 | 保留；区分线性化缺陷与 2.10 shape 检查兼容性 |
@@ -109,7 +113,7 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | --- | --- | --- | --- | --- | --- | --- |
 | test_triton_kernels.py | test_combo_fp_self_sub_rewrite | 未找到同名定义（缺修复：浮点自减的局部数值改写） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_torchinductor.py | test_adaptive_avg_pool2d1 | 一致 | 已有方法 | 失败（0/2） | 失败（0/2） | F4 仍存在：Combo 索引化简解包失败后回退；两个开关分支最终均被 output_shape 断言阻塞 |
-| test_torchinductor.py | test_mean | 存在（差异：开启 Combo） | 已有方法 | 通过（1/1） | 失败（0/1） | 最新执行失败，待分析：AssertionError: Tensor-likes are not close! |
+| test_torchinductor.py | test_mean | 存在（差异：开启 Combo） | 已有方法 | 通过（1/1） | 失败（0/1） | F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认 |
 | test_torchinductor.py | test_rand_like_deterministic | 存在（差异：增加 random.seed） | 已有方法 | 失败（0/2） | 失败（0/2） | F5 仍存在：Combo 索引 int64 与 int32 检查不一致后回退；两个开关分支最终均被 output_shape 断言阻塞 |
 | test_combo_kernels.py | test_activation_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
