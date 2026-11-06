@@ -68,6 +68,22 @@ python scripts/tests/combo_kernel_210/update_liulm_results.py --repo <torch-lear
 新增且未经分析的全量失败会明确标为“待分析”，不会套用已有问题分类，也不会把定向结果外推为全量结果。
 这些新增入口已做语法和 CLI 检查；当前 NPU 全量任务沿用已经启动的 runner，不为验证入口重复运行测试。
 
+## 单独复测失败项的自动收尾
+
+失败项使用新的 phase 目录与新缓存，筛选最新表中“失败”和“执行异常”的方法；测试树与 F3 插件沿用已验证版本。
+用 `run_validation.py --with-f3 --expected-instances <实例数> --detach` 启动后，在本地执行：
+
+```bash
+python scripts/tests/combo_kernel_210/publish_retest.py \
+    --host NPU_A5 --remote-phase <remote-prepared-phase> \
+    --raw-root <new-local-raw-directory> --repo <torch-learn-root> --detach
+```
+
+发布脚本默认每 120 秒静默等待完成标记，统一下载证据，校验实例清单、源码与 F3 实际加载记录，
+保存在原证据目录的 `retests/<phase>/` 中，并提交推送。状态和提交写入 raw 目录的 `publisher_status.json`。
+表格更新脚本读取 `retests/index.json`，只用已结束复测覆盖对应方法的“最新结果”和“当前分析”；
+未复测方法仍使用全量记录，CSV 保持原表 116 行、7 列及未运行原因。全量原始统计保留在文档中。
+
 ## 脚本
 
 将本目录的 Python 文件和 `combo_npu_a5_selected.json` 复制到远端工作目录根下使用：

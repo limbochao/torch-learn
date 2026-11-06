@@ -119,7 +119,24 @@ def main():
     else:
         latest = from_snapshot(snapshot) if snapshot else []
         stamp = snapshot["captured_at"] if snapshot else "定向复测报告"
+    full_methods = latest
     latest_map = {(m["file"], m["name"]): m for m in latest}
+    retests = []
+    index = art / "retests/index.json"
+    if index.exists():
+        for phase in json.loads(index.read_text()):
+            folder = art / "retests" / phase
+            result = json.loads((folder / "functional_results.json").read_text())
+            for method in result["methods"]:
+                if not method["job_finished"]:
+                    continue
+                if method["returncode"] not in (0, 1):
+                    name = method["file"].removesuffix(".py") + "." + method["name"] + ".log"
+                    method["execution_log"] = (folder / name).read_text()
+                latest_map[method["file"], method["name"]] = method
+            retests.append((phase, result))
+        latest = list(latest_map.values())
+        stamp = "全量快照 + " + retests[-1][0]
     rows = []
     for original in originals:
         key = original["测试文件"], original["函数名"]
@@ -157,22 +174,53 @@ def main():
     done = [m for m in latest if m["job_finished"]]
     good = sum(passed(m) for m in done)
     invalid = sum(m["returncode"] not in (0, 1) or m["completed_instances"] != m["expected_instances"] for m in done)
-    text = (f"最新结果已刷新：全量 {len(done)}/62 个方法结束，其中 {good} 个通过、"
+    scope = "全量及失败项复测" if retests else "全量"
+    text = (f"最新结果已刷新：{scope} {len(done)}/62 个方法有终态，其中 {good} 个通过、"
             f"{len(done)-good-invalid} 个失败、{invalid} 个执行异常；其余状态按实际记录展示。")
     body = doc.read_text()
     body = re.sub(r'(验证日期：[0-9-]+。)\*\*[^\n]+?\*\*', lambda m: m[1] + "**" + text + "**", body, count=1)
     start, end = body.index("## 逐项结果"), body.index("## 证据与复现")
     intro = (f"与上游对照总表保持 {len(rows)} 条记录及原始顺序，包含 62 个独立执行方法、43 个未运行方法、"
              "11 条嵌套函数记录；嵌套记录不重复计数。未运行原因与原表逐字一致。\n\n"
-             f"最新全量快照：{stamp}。优先展示本轮全量结果，尚未结束时单独注明已有定向结果；"
+             f"最新结果来源：{stamp}。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；"
              "执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。\n\n")
     body = body[:start] + "## 逐项结果\n\n" + intro + markdown_table(rows, FIELDS) + "\n\n" + body[end:]
     body = body.replace("本表保留 `a369f6c` 旧基线的完整结果，并追加 `0fd5a10` 新包和已有 F3 修复的验证结果。",
                         "本表按上游对照总表的行与顺序，记录 `0fd5a10` 新包叠加 F3 的最新结果；历史轮次保留在证据中。")
-    instance_passed = sum(m["counts"].get("passed", 0) for m in latest)
-    line = (f"| 0fd5a10 + F3 全量 | {good} / 62 | {instance_passed} / 409 | "
-            f"已结束 {len(done)}/62 个方法，{invalid} 个执行异常 |")
+    instance_passed = sum(m["counts"].get("passed", 0) for m in full_methods)
+    line = (f"| 0fd5a10 + F3 全量 | {sum(passed(m) for m in full_methods)} / 62 | {instance_passed} / 409 | "
+            "本轮全量原始记录；后续复测见下表 |")
     body = re.sub(r'\| 0fd5a10 \+ F3 全量 \|[^\n]*', line, body, count=1)
+    if retests:
+        phase, result = retests[-1]
+        selected = {(m["file"], m["name"]) for m in result["methods"]}
+        repeated = [r for r in rows if (r["测试文件"], r["函数名"]) in selected]
+        heading = "## 失败项复测"
+        if heading in body:
+            start, end = body.index(heading), body.index("## 当前仍存在的问题")
+            body = body[:start] + body[end:]
+        content = (heading + "\n\n" + f"新包 + F3，独立目录 `{phase}`，复测 {len(selected)} 个方法、"
+                   f"{result['expected_instances']} 个实例：通过 {result['instance_counts'].get('passed', 0)}，"
+                   f"失败 {result['instance_counts'].get('failed', 0)}。数值断言与测试适配均未变更。\n\n"
+                   + markdown_table(repeated, ["测试文件", "函数名", "最新结果", "当前分析"]) + "\n\n")
+        body = body.replace("## 当前仍存在的问题", content + "## 当前仍存在的问题", 1)
+        problem_cases = {
+            "F4": {"test_adaptive_avg_pool2d1"}, "F5": {"test_rand_like_deterministic"},
+            "F6": {"test_combo_kernel_per_config_subkernel_block_size"},
+            "F7": {"test_triton_kernel_to_post_grad_tracing_combo_kernel"},
+            "F8": {"test_combo_kernel_size_hint_failure"},
+            "F10": {"test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda"},
+            "F11": {"test_mutated_benchmark", "test_dynamic_shapes_mutated"}, "F12": {"test_mean"},
+        }
+        for problem, names in problem_cases.items():
+            tested = [m for m in result["methods"] if m["name"] in names]
+            if {m["name"] for m in tested} == names and all(passed(m) for m in tested):
+                body = re.sub(r'\| ' + problem + r' \|[^\n]*\n', '', body)
+        if all(passed(m) for m in result["methods"] if m["name"] == "test_round_robin_dispatch") and any(
+                m["name"] == "test_round_robin_dispatch" for m in result["methods"]):
+            body = re.sub(r'\| 环境执行异常 \|[^\n]*\n', '', body)
+            body = body.replace("因此不是 409 个实例均已完成验证，stream 异常项仍需复测。",
+                                "该全量记录的 stream 资源异常项已在本次失败项复测中通过，不再作为当前阻塞。")
     doc.write_text(body)
     readme = art / "README.md"
     content = re.sub(r'(`[A-Fa-f0-9]{40}`。)[^\n]*', lambda m: m[1] + text, readme.read_text(), count=1)
@@ -180,6 +228,12 @@ def main():
     summary = json.loads((art / "validation_summary.json").read_text())
     summary["latest_table_snapshot"] = {"captured_at": stamp, "finished_methods": len(done), "passed_methods": good,
                                         "failed_methods": len(done)-good-invalid, "execution_errors": invalid}
+    if retests:
+        phase, result = retests[-1]
+        summary["latest_retest"] = {"phase": phase, "methods": len(result["methods"]),
+                                   "expected_instances": result["expected_instances"],
+                                   "completed_instances": result["completed_instances"],
+                                   "instance_counts": result["instance_counts"]}
     (art / "validation_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
     print(text)
 
