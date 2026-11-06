@@ -65,7 +65,7 @@ def main():
             copy(path, Path('install') / path.name)
     metadata = ['resource_authorization.json', 'expected_raw_source_sha256.json',
                 'expected_source_sha256.json', 'run_focused_then_wait.py', 'run_full_after_docs.py',
-                'docs_push_receipt.json', 'pipeline_status.json']
+                'docs_push_receipt.json', 'pipeline_status.json', 'full_snapshot.json']
     for name in metadata:
         if (source / name).exists():
             copy(source / name, Path('execution') / name)

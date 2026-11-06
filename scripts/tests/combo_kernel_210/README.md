@@ -52,6 +52,18 @@ python scripts/tests/combo_kernel_210/publish_validation.py \
 ```
 
 完成状态、统计和推送 commit 写入 `<local-raw-evidence>/publisher_status.json`；异常写入同目录的 `publisher.log`。
+如需手动刷新进行中的结果，对同一命令加 `--snapshot-only` 并去掉 `--detach`，随后运行：
+
+```bash
+python scripts/tests/combo_kernel_210/update_liulm_results.py --repo <torch-learn-root> --running
+```
+
+快照只读取现有报告，不重跑用例。表格固定跟随原版本对照 CSV 的 116 行及顺序，保留原表的未运行原因；
+列为测试文件、函数名、存在性/差异、执行范围、旧基线结果、最新结果、当前分析。
+最新结果优先使用完整全量报告，其次使用带时间的全量快照；全量尚未结束时，已有定向结果单独注明来源。
+执行异常、跳过、未完成均不记为通过。即使最终控制器因采集失败而报错，发布脚本也会保存快照并推送实际结果，
+状态记为 `published_with_execution_errors`，不会宣称完整验证通过。
+
 `archive_liulm_run.py` 和 `update_liulm_results.py` 也支持单独执行，路径通过参数指定。
 新增且未经分析的全量失败会明确标为“待分析”，不会套用已有问题分类，也不会把定向结果外推为全量结果。
 这些新增入口已做语法和 CLI 检查；当前 NPU 全量任务沿用已经启动的 runner，不为验证入口重复运行测试。
