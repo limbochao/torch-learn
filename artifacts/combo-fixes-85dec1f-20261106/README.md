@@ -1,5 +1,7 @@
 # Combo 六个失败问题的定向修复验证
 
+后续 F4 已加入余数不进位证明并合入单个提交，见 [F4 优化与 2/2 复测](../combo-f4-nocarry-20261106/README.md)。本目录保留原轮次提交及结果。
+
 基线 `85dec1f1a10ee42ebce87f1a1f8d2095909c0af6`，最终安装源码 `bc9d3c4ee973dde621ebf61600967ffbd66d0571`。
 分支 `fix/combo-f10-f12-f11-f8-f4-f5-v2.10`，已推送 origin。
 NPU Ascend950PR，2026-11-06；详细包版本和安装源码校验见 [baseline_environment.json](baseline_environment.json) 与 [committed_installation.json](committed_installation.json)。

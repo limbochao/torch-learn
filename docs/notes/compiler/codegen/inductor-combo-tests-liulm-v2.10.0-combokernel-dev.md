@@ -6,15 +6,32 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
 验证日期：2026-11-06。**最新结果已刷新：历史全量与定向复测的滚动汇总 62/62 个方法有终态，其中 60 个通过、2 个失败、0 个执行异常；其余状态按实际记录展示。**
 
-本表按上游对照总表的行与顺序保留滚动最新结果；本轮刷新 `85dec1f` 新基线及修复验证，未复测项保留历史记录。
+本表按上游对照总表的行与顺序保留滚动最新结果；本轮补充 F4 余数不进位优化验证，未复测项保留历史记录。
 可下载 [CSV 表格](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
 [上游版本对照总表](inductor-combo-tests-v2.13-vs-v2.10.md) 保留最初的版本对照与旧修复历史。
 
-## 最新基线与修复验证
+## 最新 F4 优化与复测
+
+F4 已整理为单个提交 `53f8af09f144aaaec685562acd4c3a3ffaffb71a`，开发分支最新提交为 `a8dcca84bf52e8a3e0c46aa46c2a4f663875f10e`，已推送 origin。
+在原有整除项提取的基础上，利用循环索引范围估计各项余数上界；仅当**全部余数上界之和小于正除数**时，
+才将剩余加法进一步拆成独立除法。证明不了时保留合并除法，不新增运行时判断或 shape guard。
+例如 `0≤x≤1、0≤y≤5` 时，`(10*x+y)//8` 可以安全拆分；y 上界增至 6 时拒绝。
+`(8*i+10)//3` 在 `i=0..5` 有进位，仍保留合并除法。
+
+本次在 NPU_A5 物理卡 2 上仅复测 `test_adaptive_avg_pool2d1` 的 Combo False/True 两个实例，**2/2 PASS**，
+覆盖原有三组输入及低精度检查。使用已推送提交的完整安装源码，11 项源码运行前后校验一致，未加载函数修复 overlay。
+另对 500 组随机范围、13,982 个取值点检查等价性，覆盖余数恰好进位、多项共同进位、负数项和未知范围。
+生成 DSL 中的 pooling 语义 mask 和可能进位的合并边界表达式仍保留。
+
+原 F4 `a2f7b18da9` 与本次优化合并为 `53f8af09f1`；F5 仅因重放从 `bc9d3c4ee9` 变为 `a8dcca84bf`，
+其补丁内容完全一致。总表 F5 保留实际验证过的原提交号，其余用例沿用前一轮结果；本次没有重跑全量或进行性能测量。
+证据见 [F4 优化与复测记录](../../../../artifacts/combo-f4-nocarry-20261106/README.md)。
+
+## 六问题定向修复验证
 
 本轮基线为 `85dec1f1a10ee42ebce87f1a1f8d2095909c0af6`，F3 已合入，未再加载旧 F3 overlay。
-开发分支为 `fix/combo-f10-f12-f11-f8-f4-f5-v2.10`，最终安装源码为 `bc9d3c4ee973dde621ebf61600967ffbd66d0571`。
-仅运行指定六个问题涉及的 **8 个失败方法、10 个参数实例**：原新包 0/10 通过，修复后 **10/10 通过**。
+开发分支为 `fix/combo-f10-f12-f11-f8-f4-f5-v2.10`，前一轮 10 实例验证的安装源码为 `bc9d3c4ee973dde621ebf61600967ffbd66d0571`。
+前一轮仅运行指定六个问题涉及的 **8 个失败方法、10 个参数实例**：原新包 0/10 通过，修复后 **10/10 通过**。
 没有重跑全量；总表的 60/62 方法、407/409 实例通过是滚动结果，另外 54 个方法保留上一轮记录，不能当作统一新版本的全量结论。
 
 环境为 Ascend950PR、torch `2.10.0+cpu`、torch_npu `2.10.0.post7+git85dec1f`、Triton `3.6.0`。
@@ -29,8 +46,8 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 | F12 | `64a3e7e8b9` | 1/1 PASS | 已确认与 F10 同源，共用同一个修复提交 |
 | F11 | `9b1a894d65` | 3/3 PASS | 汇总 removed_buffers，删除已移出签名的中间 buffer store |
 | F8 | `fdf73f229e` | 1/1 PASS | benchmark 尺寸收集不提前向 wrapper 写入未绑定的 u0 |
-| F4 | `a2f7b18da9` | 2/2 PASS | 修正 FloorDiv 常量处理、加法进位及 pooling 语义 mask 丢失 |
-| F5 | `bc9d3c4ee9` | 2/2 PASS | 普通 Index 与 Combo 都注册值为 1 的 constexpr 参数；旧 dtype 问题未复现，无需修改 |
+| F4 | `53f8af09f1` | 2/2 PASS（最新复测） | 保留安全拆分机会，修正常量处理、加法进位及 pooling 语义 mask 丢失 |
+| F5 | `a8dcca84bf`（原 `bc9d3c4ee9`） | 2/2 PASS（重放前验证） | 普通 Index 与 Combo 都注册值为 1 的 constexpr 参数；旧 dtype 问题未复现，无需修改 |
 
 F10/F12 共用根因，六个问题对应五个有效修复提交。F4 方法覆盖 16×16、3×3、6×6 三组输入及原有低精度检查。
 F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表随机数数值算法有误。
@@ -68,7 +85,8 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 | 0fd5a10 + F3 定向 | 7 / 13 | 7 / 15 | 6 个方法仍失败，含新增 F10 |
 | 0fd5a10 + F3 全量 | 52 / 62 | 397 / 409 | 历史全量原始记录；后续复测见下表 |
 | 85dec1f 原包定向 | 0 / 8 | 0 / 10 | 六个指定问题对应失败方法，F3 已合入 |
-| 85dec1f + 本次修复定向 | 8 / 8 | 10 / 10 | 完整安装源码；仅目标失败项，非全量 |
+| 85dec1f + 原五个修复定向 | 8 / 8 | 10 / 10 | 安装源码 bc9d3c4ee9；仅目标失败项，非全量 |
+| F4 余数不进位优化 | 1 / 1 | 2 / 2 | 安装源码 a8dcca84bf；只重跑 F4 |
 
 “原 e32+F1/F3 结果”是旧 `e32cdebf77` 基线合并 F1 `6c6454567f`、F3 `e578ec524d` 定向复测的历史记录，
 共 55/62 个方法、400/409 个实例通过，既不是当前新包，也不是一次统一安装版本的全量执行。
@@ -93,11 +111,11 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 
 ## 失败项复测
 
-85dec1f（已合入 F3）+ 本次五个修复提交，完整安装源码验证，独立目录 `installed_validation_85dec1f_20261106`，复测 8 个方法、10 个实例：通过 10，失败 0。数值断言与测试适配均未变更。
+以下为滚动复测结果：前一轮安装源码 `bc9d3c4ee9` 的 8 个方法、10 个实例全部通过；本次安装源码 `a8dcca84bf` 仅复测 F4 的 2 个实例并通过，覆盖其旧记录。其余方法保留前一轮结果。数值断言与测试适配均未变更。
 
 | 测试文件 | 函数名 | 最新结果 | 当前分析 |
 | --- | --- | --- | --- |
-| test_torchinductor.py | test_adaptive_avg_pool2d1 | 通过（2/2）；修复 a2f7b18da9 | — |
+| test_torchinductor.py | test_adaptive_avg_pool2d1 | 通过（2/2）；修复 53f8af09f1 | — |
 | test_torchinductor.py | test_mean | 通过（1/1）；修复 64a3e7e8b9 | — |
 | test_torchinductor.py | test_rand_like_deterministic | 通过（2/2）；修复 bc9d3c4ee9 | — |
 | test_combo_kernels.py | test_mutated_benchmark | 通过（1/1）；修复 9b1a894d65 | — |
@@ -138,12 +156,12 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 
 与上游对照总表保持 116 条记录及原始顺序，包含 62 个独立执行方法、43 个未运行方法、11 条嵌套函数记录；嵌套记录不重复计数。未运行原因与原表逐字一致。
 
-最新结果来源：全量快照 + installed_validation_85dec1f_20261106。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。
+最新结果来源：全量快照 + installed_validation_85dec1f_20261106 + f4_nocarry_53f8af09f1_20261106。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。
 
 | 测试文件 | 函数名 | v2.10.0存在性/实现差异 | 执行范围 | 原 e32+F1/F3 结果 | 最新结果 | 当前分析 |
 | --- | --- | --- | --- | --- | --- | --- |
 | test_triton_kernels.py | test_combo_fp_self_sub_rewrite | 未找到同名定义（缺修复：浮点自减的局部数值改写） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_torchinductor.py | test_adaptive_avg_pool2d1 | 一致 | 已有方法 | 失败（0/2） | 通过（2/2）；修复 a2f7b18da9 | — |
+| test_torchinductor.py | test_adaptive_avg_pool2d1 | 一致 | 已有方法 | 失败（0/2） | 通过（2/2）；修复 53f8af09f1 | — |
 | test_torchinductor.py | test_mean | 存在（差异：开启 Combo） | 已有方法 | 通过（1/1） | 通过（1/1）；修复 64a3e7e8b9 | — |
 | test_torchinductor.py | test_rand_like_deterministic | 存在（差异：增加 random.seed） | 已有方法 | 失败（0/2） | 通过（2/2）；修复 bc9d3c4ee9 | — |
 | test_combo_kernels.py | test_activation_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
