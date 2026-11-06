@@ -1,0 +1,129 @@
+diff --git a/torch_npu/_inductor/codegen/ir.py b/torch_npu/_inductor/codegen/ir.py
+index 4d14b306e0..c10e91f9d5 100644
+--- a/torch_npu/_inductor/codegen/ir.py
++++ b/torch_npu/_inductor/codegen/ir.py
+@@ -1144,6 +1144,9 @@ def extract_modular_indexing_coefficient(expr):
+ 
+ 
+ def eliminate_zero_term(term):
++    # FloorDiv can already have evaluated to a constant or another expression.
++    if not isinstance(term, FloorDiv):
++        return term
+     expr, divisor = term.args
+     if not isinstance(expr, sympy.Symbol):
+         return term
+@@ -1250,12 +1253,16 @@ def split_expression(expr):
+ 
+         # Check if arg is Add
+         if isinstance(arg, sympy.Add):
+-            # Assume denominator is 1: floor(a+b) -> floor(a) + floor(b)
+-            split_terms = []
++            # Only exact multiples can move outside floor division. Keep the
++            # remaining terms together so their remainders can carry.
++            split_terms, remainder_terms = [], []
+             for term in arg.args:
+-                new_term = FloorDiv(term, divisor)
+-                new_term = eliminate_zero_term(new_term)
+-                split_terms.append(new_term)
++                if V.graph.sizevars.statically_known_multiple_of(term, divisor):
++                    split_terms.append(FloorDiv(term, divisor))
++                else:
++                    remainder_terms.append(term)
++            remainder = FloorDiv(sympy.Add(*remainder_terms), divisor)
++            split_terms.append(eliminate_zero_term(remainder))
+             return sympy.Add(*split_terms)
+ 
+         # Cannot split, return original expression
+diff --git a/torch_npu/_inductor/codegen/triton.py b/torch_npu/_inductor/codegen/triton.py
+index 48e158a29f..efbc7ebaa9 100644
+--- a/torch_npu/_inductor/codegen/triton.py
++++ b/torch_npu/_inductor/codegen/triton.py
+@@ -45,6 +45,7 @@ from torch._inductor.codegen.triton import (
+     TMACompatibilityChecker, maybe_upcast_float32,
+ )
+ from torch._inductor.codegen.triton_utils import (
++    equal_1_arg_indices,
+     config_of,
+     should_unwrap_unspec_arg,
+     signature_of,
+@@ -3018,6 +3019,8 @@ class NPUIndexTritonKernel(TritonKernel):
+             inductor_meta["kernel_num_gb"] = num_gb
+ 
+         self.gen_numel_args(signature, triton_meta, triton_meta_signature, argdefs)
++        for index in equal_1_arg_indices(signature):
++            triton_meta["constants"][signature[index].name] = 1
+         if self.is_unified_simt_kernel():
+             triton_meta["configs"] = [config_of(signature)]
+ 
+@@ -4662,10 +4665,8 @@ class NPUIndexTritonKernel(TritonKernel):
+ 
+             masked_axis_name.append(node.name)
+ 
+-        for mask_var in variable_mask_vars:
+-            if save_variable_mask:
+-                continue
+-            mask_vars.discard(mask_var)
++        # Semantic masks can depend on axes absent from the address (for
++        # example, a pooling window boundary). They must still guard the load.
+ 
+         # Be careful when remove mask from load store
+         # 1. Current only leave axis mask from sorted axis
+diff --git a/torch_npu/_inductor/codegen/triton_combo_kernel.py b/torch_npu/_inductor/codegen/triton_combo_kernel.py
+index 6939fd54a1..53cfe69930 100644
+--- a/torch_npu/_inductor/codegen/triton_combo_kernel.py
++++ b/torch_npu/_inductor/codegen/triton_combo_kernel.py
+@@ -8,7 +8,7 @@ from torch._inductor.codegen.common import ArgName, ConstexprArg, SizeArg
+ from torch._inductor.codegen.simd_kernel_features import SIMDKernelFeatures
+ from torch._inductor.codegen.triton import TritonKernel
+ from torch._inductor.codegen.triton_combo_kernel import ComboKernel
+-from torch._inductor.codegen.triton_utils import signature_to_meta, config_of
++from torch._inductor.codegen.triton_utils import signature_to_meta, config_of, equal_1_arg_indices
+ from torch._inductor.runtime.hints import DeviceProperties
+ from torch._inductor.runtime.runtime_utils import next_power_of_2
+ from torch._inductor.utils import IndentedBuffer, Placeholder, triton_version_uses_attrs_dict
+@@ -195,7 +195,9 @@ class NPUComboKernel(ComboKernel):
+                 signature, size_dtype=size_dtype, argdefs=argdefs
+             ),
+             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+-            "constants": {},
++            "constants": {
++                signature[index].name: 1 for index in equal_1_arg_indices(signature)
++            },
+             "mix_mode": "aiv"
+         }
+ 
+@@ -376,6 +378,8 @@ class NPUComboKernel(ComboKernel):
+     def codegen_kernel(self, name: Optional[str] = None) -> str:
+         heuristics_list, size_hints_list = [], []
+         for subkernel in self.sub_kernels:
++            self.removed_buffers |= subkernel.removed_buffers
++            self.inplaced_to_remove |= subkernel.inplaced_to_remove
+             h, s = self.select_heuristics(subkernel)
+             heuristics_list.append(h)
+             size_hints_list.append(s)
+@@ -453,7 +457,10 @@ class NPUComboKernel(ComboKernel):
+         if config.benchmark_combo_kernel:
+             code.splice(self.codegen_kernel_benchmark(num_gb=0))
+ 
+-        return code.getvalue()
++        # Deferred stores must see the subkernels' removed buffers.
++        # Keep this state local until every partition passes validation.
++        with V.set_kernel_handler(self):
++            return code.getvalue()
+ 
+     def combo_grid_meta(self) -> dict[str, Any]:
+         dynamic_shape = bool(self.dynamic_shape_args)
+diff --git a/torch_npu/_inductor/codegen/wrapper.py b/torch_npu/_inductor/codegen/wrapper.py
+index c8c8731c5b..5ab57e394c 100644
+--- a/torch_npu/_inductor/codegen/wrapper.py
++++ b/torch_npu/_inductor/codegen/wrapper.py
+@@ -72,6 +72,9 @@ class _NPUKernelCodegenMixin:
+     # generate numel expr for range_tree_node
+     def generate_node_numel_expr(self, kernel_name: str, node, numel_expr):
+         expr = f"{kernel_name}_{node.name}_numel"
++        # Benchmark argument discovery must not emit runtime size assignments.
++        if not kernel_name:
++            return SymbolicCallArg(expr, numel_expr)
+         simplified = V.graph.sizevars.simplify(numel_expr)
+         # Ensure all PRECOMPUTED_SIZE symbols in the *simplified* expression
+         # are defined before we emit the line that uses them.

@@ -1,4 +1,4 @@
-"""Run approved source methods in isolated pytest processes on physical NPUs 1/2/3."""
+"""Run approved source methods in isolated pytest processes on explicitly authorized physical NPUs."""
 import concurrent.futures
 import datetime
 import json
@@ -84,7 +84,7 @@ def worker(physical_device, tasks):
 
 # Largest parameter groups first, balanced by estimated instance count, and isolated per source method.
 devices = [int(device) for device in os.environ.get('COMBO_PHYSICAL_DEVICES', '1,2,3').split(',')]
-assert devices and len(set(devices)) == len(devices) and set(devices) <= {1, 2, 3}, devices
+assert devices and len(set(devices)) == len(devices) and all(device >= 0 for device in devices), devices
 lanes = {device: [] for device in devices}
 loads = {device: 0 for device in devices}
 for task in sorted(TASKS, key=lambda item: len(item[1]), reverse=True):

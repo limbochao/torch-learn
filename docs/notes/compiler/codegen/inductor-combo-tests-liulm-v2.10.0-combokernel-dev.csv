@@ -1,8 +1,8 @@
 ﻿测试文件,函数名,v2.10.0存在性/实现差异,执行范围,原 e32+F1/F3 结果,最新结果,当前分析
 test_triton_kernels.py,test_combo_fp_self_sub_rewrite,未找到同名定义（缺修复：浮点自减的局部数值改写）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
-test_torchinductor.py,test_adaptive_avg_pool2d1,一致,已有方法,失败（0/2）,失败（0/2）,F4 仍存在：Combo 索引化简解包失败后回退；两个开关分支最终均被 output_shape 断言阻塞
-test_torchinductor.py,test_mean,存在（差异：开启 Combo）,已有方法,通过（1/1）,失败（0/1）,F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认
-test_torchinductor.py,test_rand_like_deterministic,存在（差异：增加 random.seed）,已有方法,失败（0/2）,失败（0/2）,F5 仍存在：Combo 索引 int64 与 int32 检查不一致后回退；两个开关分支最终均被 output_shape 断言阻塞
+test_torchinductor.py,test_adaptive_avg_pool2d1,一致,已有方法,失败（0/2）,通过（2/2）；修复 a2f7b18da9,—
+test_torchinductor.py,test_mean,存在（差异：开启 Combo）,已有方法,通过（1/1）,通过（1/1）；修复 64a3e7e8b9,—
+test_torchinductor.py,test_rand_like_deterministic,存在（差异：增加 random.seed）,已有方法,失败（0/2）,通过（2/2）；修复 bc9d3c4ee9,—
 test_combo_kernels.py,test_activation_functions,一致,已有方法,通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_activations,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
 test_combo_kernels.py,test_reduce_functions,一致,已有方法,通过（1/1）,通过（1/1）,—
@@ -22,7 +22,7 @@ test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red_per,未找到�
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red,未找到同名定义（部分支持：共享块已有，独立块缺失）,共享块 / 旧版分支,失败（0/1）,通过（1/1）,—
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_r0_r1,未找到同名定义（缺能力：二维归约排除 Combo 策略）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi_3d,未找到同名定义（缺能力：3D pointwise 排除策略）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_block_size,未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失）,共享块 / 旧版分支,失败（0/1）,失败（0/1）,F6 仍存在：eager 不支持 channels_last contiguous，未进入编译；不列入 Combo 修复重点
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_block_size,未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失）,共享块 / 旧版分支,失败（0/1）,失败（0/1）,F6 历史失败：eager 不支持 channels_last contiguous，未进入编译；不列入 Combo 修复重点；本轮 85dec1f 定向未复测，不能作为新包仍失败的结论
 test_combo_kernels.py,test_combo_kernels_pointwise_only,未找到同名定义（缺能力：仅融合 pointwise 的开关）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
 test_combo_kernels.py,test_combo_kernel_max_num_nodes,未找到同名定义（部分支持：节点上限固定 8，不可配置）,固定 8 节点分支,通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_combo_kernel_yz_overflow,未找到同名定义（缺修复：grid Y 溢出转移至 Z）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
@@ -33,9 +33,9 @@ test_combo_kernels.py,test_activation_benchmark,一致,已有方法,通过（1/1
 test_combo_kernels.py,test_activations,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
 test_combo_kernels.py,test_reduce_benchmark,一致,已有方法,修复后通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_reduce,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
-test_combo_kernels.py,test_mutated_benchmark,存在（差异：kernel 数 6/9→5～10）,已有方法,通过（1/1）,失败（0/1）,F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认
+test_combo_kernels.py,test_mutated_benchmark,存在（差异：kernel 数 6/9→5～10）,已有方法,通过（1/1）,通过（1/1）；修复 9b1a894d65,—
 test_combo_kernels.py,test_mutated,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
-test_combo_kernels.py,test_round_robin_dispatch,一致,已有方法,通过（1/1）,失败（0/1）,F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认
+test_combo_kernels.py,test_round_robin_dispatch,一致,已有方法,通过（1/1）,通过（1/1）；修复 9b1a894d65,—
 test_combo_kernels.py,test_mutated,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
 test_combo_kernels.py,test_2d_blocking_benchmark,存在（差异：kernel 数 7～8→6）,已有方法,通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_persistent_reduction_no_x_dim,一致,已有方法,修复后通过（1/1）,通过（1/1）,—
@@ -71,24 +71,24 @@ test_foreach.py,test_foreach_map_backward_unary,一致,已有方法,通过（4/4
 test_snode_runtime.py,test_foreach_basic,未找到同名定义（缺能力：调度节点输入距离指标）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
 test_snode_runtime.py,test_foreach_after_extern,未找到同名定义（缺能力：外部算子后的输入距离指标）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
 test_torchinductor.py,test_combo_kernel_store_mask,未找到同名定义（缺修复：动态 Combo 常量索引 store mask）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
-test_unbacked_symints.py,test_combo_kernel_size_hint_failure,一致,已有方法,修复后仍失败（0/1）,失败（0/1）,F8 仍存在：wrapper 在 nonzero 绑定 u0 前使用 u0，优先分析
+test_unbacked_symints.py,test_combo_kernel_size_hint_failure,一致,已有方法,修复后仍失败（0/1）,通过（1/1）；修复 fdf73f229e,—
 test_combo_kernels.py,test_combo_kernel_dynamic_shapes_grid_changes,未找到同名定义（部分支持：动态 grid 已有，独立块扁平 grid 缺失）,共享块 / 旧版分支,通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_dynamic_shapes_activations,一致,已有方法,修复后通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_activations,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
 test_combo_kernels.py,test_dynamic_shapes_2d_blocking,存在（差异：kernel 数 7～8→6）,已有方法,修复后通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_dynamic_shapes_reduce,一致,已有方法,修复后通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_reduce,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
-test_combo_kernels.py,test_dynamic_shapes_mutated,存在（差异：增加 XPU 跳过条件）,已有方法,修复后通过（1/1）,失败（0/1）,F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认
+test_combo_kernels.py,test_dynamic_shapes_mutated,存在（差异：增加 XPU 跳过条件）,已有方法,修复后通过（1/1）,通过（1/1）；修复 9b1a894d65,—
 test_combo_kernels.py,test_mutated,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
 test_combo_kernels.py,test_dynamic_shapes_activations_no_autotune,存在（差异：kernel 数=5 改为源码编译调用数=1）,已有方法,修复后通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_activations,一致,随外层方法验证,随外层方法验证,随外层方法验证,嵌套函数，不独立计数
 test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_no_x_dim,一致,已有方法,修复后通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_no_x_dim_2,一致,已有方法,修复后通过（1/1）,通过（1/1）,—
 test_combo_kernels.py,test_dynamic_shapes_2d_blocking_round_robin,一致,已有方法,修复后通过（1/1）,通过（1/1）,—
-test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda,存在（差异：装饰器仅限 CUDA）,已有方法,修复后通过（1/1）,失败（0/1）,F10 仍存在：mean 输出被后续 sum store 覆盖，精度失败；最优先分析
+test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda,存在（差异：装饰器仅限 CUDA）,已有方法,修复后通过（1/1）,通过（1/1）；修复 64a3e7e8b9,—
 test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu,未找到同名定义（待验证：已有同体 GPU 测试，XPU 待验证）,未运行,未运行,未运行,XPU 专项，不在 NPU 验证范围
 test_torchinductor.py,test_combo_kernel_filter_cpu,一致,已有方法,通过（1/1）,通过（1/1）,—
-test_provenance_tracing.py,test_triton_kernel_to_post_grad_tracing_combo_kernel,一致,已有方法,失败（0/1）,失败（0/1）,F7 仍存在：provenance 映射为空，AOTI 未执行；后置
+test_provenance_tracing.py,test_triton_kernel_to_post_grad_tracing_combo_kernel,一致,已有方法,失败（0/1）,失败（0/1）,F7 历史失败：provenance 映射为空，AOTI 未执行；后置；本轮 85dec1f 定向未复测，不能作为新包仍失败的结论
 test_user_streams.py,test_combo_kernel_fusion_within_same_stream,未找到同名定义（缺能力：按 stream 分组及传递 stream）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
 test_combo_kernels.py,test_combo_kernel_tma_descriptor_block_name,未找到同名定义（缺修复：Combo TMA 前导代码及块名替换）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除
 test_combo_kernels.py,test_combo_kernel_amd_special_config_args,未找到同名定义（缺修复：独立块路径的 HIP 编译参数传递）,未运行,未运行,未运行,缺新增能力或场景修复，按范围排除

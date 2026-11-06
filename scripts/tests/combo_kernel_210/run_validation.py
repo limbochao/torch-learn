@@ -66,7 +66,7 @@ def main():
     out.mkdir(exist_ok=True)
     assert not (out / "jobs.jsonl").exists(), "Use a fresh directory to preserve earlier evidence"
     devices = [int(x) for x in args.devices.split(",")]
-    assert devices and len(devices) == len(set(devices)) and set(devices) <= {1, 2, 3}
+    assert devices and len(devices) == len(set(devices)) and all(device >= 0 for device in devices)
     env = dict(os.environ, COMBO_PHYSICAL_DEVICES=args.devices, COMBO_WITH_F3=str(int(args.with_f3)),
                ASCEND_RT_VISIBLE_DEVICES=str(devices[0]), PYTHONPATH=str(root),
                COMBO_SELECTED_MANIFEST=str(root / "combo_npu_a5_selected.json"),

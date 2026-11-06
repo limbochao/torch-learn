@@ -129,3 +129,23 @@ python export_combo_results.py
 `COMBO_SUMMARY_NAME` 可区分不同批次汇总文件。
 `COMBO_PHYSICAL_DEVICES=2` 可将指定方法的复测限制到已授权的物理卡 2；默认仍使用 1、2、3。
 重测前应保留前次对应 `.log/.jsonl/.xml`，避免覆盖证据。
+
+## 集成 F3 后的逐项修复验证
+
+F3 合入后的包不再使用 `--with-f3`，避免覆盖新分支的分区规则。
+`--devices` 接受显式授权的非负物理卡号；启动前按当前会话授权和占用选择，脚本不停止其他进程。
+每个问题使用独立 phase，仍由 `run_validation.py` 完成收集、执行和汇总，不需要逐条查看进度。
+下载 phase 的 `evidence/` 与 `validation_status.json` 后，可以批量归档：
+
+```bash
+python scripts/tests/combo_kernel_210/archive_fix_series.py \
+    --raw-root <downloaded-phases> --output <artifact-directory> \
+    --phases baseline fix_f10 fix_f11 fix_f8 fix_f4_complete f5_constants_only
+```
+
+归档要求每轮已完整结束、实例清单齐全、安装源码在运行前后未变化。
+失败轮次也保留真实结果；日志去敏后记录原始和归档文件的 SHA256。
+总表更新支持复测目录中的 `validation_context.json`：`label` 说明实际基线，
+`fix_commits` 按方法名记录修复提交；通过项的提交写在“最新结果”，当前分析仍为 `—`。
+
+`untested_failure_note` 可注明未纳入最新定向的历史失败，避免将旧失败误判为新基线仍失败。

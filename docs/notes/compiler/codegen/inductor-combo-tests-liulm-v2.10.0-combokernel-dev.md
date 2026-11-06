@@ -4,19 +4,47 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
 # liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
-验证日期：2026-11-06。**最新结果已刷新：全量及失败项复测 62/62 个方法有终态，其中 52 个通过、10 个失败、0 个执行异常；其余状态按实际记录展示。**
+验证日期：2026-11-06。**最新结果已刷新：历史全量与定向复测的滚动汇总 62/62 个方法有终态，其中 60 个通过、2 个失败、0 个执行异常；其余状态按实际记录展示。**
 
-本表按上游对照总表的行与顺序，记录 `0fd5a10` 新包叠加 F3 的最新结果；历史轮次保留在证据中。
+本表按上游对照总表的行与顺序保留滚动最新结果；本轮刷新 `85dec1f` 新基线及修复验证，未复测项保留历史记录。
 可下载 [CSV 表格](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
 [上游版本对照总表](inductor-combo-tests-v2.13-vs-v2.10.md) 保留最初的版本对照与旧修复历史。
 
-## 本轮版本与验证口径
+## 最新基线与修复验证
+
+本轮基线为 `85dec1f1a10ee42ebce87f1a1f8d2095909c0af6`，F3 已合入，未再加载旧 F3 overlay。
+开发分支为 `fix/combo-f10-f12-f11-f8-f4-f5-v2.10`，最终安装源码为 `bc9d3c4ee973dde621ebf61600967ffbd66d0571`。
+仅运行指定六个问题涉及的 **8 个失败方法、10 个参数实例**：原新包 0/10 通过，修复后 **10/10 通过**。
+没有重跑全量；总表的 60/62 方法、407/409 实例通过是滚动结果，另外 54 个方法保留上一轮记录，不能当作统一新版本的全量结论。
+
+环境为 Ascend950PR、torch `2.10.0+cpu`、torch_npu `2.10.0.post7+git85dec1f`、Triton `3.6.0`。
+先以源码函数 overlay 逐项定位和验证，再从已推送提交提取四个完整 Python 文件覆盖安装目录后，重新执行全部 10 个目标实例。
+最终一轮不加载函数修复 overlay；11 项安装源码运行前后校验一致，四个修改文件的 SHA256 与提交完全一致。
+测试输入、stride、dtype、数值/梯度/突变断言和精度阈值沿用原适配，未新增正式测试、未关闭 benchmark。
+物理卡 4、5、6 按本次用户授权使用；共享卡的时间数据不用于性能结论。
+
+| 问题 | 修复提交 | 目标实例结果 | 修复内容 |
+| --- | --- | --- | --- |
+| F10 | `64a3e7e8b9` | 1/1 PASS | Combo 最终渲染使用子 kernel 的 inplace 删除状态，防止 sum 覆盖 mean |
+| F12 | `64a3e7e8b9` | 1/1 PASS | 已确认与 F10 同源，共用同一个修复提交 |
+| F11 | `9b1a894d65` | 3/3 PASS | 汇总 removed_buffers，删除已移出签名的中间 buffer store |
+| F8 | `fdf73f229e` | 1/1 PASS | benchmark 尺寸收集不提前向 wrapper 写入未绑定的 u0 |
+| F4 | `a2f7b18da9` | 2/2 PASS | 修正 FloorDiv 常量处理、加法进位及 pooling 语义 mask 丢失 |
+| F5 | `bc9d3c4ee9` | 2/2 PASS | 普通 Index 与 Combo 都注册值为 1 的 constexpr 参数；旧 dtype 问题未复现，无需修改 |
+
+F10/F12 共用根因，六个问题对应五个有效修复提交。F4 方法覆盖 16×16、3×3、6×6 三组输入及原有低精度检查。
+F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表随机数数值算法有误。
+当前通过项的“当前分析”统一为 `—`；修复提交写在“最新结果”。
+
+完整证据和具体原因见[修复验证记录](../../../../artifacts/combo-fixes-85dec1f-20261106/README.md)。
+
+## 历史版本与验证口径（0fd5a10）
 
 - 新能力基线为 `liulm/v2.10.0-combokernel-dev`，提交 `0fd5a10da2a3c33cab8c200f5778d711e490ff6b`。
   使用用户提供的 `torch_npu-2.10.0.post7+git0fd5a10-cp311-cp311-linux_x86_64.whl`，通过 pip 强制重装且不变更依赖。
 - **前置修正**：原 wheel 与该提交的 `scheduling.py` 有一个多余缩进空格，原样加载会出现 `IndentationError`。
-  本轮仅在安装目录删除这一空格后测试；因此下文“新包”均指 **0fd5a10 + 这一处语法修正**，不是未改动 wheel 的运行结果。
-  原文件、语法失败和精确补丁保存在证据目录；该修正尚未作为分支提交。
+  当时仅在安装目录删除这一空格后测试；该历史轮次的“新包”均指 **0fd5a10 + 这一处语法修正**，不是未改动 wheel 的运行结果。
+  原文件、语法失败和精确补丁保存在证据目录；当时未形成独立修复提交。
 - wheel 的 METADATA 仍标为 `a369f6c`，但模块版本和实际源码为 `0fd5a10`。10 项 torch_npu 源码与本地提交校验一致，
   torch 侧第 11 项源码与上轮一致；修正后的 11 项校验值在每轮测试前后均一致。不能仅凭 pip 安装成功提示判断运行版本。
 - 环境为 NPU_A5 Docker、Ascend950PR，torch `2.10.0+cpu`、torch_npu `2.10.0.post7+git0fd5a10`、Triton `3.6.0`、CANN `9.1.0`。
@@ -38,14 +66,16 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 | a369f6c 全量 | 49 / 62 | 394 / 409 | 上一轮完整执行，未加载旧 F3 |
 | 0fd5a10 定向 | 1 / 13 | 1 / 15 | 原失败项，仅 F2 用例依靠回退通过 |
 | 0fd5a10 + F3 定向 | 7 / 13 | 7 / 15 | 6 个方法仍失败，含新增 F10 |
-| 0fd5a10 + F3 全量 | 52 / 62 | 397 / 409 | 本轮全量原始记录；后续复测见下表 |
+| 0fd5a10 + F3 全量 | 52 / 62 | 397 / 409 | 历史全量原始记录；后续复测见下表 |
+| 85dec1f 原包定向 | 0 / 8 | 0 / 10 | 六个指定问题对应失败方法，F3 已合入 |
+| 85dec1f + 本次修复定向 | 8 / 8 | 10 / 10 | 完整安装源码；仅目标失败项，非全量 |
 
 “原 e32+F1/F3 结果”是旧 `e32cdebf77` 基线合并 F1 `6c6454567f`、F3 `e578ec524d` 定向复测的历史记录，
 共 55/62 个方法、400/409 个实例通过，既不是当前新包，也不是一次统一安装版本的全量执行。
 
-## 原失败方法的最新复测
+## 历史定向复测（0fd5a10）
 
-| 测试文件 | 方法 | 仅新包 | 新包+F3 | 当前分析 |
+| 测试文件 | 方法 | 仅新包 | 新包+F3 | 历史说明 |
 | --- | --- | --- | --- | --- |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | 失败（0/1） | F6：NPU eager 不支持 channels_last contiguous，尚未进入编译 |
@@ -54,53 +84,39 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 | test_combo_kernels.py | test_dynamic_shapes_reduce | 失败（0/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim | 失败（0/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim_2 | 失败（0/1） | 通过（1/1） | — |
-| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 失败（0/1） | 失败（0/1） | 仅新包 F3 阻塞；加 F3 后新增 F10：sum 覆盖 mean 输出，精度失败 |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 失败（0/1） | 失败（0/1） | — |
 | test_combo_kernels.py | test_helper_fn_defined | 失败（0/1） | 通过（1/1） | — |
 | test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | 失败（0/1） | F7：provenance 映射为空，Inductor 追溯检查失败，AOTI 未执行 |
-| test_torchinductor.py | test_adaptive_avg_pool2d1 | 失败（0/2） | 失败（0/2） | F4 仍在：Combo 索引化简错误后回退，最终两个开关分支均被 shape 检查阻塞 |
-| test_torchinductor.py | test_rand_like_deterministic | 失败（0/2） | 失败（0/2） | F5 仍在：Combo 索引 dtype 错误后回退，最终两个开关分支均被 shape 检查阻塞 |
-| test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 失败（0/1） | 失败（0/1） | F8：wrapper 在 nonzero 绑定 u0 前使用 u0 |
+| test_torchinductor.py | test_adaptive_avg_pool2d1 | 失败（0/2） | 失败（0/2） | — |
+| test_torchinductor.py | test_rand_like_deterministic | 失败（0/2） | 失败（0/2） | — |
+| test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 失败（0/1） | 失败（0/1） | — |
 
 ## 失败项复测
 
-新包 + F3，独立目录 `retest_failures_20261106_163444`，复测 10 个方法、12 个实例：通过 0，失败 12。数值断言与测试适配均未变更。
+85dec1f（已合入 F3）+ 本次五个修复提交，完整安装源码验证，独立目录 `installed_validation_85dec1f_20261106`，复测 8 个方法、10 个实例：通过 10，失败 0。数值断言与测试适配均未变更。
 
 | 测试文件 | 函数名 | 最新结果 | 当前分析 |
 | --- | --- | --- | --- |
-| test_torchinductor.py | test_adaptive_avg_pool2d1 | 失败（0/2） | F4 仍存在：Combo 索引化简解包失败后回退；两个开关分支最终均被 output_shape 断言阻塞 |
-| test_torchinductor.py | test_mean | 失败（0/1） | F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认 |
-| test_torchinductor.py | test_rand_like_deterministic | 失败（0/2） | F5 仍存在：Combo 索引 int64 与 int32 检查不一致后回退；两个开关分支最终均被 output_shape 断言阻塞 |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | F6 仍存在：eager 不支持 channels_last contiguous，未进入编译；不列入 Combo 修复重点 |
-| test_combo_kernels.py | test_mutated_benchmark | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
-| test_combo_kernels.py | test_round_robin_dispatch | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
-| test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 失败（0/1） | F8 仍存在：wrapper 在 nonzero 绑定 u0 前使用 u0，优先分析 |
-| test_combo_kernels.py | test_dynamic_shapes_mutated | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
-| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 失败（0/1） | F10 仍存在：mean 输出被后续 sum store 覆盖，精度失败；最优先分析 |
-| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | F7 仍存在：provenance 映射为空，AOTI 未执行；后置 |
+| test_torchinductor.py | test_adaptive_avg_pool2d1 | 通过（2/2）；修复 a2f7b18da9 | — |
+| test_torchinductor.py | test_mean | 通过（1/1）；修复 64a3e7e8b9 | — |
+| test_torchinductor.py | test_rand_like_deterministic | 通过（2/2）；修复 bc9d3c4ee9 | — |
+| test_combo_kernels.py | test_mutated_benchmark | 通过（1/1）；修复 9b1a894d65 | — |
+| test_combo_kernels.py | test_round_robin_dispatch | 通过（1/1）；修复 9b1a894d65 | — |
+| test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 通过（1/1）；修复 fdf73f229e | — |
+| test_combo_kernels.py | test_dynamic_shapes_mutated | 通过（1/1）；修复 9b1a894d65 | — |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 通过（1/1）；修复 64a3e7e8b9 | — |
 
 ## 当前仍存在的问题
 
-原始全量 62 个方法均已结束：52 个通过、9 个失败、1 个因环境采集异常未有效执行；408/409 个实例产生有效结果，其中 397 个通过、11 个失败。
-原全量的 stream 资源异常本轮未再出现；该方法复测有效执行后功能失败，原因见复测表，不再作为环境阻塞。
+本轮六个目标问题均已在新基线加修复的环境中验证通过，不再保留为待分析问题。
+总表剩余两项为 **历史失败、本轮未复测**，不能断言在 `85dec1f` 上仍存在：
 
-以下结论只针对新包叠加 F3 的实际执行。F1、F3、F9 在对应已完成的复测中未再出现，移出待分析范围。
-F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`，见 [PR !4](https://gitcode.com/liujm2001/pytorch/merge_requests/4)；本轮仍使用与该方法逻辑一致的 overlay。
-
-| 问题 | 当前状态 | 后续处理 |
+| 问题 | 最近已有证据 | 验证边界 |
 | --- | --- | --- |
-| F10 | 混合动态归约的 mean 被后续 sum store 覆盖，定向和最新全量均精度失败 | 最优先；成功执行后返回错误结果 |
-| F12 | 全量新增：test_mean 第二个输出 8/8 元素不一致，相对误差约 7 | 应定位；是否与 F10 同源待确认 |
-| F8 | wrapper 在 nonzero 绑定 u0 前使用 u0，定向和最新全量均失败 | 优先；尺寸收集的 wrapper 副作用仍在 |
-| F11 | test_mutated_benchmark、test_dynamic_shapes_mutated、test_round_robin_dispatch 的 store 使用未声明 out_ptr1 | 应定位；编译错误已确认，是否与 F10 属于同一状态传播问题尚未确认 |
-| F4 | Combo 索引化简错误仍被记录，回退后两个开关分支均被 output_shape 断言阻塞 | 保留；区分线性化缺陷与 2.10 shape 检查兼容性 |
-| F5 | Combo 索引 dtype 与检查不一致仍被记录，回退后同样触发 shape 断言 | 保留；尚不能认定随机数数值算法错误 |
-| F7 | provenance 映射为空，AOTI 未执行 | 后置 |
-| F6 | eager 不支持 channels_last，未进入编译 | 不列入当前 Combo 修复重点 |
+| F7 | provenance 映射为空，AOTI 未执行 | 上轮 0fd5a10+F3 失败；本次六个问题范围外 |
+| F6 | eager 不支持 channels_last contiguous，未进入编译 | 上轮 0fd5a10+F3 失败；本次六个问题范围外 |
 
-本轮新增失败的 traceback、执行阶段与退出码保存在[全量执行快照](../../../../artifacts/combo-liulm-0fd5a10-20261106/execution/full_snapshot.json)，记录快照时间及独立校验值。
-原包的缩进和版本元数据问题仍需在正式打包源码中纠正；安装目录前置修正不等于已提交修复。
-
-## F10 的生成代码证据
+## F10 的历史生成代码证据（已修复）
 
 `test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda` 使用 `x=(16,128)`、`y=(32,128)`、`z=(32,256)`，
 返回 `x.sum(1), y.mean(1), z.max(1)`；三个输入的首维标为动态。实际生成的同一 Combo 分支中：
@@ -116,20 +132,20 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 第二次 store 对相同地址写回 sum，覆盖了第一次正确的 mean。实际断言显示第二个输出 32/32 个元素不一致，
 最大绝对误差约 69.52、相对误差约 0.99218756，与 sum/mean 相差 128 倍的行为一致。
 本例观测到 Combo 成功生成且没有回退；原格式完整 wrapper 和候选源码保存在新证据目录中。
-已确认直接错误语句；具体是哪项调度/写回状态传播导致重复 store，尚未通过源码定位和提交二分确认，不能直接归因于 F3 补丁。
+本轮已定位为子 kernel 删除状态未传给最终 DeferredLine 渲染；修复 `64a3e7e8b9` 后，F10 和同源 F12 的目标路径均通过。
 
 ## 逐项结果
 
 与上游对照总表保持 116 条记录及原始顺序，包含 62 个独立执行方法、43 个未运行方法、11 条嵌套函数记录；嵌套记录不重复计数。未运行原因与原表逐字一致。
 
-最新结果来源：全量快照 + retest_failures_20261106_163444。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。
+最新结果来源：全量快照 + installed_validation_85dec1f_20261106。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。
 
 | 测试文件 | 函数名 | v2.10.0存在性/实现差异 | 执行范围 | 原 e32+F1/F3 结果 | 最新结果 | 当前分析 |
 | --- | --- | --- | --- | --- | --- | --- |
 | test_triton_kernels.py | test_combo_fp_self_sub_rewrite | 未找到同名定义（缺修复：浮点自减的局部数值改写） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_torchinductor.py | test_adaptive_avg_pool2d1 | 一致 | 已有方法 | 失败（0/2） | 失败（0/2） | F4 仍存在：Combo 索引化简解包失败后回退；两个开关分支最终均被 output_shape 断言阻塞 |
-| test_torchinductor.py | test_mean | 存在（差异：开启 Combo） | 已有方法 | 通过（1/1） | 失败（0/1） | F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认 |
-| test_torchinductor.py | test_rand_like_deterministic | 存在（差异：增加 random.seed） | 已有方法 | 失败（0/2） | 失败（0/2） | F5 仍存在：Combo 索引 int64 与 int32 检查不一致后回退；两个开关分支最终均被 output_shape 断言阻塞 |
+| test_torchinductor.py | test_adaptive_avg_pool2d1 | 一致 | 已有方法 | 失败（0/2） | 通过（2/2）；修复 a2f7b18da9 | — |
+| test_torchinductor.py | test_mean | 存在（差异：开启 Combo） | 已有方法 | 通过（1/1） | 通过（1/1）；修复 64a3e7e8b9 | — |
+| test_torchinductor.py | test_rand_like_deterministic | 存在（差异：增加 random.seed） | 已有方法 | 失败（0/2） | 通过（2/2）；修复 bc9d3c4ee9 | — |
 | test_combo_kernels.py | test_activation_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_reduce_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
@@ -149,7 +165,7 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 失败（0/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_r0_r1 | 未找到同名定义（缺能力：二维归约排除 Combo 策略） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_poi_3d | 未找到同名定义（缺能力：3D pointwise 排除策略） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失） | 共享块 / 旧版分支 | 失败（0/1） | 失败（0/1） | F6 仍存在：eager 不支持 channels_last contiguous，未进入编译；不列入 Combo 修复重点 |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失） | 共享块 / 旧版分支 | 失败（0/1） | 失败（0/1） | F6 历史失败：eager 不支持 channels_last contiguous，未进入编译；不列入 Combo 修复重点；本轮 85dec1f 定向未复测，不能作为新包仍失败的结论 |
 | test_combo_kernels.py | test_combo_kernels_pointwise_only | 未找到同名定义（缺能力：仅融合 pointwise 的开关） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_max_num_nodes | 未找到同名定义（部分支持：节点上限固定 8，不可配置） | 固定 8 节点分支 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_yz_overflow | 未找到同名定义（缺修复：grid Y 溢出转移至 Z） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
@@ -160,9 +176,9 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_reduce_benchmark | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_reduce | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_mutated_benchmark | 存在（差异：kernel 数 6/9→5～10） | 已有方法 | 通过（1/1） | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
+| test_combo_kernels.py | test_mutated_benchmark | 存在（差异：kernel 数 6/9→5～10） | 已有方法 | 通过（1/1） | 通过（1/1）；修复 9b1a894d65 | — |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_round_robin_dispatch | 一致 | 已有方法 | 通过（1/1） | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
+| test_combo_kernels.py | test_round_robin_dispatch | 一致 | 已有方法 | 通过（1/1） | 通过（1/1）；修复 9b1a894d65 | — |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_2d_blocking_benchmark | 存在（差异：kernel 数 7～8→6） | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_persistent_reduction_no_x_dim | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
@@ -198,24 +214,24 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | test_snode_runtime.py | test_foreach_basic | 未找到同名定义（缺能力：调度节点输入距离指标） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_snode_runtime.py | test_foreach_after_extern | 未找到同名定义（缺能力：外部算子后的输入距离指标） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_torchinductor.py | test_combo_kernel_store_mask | 未找到同名定义（缺修复：动态 Combo 常量索引 store mask） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 一致 | 已有方法 | 修复后仍失败（0/1） | 失败（0/1） | F8 仍存在：wrapper 在 nonzero 绑定 u0 前使用 u0，优先分析 |
+| test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 一致 | 已有方法 | 修复后仍失败（0/1） | 通过（1/1）；修复 fdf73f229e | — |
 | test_combo_kernels.py | test_combo_kernel_dynamic_shapes_grid_changes | 未找到同名定义（部分支持：动态 grid 已有，独立块扁平 grid 缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_activations | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_dynamic_shapes_2d_blocking | 存在（差异：kernel 数 7～8→6） | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_reduce | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_reduce | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_dynamic_shapes_mutated | 存在（差异：增加 XPU 跳过条件） | 已有方法 | 修复后通过（1/1） | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
+| test_combo_kernels.py | test_dynamic_shapes_mutated | 存在（差异：增加 XPU 跳过条件） | 已有方法 | 修复后通过（1/1） | 通过（1/1）；修复 9b1a894d65 | — |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_dynamic_shapes_activations_no_autotune | 存在（差异：kernel 数=5 改为源码编译调用数=1） | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim_2 | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_2d_blocking_round_robin | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
-| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 存在（差异：装饰器仅限 CUDA） | 已有方法 | 修复后通过（1/1） | 失败（0/1） | F10 仍存在：mean 输出被后续 sum store 覆盖，精度失败；最优先分析 |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 存在（差异：装饰器仅限 CUDA） | 已有方法 | 修复后通过（1/1） | 通过（1/1）；修复 64a3e7e8b9 | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu | 未找到同名定义（待验证：已有同体 GPU 测试，XPU 待验证） | 未运行 | 未运行 | 未运行 | XPU 专项，不在 NPU 验证范围 |
 | test_torchinductor.py | test_combo_kernel_filter_cpu | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
-| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 一致 | 已有方法 | 失败（0/1） | 失败（0/1） | F7 仍存在：provenance 映射为空，AOTI 未执行；后置 |
+| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 一致 | 已有方法 | 失败（0/1） | 失败（0/1） | F7 历史失败：provenance 映射为空，AOTI 未执行；后置；本轮 85dec1f 定向未复测，不能作为新包仍失败的结论 |
 | test_user_streams.py | test_combo_kernel_fusion_within_same_stream | 未找到同名定义（缺能力：按 stream 分组及传递 stream） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_tma_descriptor_block_name | 未找到同名定义（缺修复：Combo TMA 前导代码及块名替换） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_amd_special_config_args | 未找到同名定义（缺修复：独立块路径的 HIP 编译参数传递） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |

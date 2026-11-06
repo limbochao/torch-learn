@@ -1,0 +1,921 @@
+# AOT ID: ['0_inference']
+from ctypes import c_void_p, c_long, c_int
+import torch
+import math
+import random
+import os
+import tempfile
+from math import inf, nan
+from cmath import nanj
+from torch._inductor.hooks import run_intermediate_hooks
+from torch._inductor.utils import maybe_profile
+from torch._inductor.codegen.memory_planning import _align as align
+from torch import device, empty_strided
+from torch._inductor.async_compile import AsyncCompile
+from torch._inductor.select_algorithm import extern_kernels
+from torch_npu._C import _npu_getCurrentRawStreamNoWait as get_raw_stream
+import triton
+import triton.language as tl
+from torch._inductor.runtime.triton_heuristics import start_graph, end_graph
+from torch_npu._C import _npu_getCurrentRawStreamNoWait as get_raw_stream
+import torch_npu
+torch_npu.npu._initialized = torch_npu.npu.is_initialized()
+has_initialized = False
+import torch_npu._inductor.runtime.triton_heuristics as triton_heuristics
+
+aten = torch.ops.aten
+inductor_ops = torch.ops.inductor
+_quantized = torch.ops._quantized
+assert_size_stride = torch._C._dynamo.guards.assert_size_stride
+assert_alignment = torch._C._dynamo.guards.assert_alignment
+empty_strided_cpu = torch._C._dynamo.guards._empty_strided_cpu
+empty_strided_cpu_pinned = torch._C._dynamo.guards._empty_strided_cpu_pinned
+empty_strided_cuda = torch._C._dynamo.guards._empty_strided_cuda
+empty_strided_xpu = torch._C._dynamo.guards._empty_strided_xpu
+empty_strided_mtia = torch._C._dynamo.guards._empty_strided_mtia
+reinterpret_tensor = torch._C._dynamo.guards._reinterpret_tensor
+alloc_from_pool = torch.ops.inductor._alloc_from_pool
+async_compile = AsyncCompile()
+empty_strided_p2p = torch._C._distributed_c10d._SymmetricMemory.empty_strided_p2p
+
+
+# kernel path: /tmp/tmpov_v0k5u/zt/cztlkrrc647qsr736fpbz45spuj65hae2k5a2pnl2scksbq5p52r.py
+# Topologically Sorted Source Nodes: [add], Original ATen: [aten.add]
+# Source node to ATen node mapping:
+#   add => add
+# Graph fragment:
+#   %arg0_1 : Tensor "f32[2, 4, 16, 16][1024, 256, 16, 1]npu:0" = PlaceHolder[target=arg0_1]
+#   %add : Tensor "f32[2, 4, 16, 16][1024, 256, 16, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%arg0_1, 1), kwargs = {})
+#   return %add
+# SchedulerNodes: [SchedulerNode(name='op1')]
+
+triton_poi_fused_add_0 = async_compile.triton('triton_poi_fused_add_0', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.pointwise(
+    size_hints={'t0': 2, 'z1': 4, 'y2': 16, 'x3': 16}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'out_ptr0': '*fp32', 't0_numel': 'i32', 'z1_numel': 'i32', 'y2_numel': 'i32', 'x3_numel': 'i32', 'T0BLOCK': 'i32', 'Z1BLOCK': 'i32', 'Y2BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv'},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_poi_fused_add_0', 'mutated_arg_names': [], 'backend_hash': '<removed>', 'split_axis': [0, 1, 2], 'tiling_axis': [0, 1, 2, 3], 'no_loop_axis': [3], 'axis_names': ['t0', 'z1', 'y2', 'x3'], 'axis_static_values': (('t0', 2), ('z1', 4), ('y2', 16), ('x3', 16)), 'low_dims': {3}, 'numof_reduction_axis': 0, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simt_template', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'inductor_ascend_linear_mode': 'linear', 'runtime_block_arg_names': ('T0BLOCK', 'Z1BLOCK', 'Y2BLOCK'), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': False, 'autotune_remote_cache': None, 'force_disable_caches': False, 'dynamic_scale_rblock': True, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'force_filter_reduction_configs': False, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused_add_0(in_ptr0, out_ptr0, t0_numel, z1_numel, y2_numel, x3_numel, T0BLOCK, Z1BLOCK, Y2BLOCK, T0BLOCK_SUB : tl.constexpr, Z1BLOCK_SUB : tl.constexpr, Y2BLOCK_SUB : tl.constexpr):
+    x3_numel = 16
+    X3BLOCK_SUB: tl.constexpr = 16
+    t0_offset = tl.program_id(0) * T0BLOCK
+    base_t0= tl.arange(0, T0BLOCK_SUB)
+    loops_t0 = (T0BLOCK + T0BLOCK_SUB - 1) // T0BLOCK_SUB
+    z1_offset = tl.program_id(1) * Z1BLOCK
+    base_z1= tl.arange(0, Z1BLOCK_SUB)
+    loops_z1 = (Z1BLOCK + Z1BLOCK_SUB - 1) // Z1BLOCK_SUB
+    y2_offset = tl.program_id(2) * Y2BLOCK
+    base_y2= tl.arange(0, Y2BLOCK_SUB)
+    loops_y2 = (Y2BLOCK + Y2BLOCK_SUB - 1) // Y2BLOCK_SUB
+    base_x3= tl.arange(0, X3BLOCK_SUB)
+    for loop_t0 in range(loops_t0):
+        t0 = t0_offset + (loop_t0 * T0BLOCK_SUB) + base_t0[:,None,None,None]
+        t0_mask = t0 < min(T0BLOCK+t0_offset, t0_numel)
+        for loop_z1 in range(loops_z1):
+            z1 = z1_offset + (loop_z1 * Z1BLOCK_SUB) + base_z1[None,:,None,None]
+            z1_mask = z1 < min(Z1BLOCK+z1_offset, z1_numel)
+            for loop_y2 in range(loops_y2):
+                y2 = y2_offset + (loop_y2 * Y2BLOCK_SUB) + base_y2[None,None,:,None]
+                y2_mask = y2 < min(Y2BLOCK+y2_offset, y2_numel)
+                x3 = base_x3[None,None,None,:]
+                tmp0 = tl.load(in_ptr0 + (x3 + 16*y2 + 256*z1 + 1024*t0), t0_mask & y2_mask & z1_mask)
+                tl.static_assert(tmp0.dtype == tl.float32)
+                tmp1 = 1.0
+                tl.static_assert(tmp1.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.float32)
+                tmp2 = tmp0 + tmp1
+                tl.static_assert(tmp2.dtype == tl.float32)
+                tl.static_assert(tmp2.dtype == tl.float32)
+                tl.store(out_ptr0 + (x3 + 16*y2 + 256*z1 + 1024*t0), tmp2, t0_mask & y2_mask & z1_mask)
+''', device_str='npu')
+
+
+# kernel path: /tmp/tmpov_v0k5u/g7/cg72lvq64gidhlux4gqkpgc5glvu6a4umec5bfdkzfq5365xetlw.py
+# Topologically Sorted Source Nodes: [_adaptive_avg_pool2d], Original ATen: [aten._adaptive_avg_pool2d]
+# Source node to ATen node mapping:
+#   _adaptive_avg_pool2d => _adaptive_avg_pool2d
+# Graph fragment:
+#   %arg0_1 : Tensor "f32[2, 4, 16, 16][1024, 256, 16, 1]npu:0" = PlaceHolder[target=arg0_1]
+#   %_adaptive_avg_pool2d : Tensor "f32[2, 4, 6, 6][144, 36, 6, 1]npu:0"[num_users=1] = call_function[target=torch.ops.aten._adaptive_avg_pool2d.default](args = (%arg0_1, [6, 6]), kwargs = {})
+#   return %_adaptive_avg_pool2d
+# SchedulerNodes: [SchedulerNode(name='op0')]
+
+triton_poi_fused__adaptive_avg_pool2d_1 = async_compile.triton('triton_poi_fused__adaptive_avg_pool2d_1', '''
+import triton
+import triton.language as tl
+
+from torch._inductor.runtime import triton_helpers, triton_heuristics
+from torch._inductor.runtime.triton_helpers import libdevice, math as tl_math
+from torch._inductor.runtime.hints import AutotuneHint, ReductionHint, TileHint, DeviceProperties
+
+import torch
+import torch_npu
+if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+    torch_npu.npu._initialized = True
+from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+from torch_npu._inductor.runtime import triton_helpers
+from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+
+@triton_heuristics.pointwise(
+    size_hints={'z0': 8, 'y1': 6, 'x2': 6}, 
+    filename=__file__,
+    triton_meta={'signature': {'in_ptr0': '*fp32', 'out_ptr0': '*fp32', 'z0_numel': 'i32', 'y1_numel': 'i32', 'x2_numel': 'i32', 'Z0BLOCK': 'i32', 'Y1BLOCK': 'i32', 'X2BLOCK': 'i32'}, 'device': DeviceProperties(type='npu', index=0, multi_processor_count=56, cc='Ascend950PR_9579', major=None, regs_per_multiprocessor=None, max_threads_per_multi_processor=None, max_threads_per_block=None, warp_size=None), 'constants': {}, 'mix_mode': 'aiv', 'configs': [{(0,): [['tt.divisibility', 16]], (1,): [['tt.divisibility', 16]]}]},
+    inductor_meta={'grid_type': 'GridNpu', 'autotune_hints': set(), 'kernel_name': 'triton_poi_fused__adaptive_avg_pool2d_1', 'mutated_arg_names': [], 'backend_hash': '<removed>', 'split_axis': [0, 1, 2], 'tiling_axis': [0, 1, 2], 'no_loop_axis': [], 'axis_names': ['z0', 'y1', 'x2'], 'axis_static_values': (('z0', 8), ('y1', 6), ('x2', 6)), 'low_dims': {2}, 'numof_reduction_axis': 0, 'split_axis_dtype': torch.float32, 'dual_reduction': False, 'npu_kernel_type': 'simd_simt_mix', 'traced_graph_hash': 'TRACED_GRAPH_HASH', 'traced_graph_dir': 'TRACED_GRAPH_DIR', 'are_deterministic_algorithms_enabled': False, 'inductor_ascend_linear_mode': 'linear', 'runtime_block_arg_names': ('Z0BLOCK', 'Y1BLOCK', 'X2BLOCK'), 'assert_indirect_indexing': True, 'autotune_local_cache': True, 'autotune_pointwise': False, 'autotune_remote_cache': None, 'force_disable_caches': False, 'dynamic_scale_rblock': True, 'max_autotune': False, 'max_autotune_pointwise': False, 'min_split_scan_rblock': 256, 'spill_threshold': 16, 'store_cubin': False, 'deterministic': False, 'force_filter_reduction_configs': False, 'group_enabled': False, 'group_template': None, 'group_workload': None, 'primary_group_axis': None, 'static_split_axes': (), 'secondary_runtime_symbolic_axes': (), 'group_features': ()},
+    min_elem_per_thread=0
+)
+@triton.jit
+def triton_poi_fused__adaptive_avg_pool2d_1(in_ptr0, out_ptr0, z0_numel, y1_numel, x2_numel, Z0BLOCK, Y1BLOCK, X2BLOCK, Z0BLOCK_SUB : tl.constexpr, Y1BLOCK_SUB : tl.constexpr, X2BLOCK_SUB : tl.constexpr):
+    z0_offset = tl.program_id(0) * Z0BLOCK
+    base_z0= tl.arange(0, Z0BLOCK_SUB)
+    loops_z0 = (Z0BLOCK + Z0BLOCK_SUB - 1) // Z0BLOCK_SUB
+    y1_offset = tl.program_id(1) * Y1BLOCK
+    base_y1= tl.arange(0, Y1BLOCK_SUB)
+    loops_y1 = (Y1BLOCK + Y1BLOCK_SUB - 1) // Y1BLOCK_SUB
+    x2_offset = tl.program_id(2) * X2BLOCK
+    base_x2= tl.arange(0, X2BLOCK_SUB)
+    loops_x2 = (X2BLOCK + X2BLOCK_SUB - 1) // X2BLOCK_SUB
+    for loop_z0 in range(loops_z0):
+        z0 = z0_offset + (loop_z0 * Z0BLOCK_SUB) + base_z0[:,None,None]
+        z0_mask = z0 < min(Z0BLOCK+z0_offset, z0_numel)
+        for loop_y1 in range(loops_y1):
+            y1 = y1_offset + (loop_y1 * Y1BLOCK_SUB) + base_y1[None,:,None]
+            y1_mask = y1 < min(Y1BLOCK+y1_offset, y1_numel)
+            for loop_x2 in range(loops_x2):
+                x2 = x2_offset + (loop_x2 * X2BLOCK_SUB) + base_x2[None,None,:]
+                x2_mask = x2 < min(X2BLOCK+x2_offset, x2_numel)
+                tmp0 = (8*y1) // 3
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tmp1 = 3 + ((8*y1) // 3)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tmp2 = tmp0 < tmp1
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tmp3 = (8*x2) // 3
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tmp4 = 3 + ((8*x2) // 3)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tmp5 = tmp3 < tmp4
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tmp6 = tmp2 & tmp5
+                tl.static_assert(tmp6.dtype == tl.int1)
+                tl.static_assert(tmp6.dtype == tl.int1)
+                tmp7 = tmp6 & y1_mask
+                tl.static_assert(tmp7.dtype == tl.int1)
+                tl.static_assert(tmp7.dtype == tl.int1)
+                tmp8 = tmp7 & x2_mask
+                tl.static_assert(tmp8.dtype == tl.int1)
+                tl.static_assert(tmp8.dtype == tl.int1)
+                tmp9 = tl.load(in_ptr0 + (16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp8 & z0_mask, other=0.0)
+                tl.static_assert(tmp9.dtype == tl.float32)
+                tl.static_assert(tmp9.dtype == tl.float32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tmp10 = 1 + ((8*x2) // 3)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tmp11 = tmp10 < tmp4
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tmp12 = tmp2 & tmp11
+                tl.static_assert(tmp12.dtype == tl.int1)
+                tl.static_assert(tmp12.dtype == tl.int1)
+                tmp13 = tmp12 & y1_mask
+                tl.static_assert(tmp13.dtype == tl.int1)
+                tl.static_assert(tmp13.dtype == tl.int1)
+                tmp14 = tmp13 & x2_mask
+                tl.static_assert(tmp14.dtype == tl.int1)
+                tl.static_assert(tmp14.dtype == tl.int1)
+                tmp15 = tl.load(in_ptr0 + (1 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp14 & z0_mask, other=0.0)
+                tl.static_assert(tmp15.dtype == tl.float32)
+                tl.static_assert(tmp15.dtype == tl.float32)
+                tmp16 = tmp15 + tmp9
+                tl.static_assert(tmp16.dtype == tl.float32)
+                tl.static_assert(tmp16.dtype == tl.float32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tmp17 = 2 + ((8*x2) // 3)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tmp18 = tmp17 < tmp4
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tmp19 = tmp2 & tmp18
+                tl.static_assert(tmp19.dtype == tl.int1)
+                tl.static_assert(tmp19.dtype == tl.int1)
+                tmp20 = tmp19 & y1_mask
+                tl.static_assert(tmp20.dtype == tl.int1)
+                tl.static_assert(tmp20.dtype == tl.int1)
+                tmp21 = tmp20 & x2_mask
+                tl.static_assert(tmp21.dtype == tl.int1)
+                tl.static_assert(tmp21.dtype == tl.int1)
+                tmp22 = tl.load(in_ptr0 + (2 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp21 & z0_mask, other=0.0)
+                tl.static_assert(tmp22.dtype == tl.float32)
+                tl.static_assert(tmp22.dtype == tl.float32)
+                tmp23 = tmp22 + tmp16
+                tl.static_assert(tmp23.dtype == tl.float32)
+                tl.static_assert(tmp23.dtype == tl.float32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tmp24 = tmp4 < tmp4
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tmp25 = tmp2 & tmp24
+                tl.static_assert(tmp25.dtype == tl.int1)
+                tl.static_assert(tmp25.dtype == tl.int1)
+                tmp26 = tmp25 & y1_mask
+                tl.static_assert(tmp26.dtype == tl.int1)
+                tl.static_assert(tmp26.dtype == tl.int1)
+                tmp27 = tmp26 & x2_mask
+                tl.static_assert(tmp27.dtype == tl.int1)
+                tl.static_assert(tmp27.dtype == tl.int1)
+                tmp28 = tl.load(in_ptr0 + (3 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp27 & z0_mask, other=0.0)
+                tl.static_assert(tmp28.dtype == tl.float32)
+                tl.static_assert(tmp28.dtype == tl.float32)
+                tmp29 = tmp28 + tmp23
+                tl.static_assert(tmp29.dtype == tl.float32)
+                tl.static_assert(tmp29.dtype == tl.float32)
+                tmp30 = 1 + ((8*y1) // 3)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tmp31 = tmp30 < tmp1
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tmp32 = tmp31 & tmp5
+                tl.static_assert(tmp32.dtype == tl.int1)
+                tl.static_assert(tmp32.dtype == tl.int1)
+                tmp33 = tmp32 & y1_mask
+                tl.static_assert(tmp33.dtype == tl.int1)
+                tl.static_assert(tmp33.dtype == tl.int1)
+                tmp34 = tmp33 & x2_mask
+                tl.static_assert(tmp34.dtype == tl.int1)
+                tl.static_assert(tmp34.dtype == tl.int1)
+                tmp35 = tl.load(in_ptr0 + (16 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp34 & z0_mask, other=0.0)
+                tl.static_assert(tmp35.dtype == tl.float32)
+                tl.static_assert(tmp35.dtype == tl.float32)
+                tmp36 = tmp35 + tmp29
+                tl.static_assert(tmp36.dtype == tl.float32)
+                tl.static_assert(tmp36.dtype == tl.float32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tmp37 = tmp31 & tmp11
+                tl.static_assert(tmp37.dtype == tl.int1)
+                tl.static_assert(tmp37.dtype == tl.int1)
+                tmp38 = tmp37 & y1_mask
+                tl.static_assert(tmp38.dtype == tl.int1)
+                tl.static_assert(tmp38.dtype == tl.int1)
+                tmp39 = tmp38 & x2_mask
+                tl.static_assert(tmp39.dtype == tl.int1)
+                tl.static_assert(tmp39.dtype == tl.int1)
+                tmp40 = tl.load(in_ptr0 + (17 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp39 & z0_mask, other=0.0)
+                tl.static_assert(tmp40.dtype == tl.float32)
+                tl.static_assert(tmp40.dtype == tl.float32)
+                tmp41 = tmp40 + tmp36
+                tl.static_assert(tmp41.dtype == tl.float32)
+                tl.static_assert(tmp41.dtype == tl.float32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tmp42 = tmp31 & tmp18
+                tl.static_assert(tmp42.dtype == tl.int1)
+                tl.static_assert(tmp42.dtype == tl.int1)
+                tmp43 = tmp42 & y1_mask
+                tl.static_assert(tmp43.dtype == tl.int1)
+                tl.static_assert(tmp43.dtype == tl.int1)
+                tmp44 = tmp43 & x2_mask
+                tl.static_assert(tmp44.dtype == tl.int1)
+                tl.static_assert(tmp44.dtype == tl.int1)
+                tmp45 = tl.load(in_ptr0 + (18 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp44 & z0_mask, other=0.0)
+                tl.static_assert(tmp45.dtype == tl.float32)
+                tl.static_assert(tmp45.dtype == tl.float32)
+                tmp46 = tmp45 + tmp41
+                tl.static_assert(tmp46.dtype == tl.float32)
+                tl.static_assert(tmp46.dtype == tl.float32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tmp47 = tmp31 & tmp24
+                tl.static_assert(tmp47.dtype == tl.int1)
+                tl.static_assert(tmp47.dtype == tl.int1)
+                tmp48 = tmp47 & y1_mask
+                tl.static_assert(tmp48.dtype == tl.int1)
+                tl.static_assert(tmp48.dtype == tl.int1)
+                tmp49 = tmp48 & x2_mask
+                tl.static_assert(tmp49.dtype == tl.int1)
+                tl.static_assert(tmp49.dtype == tl.int1)
+                tmp50 = tl.load(in_ptr0 + (19 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp49 & z0_mask, other=0.0)
+                tl.static_assert(tmp50.dtype == tl.float32)
+                tl.static_assert(tmp50.dtype == tl.float32)
+                tmp51 = tmp50 + tmp46
+                tl.static_assert(tmp51.dtype == tl.float32)
+                tl.static_assert(tmp51.dtype == tl.float32)
+                tmp52 = 2 + ((8*y1) // 3)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tmp53 = tmp52 < tmp1
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tmp54 = tmp53 & tmp5
+                tl.static_assert(tmp54.dtype == tl.int1)
+                tl.static_assert(tmp54.dtype == tl.int1)
+                tmp55 = tmp54 & y1_mask
+                tl.static_assert(tmp55.dtype == tl.int1)
+                tl.static_assert(tmp55.dtype == tl.int1)
+                tmp56 = tmp55 & x2_mask
+                tl.static_assert(tmp56.dtype == tl.int1)
+                tl.static_assert(tmp56.dtype == tl.int1)
+                tmp57 = tl.load(in_ptr0 + (32 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp56 & z0_mask, other=0.0)
+                tl.static_assert(tmp57.dtype == tl.float32)
+                tl.static_assert(tmp57.dtype == tl.float32)
+                tmp58 = tmp57 + tmp51
+                tl.static_assert(tmp58.dtype == tl.float32)
+                tl.static_assert(tmp58.dtype == tl.float32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tmp59 = tmp53 & tmp11
+                tl.static_assert(tmp59.dtype == tl.int1)
+                tl.static_assert(tmp59.dtype == tl.int1)
+                tmp60 = tmp59 & y1_mask
+                tl.static_assert(tmp60.dtype == tl.int1)
+                tl.static_assert(tmp60.dtype == tl.int1)
+                tmp61 = tmp60 & x2_mask
+                tl.static_assert(tmp61.dtype == tl.int1)
+                tl.static_assert(tmp61.dtype == tl.int1)
+                tmp62 = tl.load(in_ptr0 + (33 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp61 & z0_mask, other=0.0)
+                tl.static_assert(tmp62.dtype == tl.float32)
+                tl.static_assert(tmp62.dtype == tl.float32)
+                tmp63 = tmp62 + tmp58
+                tl.static_assert(tmp63.dtype == tl.float32)
+                tl.static_assert(tmp63.dtype == tl.float32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tmp64 = tmp53 & tmp18
+                tl.static_assert(tmp64.dtype == tl.int1)
+                tl.static_assert(tmp64.dtype == tl.int1)
+                tmp65 = tmp64 & y1_mask
+                tl.static_assert(tmp65.dtype == tl.int1)
+                tl.static_assert(tmp65.dtype == tl.int1)
+                tmp66 = tmp65 & x2_mask
+                tl.static_assert(tmp66.dtype == tl.int1)
+                tl.static_assert(tmp66.dtype == tl.int1)
+                tmp67 = tl.load(in_ptr0 + (34 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp66 & z0_mask, other=0.0)
+                tl.static_assert(tmp67.dtype == tl.float32)
+                tl.static_assert(tmp67.dtype == tl.float32)
+                tmp68 = tmp67 + tmp63
+                tl.static_assert(tmp68.dtype == tl.float32)
+                tl.static_assert(tmp68.dtype == tl.float32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tmp69 = tmp53 & tmp24
+                tl.static_assert(tmp69.dtype == tl.int1)
+                tl.static_assert(tmp69.dtype == tl.int1)
+                tmp70 = tmp69 & y1_mask
+                tl.static_assert(tmp70.dtype == tl.int1)
+                tl.static_assert(tmp70.dtype == tl.int1)
+                tmp71 = tmp70 & x2_mask
+                tl.static_assert(tmp71.dtype == tl.int1)
+                tl.static_assert(tmp71.dtype == tl.int1)
+                tmp72 = tl.load(in_ptr0 + (35 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp71 & z0_mask, other=0.0)
+                tl.static_assert(tmp72.dtype == tl.float32)
+                tl.static_assert(tmp72.dtype == tl.float32)
+                tmp73 = tmp72 + tmp68
+                tl.static_assert(tmp73.dtype == tl.float32)
+                tl.static_assert(tmp73.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tmp74 = tmp1 < tmp1
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tmp75 = tmp74 & tmp5
+                tl.static_assert(tmp75.dtype == tl.int1)
+                tl.static_assert(tmp75.dtype == tl.int1)
+                tmp76 = tmp75 & y1_mask
+                tl.static_assert(tmp76.dtype == tl.int1)
+                tl.static_assert(tmp76.dtype == tl.int1)
+                tmp77 = tmp76 & x2_mask
+                tl.static_assert(tmp77.dtype == tl.int1)
+                tl.static_assert(tmp77.dtype == tl.int1)
+                tmp78 = tl.load(in_ptr0 + (48 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp77 & z0_mask, other=0.0)
+                tl.static_assert(tmp78.dtype == tl.float32)
+                tl.static_assert(tmp78.dtype == tl.float32)
+                tmp79 = tmp78 + tmp73
+                tl.static_assert(tmp79.dtype == tl.float32)
+                tl.static_assert(tmp79.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tmp80 = tmp74 & tmp11
+                tl.static_assert(tmp80.dtype == tl.int1)
+                tl.static_assert(tmp80.dtype == tl.int1)
+                tmp81 = tmp80 & y1_mask
+                tl.static_assert(tmp81.dtype == tl.int1)
+                tl.static_assert(tmp81.dtype == tl.int1)
+                tmp82 = tmp81 & x2_mask
+                tl.static_assert(tmp82.dtype == tl.int1)
+                tl.static_assert(tmp82.dtype == tl.int1)
+                tmp83 = tl.load(in_ptr0 + (49 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp82 & z0_mask, other=0.0)
+                tl.static_assert(tmp83.dtype == tl.float32)
+                tl.static_assert(tmp83.dtype == tl.float32)
+                tmp84 = tmp83 + tmp79
+                tl.static_assert(tmp84.dtype == tl.float32)
+                tl.static_assert(tmp84.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tmp85 = tmp74 & tmp18
+                tl.static_assert(tmp85.dtype == tl.int1)
+                tl.static_assert(tmp85.dtype == tl.int1)
+                tmp86 = tmp85 & y1_mask
+                tl.static_assert(tmp86.dtype == tl.int1)
+                tl.static_assert(tmp86.dtype == tl.int1)
+                tmp87 = tmp86 & x2_mask
+                tl.static_assert(tmp87.dtype == tl.int1)
+                tl.static_assert(tmp87.dtype == tl.int1)
+                tmp88 = tl.load(in_ptr0 + (50 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp87 & z0_mask, other=0.0)
+                tl.static_assert(tmp88.dtype == tl.float32)
+                tl.static_assert(tmp88.dtype == tl.float32)
+                tmp89 = tmp88 + tmp84
+                tl.static_assert(tmp89.dtype == tl.float32)
+                tl.static_assert(tmp89.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tmp90 = tmp74 & tmp24
+                tl.static_assert(tmp90.dtype == tl.int1)
+                tl.static_assert(tmp90.dtype == tl.int1)
+                tmp91 = tmp90 & y1_mask
+                tl.static_assert(tmp91.dtype == tl.int1)
+                tl.static_assert(tmp91.dtype == tl.int1)
+                tmp92 = tmp91 & x2_mask
+                tl.static_assert(tmp92.dtype == tl.int1)
+                tl.static_assert(tmp92.dtype == tl.int1)
+                tmp93 = tl.load(in_ptr0 + (51 + 16*((8*y1) // 3) + 256*z0 + ((8*x2) // 3)), tmp92 & z0_mask, other=0.0)
+                tl.static_assert(tmp93.dtype == tl.float32)
+                tl.static_assert(tmp93.dtype == tl.float32)
+                tmp94 = tmp93 + tmp89
+                tl.static_assert(tmp94.dtype == tl.float32)
+                tl.static_assert(tmp94.dtype == tl.float32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tl.static_assert(tmp6.dtype == tl.int1)
+                tl.static_assert(tmp7.dtype == tl.int1)
+                tl.static_assert(tmp8.dtype == tl.int1)
+                tmp95 = 1.0
+                tl.static_assert(tmp95.dtype == tl.float32)
+                tl.static_assert(tmp95.dtype == tl.float32)
+                tmp96 = tl.full(tmp95.shape, 0.0, tmp95.dtype)
+                tl.static_assert(tmp96.dtype == tl.float32)
+                tmp97 = tl.where(tmp8, tmp95, tmp96)
+                tl.static_assert(tmp97.dtype == tl.float32)
+                tl.static_assert(tmp97.dtype == tl.float32)
+                tl.static_assert(tmp97.dtype == tl.float32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tl.static_assert(tmp12.dtype == tl.int1)
+                tl.static_assert(tmp13.dtype == tl.int1)
+                tl.static_assert(tmp14.dtype == tl.int1)
+                tmp98 = 1.0
+                tl.static_assert(tmp98.dtype == tl.float32)
+                tl.static_assert(tmp98.dtype == tl.float32)
+                tmp99 = tl.full(tmp98.shape, 0.0, tmp98.dtype)
+                tl.static_assert(tmp99.dtype == tl.float32)
+                tmp100 = tl.where(tmp14, tmp98, tmp99)
+                tl.static_assert(tmp100.dtype == tl.float32)
+                tl.static_assert(tmp100.dtype == tl.float32)
+                tl.static_assert(tmp100.dtype == tl.float32)
+                tmp101 = tmp100 + tmp97
+                tl.static_assert(tmp101.dtype == tl.float32)
+                tl.static_assert(tmp101.dtype == tl.float32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tl.static_assert(tmp19.dtype == tl.int1)
+                tl.static_assert(tmp20.dtype == tl.int1)
+                tl.static_assert(tmp21.dtype == tl.int1)
+                tmp102 = 1.0
+                tl.static_assert(tmp102.dtype == tl.float32)
+                tl.static_assert(tmp102.dtype == tl.float32)
+                tmp103 = tl.full(tmp102.shape, 0.0, tmp102.dtype)
+                tl.static_assert(tmp103.dtype == tl.float32)
+                tmp104 = tl.where(tmp21, tmp102, tmp103)
+                tl.static_assert(tmp104.dtype == tl.float32)
+                tl.static_assert(tmp104.dtype == tl.float32)
+                tl.static_assert(tmp104.dtype == tl.float32)
+                tmp105 = tmp104 + tmp101
+                tl.static_assert(tmp105.dtype == tl.float32)
+                tl.static_assert(tmp105.dtype == tl.float32)
+                tl.static_assert(tmp0.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp2.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tl.static_assert(tmp25.dtype == tl.int1)
+                tl.static_assert(tmp26.dtype == tl.int1)
+                tl.static_assert(tmp27.dtype == tl.int1)
+                tmp106 = 1.0
+                tl.static_assert(tmp106.dtype == tl.float32)
+                tl.static_assert(tmp106.dtype == tl.float32)
+                tmp107 = tl.full(tmp106.shape, 0.0, tmp106.dtype)
+                tl.static_assert(tmp107.dtype == tl.float32)
+                tmp108 = tl.where(tmp27, tmp106, tmp107)
+                tl.static_assert(tmp108.dtype == tl.float32)
+                tl.static_assert(tmp108.dtype == tl.float32)
+                tl.static_assert(tmp108.dtype == tl.float32)
+                tmp109 = tmp108 + tmp105
+                tl.static_assert(tmp109.dtype == tl.float32)
+                tl.static_assert(tmp109.dtype == tl.float32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tl.static_assert(tmp32.dtype == tl.int1)
+                tl.static_assert(tmp33.dtype == tl.int1)
+                tl.static_assert(tmp34.dtype == tl.int1)
+                tmp110 = 1.0
+                tl.static_assert(tmp110.dtype == tl.float32)
+                tl.static_assert(tmp110.dtype == tl.float32)
+                tmp111 = tl.full(tmp110.shape, 0.0, tmp110.dtype)
+                tl.static_assert(tmp111.dtype == tl.float32)
+                tmp112 = tl.where(tmp34, tmp110, tmp111)
+                tl.static_assert(tmp112.dtype == tl.float32)
+                tl.static_assert(tmp112.dtype == tl.float32)
+                tl.static_assert(tmp112.dtype == tl.float32)
+                tmp113 = tmp112 + tmp109
+                tl.static_assert(tmp113.dtype == tl.float32)
+                tl.static_assert(tmp113.dtype == tl.float32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tl.static_assert(tmp37.dtype == tl.int1)
+                tl.static_assert(tmp38.dtype == tl.int1)
+                tl.static_assert(tmp39.dtype == tl.int1)
+                tmp114 = 1.0
+                tl.static_assert(tmp114.dtype == tl.float32)
+                tl.static_assert(tmp114.dtype == tl.float32)
+                tmp115 = tl.full(tmp114.shape, 0.0, tmp114.dtype)
+                tl.static_assert(tmp115.dtype == tl.float32)
+                tmp116 = tl.where(tmp39, tmp114, tmp115)
+                tl.static_assert(tmp116.dtype == tl.float32)
+                tl.static_assert(tmp116.dtype == tl.float32)
+                tl.static_assert(tmp116.dtype == tl.float32)
+                tmp117 = tmp116 + tmp113
+                tl.static_assert(tmp117.dtype == tl.float32)
+                tl.static_assert(tmp117.dtype == tl.float32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tl.static_assert(tmp42.dtype == tl.int1)
+                tl.static_assert(tmp43.dtype == tl.int1)
+                tl.static_assert(tmp44.dtype == tl.int1)
+                tmp118 = 1.0
+                tl.static_assert(tmp118.dtype == tl.float32)
+                tl.static_assert(tmp118.dtype == tl.float32)
+                tmp119 = tl.full(tmp118.shape, 0.0, tmp118.dtype)
+                tl.static_assert(tmp119.dtype == tl.float32)
+                tmp120 = tl.where(tmp44, tmp118, tmp119)
+                tl.static_assert(tmp120.dtype == tl.float32)
+                tl.static_assert(tmp120.dtype == tl.float32)
+                tl.static_assert(tmp120.dtype == tl.float32)
+                tmp121 = tmp120 + tmp117
+                tl.static_assert(tmp121.dtype == tl.float32)
+                tl.static_assert(tmp121.dtype == tl.float32)
+                tl.static_assert(tmp30.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp31.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tl.static_assert(tmp47.dtype == tl.int1)
+                tl.static_assert(tmp48.dtype == tl.int1)
+                tl.static_assert(tmp49.dtype == tl.int1)
+                tmp122 = 1.0
+                tl.static_assert(tmp122.dtype == tl.float32)
+                tl.static_assert(tmp122.dtype == tl.float32)
+                tmp123 = tl.full(tmp122.shape, 0.0, tmp122.dtype)
+                tl.static_assert(tmp123.dtype == tl.float32)
+                tmp124 = tl.where(tmp49, tmp122, tmp123)
+                tl.static_assert(tmp124.dtype == tl.float32)
+                tl.static_assert(tmp124.dtype == tl.float32)
+                tl.static_assert(tmp124.dtype == tl.float32)
+                tmp125 = tmp124 + tmp121
+                tl.static_assert(tmp125.dtype == tl.float32)
+                tl.static_assert(tmp125.dtype == tl.float32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tl.static_assert(tmp54.dtype == tl.int1)
+                tl.static_assert(tmp55.dtype == tl.int1)
+                tl.static_assert(tmp56.dtype == tl.int1)
+                tmp126 = 1.0
+                tl.static_assert(tmp126.dtype == tl.float32)
+                tl.static_assert(tmp126.dtype == tl.float32)
+                tmp127 = tl.full(tmp126.shape, 0.0, tmp126.dtype)
+                tl.static_assert(tmp127.dtype == tl.float32)
+                tmp128 = tl.where(tmp56, tmp126, tmp127)
+                tl.static_assert(tmp128.dtype == tl.float32)
+                tl.static_assert(tmp128.dtype == tl.float32)
+                tl.static_assert(tmp128.dtype == tl.float32)
+                tmp129 = tmp128 + tmp125
+                tl.static_assert(tmp129.dtype == tl.float32)
+                tl.static_assert(tmp129.dtype == tl.float32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tl.static_assert(tmp59.dtype == tl.int1)
+                tl.static_assert(tmp60.dtype == tl.int1)
+                tl.static_assert(tmp61.dtype == tl.int1)
+                tmp130 = 1.0
+                tl.static_assert(tmp130.dtype == tl.float32)
+                tl.static_assert(tmp130.dtype == tl.float32)
+                tmp131 = tl.full(tmp130.shape, 0.0, tmp130.dtype)
+                tl.static_assert(tmp131.dtype == tl.float32)
+                tmp132 = tl.where(tmp61, tmp130, tmp131)
+                tl.static_assert(tmp132.dtype == tl.float32)
+                tl.static_assert(tmp132.dtype == tl.float32)
+                tl.static_assert(tmp132.dtype == tl.float32)
+                tmp133 = tmp132 + tmp129
+                tl.static_assert(tmp133.dtype == tl.float32)
+                tl.static_assert(tmp133.dtype == tl.float32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tl.static_assert(tmp64.dtype == tl.int1)
+                tl.static_assert(tmp65.dtype == tl.int1)
+                tl.static_assert(tmp66.dtype == tl.int1)
+                tmp134 = 1.0
+                tl.static_assert(tmp134.dtype == tl.float32)
+                tl.static_assert(tmp134.dtype == tl.float32)
+                tmp135 = tl.full(tmp134.shape, 0.0, tmp134.dtype)
+                tl.static_assert(tmp135.dtype == tl.float32)
+                tmp136 = tl.where(tmp66, tmp134, tmp135)
+                tl.static_assert(tmp136.dtype == tl.float32)
+                tl.static_assert(tmp136.dtype == tl.float32)
+                tl.static_assert(tmp136.dtype == tl.float32)
+                tmp137 = tmp136 + tmp133
+                tl.static_assert(tmp137.dtype == tl.float32)
+                tl.static_assert(tmp137.dtype == tl.float32)
+                tl.static_assert(tmp52.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp53.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tl.static_assert(tmp69.dtype == tl.int1)
+                tl.static_assert(tmp70.dtype == tl.int1)
+                tl.static_assert(tmp71.dtype == tl.int1)
+                tmp138 = 1.0
+                tl.static_assert(tmp138.dtype == tl.float32)
+                tl.static_assert(tmp138.dtype == tl.float32)
+                tmp139 = tl.full(tmp138.shape, 0.0, tmp138.dtype)
+                tl.static_assert(tmp139.dtype == tl.float32)
+                tmp140 = tl.where(tmp71, tmp138, tmp139)
+                tl.static_assert(tmp140.dtype == tl.float32)
+                tl.static_assert(tmp140.dtype == tl.float32)
+                tl.static_assert(tmp140.dtype == tl.float32)
+                tmp141 = tmp140 + tmp137
+                tl.static_assert(tmp141.dtype == tl.float32)
+                tl.static_assert(tmp141.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp3.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp5.dtype == tl.int1)
+                tl.static_assert(tmp75.dtype == tl.int1)
+                tl.static_assert(tmp76.dtype == tl.int1)
+                tl.static_assert(tmp77.dtype == tl.int1)
+                tmp142 = 1.0
+                tl.static_assert(tmp142.dtype == tl.float32)
+                tl.static_assert(tmp142.dtype == tl.float32)
+                tmp143 = tl.full(tmp142.shape, 0.0, tmp142.dtype)
+                tl.static_assert(tmp143.dtype == tl.float32)
+                tmp144 = tl.where(tmp77, tmp142, tmp143)
+                tl.static_assert(tmp144.dtype == tl.float32)
+                tl.static_assert(tmp144.dtype == tl.float32)
+                tl.static_assert(tmp144.dtype == tl.float32)
+                tmp145 = tmp144 + tmp141
+                tl.static_assert(tmp145.dtype == tl.float32)
+                tl.static_assert(tmp145.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp10.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp11.dtype == tl.int1)
+                tl.static_assert(tmp80.dtype == tl.int1)
+                tl.static_assert(tmp81.dtype == tl.int1)
+                tl.static_assert(tmp82.dtype == tl.int1)
+                tmp146 = 1.0
+                tl.static_assert(tmp146.dtype == tl.float32)
+                tl.static_assert(tmp146.dtype == tl.float32)
+                tmp147 = tl.full(tmp146.shape, 0.0, tmp146.dtype)
+                tl.static_assert(tmp147.dtype == tl.float32)
+                tmp148 = tl.where(tmp82, tmp146, tmp147)
+                tl.static_assert(tmp148.dtype == tl.float32)
+                tl.static_assert(tmp148.dtype == tl.float32)
+                tl.static_assert(tmp148.dtype == tl.float32)
+                tmp149 = tmp148 + tmp145
+                tl.static_assert(tmp149.dtype == tl.float32)
+                tl.static_assert(tmp149.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp17.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp18.dtype == tl.int1)
+                tl.static_assert(tmp85.dtype == tl.int1)
+                tl.static_assert(tmp86.dtype == tl.int1)
+                tl.static_assert(tmp87.dtype == tl.int1)
+                tmp150 = 1.0
+                tl.static_assert(tmp150.dtype == tl.float32)
+                tl.static_assert(tmp150.dtype == tl.float32)
+                tmp151 = tl.full(tmp150.shape, 0.0, tmp150.dtype)
+                tl.static_assert(tmp151.dtype == tl.float32)
+                tmp152 = tl.where(tmp87, tmp150, tmp151)
+                tl.static_assert(tmp152.dtype == tl.float32)
+                tl.static_assert(tmp152.dtype == tl.float32)
+                tl.static_assert(tmp152.dtype == tl.float32)
+                tmp153 = tmp152 + tmp149
+                tl.static_assert(tmp153.dtype == tl.float32)
+                tl.static_assert(tmp153.dtype == tl.float32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp1.dtype == tl.int32)
+                tl.static_assert(tmp74.dtype == tl.int1)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp4.dtype == tl.int32)
+                tl.static_assert(tmp24.dtype == tl.int1)
+                tl.static_assert(tmp90.dtype == tl.int1)
+                tl.static_assert(tmp91.dtype == tl.int1)
+                tl.static_assert(tmp92.dtype == tl.int1)
+                tmp154 = 1.0
+                tl.static_assert(tmp154.dtype == tl.float32)
+                tl.static_assert(tmp154.dtype == tl.float32)
+                tmp155 = tl.full(tmp154.shape, 0.0, tmp154.dtype)
+                tl.static_assert(tmp155.dtype == tl.float32)
+                tmp156 = tl.where(tmp92, tmp154, tmp155)
+                tl.static_assert(tmp156.dtype == tl.float32)
+                tl.static_assert(tmp156.dtype == tl.float32)
+                tl.static_assert(tmp156.dtype == tl.float32)
+                tmp157 = tmp156 + tmp153
+                tl.static_assert(tmp157.dtype == tl.float32)
+                tl.static_assert(tmp157.dtype == tl.float32)
+                tmp158 = (tmp94 / tmp157)
+                tl.static_assert(tmp158.dtype == tl.float32)
+                tl.static_assert(tmp158.dtype == tl.float32)
+                tl.store(out_ptr0 + (x2 + 6*y1 + 36*z0), tmp158, x2_mask & y1_mask & z0_mask)
+''', device_str='npu')
+
+
+async_compile.wait(globals())
+del async_compile
+
+class Runner:
+    def __init__(self, partitions):
+        self.partitions = partitions
+
+    def recursively_apply_fns(self, fns):
+        new_callables = []
+        for fn, c in zip(fns, self.partitions):
+            new_callables.append(fn(c))
+        self.partitions = new_callables
+
+    def call(self, args):
+        arg0_1, = args
+        args.clear()
+        with torch.npu.utils.device(0):
+            torch.npu.set_device(0)
+            buf1 = empty_strided((2, 4, 16, 16), (1024, 256, 16, 1), device='npu', dtype=torch.float32)
+            # Topologically Sorted Source Nodes: [add], Original ATen: [aten.add]
+            stream0 = get_raw_stream(0)
+            triton_poi_fused_add_0.run(arg0_1, buf1, 2, 4, 16, 16, stream=stream0)
+            # Topologically Sorted Source Nodes: [add, _adaptive_avg_pool2d_1], Original ATen: [aten.add, aten._adaptive_avg_pool2d]
+            buf2 = torch.ops.aten._adaptive_avg_pool2d.default(buf1, [2, 5])
+            run_intermediate_hooks('_adaptive_avg_pool2d_1', buf2)
+            del buf1
+            buf3 = buf2
+            assert_size_stride(buf3, (2, 4, 2, 5), (40, 10, 5, 1), 'torch.ops.aten._adaptive_avg_pool2d.default')
+            assert_alignment(buf3, 16, 'torch.ops.aten._adaptive_avg_pool2d.default')
+            del buf2
+            buf0 = empty_strided((2, 4, 6, 6), (144, 36, 6, 1), device='npu', dtype=torch.float32)
+            # Topologically Sorted Source Nodes: [_adaptive_avg_pool2d], Original ATen: [aten._adaptive_avg_pool2d]
+            stream0 = get_raw_stream(0)
+            triton_poi_fused__adaptive_avg_pool2d_1.run(arg0_1, buf0, 8, 6, 6, stream=stream0)
+            del arg0_1
+        return (buf0, buf3, )
+
+runner = Runner(partitions=[])
+call = runner.call
+recursively_apply_fns = runner.recursively_apply_fns
+
+
+def benchmark_compiled_module(times=10, repeat=10):
+    from torch._dynamo.testing import rand_strided
+    from torch._inductor.utils import print_performance
+    arg0_1 = rand_strided((2, 4, 16, 16), (1024, 256, 16, 1), device='npu:0', dtype=torch.float32)
+    fn = lambda: call([arg0_1])
+    return print_performance(fn, times=times, repeat=repeat)
+
+
+if __name__ == "__main__":
+    from torch._inductor.wrapper_benchmark import compiled_module_main
+    compiled_module_main('None', benchmark_compiled_module)

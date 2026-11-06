@@ -64,7 +64,9 @@ def format_result(method):
         return f"执行异常（有效结果 {method['completed_instances']}/{total}）"
     if method["counts"].get("skipped", 0):
         return f"含跳过（通过 {count}/{total}）"
-    return ("通过" if passed(method) else "失败") + f"（{count}/{total}）"
+    value = ("通过" if passed(method) else "失败") + f"（{count}/{total}）"
+    commit = method.get("fix_commit")
+    return value + f"；修复 {commit[:10]}" if commit and passed(method) else value
 
 
 def analysis(method, fallback):
@@ -121,7 +123,11 @@ def main():
         for phase in json.loads(index.read_text()):
             folder = art / "retests" / phase
             result = json.loads((folder / "functional_results.json").read_text())
+            context_path = folder / "validation_context.json"
+            context = json.loads(context_path.read_text()) if context_path.exists() else {}
+            result["validation_context"] = context
             for method in result["methods"]:
+                method["fix_commit"] = context.get("fix_commits", {}).get(method["name"])
                 if not method["job_finished"]:
                     continue
                 if method["returncode"] not in (0, 1):
@@ -160,6 +166,14 @@ def main():
                 row["最新结果"] += "；定向：" + format_result(focused_map[key])
                 row["当前分析"] = analysis(focused_map[key], fallback) + "（全量待完成）"
         rows.append(row)
+    if retests:
+        context = retests[-1][1].get("validation_context", {})
+        note = context.get("untested_failure_note")
+        tested_keys = {(m["file"], m["name"]) for m in retests[-1][1]["methods"]}
+        for row in rows:
+            key = row["测试文件"], row["函数名"]
+            if note and row["最新结果"].startswith("失败") and key not in tested_keys:
+                row["当前分析"] = row["当前分析"].replace("仍存在", "历史失败") + "；" + note
     assert [(r["测试文件"], r["函数名"]) for r in rows] == [(r["测试文件"], r["函数名"]) for r in originals]
     with doc.with_suffix(".csv").open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=FIELDS, lineterminator="\n")
@@ -168,7 +182,7 @@ def main():
     done = [m for m in latest if m["job_finished"]]
     good = sum(passed(m) for m in done)
     invalid = sum(m["returncode"] not in (0, 1) or m["completed_instances"] != m["expected_instances"] for m in done)
-    scope = "全量及失败项复测" if retests else "全量"
+    scope = "历史全量与定向复测的滚动汇总" if retests else "全量"
     text = (f"最新结果已刷新：{scope} {len(done)}/62 个方法有终态，其中 {good} 个通过、"
             f"{len(done)-good-invalid} 个失败、{invalid} 个执行异常；其余状态按实际记录展示。")
     body = doc.read_text()
@@ -185,7 +199,8 @@ def main():
     line = (f"| 0fd5a10 + F3 全量 | {sum(passed(m) for m in full_methods)} / 62 | {instance_passed} / 409 | "
             "本轮全量原始记录；后续复测见下表 |")
     body = re.sub(r'\| 0fd5a10 \+ F3 全量 \|[^\n]*', line, body, count=1)
-    focused_start = body.index("## 原失败方法的最新复测")
+    focused_heading = next(h for h in ("## 原失败方法的最新复测", "## 历史定向复测（0fd5a10）") if h in body)
+    focused_start = body.index(focused_heading)
     focused_end = body.index("\n## ", focused_start + 1)
     focused_lines = body[focused_start:focused_end].splitlines()
     for i, line in enumerate(focused_lines):
@@ -206,7 +221,8 @@ def main():
         if heading in body:
             start, end = body.index(heading), body.index("## 当前仍存在的问题")
             body = body[:start] + body[end:]
-        content = (heading + "\n\n" + f"新包 + F3，独立目录 `{phase}`，复测 {len(selected)} 个方法、"
+        label = result.get("validation_context", {}).get("label", "新包 + F3")
+        content = (heading + "\n\n" + f"{label}，独立目录 `{phase}`，复测 {len(selected)} 个方法、"
                    f"{result['expected_instances']} 个实例：通过 {result['instance_counts'].get('passed', 0)}，"
                    f"失败 {result['instance_counts'].get('failed', 0)}。数值断言与测试适配均未变更。\n\n"
                    + markdown_table(repeated, ["测试文件", "函数名", "最新结果", "当前分析"]) + "\n\n")
