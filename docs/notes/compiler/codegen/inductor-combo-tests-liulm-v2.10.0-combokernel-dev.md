@@ -4,7 +4,7 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
 # liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
-验证日期：2026-11-06。**最新结果已刷新：全量 62/62 个方法结束，其中 52 个通过、9 个失败、1 个执行异常；其余状态按实际记录展示。**
+验证日期：2026-11-06。**最新结果已刷新：全量及失败项复测 62/62 个方法有终态，其中 52 个通过、10 个失败、0 个执行异常；其余状态按实际记录展示。**
 
 本表按上游对照总表的行与顺序，记录 `0fd5a10` 新包叠加 F3 的最新结果；历史轮次保留在证据中。
 可下载 [CSV 表格](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
@@ -38,7 +38,7 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 | a369f6c 全量 | 49 / 62 | 394 / 409 | 上一轮完整执行，未加载旧 F3 |
 | 0fd5a10 定向 | 1 / 13 | 1 / 15 | 原失败项，仅 F2 用例依靠回退通过 |
 | 0fd5a10 + F3 定向 | 7 / 13 | 7 / 15 | 6 个方法仍失败，含新增 F10 |
-| 0fd5a10 + F3 全量 | 52 / 62 | 397 / 409 | 已结束 62/62 个方法，1 个执行异常 |
+| 0fd5a10 + F3 全量 | 52 / 62 | 397 / 409 | 本轮全量原始记录；后续复测见下表 |
 
 “原 e32+F1/F3 结果”是旧 `e32cdebf77` 基线合并 F1 `6c6454567f`、F3 `e578ec524d` 定向复测的历史记录，
 共 55/62 个方法、400/409 个实例通过，既不是当前新包，也不是一次统一安装版本的全量执行。
@@ -60,6 +60,23 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 | test_torchinductor.py | test_adaptive_avg_pool2d1 | 失败（0/2） | 失败（0/2） | F4 仍在：Combo 索引化简错误后回退，最终两个开关分支均被 shape 检查阻塞 |
 | test_torchinductor.py | test_rand_like_deterministic | 失败（0/2） | 失败（0/2） | F5 仍在：Combo 索引 dtype 错误后回退，最终两个开关分支均被 shape 检查阻塞 |
 | test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 失败（0/1） | 失败（0/1） | F8：wrapper 在 nonzero 绑定 u0 前使用 u0 |
+
+## 失败项复测
+
+新包 + F3，独立目录 `retest_failures_20261106_163444`，复测 10 个方法、12 个实例：通过 0，失败 12。数值断言与测试适配均未变更。
+
+| 测试文件 | 函数名 | 最新结果 | 当前分析 |
+| --- | --- | --- | --- |
+| test_torchinductor.py | test_adaptive_avg_pool2d1 | 失败（0/2） | F4 仍存在：Combo 索引化简解包失败后回退；两个开关分支最终均被 output_shape 断言阻塞 |
+| test_torchinductor.py | test_mean | 失败（0/1） | F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认 |
+| test_torchinductor.py | test_rand_like_deterministic | 失败（0/2） | F5 仍存在：Combo 索引 int64 与 int32 检查不一致后回退；两个开关分支最终均被 output_shape 断言阻塞 |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | F6 仍存在：eager 不支持 channels_last contiguous，未进入编译；不列入 Combo 修复重点 |
+| test_combo_kernels.py | test_mutated_benchmark | 失败（0/1） | F11 全量新增：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
+| test_combo_kernels.py | test_round_robin_dispatch | 失败（0/1） | F11 全量新增：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
+| test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 失败（0/1） | F8 仍存在：wrapper 在 nonzero 绑定 u0 前使用 u0，优先分析 |
+| test_combo_kernels.py | test_dynamic_shapes_mutated | 失败（0/1） | F11 全量新增：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 失败（0/1） | F10 仍存在：mean 输出被后续 sum store 覆盖，精度失败；最优先分析 |
+| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | F7 仍存在：provenance 映射为空，AOTI 未执行；后置 |
 
 ## 当前仍存在的问题
 
@@ -107,7 +124,7 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 
 与上游对照总表保持 116 条记录及原始顺序，包含 62 个独立执行方法、43 个未运行方法、11 条嵌套函数记录；嵌套记录不重复计数。未运行原因与原表逐字一致。
 
-最新全量快照：2026-11-06T16:29:24.608870+08:00。优先展示本轮全量结果，尚未结束时单独注明已有定向结果；执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。
+最新结果来源：全量快照 + retest_failures_20261106_163444。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。
 
 | 测试文件 | 函数名 | v2.10.0存在性/实现差异 | 执行范围 | 原 e32+F1/F3 结果 | 最新结果 | 当前分析 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -147,7 +164,7 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | test_combo_kernels.py | test_reduce | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_mutated_benchmark | 存在（差异：kernel 数 6/9→5～10） | 已有方法 | 通过（1/1） | 失败（0/1） | F11 全量新增：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_round_robin_dispatch | 一致 | 已有方法 | 通过（1/1） | 执行异常（有效结果 0/1） | 环境执行异常：采集用例时 NPU stream 资源不足（207005），未进入用例；不能判为代码缺陷，需复测 |
+| test_combo_kernels.py | test_round_robin_dispatch | 一致 | 已有方法 | 通过（1/1） | 失败（0/1） | F11 全量新增：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_2d_blocking_benchmark | 存在（差异：kernel 数 7～8→6） | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
 | test_combo_kernels.py | test_persistent_reduction_no_x_dim | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | F3 修复后通过，NumelList 分区错误未再出现，不再分析 |
