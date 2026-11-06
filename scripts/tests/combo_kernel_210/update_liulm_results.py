@@ -78,7 +78,7 @@ def analysis(method, fallback):
     if "Too many streams" in log or "207005" in log:
         return "环境执行异常：采集用例时 NPU stream 资源不足（207005），未进入用例；不能判为代码缺陷，需复测"
     if "out_ptr1 is not defined" in log:
-        return "F11 全量新增：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认"
+        return "F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认"
     if name in KNOWN and (not passed(method) or name in {
             "test_helper_fn_defined", "test_combo_kernel_per_config_subkernel_red"}):
         return KNOWN[name]
@@ -210,17 +210,19 @@ def main():
             "F7": {"test_triton_kernel_to_post_grad_tracing_combo_kernel"},
             "F8": {"test_combo_kernel_size_hint_failure"},
             "F10": {"test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda"},
-            "F11": {"test_mutated_benchmark", "test_dynamic_shapes_mutated"}, "F12": {"test_mean"},
+            "F11": {"test_mutated_benchmark", "test_dynamic_shapes_mutated", "test_round_robin_dispatch"},
+            "F12": {"test_mean"},
         }
         for problem, names in problem_cases.items():
             tested = [m for m in result["methods"] if m["name"] in names]
             if {m["name"] for m in tested} == names and all(passed(m) for m in tested):
                 body = re.sub(r'\| ' + problem + r' \|[^\n]*\n', '', body)
-        if all(passed(m) for m in result["methods"] if m["name"] == "test_round_robin_dispatch") and any(
-                m["name"] == "test_round_robin_dispatch" for m in result["methods"]):
+        stream_retest = next((m for m in result["methods"] if m["name"] == "test_round_robin_dispatch"), None)
+        if stream_retest and stream_retest["completed_instances"] == stream_retest["expected_instances"]:
             body = re.sub(r'\| 环境执行异常 \|[^\n]*\n', '', body)
+            new_state = "通过" if passed(stream_retest) else "有效执行后功能失败，原因见复测表"
             body = body.replace("因此不是 409 个实例均已完成验证，stream 异常项仍需复测。",
-                                "该全量记录的 stream 资源异常项已在本次失败项复测中通过，不再作为当前阻塞。")
+                                f"原全量的 stream 资源异常本轮未再出现；该方法复测{new_state}，不再作为环境阻塞。")
     doc.write_text(body)
     readme = art / "README.md"
     content = re.sub(r'(`[A-Fa-f0-9]{40}`。)[^\n]*', lambda m: m[1] + text, readme.read_text(), count=1)
