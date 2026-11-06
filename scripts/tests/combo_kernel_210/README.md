@@ -16,6 +16,46 @@
 导出的是提交中的文件，未复制本地未跟踪文件。测试树放在上述工作目录的
 `Community-Use-Case-Testing/v2.13.0/inductor_npu`。
 
+## 后台一键执行与自动收尾
+
+liulm 最新结果见 [基线表](../../../docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md)。
+原失败项的两轮结果已单独列在正文前部，不需要从 62 行全量表中查找。
+
+`run_validation.py` 在已准备好的独立 phase 目录中完成收集、并行执行、汇总、证据捕获和完整性检查。
+目录需包含实际适配的测试树、`combo_npu_a5_selected.json`、现有 runner/plugin/export/capture 脚本。
+定向目录的 manifest 选原失败方法，预期为 15 个实例；全量目录选择完整 manifest，预期为 409 个实例。
+每次使用新的 phase 目录，避免覆盖历史报告。安装包由调用者提前安装，脚本不自动修改共享安装目录。
+
+```bash
+# 远端 Docker 验证目录；先确认物理卡授权和占用，再执行。
+python run_validation.py --root <prepared-phase> --devices 1,2,3 \
+    --with-f3 --expected-instances 409 --detach
+```
+
+F3 模式要求该 phase 已准备本轮使用的 `combo_baseline_audit.py`、`f3_horizontal_partition.py`，
+并在 `combo_validation_plugin.py` 中调用 `combo_baseline_audit.install()`。
+这些实际插件和 F3 方法保存在 [本轮执行快照](../../../artifacts/combo-liulm-0fd5a10-20261106/scripts/)。
+仅新包模式不带 `--with-f3`，原失败项使用 `--expected-instances 15`。
+任务只写 `validation.log`、`validation_status.json` 和 `evidence/`，不会反复输出进度。
+
+`publish_validation.py` 可接管已经运行的本轮 full 任务，无需重启或重复执行用例。
+它默认每 180 秒静默检查完成标记；结束后一次下载、脱敏归档、校验、更新 Markdown/CSV，并提交推送到 origin/main。
+三个阶段的父目录使用 `install/`、`failed_first/`、`with_fixes/`、`full/` 结构。
+本地 raw 目录保留对应原始证据；代码分支不是 main 或推送不是快进时会报错退出，不会强制推送。
+它通过临时 Git index 只提交本轮文档和证据，保留其他已暂存修改。
+
+```bash
+# 本地 torch-learn 仓库中执行，无需持续查看测试输出。
+python scripts/tests/combo_kernel_210/publish_validation.py \
+    --host NPU_A5 --remote-root <remote-validation-parent> \
+    --raw-root <local-raw-evidence> --repo <torch-learn-root> --detach
+```
+
+完成状态、统计和推送 commit 写入 `<local-raw-evidence>/publisher_status.json`；异常写入同目录的 `publisher.log`。
+`archive_liulm_run.py` 和 `update_liulm_results.py` 也支持单独执行，路径通过参数指定。
+新增且未经分析的全量失败会明确标为“待分析”，不会套用已有问题分类，也不会把定向结果外推为全量结果。
+这些新增入口已做语法和 CLI 检查；当前 NPU 全量任务沿用已经启动的 runner，不为验证入口重复运行测试。
+
 ## 脚本
 
 将本目录的 Python 文件和 `combo_npu_a5_selected.json` 复制到远端工作目录根下使用：
