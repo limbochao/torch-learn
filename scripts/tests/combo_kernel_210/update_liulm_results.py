@@ -18,11 +18,8 @@ KNOWN = {
     "test_combo_kernel_size_hint_failure": "F8 仍存在：wrapper 在 nonzero 绑定 u0 前使用 u0，优先分析",
     "test_triton_kernel_to_post_grad_tracing_combo_kernel": "F7 仍存在：provenance 映射为空，AOTI 未执行；后置",
     "test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda": "F10 仍存在：mean 输出被后续 sum store 覆盖，精度失败；最优先分析",
-    "test_helper_fn_defined": "F9 已修复：helper 用例实际 Combo 路径通过，不再分析；F3 错误未再出现",
     "test_mean": "F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认",
 }
-F3 = {"test_reduce_benchmark", "test_persistent_reduction_no_x_dim", "test_dynamic_shapes_reduce",
-      "test_dynamic_shapes_persistent_reduction_no_x_dim", "test_dynamic_shapes_persistent_reduction_no_x_dim_2"}
 
 
 def load_csv(path):
@@ -71,6 +68,8 @@ def format_result(method):
 
 
 def analysis(method, fallback):
+    if passed(method):
+        return "—"
     name = method["name"]
     if not method["job_finished"]:
         return fallback if fallback != "—" else "全量尚未结束，当前无新增失败证据"
@@ -79,13 +78,8 @@ def analysis(method, fallback):
         return "环境执行异常：采集用例时 NPU stream 资源不足（207005），未进入用例；不能判为代码缺陷，需复测"
     if "out_ptr1 is not defined" in log:
         return "F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认"
-    if name in KNOWN and (not passed(method) or name in {
-            "test_helper_fn_defined", "test_combo_kernel_per_config_subkernel_red"}):
+    if name in KNOWN:
         return KNOWN[name]
-    if name in F3 and passed(method):
-        return "F3 修复后通过，NumelList 分区错误未再出现，不再分析"
-    if passed(method):
-        return "通过；F1/F3 旧错误未再出现，不再分析" if "F1" in fallback or "F3" in fallback else "通过，当前无失败待分析"
     errors = [s[2:].strip() for s in log.splitlines() if s.startswith("E ") and "Error" in s]
     return "最新执行失败，待分析：" + next(iter(errors), "见报告")[:180]
 
@@ -191,6 +185,19 @@ def main():
     line = (f"| 0fd5a10 + F3 全量 | {sum(passed(m) for m in full_methods)} / 62 | {instance_passed} / 409 | "
             "本轮全量原始记录；后续复测见下表 |")
     body = re.sub(r'\| 0fd5a10 \+ F3 全量 \|[^\n]*', line, body, count=1)
+    focused_start = body.index("## 原失败方法的最新复测")
+    focused_end = body.index("\n## ", focused_start + 1)
+    focused_lines = body[focused_start:focused_end].splitlines()
+    for i, line in enumerate(focused_lines):
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) == 7 and cells[4].startswith("通过"):
+            cells[5] = "—"
+            focused_lines[i] = "| " + " | ".join(cells[1:-1]) + " |"
+    body = body[:focused_start] + "\n".join(focused_lines) + "\n" + body[focused_end:]
+    # Passing cases have no current analysis, including cases that used fallback.
+    if any(r["函数名"] == "test_combo_kernel_per_config_subkernel_red" and r["最新结果"].startswith("通过")
+           for r in rows):
+        body = re.sub(r'\| F2 \|[^\n]*\n', '', body)
     if retests:
         phase, result = retests[-1]
         selected = {(m["file"], m["name"]) for m in result["methods"]}

@@ -47,15 +47,15 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
 | 测试文件 | 方法 | 仅新包 | 新包+F3 | 当前分析 |
 | --- | --- | --- | --- | --- |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 通过（1/1） | 通过（1/1） | F2 未修复：编译错误被新回退屏蔽，普通 kernel 路径通过 |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | 失败（0/1） | F6：NPU eager 不支持 channels_last contiguous，尚未进入编译 |
-| test_combo_kernels.py | test_reduce_benchmark | 失败（0/1） | 通过（1/1） | 仅新包仍为 F3；加既有 e578ec524d 修复后定向通过 |
-| test_combo_kernels.py | test_persistent_reduction_no_x_dim | 失败（0/1） | 通过（1/1） | 仅新包仍为 F3；加既有 e578ec524d 修复后定向通过 |
-| test_combo_kernels.py | test_dynamic_shapes_reduce | 失败（0/1） | 通过（1/1） | 仅新包仍为 F3；加既有 e578ec524d 修复后定向通过 |
-| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim | 失败（0/1） | 通过（1/1） | 仅新包仍为 F3；加既有 e578ec524d 修复后定向通过 |
-| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim_2 | 失败（0/1） | 通过（1/1） | 仅新包仍为 F3；加既有 e578ec524d 修复后定向通过 |
+| test_combo_kernels.py | test_reduce_benchmark | 失败（0/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_persistent_reduction_no_x_dim | 失败（0/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_dynamic_shapes_reduce | 失败（0/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim | 失败（0/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim_2 | 失败（0/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 失败（0/1） | 失败（0/1） | 仅新包 F3 阻塞；加 F3 后新增 F10：sum 覆盖 mean 输出，精度失败 |
-| test_combo_kernels.py | test_helper_fn_defined | 失败（0/1） | 通过（1/1） | 新包单独仍被 F3 阻塞；加 F3 后通过，F9 helper 定义已验证修复 |
+| test_combo_kernels.py | test_helper_fn_defined | 失败（0/1） | 通过（1/1） | — |
 | test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | 失败（0/1） | F7：provenance 映射为空，Inductor 追溯检查失败，AOTI 未执行 |
 | test_torchinductor.py | test_adaptive_avg_pool2d1 | 失败（0/2） | 失败（0/2） | F4 仍在：Combo 索引化简错误后回退，最终两个开关分支均被 shape 检查阻塞 |
 | test_torchinductor.py | test_rand_like_deterministic | 失败（0/2） | 失败（0/2） | F5 仍在：Combo 索引 dtype 错误后回退，最终两个开关分支均被 shape 检查阻塞 |
@@ -94,7 +94,6 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | F11 | test_mutated_benchmark、test_dynamic_shapes_mutated、test_round_robin_dispatch 的 store 使用未声明 out_ptr1 | 应定位；编译错误已确认，是否与 F10 属于同一状态传播问题尚未确认 |
 | F4 | Combo 索引化简错误仍被记录，回退后两个开关分支均被 output_shape 断言阻塞 | 保留；区分线性化缺陷与 2.10 shape 检查兼容性 |
 | F5 | Combo 索引 dtype 与检查不一致仍被记录，回退后同样触发 shape 断言 | 保留；尚不能认定随机数数值算法错误 |
-| F2 | Combo store 类型错误仍在，用例依靠普通 kernel 回退通过 | 暂不优先分析，不能记为 Combo 缺陷已修复 |
 | F7 | provenance 映射为空，AOTI 未执行 | 后置 |
 | F6 | eager 不支持 channels_last，未进入编译 | 不列入当前 Combo 修复重点 |
 
@@ -131,96 +130,96 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | test_torchinductor.py | test_adaptive_avg_pool2d1 | 一致 | 已有方法 | 失败（0/2） | 失败（0/2） | F4 仍存在：Combo 索引化简解包失败后回退；两个开关分支最终均被 output_shape 断言阻塞 |
 | test_torchinductor.py | test_mean | 存在（差异：开启 Combo） | 已有方法 | 通过（1/1） | 失败（0/1） | F12 全量新增：mean 用例第二个输出 8/8 元素不一致，相对误差约 7；与 F10 是否同源待确认 |
 | test_torchinductor.py | test_rand_like_deterministic | 存在（差异：增加 random.seed） | 已有方法 | 失败（0/2） | 失败（0/2） | F5 仍存在：Combo 索引 int64 与 int32 检查不一致后回退；两个开关分支最终均被 output_shape 断言阻塞 |
-| test_combo_kernels.py | test_activation_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_activation_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_reduce_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_reduce_functions | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_reduce | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_mutated_args | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_mutated_args | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_reduce_split | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_combo_kernels.py | test_2d_blocking_partitioning | 存在（差异：增加 C++ wrapper grid 检查） | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_reduce_split | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_2d_blocking_partitioning | 存在（差异：增加 C++ wrapper grid 检查） | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_persistent_reduction_size_hint | 未找到同名定义（缺修复：按最大归约维选择 size hint） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_sort_in_combo_kernel_forces_persistent_reduction | 未找到同名定义（缺修复：Combo sort 强制持久归约） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_fuse_mix_order_reductions_combo_kernels | 未找到同名定义（缺修复：混合顺序归约及消费者排除） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_scalar_store_broadcast | 未找到同名定义（缺修复：标量 store 指针广播） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_single_combo_kernels | 未找到同名定义（缺能力：单节点分区改用普通 kernel） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_poi | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_per | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red_per | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 失败（0/1） | 通过（1/1） | F2 仍存在：Combo store 编译失败后回退普通 kernel，功能通过；暂不优先分析 |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_poi | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_per | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red_per | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 失败（0/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_r0_r1 | 未找到同名定义（缺能力：二维归约排除 Combo 策略） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_poi_3d | 未找到同名定义（缺能力：3D pointwise 排除策略） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失） | 共享块 / 旧版分支 | 失败（0/1） | 失败（0/1） | F6 仍存在：eager 不支持 channels_last contiguous，未进入编译；不列入 Combo 修复重点 |
 | test_combo_kernels.py | test_combo_kernels_pointwise_only | 未找到同名定义（缺能力：仅融合 pointwise 的开关） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_combo_kernels.py | test_combo_kernel_max_num_nodes | 未找到同名定义（部分支持：节点上限固定 8，不可配置） | 固定 8 节点分支 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_combo_kernel_max_num_nodes | 未找到同名定义（部分支持：节点上限固定 8，不可配置） | 固定 8 节点分支 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_yz_overflow | 未找到同名定义（缺修复：grid Y 溢出转移至 Z） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_no_bench_stitched_config | 未找到同名定义（缺能力：免 benchmark 拼接独立块配置） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_no_bench_persistent_reduction | 未找到同名定义（缺能力：免 benchmark 持久归约配置拼接） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_no_bench_carve_out | 未找到同名定义（缺能力：免 benchmark 不适配节点拆出） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_combo_kernels.py | test_activation_benchmark | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_activation_benchmark | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_reduce_benchmark | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | F3 修复后通过，NumelList 分区错误未再出现，不再分析 |
+| test_combo_kernels.py | test_reduce_benchmark | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_reduce | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_mutated_benchmark | 存在（差异：kernel 数 6/9→5～10） | 已有方法 | 通过（1/1） | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_round_robin_dispatch | 一致 | 已有方法 | 通过（1/1） | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_2d_blocking_benchmark | 存在（差异：kernel 数 7～8→6） | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_combo_kernels.py | test_persistent_reduction_no_x_dim | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | F3 修复后通过，NumelList 分区错误未再出现，不再分析 |
+| test_combo_kernels.py | test_2d_blocking_benchmark | 存在（差异：kernel 数 7～8→6） | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_persistent_reduction_no_x_dim | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_subkernel_reduction_hint | 未找到同名定义（缺能力：逐子 kernel 归约方向提示） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_rms_norm_forwards_add_persistent_rblock | 未找到同名定义（缺能力：转发持久归约候选标记） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_foreach.py | test_single_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | 通过，当前无失败待分析 |
-| test_foreach.py | test_single_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | 通过，当前无失败待分析 |
-| test_foreach.py | test_single_scalar_tensor | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | 通过，当前无失败待分析 |
-| test_foreach.py | test_scheduler_fusion_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | 通过，当前无失败待分析 |
-| test_foreach.py | test_scheduler_fusion_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | 通过，当前无失败待分析 |
-| test_foreach.py | test_broadcasting | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | 通过，当前无失败待分析 |
-| test_foreach.py | test_type_promotion | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | 通过，当前无失败待分析 |
-| test_foreach.py | test_kernel_split_arg_limit_list | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | 通过，当前无失败待分析 |
-| test_foreach.py | test_fusion_duplicate_buffer_list | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | 通过，当前无失败待分析 |
-| test_foreach.py | test_non_foreach_producer_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | 通过，当前无失败待分析 |
-| test_foreach.py | test_non_foreach_producer_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | 通过，当前无失败待分析 |
-| test_foreach.py | test_non_foreach_consumer_producer_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | 通过，当前无失败待分析 |
-| test_foreach.py | test_non_foreach_consumer_producer_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | 通过，当前无失败待分析 |
-| test_foreach.py | test_enable_dynamic_shapes_python_wrapper | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_foreach.py | test_decomp | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_foreach.py | test_fuse_concat | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_foreach.py | test_2d_blocking | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | 通过，当前无失败待分析 |
-| test_foreach.py | test_2d_blocking_partitioning_elems | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | 通过，当前无失败待分析 |
-| test_foreach.py | test_2d_blocking_partitioning_mixed_sizes | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | 通过，当前无失败待分析 |
-| test_foreach.py | test_reinplacing | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | 通过，当前无失败待分析 |
-| test_foreach.py | test_reinplacing_mut_before | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | 通过，当前无失败待分析 |
-| test_foreach.py | test_reinplacing_mut_after | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | 通过，当前无失败待分析 |
-| test_foreach.py | test_aliasing | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_foreach.py | test_2d_block_no_mixed_sizes_no_mask | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_foreach.py | test_2d_block_mixed_sizes_with_mask | 存在（差异：启用子 kernel 独立块并检查生成代码） | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_foreach.py | test_foreach_map_backward_binary | 一致 | 已有方法 | 通过（10/10） | 通过（10/10） | 通过，当前无失败待分析 |
-| test_foreach.py | test_foreach_map_backward_unary | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | 通过，当前无失败待分析 |
+| test_foreach.py | test_single_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | — |
+| test_foreach.py | test_single_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | — |
+| test_foreach.py | test_single_scalar_tensor | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | — |
+| test_foreach.py | test_scheduler_fusion_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | — |
+| test_foreach.py | test_scheduler_fusion_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | — |
+| test_foreach.py | test_broadcasting | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | — |
+| test_foreach.py | test_type_promotion | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | — |
+| test_foreach.py | test_kernel_split_arg_limit_list | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | — |
+| test_foreach.py | test_fusion_duplicate_buffer_list | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | — |
+| test_foreach.py | test_non_foreach_producer_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | — |
+| test_foreach.py | test_non_foreach_producer_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | — |
+| test_foreach.py | test_non_foreach_consumer_producer_list | 一致 | 已有方法 | 通过（32/32） | 通过（32/32） | — |
+| test_foreach.py | test_non_foreach_consumer_producer_scalar | 一致 | 已有方法 | 通过（16/16） | 通过（16/16） | — |
+| test_foreach.py | test_enable_dynamic_shapes_python_wrapper | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_foreach.py | test_decomp | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_foreach.py | test_fuse_concat | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_foreach.py | test_2d_blocking | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | — |
+| test_foreach.py | test_2d_blocking_partitioning_elems | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | — |
+| test_foreach.py | test_2d_blocking_partitioning_mixed_sizes | 一致 | 已有方法 | 通过（20/20） | 通过（20/20） | — |
+| test_foreach.py | test_reinplacing | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | — |
+| test_foreach.py | test_reinplacing_mut_before | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | — |
+| test_foreach.py | test_reinplacing_mut_after | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | — |
+| test_foreach.py | test_aliasing | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_foreach.py | test_2d_block_no_mixed_sizes_no_mask | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_foreach.py | test_2d_block_mixed_sizes_with_mask | 存在（差异：启用子 kernel 独立块并检查生成代码） | 已有方法 | 通过（1/1） | 通过（1/1） | — |
+| test_foreach.py | test_foreach_map_backward_binary | 一致 | 已有方法 | 通过（10/10） | 通过（10/10） | — |
+| test_foreach.py | test_foreach_map_backward_unary | 一致 | 已有方法 | 通过（4/4） | 通过（4/4） | — |
 | test_snode_runtime.py | test_foreach_basic | 未找到同名定义（缺能力：调度节点输入距离指标） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_snode_runtime.py | test_foreach_after_extern | 未找到同名定义（缺能力：外部算子后的输入距离指标） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_torchinductor.py | test_combo_kernel_store_mask | 未找到同名定义（缺修复：动态 Combo 常量索引 store mask） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 一致 | 已有方法 | 修复后仍失败（0/1） | 失败（0/1） | F8 仍存在：wrapper 在 nonzero 绑定 u0 前使用 u0，优先分析 |
-| test_combo_kernels.py | test_combo_kernel_dynamic_shapes_grid_changes | 未找到同名定义（部分支持：动态 grid 已有，独立块扁平 grid 缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_combo_kernels.py | test_dynamic_shapes_activations | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_combo_kernel_dynamic_shapes_grid_changes | 未找到同名定义（部分支持：动态 grid 已有，独立块扁平 grid 缺失） | 共享块 / 旧版分支 | 通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_dynamic_shapes_activations | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_dynamic_shapes_2d_blocking | 存在（差异：kernel 数 7～8→6） | 已有方法 | 修复后通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
-| test_combo_kernels.py | test_dynamic_shapes_reduce | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | F3 修复后通过，NumelList 分区错误未再出现，不再分析 |
+| test_combo_kernels.py | test_dynamic_shapes_2d_blocking | 存在（差异：kernel 数 7～8→6） | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_dynamic_shapes_reduce | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_reduce | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
 | test_combo_kernels.py | test_dynamic_shapes_mutated | 存在（差异：增加 XPU 跳过条件） | 已有方法 | 修复后通过（1/1） | 失败（0/1） | F11 仍存在：Combo 生成 store 使用未声明的 out_ptr1，Triton 编译失败；是否与 F10 写回状态有关尚待确认 |
 | test_combo_kernels.py | test_mutated | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_dynamic_shapes_activations_no_autotune | 存在（差异：kernel 数=5 改为源码编译调用数=1） | 已有方法 | 修复后通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_dynamic_shapes_activations_no_autotune | 存在（差异：kernel 数=5 改为源码编译调用数=1） | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_activations | 一致 | 随外层方法验证 | 随外层方法验证 | 随外层方法验证 | 嵌套函数，不独立计数 |
-| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | F3 修复后通过，NumelList 分区错误未再出现，不再分析 |
-| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim_2 | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | F3 修复后通过，NumelList 分区错误未再出现，不再分析 |
-| test_combo_kernels.py | test_dynamic_shapes_2d_blocking_round_robin | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_no_x_dim_2 | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
+| test_combo_kernels.py | test_dynamic_shapes_2d_blocking_round_robin | 一致 | 已有方法 | 修复后通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 存在（差异：装饰器仅限 CUDA） | 已有方法 | 修复后通过（1/1） | 失败（0/1） | F10 仍存在：mean 输出被后续 sum store 覆盖，精度失败；最优先分析 |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu | 未找到同名定义（待验证：已有同体 GPU 测试，XPU 待验证） | 未运行 | 未运行 | 未运行 | XPU 专项，不在 NPU 验证范围 |
-| test_torchinductor.py | test_combo_kernel_filter_cpu | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_torchinductor.py | test_combo_kernel_filter_cpu | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
 | test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 一致 | 已有方法 | 失败（0/1） | 失败（0/1） | F7 仍存在：provenance 映射为空，AOTI 未执行；后置 |
 | test_user_streams.py | test_combo_kernel_fusion_within_same_stream | 未找到同名定义（缺能力：按 stream 分组及传递 stream） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_tma_descriptor_block_name | 未找到同名定义（缺修复：Combo TMA 前导代码及块名替换） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_amd_special_config_args | 未找到同名定义（缺修复：独立块路径的 HIP 编译参数传递） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_combo_kernels.py | test_helper_fn_defined | 一致 | 已有方法 | 修复后仍失败（0/1） | 通过（1/1） | F9 已修复：helper 用例实际 Combo 路径通过，不再分析；F3 错误未再出现 |
+| test_combo_kernels.py | test_helper_fn_defined | 一致 | 已有方法 | 修复后仍失败（0/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_pdl_codegen_in_combo_kernel | 未找到同名定义（缺能力：Combo PDL 代码生成） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_pdl_combo_kernel_pointwise | 未找到同名定义（缺能力：Combo pointwise PDL 接入） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_pdl_combo_kernel_reduction | 未找到同名定义（缺能力：Combo reduction PDL 接入） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
@@ -240,7 +239,7 @@ F3 已同步为新基线修复提交 `113692bb66ee5879ba9b64656e4207ec8894910c`�
 | test_combo_kernels.py | test_combo_per_kernel_inductor_meta_matches_standalone | 未找到同名定义（缺能力：与普通 kernel 一致的子级元数据） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_num_gb_and_flop_match_standalone_sum | 未找到同名定义（缺能力：Combo 字节量及 FLOP 汇总） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth | 未找到同名定义（缺能力：带宽分析的 Combo 字节量） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_combo_kernels.py | test_combo_inductor_meta_no_kernel_num_gb_without_profile | 未找到同名定义（已有行为：默认不输出统计字段；新增覆盖） | 旧版默认行为 | 通过（1/1） | 通过（1/1） | 通过，当前无失败待分析 |
+| test_combo_kernels.py | test_combo_inductor_meta_no_kernel_num_gb_without_profile | 未找到同名定义（已有行为：默认不输出统计字段；新增覆盖） | 旧版默认行为 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_benchmark_combo_kernel_emits_real_num_gb | 未找到同名定义（缺能力：benchmark 使用真实字节量） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_peak_memory_wide_resnet | 未找到同名定义（缺能力：按峰值内存限制融合） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 
