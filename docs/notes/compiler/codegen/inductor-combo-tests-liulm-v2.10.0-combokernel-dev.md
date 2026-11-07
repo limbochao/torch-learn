@@ -10,6 +10,11 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 可下载 [CSV 表格](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
 [上游版本对照总表](inductor-combo-tests-v2.13-vs-v2.10.md) 保留最初的版本对照与旧修复历史。
 
+## 五个修复的逐行评审文档
+
+[五篇文档总览](inductor-combo-fixes-v2.10-review.md)分别记录 F10/F12、F11、F8、F4、F5，
+包含完整提交 diff、逐行解释、两版社区源码对照、正确性与性能风险，以及已有验证证据。
+
 ## 最新全量复测
 
 完成时间：2026-11-07 01:31:59（北京时间）。11 项安装源码运行前后校验一致；六个已修复问题涉及的 8 个方法、10 个实例均通过。

@@ -1,0 +1,21 @@
+diff --git a/torch_npu/_inductor/codegen/triton_combo_kernel.py b/torch_npu/_inductor/codegen/triton_combo_kernel.py
+index e328cf5460..f96029bd5a 100644
+--- a/torch_npu/_inductor/codegen/triton_combo_kernel.py
++++ b/torch_npu/_inductor/codegen/triton_combo_kernel.py
+@@ -376,6 +376,7 @@ class NPUComboKernel(ComboKernel):
+     def codegen_kernel(self, name: Optional[str] = None) -> str:
+         heuristics_list, size_hints_list = [], []
+         for subkernel in self.sub_kernels:
++            self.removed_buffers |= subkernel.removed_buffers
+             self.inplaced_to_remove |= subkernel.inplaced_to_remove
+             h, s = self.select_heuristics(subkernel)
+             heuristics_list.append(h)
+@@ -454,7 +455,7 @@ class NPUComboKernel(ComboKernel):
+         if config.benchmark_combo_kernel:
+             code.splice(self.codegen_kernel_benchmark(num_gb=0))
+ 
+-        # Deferred stores must see the subkernels' removed inplace buffers.
++        # Deferred stores must see the subkernels' removed buffers.
+         # Keep this state local until every partition passes validation.
+         with V.set_kernel_handler(self):
+             return code.getvalue()

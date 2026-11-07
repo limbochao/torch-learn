@@ -1,0 +1,45 @@
+diff --git a/torch_npu/_inductor/codegen/triton.py b/torch_npu/_inductor/codegen/triton.py
+index ce1fbf932a..efbc7ebaa9 100644
+--- a/torch_npu/_inductor/codegen/triton.py
++++ b/torch_npu/_inductor/codegen/triton.py
+@@ -45,6 +45,7 @@ from torch._inductor.codegen.triton import (
+     TMACompatibilityChecker, maybe_upcast_float32,
+ )
+ from torch._inductor.codegen.triton_utils import (
++    equal_1_arg_indices,
+     config_of,
+     should_unwrap_unspec_arg,
+     signature_of,
+@@ -3018,6 +3019,8 @@ class NPUIndexTritonKernel(TritonKernel):
+             inductor_meta["kernel_num_gb"] = num_gb
+ 
+         self.gen_numel_args(signature, triton_meta, triton_meta_signature, argdefs)
++        for index in equal_1_arg_indices(signature):
++            triton_meta["constants"][signature[index].name] = 1
+         if self.is_unified_simt_kernel():
+             triton_meta["configs"] = [config_of(signature)]
+ 
+diff --git a/torch_npu/_inductor/codegen/triton_combo_kernel.py b/torch_npu/_inductor/codegen/triton_combo_kernel.py
+index f96029bd5a..53cfe69930 100644
+--- a/torch_npu/_inductor/codegen/triton_combo_kernel.py
++++ b/torch_npu/_inductor/codegen/triton_combo_kernel.py
+@@ -8,7 +8,7 @@ from torch._inductor.codegen.common import ArgName, ConstexprArg, SizeArg
+ from torch._inductor.codegen.simd_kernel_features import SIMDKernelFeatures
+ from torch._inductor.codegen.triton import TritonKernel
+ from torch._inductor.codegen.triton_combo_kernel import ComboKernel
+-from torch._inductor.codegen.triton_utils import signature_to_meta, config_of
++from torch._inductor.codegen.triton_utils import signature_to_meta, config_of, equal_1_arg_indices
+ from torch._inductor.runtime.hints import DeviceProperties
+ from torch._inductor.runtime.runtime_utils import next_power_of_2
+ from torch._inductor.utils import IndentedBuffer, Placeholder, triton_version_uses_attrs_dict
+@@ -195,7 +195,9 @@ class NPUComboKernel(ComboKernel):
+                 signature, size_dtype=size_dtype, argdefs=argdefs
+             ),
+             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+-            "constants": {},
++            "constants": {
++                signature[index].name: 1 for index in equal_1_arg_indices(signature)
++            },
+             "mix_mode": "aiv"
+         }
+ 
