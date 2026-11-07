@@ -173,11 +173,70 @@ end   = ceil((0+1)*3/6) = 1
 `save_variable_mask` 还被上方轴处理逻辑使用，所以本提交没有删除其计算。
 没有把所有 mask 都无条件保留，也没有以 adaptive pooling 算子名或特定 shape 加例外。
 
+### 实际失败证据：修正除法后，3×3 到 6×6 仍然数值错误
+
+保留语义 mask 的依据来自本次实际失败。在 `fix_f4_floor_carry_v2` 阶段，已处理前述
+FloorDiv 类型及加法进位问题，但 `test_adaptive_avg_pool2d1` 运行到输入 `(2,4,3,3)` 时，
+第一个输出 `(2,4,6,6)` 仍报数值不一致。Combo False 实例的历史日志明确记录：
+
+```text
+AssertionError: Tensor-likes are not close!
+Mismatched elements: 288 / 288 (100.0%)
+Greatest absolute difference: 5.596200466156006
+```
+
+这是修复过程中的历史失败，当前正式修复后的该方法已经 PASS。
+原始异常见[该阶段日志](../../../../artifacts/combo-fixes-85dec1f-20261106/fix_f4_floor_carry_v2/evidence/test_torchinductor.test_adaptive_avg_pool2d1.log)。
+288 正好是 `2*4*6*6`，说明失败覆盖这次输出的所有元素。
+
+该阶段的[完整生成候选](../../../../artifacts/combo-fixes-85dec1f-20261106/fix_f4_floor_carry_v2/evidence/combo_sources/audit.test_torchinductor.test_adaptive_avg_pool2d1/2123bff851e2e8b26eb6c806c3c40990497665e68c9b0728906e32a4c16ad9c9.py)
+展开了四个邻居，地址偏移分别为 `0`、`1`、`3`、`4`。
+以偏移 1 的邻居为例，实际生成的 load 如下，保留原格式：
+
+```python
+                    tmp19 = tl.load(in_ptr0 + (1 + x5 + 3*y3 + 9*z0), x5_mask & y3_mask & z0_mask, other=0.0)
+```
+
+该语句只有 `x5_mask & y3_mask & z0_mask`，缺少窗口条件 `tmp18`。
+`tmp18` 在同一候选的后面仍被计算，包含邻居的窗口有效性及相关轴 mask；
+但它没有用于这个 load。窗口边界表达式包含 `y4`、`x6`，而此 load 的指针地址只包含
+`z0`、`y3`、`x5`。旧过滤规则据此丢弃语义 mask，导致不能从“地址轴关系”推出的窗口限制丢失。
+
+分子和分母因此采用了不同的有效元素集合：四个邻居经缺失窗口条件的 load 进入求和，
+而计数仍通过 `tl.where(tmp10, tmp37, tmp38)` 等语句按窗口 mask 计算，其中 `tmp37` 为 1、`tmp38` 为 0。
+对于前面推导的第一个输出窗口，真正有效的只有 `[0,0]`，其余三个候选邻居应贡献 0；
+旧代码却让它们参与求和，再除以有效计数 1，结果自然不等于正确的单元素平均值。
+这直接解释了为何仅修正 FloorDiv 还不能让完整方法通过。
+
+### 验证因果关系：恢复四个 load 的窗口条件
+
 单 kernel 的[DSL 诊断快照](../../../../artifacts/combo-fixes-85dec1f-20261106/pool_mask_dsl.py)
-只调整相关 load 的位置与窗口 mask，
-[实际结果](../../../../artifacts/combo-fixes-85dec1f-20261106/pool_mask_dsl.log)为 `PASS max_abs=0.0`。
-正式源码修复后，审计进一步确认 mask 先定义，再用于 load，完整原始方法通过。
-单 kernel 实验说明访问条件这一层的因果关系；最终 PASS 则来自完整方法验证，二者不能混为一个范围。
+保留这组输入和计算，将四个 load 分别放到对应语义 mask 定义之后，使用
+`tmp10`、`tmp18`、`tmp27`、`tmp34` 保护访问。上面偏移 1 的访问变为：
+
+```python
+                tmp19 = tl.load(in_ptr0 + (1 + x5 + 3*y3 + 9*z0), tmp18, other=0.0)
+```
+
+当该邻居不属于当前窗口时，`other=0.0` 使它不再贡献到求和中。
+历史实验与 eager `adaptive_avg_pool2d(x, (6,6))` 比较，
+[实际结果](../../../../artifacts/combo-fixes-85dec1f-20261106/pool_mask_dsl.log)为：
+
+```json
+{"semantic_mask_dsl_check": "passed", "max_abs": 0.0}
+```
+
+因此修复删除的是整个“可能丢弃语义 mask”的循环，不是删除窗口 mask。
+其中单独被删除的 `if save_variable_mask:` 只是该旧循环的保留分支；
+必须结合后面的 `mask_vars.discard(mask_var)` 理解，不能孤立解释成“现在不再需要 mask”。
+`save_variable_mask` 的计算及普通轴 mask 的既有处理仍然保留。
+
+正式 codegen 修复后，[审计](../../../../artifacts/combo-f4-nocarry-20261106/codegen_checks.json)
+确认语义 mask 在 load 前定义且用于访问；原方法 Combo False/True
+[2/2 PASS](../../../../artifacts/combo-f4-nocarry-20261106/f4_nocarry_validation/evidence/functional_results.json)，
+后续最终源码全量也再次通过这两个实例。
+单 kernel 实验证明这组输入的访问条件问题；完整方法验证覆盖原三组输入。
+这些都是已有运行证据，本次文档补充没有重新执行 NPU 测试，也没有从单 kernel 结果推定所有模型均已验证。
 
 ## 完整修改与逐行说明
 
@@ -343,7 +402,7 @@ index 48e158a29f..ce1fbf932a 100644
 | ir.py 新 1298 | `+ remainder = FloorDiv(sympy.Add(*remainder_terms), divisor)` | 未证明成功则将剩余项合并后除一次；空列表构成 0，SymPy 可直接求值。 |
 | ir.py 新 1299 | `+ split_terms.append(eliminate_zero_term(remainder))` | 把合并商加入结果；类型保护同时兼容它已经化为常量的情况。 |
 | triton.py 旧 4665 | `- for mask_var in variable_mask_vars:` | 删除遍历并清除 CSE 语义 mask 的旧循环；下方普通轴 mask 的过滤循环保留。 |
-| triton.py 旧 4666 | `- if save_variable_mask:` | 删除旧循环中仅以地址轴子集关系决定语义 mask 是否保留的条件。 |
+| triton.py 旧 4666 | `- if save_variable_mask:` | 随整个语义 mask 删除循环移除。旧条件在 3×3→6×6 pooling 中未能保留窗口条件，使窗口外邻居参与求和，见上文实际失败证据。 |
 | triton.py 旧 4667 | `- continue` | 删除上述旧循环的跳过逻辑；不再需要靠该条件决定语义 mask 的生死。 |
 | triton.py 旧 4668 | `- mask_vars.discard(mask_var)` | 删除按地址轴关系清除语义 mask 的操作；地址未使用某轴不代表该轴的有效性条件无用。 |
 | triton.py 新 4665 | `+ # Semantic masks can depend on axes absent from the address (for` | 解释语义 mask 可依赖指针表达式未出现的轴。 |
