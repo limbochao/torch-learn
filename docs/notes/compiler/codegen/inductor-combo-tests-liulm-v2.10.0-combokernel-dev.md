@@ -4,18 +4,18 @@ title: liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
 # liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测
 
-验证日期：2026-11-07。**最新结果已刷新：历史全量与定向复测的滚动汇总 62/62 个方法有终态，其中 60 个通过、2 个失败、0 个执行异常；其余状态按实际记录展示。**
+验证日期：2026-11-07。**本轮全量已完成：62 个方法中 60 个通过、2 个失败；409 个实例中 407 个通过、2 个失败，0 跳过、0 执行异常。**
 
-本表按上游对照总表的行与顺序保留滚动最新结果；本轮补充 F4 余数不进位优化验证，未复测项保留历史记录。
+本表按上游对照总表的行与顺序记录 `a8dcca84bf` 本轮完整全量结果；历史定向记录保留在后文。
 可下载 [CSV 表格](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
 [上游版本对照总表](inductor-combo-tests-v2.13-vs-v2.10.md) 保留最初的版本对照与旧修复历史。
 
-
 ## 最新全量复测
+
+完成时间：2026-11-07 01:31:59（北京时间）。11 项安装源码运行前后校验一致；六个已修复问题涉及的 8 个方法、10 个实例均通过。
 
 启动源码提交 `a8dcca84bf52e8a3e0c46aa46c2a4f663875f10e`，[查看 PR](https://gitcode.com/liujm2001/pytorch/merge_requests/7)。
 本轮按 62 个方法、409 个实例启动，实际记录 409 个实例；实例通过 407、失败 2、跳过 0。数值断言和测试适配未变更，没有加载函数修复或 F3 overlay。当前逐项结果均来自本轮，历史定向记录保留在后文。
-
 
 ## F4 优化与历史定向复测
 
@@ -31,7 +31,7 @@ F4 已整理为单个提交 `53f8af09f144aaaec685562acd4c3a3ffaffb71a`，开发�
 生成 DSL 中的 pooling 语义 mask 和可能进位的合并边界表达式仍保留。
 
 原 F4 `a2f7b18da9` 与本次优化合并为 `53f8af09f1`；F5 仅因重放从 `bc9d3c4ee9` 变为 `a8dcca84bf`，
-其补丁内容完全一致。总表 F5 保留实际验证过的原提交号，其余用例沿用前一轮结果；本次没有重跑全量或进行性能测量。
+其补丁内容完全一致。该历史定向轮次仅复测 F4，F5 当时沿用重放前验证；本轮全量已重新覆盖 F5，表中提交更新为 `a8dcca84bf`。本轮未进行性能测量。
 证据见 [F4 优化与复测记录](../../../../artifacts/combo-f4-nocarry-20261106/README.md)。
 
 ## 六问题定向修复验证
@@ -39,7 +39,7 @@ F4 已整理为单个提交 `53f8af09f144aaaec685562acd4c3a3ffaffb71a`，开发�
 本轮基线为 `85dec1f1a10ee42ebce87f1a1f8d2095909c0af6`，F3 已合入，未再加载旧 F3 overlay。
 开发分支为 `fix/combo-f10-f12-f11-f8-f4-f5-v2.10`，前一轮 10 实例验证的安装源码为 `bc9d3c4ee973dde621ebf61600967ffbd66d0571`。
 前一轮仅运行指定六个问题涉及的 **8 个失败方法、10 个参数实例**：原新包 0/10 通过，修复后 **10/10 通过**。
-没有重跑全量；总表的 60/62 方法、407/409 实例通过是滚动结果，另外 54 个方法保留上一轮记录，不能当作统一新版本的全量结论。
+该历史定向轮次未重跑全量；随后本轮在统一安装源码 `a8dcca84bf` 上完整运行了 62 个方法、409 个实例，见上方全量结果。
 
 环境为 Ascend950PR、torch `2.10.0+cpu`、torch_npu `2.10.0.post7+git85dec1f`、Triton `3.6.0`。
 先以源码函数 overlay 逐项定位和验证，再从已推送提交提取四个完整 Python 文件覆盖安装目录后，重新执行全部 10 个目标实例。
@@ -54,7 +54,7 @@ F4 已整理为单个提交 `53f8af09f144aaaec685562acd4c3a3ffaffb71a`，开发�
 | F11 | `9b1a894d65` | 3/3 PASS | 汇总 removed_buffers，删除已移出签名的中间 buffer store |
 | F8 | `fdf73f229e` | 1/1 PASS | benchmark 尺寸收集不提前向 wrapper 写入未绑定的 u0 |
 | F4 | `53f8af09f1` | 2/2 PASS（最新复测） | 保留安全拆分机会，修正常量处理、加法进位及 pooling 语义 mask 丢失 |
-| F5 | `a8dcca84bf`（原 `bc9d3c4ee9`） | 2/2 PASS（重放前验证） | 普通 Index 与 Combo 都注册值为 1 的 constexpr 参数；旧 dtype 问题未复现，无需修改 |
+| F5 | `a8dcca84bf`（原 `bc9d3c4ee9`） | 2/2 PASS（本轮全量） | 普通 Index 与 Combo 都注册值为 1 的 constexpr 参数；旧 dtype 问题未复现，无需修改 |
 
 F10/F12 共用根因，六个问题对应五个有效修复提交。F4 方法覆盖 16×16、3×3、6×6 三组输入及原有低精度检查。
 F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表随机数数值算法有误。
@@ -135,7 +135,7 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_per | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red_per | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 通过（1/1） | — |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | 本轮全量失败，待按新日志分析：RuntimeError: NPU contiguous operator only supported contiguous memory format. |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | F6 仍存在：NPU eager 的 contiguous 不支持 channels_last memory format，失败发生在 torch.compile 之前。 |
 | test_combo_kernels.py | test_combo_kernel_max_num_nodes | 通过（1/1） | — |
 | test_combo_kernels.py | test_activation_benchmark | 通过（1/1） | — |
 | test_combo_kernels.py | test_reduce_benchmark | 通过（1/1） | — |
@@ -182,18 +182,18 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 | test_combo_kernels.py | test_dynamic_shapes_2d_blocking_round_robin | 通过（1/1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 通过（1/1）；修复 64a3e7e8b9 | — |
 | test_torchinductor.py | test_combo_kernel_filter_cpu | 通过（1/1） | — |
-| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | 本轮全量失败，待按新日志分析：AssertionError: The length of the sequences mismatch: 0 != 1 |
+| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | F7 仍存在：provenance 的 cppCodeToPost 映射为空（预期 1 项），Inductor 追溯断言失败；AOTI 未执行。 |
 | test_combo_kernels.py | test_helper_fn_defined | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_inductor_meta_no_kernel_num_gb_without_profile | 通过（1/1） | — |
 
 ## 当前仍存在的问题
 
-本轮全量未全部通过的用例如下；失败原因只依据本轮日志，尚未完成源码分析的项明确标为待分析。
+本轮剩余失败为 F6、F7，已依据本轮日志及实际执行的用例源码核对失败阶段；没有新增失败项。F7 映射生成或登记为空的具体原因仍待源码分析。
 
 | 测试文件 | 函数名 | 最新结果 | 当前分析 |
 | --- | --- | --- | --- |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | 本轮全量失败，待按新日志分析：RuntimeError: NPU contiguous operator only supported contiguous memory format. |
-| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | 本轮全量失败，待按新日志分析：AssertionError: The length of the sequences mismatch: 0 != 1 |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 失败（0/1） | F6 仍存在：NPU eager 的 contiguous 不支持 channels_last memory format，失败发生在 torch.compile 之前。 |
+| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 失败（0/1） | F7 仍存在：provenance 的 cppCodeToPost 映射为空（预期 1 项），Inductor 追溯断言失败；AOTI 未执行。 |
 
 ## F10 的历史生成代码证据（已修复）
 
@@ -217,7 +217,7 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 
 与上游对照总表保持 116 条记录及原始顺序，包含 62 个独立执行方法、43 个未运行方法、11 条嵌套函数记录；嵌套记录不重复计数。未运行原因与原表逐字一致。
 
-最新结果来源：全量快照 + full_a8dcca84bf_20261106。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。
+最新结果来源：`full_a8dcca84bf_20261106` 的完整全量报告；62 个独立执行方法均使用本轮结果，43 个未运行方法及 11 条嵌套记录的处理保持原表一致。历史轮次保存在证据及上方汇总中。
 
 | 测试文件 | 函数名 | v2.10.0存在性/实现差异 | 执行范围 | 原 e32+F1/F3 结果 | 最新结果 | 当前分析 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -244,7 +244,7 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red | 未找到同名定义（部分支持：共享块已有，独立块缺失） | 共享块 / 旧版分支 | 失败（0/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_r0_r1 | 未找到同名定义（缺能力：二维归约排除 Combo 策略） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_per_config_subkernel_poi_3d | 未找到同名定义（缺能力：3D pointwise 排除策略） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
-| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失） | 共享块 / 旧版分支 | 失败（0/1） | 失败（0/1） | 本轮全量失败，待按新日志分析：RuntimeError: NPU contiguous operator only supported contiguous memory format. |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size | 未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失） | 共享块 / 旧版分支 | 失败（0/1） | 失败（0/1） | F6 仍存在：NPU eager 的 contiguous 不支持 channels_last memory format，失败发生在 torch.compile 之前。 |
 | test_combo_kernels.py | test_combo_kernels_pointwise_only | 未找到同名定义（缺能力：仅融合 pointwise 的开关） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_max_num_nodes | 未找到同名定义（部分支持：节点上限固定 8，不可配置） | 固定 8 节点分支 | 通过（1/1） | 通过（1/1） | — |
 | test_combo_kernels.py | test_combo_kernel_yz_overflow | 未找到同名定义（缺修复：grid Y 溢出转移至 Z） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
@@ -310,7 +310,7 @@ F5 的缺失常量导致 seed offset 在 Triton IR 中成为 `None`，不代表�
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda | 存在（差异：装饰器仅限 CUDA） | 已有方法 | 修复后通过（1/1） | 通过（1/1）；修复 64a3e7e8b9 | — |
 | test_combo_kernels.py | test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu | 未找到同名定义（待验证：已有同体 GPU 测试，XPU 待验证） | 未运行 | 未运行 | 未运行 | XPU 专项，不在 NPU 验证范围 |
 | test_torchinductor.py | test_combo_kernel_filter_cpu | 一致 | 已有方法 | 通过（1/1） | 通过（1/1） | — |
-| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 一致 | 已有方法 | 失败（0/1） | 失败（0/1） | 本轮全量失败，待按新日志分析：AssertionError: The length of the sequences mismatch: 0 != 1 |
+| test_provenance_tracing.py | test_triton_kernel_to_post_grad_tracing_combo_kernel | 一致 | 已有方法 | 失败（0/1） | 失败（0/1） | F7 仍存在：provenance 的 cppCodeToPost 映射为空（预期 1 项），Inductor 追溯断言失败；AOTI 未执行。 |
 | test_user_streams.py | test_combo_kernel_fusion_within_same_stream | 未找到同名定义（缺能力：按 stream 分组及传递 stream） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_tma_descriptor_block_name | 未找到同名定义（缺修复：Combo TMA 前导代码及块名替换） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |
 | test_combo_kernels.py | test_combo_kernel_amd_special_config_args | 未找到同名定义（缺修复：独立块路径的 HIP 编译参数传递） | 未运行 | 未运行 | 未运行 | 缺新增能力或场景修复，按范围排除 |

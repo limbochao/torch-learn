@@ -11,6 +11,20 @@ PR：[liujm2001/pytorch !7](https://gitcode.com/liujm2001/pytorch/merge_requests
 [expected_source_sha256.json](expected_source_sha256.json)，修复提交映射见
 [validation_context.json](validation_context.json)。
 
+## 全量执行结果
+
+2026-11-07 01:31:59（北京时间）完成，**60/62 个方法、407/409 个实例通过**，2 个实例失败，0 跳过、0 执行异常。
+11 项安装源码运行前后校验一致；六个修复问题涉及的 8 个方法、10 个实例均通过。
+结果见 [result.json](result.json)，原始报告与完整性检查见
+[functional_results.json](../combo-liulm-0fd5a10-20261106/retests/full_a8dcca84bf_20261106/functional_results.json)和
+[integrity_checks.json](../combo-liulm-0fd5a10-20261106/retests/full_a8dcca84bf_20261106/integrity_checks.json)。
+
+- F6：NPU eager 的 contiguous 不支持 channels_last memory format，失败发生在 torch.compile 之前。
+- F7：provenance 的 cppCodeToPost 映射为空（预期 1 项），Inductor 追溯断言失败，AOTI 未执行。
+
+定时任务已于 2026-11-07 01:35:08 自动发布结果，提交 `a25bfbf3a9`，随后停止。
+以下保留本轮启动及定时配置。
+
 ## 自动执行与定时收尾
 
 使用已有 run_validation.py / run_combo_selected.py 执行，prepare_validation.py 创建独立 phase，
