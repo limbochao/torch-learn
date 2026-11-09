@@ -124,10 +124,17 @@ captures and exported files as sensitive, and load only artifacts you trust.
 Metadata replay uses deterministic random data with seed `0`; override it with
 `TRITON_REPRO_SEED=<integer>` when testing other synthetic values.
 
-Keep normal compile concurrency during discovery. Do not globally set
-`TORCHINDUCTOR_COMPILE_THREADS=1`, `TRITON_DISABLE_CACHE=1`, or
-`TRITON_ALWAYS_COMPILE=1`; those settings change unrelated compilation and
-cache behavior.
+Keep normal compile concurrency during discovery unless an OOM, measured host
+memory pressure, or the user's chosen configuration calls for reducing it.
+In that case, lower compile/precompile threads only for the task process,
+verify which settings this stack reads, and record the original and effective
+values. Prefer targeted `TRITON_TRACE_SERIALIZE=1` for isolating matched
+candidates. Do not globally disable caches or force every kernel to recompile.
+
+For slow compilation, OOM retries, durable monitoring, or a per-candidate
+deadline, read [references/long-compilation.md](references/long-compilation.md).
+The bundled tracer journals candidate starts and outcomes; it does not itself
+enforce a timeout or supervise detached remote jobs.
 
 ## Identify the failed record
 
@@ -254,6 +261,12 @@ outside the capture directory and running the copy. Do not delete the original
 capture unless the user asks.
 
 ## Report the result
+
+Separate candidate outcomes from the final model outcome. An archived compiler
+exception is a replay candidate, but autotune may reject that config and finish
+successfully with another. Report whether the candidate failure actually
+blocks the requested model scenario. Compilation/runtime failure before the
+comparison is not a numerical accuracy failure.
 
 Report:
 

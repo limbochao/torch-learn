@@ -13,6 +13,8 @@
 ## 当前脚本
 
 - [run_torchbench.py](../torchbench.md)：自动准备所选模型的数据，开关 Inductor 和精度测试。
+- [run_torchbench_matrix.sh](../torchbench_matrix.md)：读取模型 CSV，串行运行静态/动态 shape、推理/训练、
+  性能/精度的八种组合，保留逐项日志并生成结果宽表。
 - [pta_case/](pta_case/README.md)：triu 与 quantile 系列 NPU 回归用例，按 PyTorch 版本选择预期 FX 图。
 - [npu_inductor_213_retry/](npu_inductor_213_retry/README.md)：PyTorch 2.13 NPU Inductor 失败与跳过重跑；
   [最新 331 行总表](../../artifacts/npu-inductor-213-retry-20261011/results.csv) 保留上轮结果、重跑处理及最新结果。

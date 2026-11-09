@@ -1,0 +1,70 @@
+<conda-env>/lib/python3.11/site-packages/triton/language/extra/cann/extension/math_ops.py:13: FutureWarning: triton.language.extra.cann.extension.atan2 is deprecated and will be removed in the next release; use triton.language.extra.cann.libdevice.atan2 instead.
+  @_deprecated(replacement="triton.language.extra.cann.libdevice.atan2")
+<conda-env>/lib/python3.11/site-packages/triton/language/extra/cann/extension/math_ops.py:35: FutureWarning: triton.language.extra.cann.extension.isfinited is deprecated and will be removed in the next release; use triton.language.extra.cann.libdevice.isfinited instead.
+  @_deprecated(replacement="triton.language.extra.cann.libdevice.isfinited")
+<conda-env>/lib/python3.11/site-packages/triton/language/extra/cann/extension/math_ops.py:49: FutureWarning: triton.language.extra.cann.extension.finitef is deprecated and will be removed in the next release; use triton.language.extra.cann.libdevice.finitef instead.
+  @_deprecated(replacement="triton.language.extra.cann.libdevice.finitef")
+PARENT_SOURCE <validation>/branch_parent/torch_npu/_inductor/codegen/npu_combined_scheduling.py 51e25a348d4f72c14265aa981c41454f9ac8037a2b1a19c829f1aa1e3a3064c5
+torch=2.13.0+cpu cuda=None device=npu dynamic=True
+input shape=(2, 16, 224, 224) stride=(802816, 50176, 224, 1) dtype=torch.float32
+input shape=(16, 16, 1, 1) stride=(16, 1, 1, 1) dtype=torch.float32
+PASS eager_forward_backward batch=2 height=224
+W1024 16:43:16.972000 <process> site-packages/torch/_inductor/debug.py:545] [0/0] model__0_forward_1 debug trace: <validation>/branch_parent_debug/torch_compile_debug/<trace-run>/torchinductor/model__0_forward_1.0
+Traceback (most recent call last):
+  File "<validation>/run_parent_portable.py", line 12, in <module>
+    runpy.run_path(str(target),run_name="__main__")
+  File "<frozen runpy>", line 291, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "<validation>/06_scheduler_symbolic_groups.py", line 56, in <module>
+    main()
+  File "<validation>/06_scheduler_symbolic_groups.py", line 47, in main
+    actual = compiled(*inputs)
+             ^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1183, in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1048, in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1040, in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1847, in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/compile_fx.py", line 1608, in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2669, in compile_to_module
+    return self._compile_to_module()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2675, in _compile_to_module
+    self.codegen_with_cpp_wrapper() if self.cpp_wrapper else self.codegen()
+                                                             ^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/graph.py", line 2611, in codegen
+    self.scheduler.codegen()
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/scheduler.py", line 9206, in codegen
+    self._codegen_partitions()
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/scheduler.py", line 9354, in _codegen_partitions
+    self._codegen(partition)
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/scheduler.py", line 9508, in _codegen
+    self.get_backend(device).codegen_node(node)
+  File "<validation>/branch_parent/torch_npu/_inductor/codegen/npu_combined_scheduling.py", line 131, in codegen_node
+    return self._nolinear_triton_scheduling.codegen_node(node)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/codegen/simd.py", line 2966, in codegen_node
+    return self._codegen_nodes(nodes, coalesce_analysis)  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/codegen/simd.py", line 2936, in _codegen_nodes
+    node_schedule = self.generate_node_schedule(nodes, numel, rnumel)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<validation>/branch_parent/torch_npu/_inductor/codegen/scheduling.py", line 163, in generate_node_schedule
+    return super().generate_node_schedule(nodes, numel, rnumel)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<conda-env>/lib/python3.11/site-packages/torch/_inductor/codegen/simd.py", line 2266, in generate_node_schedule
+    raise NotImplementedError(
+torch._inductor.exc.InductorError: NotImplementedError: unexpected group: (s14*s4, (((s43 - 1)//32))**2 + 2*(((s43 - 1)//32)) + 1) != (s14*s4*(((s43 - 1)//32))**2 + 2*s14*s4*(((s43 - 1)//32)) + s14*s4, 1)
+
+Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"
+
+[ERROR] 2026-10-24-16:43:17 (process, Device:0, RankID:-1) ERR99999 UNKNOWN applicaiton exception

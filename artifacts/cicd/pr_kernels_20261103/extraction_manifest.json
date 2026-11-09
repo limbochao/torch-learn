@@ -1,0 +1,335 @@
+[
+  {
+    "case": "pr48545/01_persistent_threshold",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48545",
+    "merge_commit": "1e4bf850bc",
+    "failure_stage": "kernel compile / UB overflow",
+    "note": "Historical Albert static training performance capture; 81 inputs, R=2048, X=4096. PR changes persistent selection on Ascend950, not the ATen formula. This is historical failing DSL, not a fresh capture of the PR parent.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48545/01_persistent_threshold/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/04_load_liveness.py",
+    "eager_sha256": "349523551667dc73f5473c88a8ef059b70f6dc8bfb69c58b9abc63ed942e47f8",
+    "previous_extraction": {
+      "case": "04_load_liveness.py",
+      "kernel": "triton_per_fused_add_native_layer_norm_backwar_14",
+      "original_wrapper_sha256": "3b77c62e371da9acfab1b9169c199671011b4c837e87f692ff2f8ffa86cbe4a6",
+      "original_graph_sha256": "f453562072cf0092ca7af8f06d87838adcb2563fc78af1a66fb5676d5fb713db",
+      "inputs": 81,
+      "bindings": {},
+      "dynamic": false,
+      "extracted_forward_sha256": "9692ccc2ec8a6907e93f457fa5b961367032bf69ff854000778ecec7914c4d23",
+      "delivered_forward_matches_extraction": true,
+      "source_kernel_sha256": "3ab01bd65132a84e14c763ac2b256ad66fb5b108a28615ce753b6df7cb7b5355",
+      "source_kernel_load_count": 81,
+      "source_kernel_store_count": 2,
+      "original_graph": "04_load_liveness_original_graph.txt",
+      "normalized_graph": "04_load_liveness_normalized_graph.txt",
+      "method": "scripts/tools/extract_triton_kernel.py --only-eager; normalize only target Graph fragment first",
+      "input_construction": "standalone torch.empty_strided with original shape/stride/dtype and seeded synthetic data",
+      "normalization": "Prune overwritten placeholders and non-stored intermediate returns; retain 81 real inputs and two final stores.",
+      "model_context": [
+        "AlbertForMaskedLM"
+      ],
+      "historical_layer": "first",
+      "fixed_npu_dsl": "artifacts/cicd/model_fixes_20261020/generated/albert_backward.py",
+      "fixed_npu_dsl_is_same_wrapper": false,
+      "fixed_npu_dsl_note": "Historical comparison artifact; source wrapper and fixed DSL are separate captures."
+    },
+    "kernel": "triton_per_fused_add_native_layer_norm_backwar_14",
+    "capture": "cicd-eager-forward-20261022/04_load_liveness_output.py",
+    "original_wrapper_sha256": "3b77c62e371da9acfab1b9169c199671011b4c837e87f692ff2f8ffa86cbe4a6",
+    "dsl": "artifacts/cicd/pr_kernels_20261103/pr48545/01_persistent_threshold/problem_dsl.py",
+    "dsl_string_sha256": "3ab01bd65132a84e14c763ac2b256ad66fb5b108a28615ce753b6df7cb7b5355"
+  },
+  {
+    "case": "pr48475/02_contiguous_sum",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48475",
+    "merge_commit": "176c9da6eb",
+    "failure_stage": "generated DSL / accuracy",
+    "note": "BERT bias-gradient ATen subgraph; preserve two actual stores. Original DSL flattens the preserved X5 channel axis into the reduction.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48475/02_contiguous_sum/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/02_reduction_axes.py",
+    "eager_sha256": "bf7208fa0cac6a2d8e260980a723f39fe41226bdc8d76d16ecca11980676385e",
+    "previous_extraction": {
+      "case": "02_reduction_axes.py",
+      "kernel": "triton_per_fused_clone_matmul_backward_sum_tra_11",
+      "original_wrapper_sha256": "623aa450e38103dc5d856efb401af8f88014d884a4f8fa5f5f05c219c786c8b1",
+      "original_graph_sha256": "88c956646beb058731c5b2a52b1e63fc9d55d921d3b5a0c7f21df3102054ff76",
+      "inputs": 1,
+      "bindings": {},
+      "dynamic": false,
+      "extracted_forward_sha256": "d5c7dc782ad5cf096e6796f148b66f6576134f8a89be450a1d435e60df2acb78",
+      "delivered_forward_matches_extraction": true,
+      "source_kernel_sha256": "b819d376ec9e22dee7aada10e3c69f6d7cd59378b5c188e9f78992f354f72784",
+      "source_kernel_load_count": 1,
+      "source_kernel_store_count": 2,
+      "original_graph": "02_reduction_axes_original_graph.txt",
+      "normalized_graph": "02_reduction_axes_normalized_graph.txt",
+      "method": "scripts/tools/extract_triton_kernel.py --only-eager; normalize only target Graph fragment first",
+      "input_construction": "standalone torch.empty_strided with original shape/stride/dtype and seeded synthetic data",
+      "normalization": "Prune overwritten placeholder view_295; retain both actual kernel outputs.",
+      "model_context": [
+        "BERT_pytorch"
+      ],
+      "historical_layer": "second",
+      "fixed_npu_dsl": "artifacts/cicd/model_fixes_20261020/generated/bert_bias_gradient.py",
+      "fixed_npu_dsl_is_same_wrapper": false,
+      "fixed_npu_dsl_note": "Historical comparison artifact; source wrapper and fixed DSL are separate captures."
+    },
+    "kernel": "triton_per_fused_clone_matmul_backward_sum_tra_11",
+    "capture": "four_model_matrix_20261020/bert_diagnostics/BERT_pytorch_s_train_acc/BERT_pytorch__0_backward_3.1/output_code.py",
+    "original_wrapper_sha256": "623aa450e38103dc5d856efb401af8f88014d884a4f8fa5f5f05c219c786c8b1",
+    "dsl": "artifacts/cicd/pr_kernels_20261103/pr48475/02_contiguous_sum/problem_dsl.py",
+    "dsl_string_sha256": "b819d376ec9e22dee7aada10e3c69f6d7cd59378b5c188e9f78992f354f72784"
+  },
+  {
+    "case": "pr48475/03_ub_retry_pooling",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48475",
+    "merge_commit": "176c9da6eb",
+    "failure_stage": "kernel compile / UB overflow",
+    "note": "Historical NFNet inference pooling capture. The retry was also validated on the training avg_pool2d_15 kernel; these are different captures of the pooling computation. PR extends candidate search; it does not change this DSL body.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48475/03_ub_retry_pooling/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/05a_tiling_pooling.py",
+    "eager_sha256": "ae148527f89ec40a4705ef61e74cdc214738eefa5e75299a04852c8b89a05deb",
+    "previous_extraction": {
+      "case": "05a_tiling_pooling.py",
+      "kernel": "triton_poi_fused__native_batch_norm_legit_avg_pool2d_convolution_view_21",
+      "original_wrapper_sha256": "b1f242cfeb98097497514d0b73bc3227757e4363bf8c36e0cedf56d30b28f5d2",
+      "original_graph_sha256": "7fe828183ef403e89330da48566a5c7de6170283f346aeea4d4406b4cf463de0",
+      "inputs": 1,
+      "bindings": {
+        "s21": 128,
+        "s65": 288
+      },
+      "dynamic": true,
+      "extracted_forward_sha256": "9439f8e1c8b3663c8bf174f3a9c351e086935a9d0b59ffa8a72bc7d20cc8f2ee",
+      "delivered_forward_matches_extraction": true,
+      "source_kernel_sha256": "f4d0c195b168638bc7bc26d4339f3b79960ed3e1d4d598d15360ffc97beef9d3",
+      "source_kernel_load_count": 4,
+      "source_kernel_store_count": 1,
+      "original_graph": "05a_tiling_pooling_original_graph.txt",
+      "normalized_graph": "05a_tiling_pooling_normalized_graph.txt",
+      "method": "scripts/tools/extract_triton_kernel.py --only-eager; normalize only target Graph fragment first",
+      "input_construction": "standalone torch.empty_strided with original shape/stride/dtype and seeded synthetic data",
+      "normalization": "Slice avg_pool2d from overbroad metadata using actual one-input/one-output kernel boundary; default bindings from original wrapper get_args.",
+      "model_context": [
+        "nfnet_l0"
+      ],
+      "historical_layer": "first",
+      "fixed_npu_dsl": "artifacts/cicd/model_fixes_20261020/generated/nfnet_pooling_v4.py",
+      "fixed_npu_dsl_is_same_wrapper": false,
+      "fixed_npu_dsl_note": "Historical comparison artifact; source wrapper and fixed DSL are separate captures."
+    },
+    "kernel": "triton_poi_fused__native_batch_norm_legit_avg_pool2d_convolution_view_21",
+    "capture": "four_model_matrix_20261020/nfnet_diagnostics/NFNet_d_infer_perf/output_code.py",
+    "original_wrapper_sha256": "b1f242cfeb98097497514d0b73bc3227757e4363bf8c36e0cedf56d30b28f5d2",
+    "dsl": "artifacts/cicd/pr_kernels_20261103/pr48475/03_ub_retry_pooling/problem_dsl.py",
+    "dsl_string_sha256": "f4d0c195b168638bc7bc26d4339f3b79960ed3e1d4d598d15360ffc97beef9d3"
+  },
+  {
+    "case": "pr48475/04_ub_retry_softmax",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48475",
+    "merge_commit": "176c9da6eb",
+    "failure_stage": "kernel compile / UB overflow",
+    "note": "Historical Albert dynamic softmax resource case, batch=4, sequence=512. Representative search-pressure input; no claim of a new PR-specific device retry validation.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48475/04_ub_retry_softmax/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/05b_tiling_softmax.py",
+    "eager_sha256": "72aba421d79ccac14e336708508401a85803077526d42a8cd2d272934fc4f8bb",
+    "previous_extraction": {
+      "case": "05b_tiling_softmax.py",
+      "kernel": "triton_per_fused__softmax_all_amax_div_matmul__5",
+      "original_wrapper_sha256": "ee7d933354bcc4b73692b7588822413f427ee153506fff1ba18108c48507a8e4",
+      "original_graph_sha256": "21b7fc998bb2fac239a8bdb96e1fcd73d68933996e36f9710581a9d74ee36257",
+      "inputs": 2,
+      "bindings": {
+        "s87": 4,
+        "s40": 512
+      },
+      "dynamic": true,
+      "extracted_forward_sha256": "2c44ab0ed8dbab0ff3e574ed78f4845192c58660d3dde53395080645006e0f63",
+      "delivered_forward_matches_extraction": true,
+      "source_kernel_sha256": "6f2e3af3b1c4e00bb14ef05488616d7626c60355de2ec89e9f742cfeb7b579b7",
+      "source_kernel_load_count": 2,
+      "source_kernel_store_count": 1,
+      "original_graph": "05b_tiling_softmax_original_graph.txt",
+      "normalized_graph": "05b_tiling_softmax_normalized_graph.txt",
+      "method": "scripts/tools/extract_triton_kernel.py --only-eager; normalize only target Graph fragment first",
+      "input_construction": "standalone torch.empty_strided with original shape/stride/dtype and seeded synthetic data",
+      "normalization": "Restore missing shape nodes via sym_size; drop non-stored max/sum returns; return final probability only; default bindings from original get_args.",
+      "model_context": [
+        "AlbertForMaskedLM"
+      ],
+      "historical_layer": "second",
+      "fixed_npu_dsl": "artifacts/cicd/model_fixes_20261020/generated/albert_softmax_v2.py",
+      "fixed_npu_dsl_is_same_wrapper": false,
+      "fixed_npu_dsl_note": "Historical comparison artifact; source wrapper and fixed DSL are separate captures."
+    },
+    "kernel": "triton_per_fused__softmax_all_amax_div_matmul__5",
+    "capture": "cicd-model-fixes-20261020/albert_dtrain_output.py",
+    "original_wrapper_sha256": "ee7d933354bcc4b73692b7588822413f427ee153506fff1ba18108c48507a8e4",
+    "dsl": "artifacts/cicd/pr_kernels_20261103/pr48475/04_ub_retry_softmax/problem_dsl.py",
+    "dsl_string_sha256": "6f2e3af3b1c4e00bb14ef05488616d7626c60355de2ec89e9f742cfeb7b579b7"
+  },
+  {
+    "case": "pr48475/05_nolinear_fusion",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48475",
+    "merge_commit": "176c9da6eb",
+    "failure_stage": "scheduling / no-linear fallback, before complete DSL",
+    "note": "NFNet-derived training graph; run both shapes and backward with one compiled callable. Numerical success alone does not prove that the fallback and regrouping path ran.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48475/05_nolinear_fusion/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/06_scheduler_symbolic_groups.py",
+    "eager_sha256": "c7af0eabd83ce262f0753041b68f35251c28a0227e3117bb04afafd2c6cf128e",
+    "previous_extraction": {
+      "case": "06_scheduler_symbolic_groups.py",
+      "origin": "scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py",
+      "inputs": 2,
+      "shapes": [
+        [
+          2,
+          16,
+          224,
+          224
+        ],
+        [
+          3,
+          16,
+          256,
+          256
+        ]
+      ],
+      "dynamic": true,
+      "model": "nfnet_l0-derived small graph",
+      "layer": 2,
+      "failed_kernel_dsl": "not generated"
+    },
+    "dsl": null,
+    "dsl_absent_reason": "Failure precedes complete target-kernel DSL; no successful DSL substituted."
+  },
+  {
+    "case": "pr48448/06_reduction_mask",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48448",
+    "merge_commit": "dd35816d26",
+    "failure_stage": "generated DSL / accuracy",
+    "note": "GPT2 embedding/residual/LayerNorm capture representing the shared GPT2/BERT mask defect. Keep the two actual outputs; token IDs are synthetic legal indices.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48448/06_reduction_mask/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/01_reduction_mask.py",
+    "eager_sha256": "9a1ccbb1e3cd9e4554023962582f24369a591f2f928f46054fcdbf1d8dd32789",
+    "previous_extraction": {
+      "case": "01_reduction_mask.py",
+      "kernel": "triton_per_fused_add_addmm_arange_embedding_na_3",
+      "original_wrapper_sha256": "bec24e239a15c72ff29e7bde0d2b81211ded6c9b6b0360e7845e2b3840d1d019",
+      "original_graph_sha256": "e242bfc0e6b18d33b09b634ff9c0cacc858acbfe933570c31f59ee9d666989f2",
+      "inputs": 7,
+      "bindings": {},
+      "dynamic": false,
+      "extracted_forward_sha256": "0ce8bbe4bbcce5054abf9abb41060bad09c918d8202f7e42d9c1996c15e69fbf",
+      "delivered_forward_matches_extraction": true,
+      "source_kernel_sha256": "a8a5031212b0966a4886ecd7997bb38beab2a64245b4280018aabe782bb1e620",
+      "source_kernel_load_count": 7,
+      "source_kernel_store_count": 2,
+      "original_graph": "01_reduction_mask_original_graph.txt",
+      "normalized_graph": "01_reduction_mask_normalized_graph.txt",
+      "method": "scripts/tools/extract_triton_kernel.py --only-eager; normalize only target Graph fragment first",
+      "input_construction": "standalone torch.empty_strided with original shape/stride/dtype and seeded synthetic data",
+      "normalization": "Representative GPT2 graph for the shared GPT2/BERT mask defect; restore LayerNorm output[0], return actual two stores; iota follows input device.",
+      "model_context": [
+        "GPT2ForSequenceClassification",
+        "BERT_pytorch"
+      ],
+      "historical_layer": "first",
+      "fixed_npu_dsl": "artifacts/cicd/model_fixes_20261020/generated/gpt2_embedding_norm.py",
+      "fixed_npu_dsl_is_same_wrapper": false,
+      "fixed_npu_dsl_note": "Historical comparison artifact; source wrapper and fixed DSL are separate captures."
+    },
+    "kernel": "triton_per_fused_add_addmm_arange_embedding_na_3",
+    "capture": "four_model_matrix_20261020/gpt2_diagnostics/output_code.py",
+    "original_wrapper_sha256": "bec24e239a15c72ff29e7bde0d2b81211ded6c9b6b0360e7845e2b3840d1d019",
+    "dsl": "artifacts/cicd/pr_kernels_20261103/pr48448/06_reduction_mask/problem_dsl.py",
+    "dsl_string_sha256": "a8a5031212b0966a4886ecd7997bb38beab2a64245b4280018aabe782bb1e620"
+  },
+  {
+    "case": "pr48448/07_symbolic_strides",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48448",
+    "merge_commit": "dd35816d26",
+    "failure_stage": "lowering / symbolic Layout proof, before DSL",
+    "note": "Same NFNet-derived training graph as cases 05 and 08; second shape is essential. This is a graph-level reproducer, not a direct Layout helper unit test.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48448/07_symbolic_strides/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/07_layout_symbolic_strides.py",
+    "eager_sha256": "f9385cddaaa977b0524d9cc3a1435e211f579272ab2063d0e08e9a3df8fe9698",
+    "previous_extraction": {
+      "case": "07_layout_symbolic_strides.py",
+      "origin": "scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py",
+      "inputs": 2,
+      "shapes": [
+        [
+          2,
+          16,
+          224,
+          224
+        ],
+        [
+          3,
+          16,
+          256,
+          256
+        ]
+      ],
+      "dynamic": true,
+      "model": "nfnet_l0-derived small graph",
+      "layer": 3,
+      "failed_kernel_dsl": "not generated"
+    },
+    "dsl": null,
+    "dsl_absent_reason": "Failure precedes complete target-kernel DSL; no successful DSL substituted."
+  },
+  {
+    "case": "pr48448/08_range_split",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48448",
+    "merge_commit": "dd35816d26",
+    "failure_stage": "range compatibility / codegen preparation, before complete DSL",
+    "note": "Same NFNet-derived training graph as cases 05 and 07. A successful graph may hide a rejected candidate; inspect CantSplit handling separately.",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48448/08_range_split/eager_compile.py",
+    "eager_source": "scripts/repro/cicd/model_fixes_eager_20261022/08_codegen_range_split.py",
+    "eager_sha256": "3bcf8e6868f00d61e4aa60e9bca8dfc216dffd4981325b000ae9c508764660d5",
+    "previous_extraction": {
+      "case": "08_codegen_range_split.py",
+      "origin": "scripts/repro/cicd/model_fixes_20261020/symbolic_group_training.py",
+      "inputs": 2,
+      "shapes": [
+        [
+          2,
+          16,
+          224,
+          224
+        ],
+        [
+          3,
+          16,
+          256,
+          256
+        ]
+      ],
+      "dynamic": true,
+      "model": "nfnet_l0-derived small graph",
+      "layer": 4,
+      "failed_kernel_dsl": "not generated"
+    },
+    "dsl": null,
+    "dsl_absent_reason": "Failure precedes complete target-kernel DSL; no successful DSL substituted."
+  },
+  {
+    "case": "pr48448/09_split_with_sizes_mask",
+    "pr": "https://gitcode.com/Ascend/pytorch/pull/48448",
+    "merge_commit": "dd35816d26",
+    "failure_stage": "generated DSL / accuracy",
+    "kernel": "triton_per_fused_split_with_sizes_sum_0",
+    "capture": "artifacts/npu-inductor-boundary-20261028/pr48448-split-with-sizes/before/output_code.py",
+    "original_wrapper_sha256": "c21c909eeac668eb16ec257968ef22982fdf38a3521dbd0cef935ba46ac80742",
+    "dsl_string_sha256": "46c48ca300360ef02be5b5c167e125d187febf0590c0751d6cf9d8bc845e5678",
+    "eager": "scripts/repro/cicd/pr_kernels_20261103/pr48448/09_split_with_sizes_mask/eager_compile.py",
+    "eager_sha256": "623cb6f227fd028c893c0eb27b6c2b48004cbf9fbd62bed6242277b744c2a8fc",
+    "dsl": "artifacts/cicd/pr_kernels_20261103/pr48448/09_split_with_sizes_mask/problem_dsl.py",
+    "input_source": "seed=0 synthetic float32[32]; CPU int64 sizes=[7,16,9]",
+    "normalization": "Retain original test forward including tolist and the Python scalar output; metadata lacks getitem and scalar producers.",
+    "historical_validation": "See artifacts/npu-inductor-boundary-20261028/pr48448-split-with-sizes/summary.json"
+  }
+]

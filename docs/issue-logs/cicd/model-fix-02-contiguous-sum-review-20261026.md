@@ -305,8 +305,35 @@ flowchart TD
 
 表中均省略 `BLOCK_SUB`。这一变化让 P 在归约体内外保持同一约定。
 对主例旧版误判非相邻时，kernel 的包装函数原本不采用这个 P；
-现在进入相邻路径后会采用，因此这个 helper 的前后一致性也必须处理。
+现在进入相邻路径后会采用，C 保持这个 helper 在体内外返回同一套打包尺寸。
 新范围外仍执行原有的尺寸文本过滤。
+
+把旧过滤语句代入具体返回值，就能看清问题。下面保留尺寸符号，避免把符号名和尺寸数值混淆：
+
+```python
+# 归约体内，旧函数能够正确识别 r 槽位
+dense_size_list = ["R2BLOCK_SUB", "R3BLOCK_SUB", "X5BLOCK_SUB"]
+dense_reduction_list = ["R3BLOCK_SUB", "R2BLOCK_SUB"]
+# 过滤后：["X5BLOCK_SUB"]
+# 再追加归约乘积：["X5BLOCK_SUB", "R3BLOCK_SUB * R2BLOCK_SUB"]
+
+# 退出归约体后，完整列表中的 r 槽位被 dense_size_list() 写成 "1"
+dense_size_list = ["1", "1", "X5BLOCK_SUB"]
+dense_reduction_list = ["R3BLOCK_SUB", "R2BLOCK_SUB"]
+# "1" 不在 dense_reduction_list 中，所以旧代码会把两个 "1" 都留下
+# 再追加归约乘积：["1", "1", "X5BLOCK_SUB", "R3BLOCK_SUB * R2BLOCK_SUB"]
+```
+
+代入 `[R2,R3,X5]=[2,2,3]`，目标 P 应为 `[3,4]`，旧的体外返回却是 `[1,1,3,4]`。
+元素总数虽一样，rank 已从 2 变成 4：r 的占位槽被错误当成额外保留维。
+新代码看轴名，知道这两个 `"1"` 仍属于 r，过滤后返回正确的 P `[3,4]`。
+这里修正的是打包尺寸 helper，不是把最终求和结果 Q `[1,1,3]` 改成 `[3,4]`。
+
+**C 不是 BERT 原始错误的核心触发点。** 归约体内它的新旧返回相同；
+让原先错误 flatten 改为按 channel 求和的是 B：相邻判定改变后，启用已有的 permute、打包和 dim 路径。
+C 的独立反例是体外 helper 返回不一致，当前证据来自直接调用 helper 的源码测试，
+尚没有新分支 BERT 设备 trace 证明它在该场景的某个实际体外调用点造成错误。
+因此不应把 C 描述为“已经证明 BERT 数值修复必须依赖的修改”。
 
 ### D：计算 rank 以 golden 的保留轴数加一个合并 r 轴为准
 
@@ -330,6 +357,12 @@ flowchart TD
 这同时保证计算尺寸、rank 和结果恢复依赖同一份参考轴集合。
 目标范围外仍保留旧的 tiling_axis 或一维逻辑。
 
+但本例 golden 与 tiling_axis 的长度都是 3，因此新旧两个计数公式都得到 2。
+即使不添加 D，只保留 B，原来的 `is_contiguous_reduction()` 分支也会返回 rank=2。
+所以主例 rank 从 1 变成 2，主要来自 B 让相邻判断从 False 变为 True，
+不是换用 golden 计数本身带来了不同数值。
+D 的作用是统一计数依据；当前证据没有证明它在本例中是不可省略的独立修复。
+
 ### 哪些旧函数没有修改，但现在返回值改变了
 
 下列函数的实现保持基线代码；它们消费 B 的 True、C 的 P 和 D 的 rank：
@@ -341,7 +374,7 @@ flowchart TD
 | kernel `dense_size_list()` | 当前计算布局元数据 | `[R2,R3,X5]` | `[X5,R3 * R2]` | B 使其选用 P |
 | `dense_size_str()` | 可写入 DSL 的尺寸字符串 | `"[R2* R3* X5]"` | `"[X5, R3 * R2]"` | B 使其选用相邻分支 |
 | `analyze_reduction_dim()` / `reduction_dim()` | 在计算布局上选归约维 | `0` | `1` | B 使原有分支返回非 r 轴数量 |
-| `triton_tensor_ndim()` | 计算布局 rank | `1` | `2` | D |
+| `triton_tensor_ndim()` | 计算布局 rank | `1` | `2` | B 已能改变主例结果；D 统一到 golden 计数 |
 
 表中省略 `BLOCK_SUB`。P 的乘积文本 `R3 * R2` 沿用旧 helper 的返回顺序，
 不意味着把逻辑元素按 r3/r2 重新交换。
@@ -390,6 +423,27 @@ flowchart TD
 
 ### F：广播条件和生成语句都使用完整 rank
 
+F 的 if 及 broadcast 调用写在共享路径上，但 E 中已经按 `use_contiguous_sum_layout` 选择参数。
+“所有归约都执行到这段 Python”不等于“所有归约都改变广播行为”。新范围为 False 时：
+
+```python
+broadcast_shape = value_shape
+broadcast_size_str = dense_size_str
+# value_shape 是前面 tuple(self.dense_size_list()) 的结果，二者长度一致。
+```
+
+因此 F 在非目标范围内可代回旧代码：
+
+| 项目 | 旧代码 | 新代码在 flag=False 时 |
+| --- | --- | --- |
+| 是否广播 | `len(axis_list) < len(self.dense_size_list())` | `len(axis_list) < len(value_shape)`，比较的长度相同 |
+| DSL 的广播目标 | dense_size_str | broadcast_size_str 等于 dense_size_str |
+| 广播结果 CSE shape | value_shape | broadcast_shape 等于 value_shape |
+
+只有 flag=True 的目标 sum 才改用完整 F。这个范围仍包括原来已正确判相邻的多轴 sum，
+而不仅是 BERT 原来误判的 kernel。局部检查中 576 组非目标生成结果不变，
+是这种条件隔离的支持证据；目标分支的缺轴广播及 mask 仍需设备验证，不能由参数隔离推定无回归。
+
 ```diff
 @@ -4123,13 +4163,13 @@ class NPUIndexTritonKernel(TritonKernel):
                  if str(axis) in str(index) and (axis not in axis_list):
@@ -411,7 +465,41 @@ flowchart TD
 ```
 
 沿用原有 axis_list 收集方法，只把比较基准从计算布局 rank 换成广播布局 rank。
-例如缺少两个归约维的输入 `v.shape=[1,1,X5]`，应先广播为 F，再重排为 P：
+问题发生在 permute、reshape **之前**：输入仍按原来的 `[r2,r3,x5]` 槽位排列，
+其中缺少的轴需要先复制补齐。此时 P 尚未生成，不能用 P 作为 broadcast 的目标。
+
+例如完整 tile 是 `[2,2,3]`，但一个参与求和的值仅依赖 x5：
+
+```text
+v.shape = [1,1,3]
+v[0,0,:] = [1,10,100]
+
+要补成的完整 tile F：
+full[0,0,:] = [1,10,100]
+full[0,1,:] = [1,10,100]
+full[1,0,:] = [1,10,100]
+full[1,1,:] = [1,10,100]
+
+之后重排并打包为 P：
+[[  1,   1,   1,   1],
+ [ 10,  10,  10,  10],
+ [100, 100, 100, 100]]
+
+沿 dim=1 求和：[4,40,400]
+```
+
+先只看 F 中生成语句的修改，假设已经应用 B、进入相邻归约路径，但保留旧广播代码。
+此时 dense_size_str 已是 P `[3,4]`，旧代码将要求：
+
+```python
+# 错误目标：v 还处于 [r2,r3,x5] 槽位，P 却已是 [x5,合并r]
+tl.broadcast_to(v, [3, 4])  # v 的 shape 是 [1,1,3]
+```
+
+broadcast 只按已有槽位扩展长度为 1 的维度，不负责交换轴、合并轴或把 3 个 channel 重新分行。
+`[1,1,3]` 不能直接广播成 `[3,4]`；即使先去掉前导 1，末维 3 也不能按广播规则变成 4。
+旧基线在主例被判非相邻时会使用 flatten 目标 `[12]`，同样无法正确广播这个缺轴输入。
+新版 E/F 让目标回到 F，先进行合法的 `[1,1,3] → [2,2,3]` 扩展：
 
 ```python
 # 新规则生成的结构示意，省略 mask 与临时变量编号
@@ -419,13 +507,25 @@ full = tl.broadcast_to(v, [R2BLOCK_SUB, R3BLOCK_SUB, X5BLOCK_SUB])
 packed = tl.reshape(full.permute([2, 0, 1]), [X5BLOCK_SUB, R3BLOCK_SUB * R2BLOCK_SUB])
 ```
 
-若只修 B，目标主路径的 `self.dense_size_list()` 已变为 P，
-旧代码就会尝试直接向 P 广播；输入仍处于 F 槽位中，rank 和轴语义不能对应。
-因此 E、F 是相邻判定变更之后必须保持的布局一致性。
+再看 F 中 if 条件为什么一起改。假设 B 已启用相邻路径，旧比较基准是 P 的 rank=2；
+但广播前需要补齐的是 F 的 rank=3。单独代入这条 if：
 
-当输入本身已完整含有三个轴时，这里不新增广播。
-axis_list 仍由当前 kernel 的 load/store indexing 收集，不是对每个输入做全新的语义分析；
-本次没有证明所有复杂融合输入都已覆盖，需要真实 lowering 和 NPU 测试继续确认。
+| axis_list 长度 | 旧条件 `< 2` | 新条件 `< 3` | 区别 |
+| --- | --- | --- | --- |
+| 1 | True | True | 都尝试广播，但生成语句必须用 F |
+| 2 | False | True | 旧条件可能漏掉尚未补齐第三槽位的情况 |
+| 3 | False | False | 都不因这个条件新增广播 |
+
+例如输入槽位形状 `[2,1,3]`，若 axis_list 收集到 `[r2,x5]`，旧条件会跳过广播，
+但 6 个元素不能直接 reshape 成 P `[3,4]` 的 12 个元素。
+新条件会先把缺少的 r3 维广播补齐，再执行重排和打包。
+
+上述数值是说明旧语句和条件缺陷的构造例，不是从新分支 BERT 捕获的 trace。
+axis_list 实际由整个当前 kernel 的 load/store indexing 收集，可能包含其他值或外层轴；
+它不等于逐个读取 `v.shape`。这次保留了这种收集方式，
+所以新条件只是让比较基准对应广播前的完整布局，不能据此宣称所有缺轴检测都已完善。
+对历史 BERT 中已经完整加载的 `[r2,r3,x5]` 值，F 不是修正错误求和的关键入口；
+它补齐的是目标范围内其他缺轴输入场景的生成规则。
 
 <a id="flow-4"></a>
 

@@ -32,6 +32,28 @@ description: Use this skill for PyTorch/torch_npu/Inductor codegen failures, wro
 
 如果是 accuracy issue，必须用同一组输入比较 eager 和 compiled output。
 
+### 1.1 定界责任模块
+
+分别记录报错阶段、根因职责和实际修复入口，不能根据 traceback 最后一层或补丁目录直接判责。
+按当前源码的调用关系核对，不把下面的职责概览当作固定串行调用栈：
+
+| 职责 | 优先收集的证据 |
+| --- | --- |
+| lowering / IR / Layout 符号证明 | 原 ATen 语义、符号表达式、stride/整除条件及化简前后结果 |
+| scheduling / fusion | 节点依赖、group/迭代域、匹配条件、候选接受/拒绝原因 |
+| codegen 范围兼容性检查 | split 输入、失败分支、预期拒绝异常和调用者处理协议 |
+| DSL 生成 | axis analysis、mask、索引、load/store 排布和生成函数 |
+| tiling / autotune 候选生成 | 资源估计、搜索范围、停止条件、合法小 tile 是否被遗漏 |
+| Triton / 设备编译器 | 同一固定候选的直接重放、IR、目标架构、编译选项与最内层错误 |
+
+例如下层报 UB overflow，需继续区分候选确实超容量、Inductor 值生存期过长、
+资源估计/候选搜索不完整，还是下层编译错误；报错本身不能证明其中任何一个根因。
+NPU 侧补丁可能修改社区 Layout 方法，需要同时标注逻辑所属组件和补丁接入位置。
+
+若定界为非 Inductor，给出公共 eager/模型加载阶段的失败证据，或在确认 DSL 语义、输入和配置合法后
+绕过 Inductor 仍复现的下层错误；明确尚未排除的条件。直接重放失败本身不能排除上游生成了错误 DSL，
+也不能仅凭 traceback 出现在 Triton 就认定非 Inductor。
+
 ### 2. 构造或缩小 repro
 
 优先写 standalone script：
@@ -73,6 +95,10 @@ python <torch-learn>/scripts/tools/extract_triton_kernel.py \
 
 需要同时查看 FX 语义时可以增加 `--include-eager`。生成的 `eager_forward(...)` 不会猜测
 FX placeholder 与 Triton pointer 参数的对应关系；涉及 in-place、多输出或别名时，调用者仍需显式构造 eager 输入。
+
+需要单文件 eager 子图用于跨设备重新 codegen 时，使用 `--only-eager` 并核对真实输入/输出边界。
+若可用，按 `inductor-eager-repro-extract` skill 完成 metadata 修正、输入约束和独立运行检查。
+固定配置编译/launch 重放则使用编译捕获流程，不能混为同一类复现。
 
 #### 记录最终 best tiling
 
@@ -163,6 +189,11 @@ hypothesis 应进入 issue log，而不是固化为通用规则。
 - 不要把能 fallback 的路径当作主路径正确性的证据。
 - 如果一个 device 可以 fallback 到另一个 kernel type，另一个不能，优先分析 shared failing path。
 
+GPU 对照先按 ATen 语义、布局和实际输出建立对应，不能要求 GPU 与 NPU 的 fusion、tile 或临时变量一致。
+比较归约的元素集合、保留轴、单位元、mask 和写回范围；资源调度差异单独分析。
+故障发生在 DSL 生成之前时，使用失败 IR/表达式和对应社区源码，注明没有“修复前失败 DSL”。
+NPU 的整网结果不能推定社区 CUDA 是否存在相同缺陷，CUDA 未实测时明确标注。
+
 ### 7. 加 focused instrumentation
 
 每个 instrumentation 只回答一个问题：
@@ -204,6 +235,11 @@ codegen 本身应该是一套通用规则。不要因为当前 case 暴露问题
 - artifact validation：检查 regenerated DSL，确认原始错误行为消失。
 
 最终报告包含 command、result、generated-kernel evidence，以及不能运行的测试和原因。
+
+将模型验证与缺陷修复状态分开：整网 PASS 只证明本次成功路径满足检查。
+若其他修复让历史缺陷不再可达，保留独立复现，标记“未修复、影响被屏蔽、不阻塞当前模型验证”。
+判定已修复仍需目标路径的生成代码/IR 或独立复现证据；一个本来就能拒绝的候选不因整网 PASS 而证明内部逻辑正确。
+模型第一层、第二层表示先后暴露的阻塞；职责模块属于另一维度，独立小图问题不能自动归入模型层级。
 
 ## 输出结构
 

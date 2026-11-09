@@ -441,8 +441,10 @@ atomic、fallback 等限制。性能调研时建议把 scatter/masked store 单�
 - `simt_template`
 - `simd_simt_mix`
 
-这个字段不是 pointwise/reduction 分类，而是后端编译模式。动态 shape 性能分析时，
-最好同时记录 `kernel_category=pointwise` 和 `npu_kernel_type`。
+这个字段描述 codegen 与候选编译模式，和 pointwise/reduction 是不同分类维度；
+其中 `simd_simt_mix` 还要通过 autotune 确认最终编译模式。动态 shape 性能分析时，
+最好同时记录 `kernel_category=pointwise`、`npu_kernel_type` 和 selected config 的 `compile_mode`。
+具体赋值条件与回退路径见 [torch_npu master 的 npu_kernel_type 选择逻辑](torch-npu-master-npu-kernel-type.md)。
 
 ## 后续问题
 

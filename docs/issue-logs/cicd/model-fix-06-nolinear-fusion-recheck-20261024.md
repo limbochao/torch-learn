@@ -14,6 +14,7 @@ published: false
 分支为 `bugfix/inductor-nolinear-fusion-recheck-master-20261024`，
 创建基线为官方 master `dc67771ff2`；PR 目标为 `Ascend/pytorch:master`。
 生产修改集中在 `torch_npu/_inductor/codegen/npu_combined_scheduling.py`。
+设备实测后，测试修正提交为 `6d99e11e9e4fca720aa9941bf5b2268ce9d8d22e`；生产逻辑仍为上述提交。
 
 这里的 no-linear 仍生成 NPU kernel：`NPUNoLinearTritonScheduling` 继承社区 `TritonScheduling`，
 `kernel_type` 为 `NPUTritonKernel`，非 Welford 场景沿用社区的节点调度方法，见[NPU scheduler 源码][npu-scheduling]。
@@ -184,7 +185,8 @@ kernel 1: op59 / producer
 kernel 2: op60 / reduction + op61 / epilogue
 ```
 
-这是基于源码级回归确认的分组结果；实际 NPU kernel、输出精度和性能仍需上机验证。
+这是历史 IR 对应的源码级分组结果。下文新增的 NPU 派生小图实测另有实际拆分、DSL 和数值证据，
+其节点与历史整网 IR 不同；性能尚未测量。
 实现只在原有融合组内部按顺序分段，不重新搜索整个图的融合方案。
 
 ## 每处修改的含义
@@ -366,8 +368,10 @@ python test/_inductor/test_nolinear_fallback_fusion.py -v
 
 设备用例对 stride=32、padding=1 的 3×3 conv 及空间 mean/sigmoid 派生训练图使用两组输入：
 `(2,16,65,65)` 和 `(3,16,97,97)`，NPU float32、连续布局，开启 dynamic compile。
-它强制 index codegen 抛异常，对比 eager/compiled 标量结果和输入梯度，
+它强制 index codegen 抛异常，对比 eager/compiled 逐元素输出和输入梯度，
 并要求实际出现至少一次多段回退，防止测试因未进入目标路径而通过。
+原用例末尾的 `.sum()` 使融合组合变化，设备数值检查通过但没有触发拆分；
+`6d99e11e9e` 删除该求和，并向 backward 显式传入同一随机梯度，修正了覆盖范围。
 
 历史模型派生的[双 shape 小图][training-repro]也保留在本仓库，
 输入为 `(2,16,224,224)`、`(3,16,256,256)`，检查前向和输入/权重梯度：
@@ -378,10 +382,86 @@ python scripts/repro/cicd/model_fixes_eager_20261022/06_scheduler_symbolic_group
 ```
 
 该小图不强制 index 失败，执行成功时需要另外确认实际经过了回退和重新分组，
-才能用于判断本补丁目标路径。两种设备入口在本轮均未上机运行。
+才能用于判断本补丁目标路径。下面记录本次两种设备入口的实际结果。
 
 生产文件与回归文件已通过 `py_compile`、`git diff --check`。
-目前没有 `9fe2e0f635` 对应的 NPU 成功 DSL 或模型整网 PASS 记录。
+
+### 2026-10-24 NPU 实测结果
+
+设备为 Ascend950PR，使用指定的 2.13 conda 环境，在容器工作目录执行。
+实际版本为 torch `2.13.0+cpu`、torch_npu `2.13.0.dev20261019`、Triton `3.6.0`。
+最终测试加载独立副本中的分支 Python 源码：501 个 Python 文件逐一与分支核对一致，
+native 扩展沿用该环境原安装文件，没有重编译 native 库。见[环境与关键文件校验值][npu-environment]。
+
+原安装包与分支基线有差异：只替换 combined scheduler 时，派生小图的第二组 shape
+在卷积 backward lowering 暴露了旧 stride 证明异常；只补 stride 文件后仍有旧 `CantSplit` 接口异常。
+最终验收使用完整分支 Python 基线，不能把这些旧包异常记成本补丁引入的问题。
+
+针对性回归使用 `FAST_RUN_WITH_MAX_TILING_NUM=1`，编译与预编译线程均为 1。
+最终完整测试关闭 FX graph 和 AOTAutograd 缓存；新旧对照也关闭这两类缓存，
+并为未修改版本使用独立的 Inductor 缓存目录，确保重新经过调度。
+
+```bash
+TORCHINDUCTOR_NPU_BACKEND=default FAST_RUN_WITH_MAX_TILING_NUM=1 \
+TORCHINDUCTOR_COMPILE_THREADS=1 TORCHNPU_PRECOMPILE_THREADS=1 \
+TORCHINDUCTOR_FX_GRAPH_CACHE=0 TORCHINDUCTOR_AUTOGRAD_CACHE=0 \
+python test/_inductor/test_nolinear_fallback_fusion.py -v
+```
+
+| 验证 | 实际结果 | 证据 |
+| --- | --- | --- |
+| 完整回归文件 | 11 个测试全部通过，设备用例未跳过 | [测试输出][npu-tests] |
+| 强制回退的 3×3 conv 小图 | 两组 shape 的输出、输入梯度通过，确实出现多段回退 | [分组记录][npu-forced] |
+| 自然回退的 1×1 conv 派生小图 | 两组 shape 的输出、输入梯度、权重梯度全部通过 | [训练输出][npu-training] |
+| 移除本补丁的对照 | 同一 Python 基线，仅 combined scheduler 恢复为 `dc67771ff2`，首组 shape 复现 `unexpected group` | [失败输出][npu-parent] |
+
+派生小图的[输入 IR][npu-ir]在 codegen 前将 `op2`（空间归约）、`op3`（除法和 sigmoid）、
+`op4`（逐元素乘法）融合在一起。回退重新检查后，拆为 `[op2, op3]`、`[op4]`。
+[前向 wrapper 与完整 DSL][npu-forward]实际生成并依次调用
+`triton_red_fused_mean_sigmoid_0` 和 `triton_poi_fused_mul_1`，
+中间结果通过 `buf3` 跨 kernel 传递；[backward 生成代码][npu-backward]也已保留。
+这证明了目标路径实际完成调度、分配、kernel 执行和数值比较，覆盖范围仍限于这些小图。
+
+归档产物移除了个人路径、进程号、trace run ID、完整 backend hash 等环境信息，未重排 generated DSL。
+
+### 仅含 no-linear 修复时，NFNet 受 pooling 编译问题阻塞
+
+本次另外执行了 `nfnet_l0` 的 FP32、动态编译、5 步训练精度验证，关闭 ACL graph，
+runner 默认解析 batch size 为 8，使用其原有 `tolerance=0.02`。
+该 runner 的训练比较收集输出、loss、输入梯度、模型梯度和更新后参数；
+本次在 compiled 路径执行前编译失败，尚未完成这些精度比较。
+
+```bash
+python timm_models.py --only nfnet_l0 --accuracy --training --float32 \
+    --backend inductor --npu-backend triton --disable-aclgraph \
+    --dynamic-shapes --iterations 5 --accu-summary --output <output>/benchmark.csv
+```
+
+单候选尝试在 `triton_poi_fused_avg_pool2d_15` 编译时 UB overflow。
+补充尝试保留每种 `(compile_mode, multibuffer)` 组合的最后一个候选：
+该 pooling kernel 原有 20 个候选，保留下来的两个均为 `XBLOCK=4096`，multibuffer 分别为开、关。
+两者及 VF retry 都报需要 `2,883,584 bits`、可用 `1,769,472 bits`。
+[结果记录][npu-nfnet]中的 CSV 为 `fail_to_run`，虽然 runner 退出码为 0。
+
+这不是一次默认完整 autotune 搜索，也没有证明所有更大候选均失败。
+当前可以确认整网尝试仍停在 pooling kernel 编译，不能宣称 NFNet 整网通过；
+这是本次调度回归之外的阻塞，后续应结合[tiling 资源问题][tiling-issue]单独验证。
+本轮没有性能测量，也没有把动态模式下固定输入的整网运行当作多尺寸切换覆盖。
+
+### 叠加 !48470 的 UB overflow retry
+
+按后续验证要求，在独立源码目录以 `6d99e11e9e` 为基线，叠加
+[!48470][retry-pr] 的 `448cd7439d`，没有把 retry 合入 !48469 的提交。
+实际 Python overlay 的 501 个文件与组合源码逐一一致，native 扩展继续使用原安装文件。
+组合环境中，retry 的 18 个测试与 no-linear 的 11 个测试全部通过，NPU 设备用例未跳过。
+
+整网沿用上一轮保留各 `(compile_mode, multibuffer)` 最后一个候选的验证设置，
+保持 batch 8、FP32、dynamic、5 步训练和原精度阈值。
+pooling 的两个 `XBLOCK=4096` 候选及原 VF 重试失败后，
+retry 实际追加 `XBLOCK=1024、512、256、128`，并成功完成编译，模型继续向后执行。
+前后捕获的 pooling kernel body SHA-256 都为
+`a91135779628b95e3df7201af2c1036745bd0d5ddad393ddda88ca96b4a5ff06`；
+这里改变的是候选 tile 搜索范围。
 
 ## 影响范围和剩余边界
 
@@ -393,8 +473,8 @@ python scripts/repro/cicd/model_fixes_eager_20261022/06_scheduler_symbolic_group
   第一次 index 失败的触发原因仍需独立捕获；本补丁不等于修复该首次异常。
 - 状态恢复只覆盖两类 buffer 移除集合，没有撤销已经输出的 wrapper 代码或所有副作用。
   不能将它概括为“任意阶段异常都能完整回滚”；若 index 在输出 kernel 调用后才失败，需要单独审查。
-- Welford、scan、复杂 reduction 布局、原生设备分配与实际内存复用仍需针对性验证。
-  CPU 分组通过和历史旧方案模型 PASS 都不能替代这些检查。
+- Welford、scan、复杂 reduction 布局和复杂 alias/mutation 的设备内存复用仍需针对性验证。
+  本次小图的设备执行、CPU 元数据检查和历史旧方案模型 PASS 都不能替代这些检查。
 
 [pr]: https://gitcode.com/Ascend/pytorch/merge_requests/48469
 [issue]: https://gitcode.com/Ascend/pytorch/issues/5625
@@ -407,7 +487,7 @@ python scripts/repro/cicd/model_fixes_eager_20261022/06_scheduler_symbolic_group
   https://gitcode.com/luqichao/pytorch_new/blob/9fe2e0f635/torch_npu/_inductor/codegen/_sizevars.py
 [features]:
   https://gitcode.com/luqichao/pytorch_new/blob/9fe2e0f635/torch_npu/_inductor/codegen/npu_kernel_features.py
-[tests]: https://gitcode.com/luqichao/pytorch_new/blob/9fe2e0f635/test/_inductor/test_nolinear_fallback_fusion.py
+[tests]: https://gitcode.com/luqichao/pytorch_new/blob/6d99e11e9e/test/_inductor/test_nolinear_fallback_fusion.py
 [sizevars]: https://github.com/pytorch/pytorch/blob/v2.13.0/torch/_inductor/sizevars.py#L280
 [simd]: https://github.com/pytorch/pytorch/blob/v2.13.0/torch/_inductor/codegen/simd.py#L1995
 [scheduler]: https://github.com/pytorch/pytorch/blob/v2.13.0/torch/_inductor/scheduler.py
@@ -418,3 +498,14 @@ python scripts/repro/cicd/model_fixes_eager_20261022/06_scheduler_symbolic_group
 [cpu-repro]: ../../../scripts/repro/cicd/nolinear_fusion_recheck_20261024/verify_fallback.py
 [cpu-result]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/cpu_source_tests.txt
 [training-repro]: ../../../scripts/repro/cicd/model_fixes_eager_20261022/06_scheduler_symbolic_groups.py
+[npu-environment]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/environment.json
+[npu-tests]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/regression_tests.txt
+[npu-forced]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/forced_fallback.txt
+[npu-training]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/dynamic_training.txt
+[npu-parent]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/parent_control.txt
+[npu-ir]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/input_ir_post_fusion.txt
+[npu-forward]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/forward_output_code.py
+[npu-backward]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/backward_output_code.py
+[npu-nfnet]: ../../../artifacts/cicd/nolinear_fusion_recheck_20261024/npu/nfnet_result.json
+[tiling-issue]: model-fix-05-tiling-resource-20261022.md
+[retry-pr]: https://gitcode.com/Ascend/pytorch/merge_requests/48470

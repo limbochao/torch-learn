@@ -37,6 +37,14 @@ title: 学习笔记
       <p>单独记录 liulm 新能力基线的 62 个方法、409 个实例复测情况，并与旧基线结果对照。</p>
     </div>
     <div>
+      <a href="compiler/codegen/torch-npu-master-npu-kernel-type.html">torch_npu master 的 npu_kernel_type 选择逻辑</a>
+      <p>按源码说明四种 type 的适用场景、赋值覆盖、索引回退，以及 autotune 最终编译模式。</p>
+    </div>
+    <div>
+      <a href="compiler/codegen/roadmap/">PyTorch Inductor Codegen 学习路线</a>
+      <p>按八个目标系统学习 Dynamo、FX、Inductor IR、scheduler、backend codegen、dynamic shape 和 Ascend NPU；每章包含源码范围、架构总览和技术点专题。</p>
+    </div>
+    <div>
       <a href="compiler/symbolic-group/inductor-symbolic-group-v2.10.html">torch_npu v2.10.0 Symbolic Group 实现</a>
       <p>仅依据 v2.10.0 线上代码说明准入、代表 shape、candidate plan、autotune 和 dispatch。</p>
     </div>
