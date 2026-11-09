@@ -25,6 +25,8 @@ Skill 内部需要随安装包分发的 bundled scripts 保留在对应 `skills/
 - `tools/cuda_profiler.py`: 将 PyTorch CUDA profiler Chrome Trace JSON 中的 device kernel 记录转换为 CSV。
 - `tools/cuda_op_statistic.py`: 将 CUDA Chrome Trace 聚合为与 NPU `op_statistic.csv` 相同格式的统计表。
 - `tools/download_torch_npu_daily.py`: 从华为云 OBS 查询并下载指定 torch_npu 分支的 PyTorch 日构建包。
+- `tools/download_triton_ascend_daily.py`: 按日期、Python 版本和架构查询并下载 Triton-Ascend 日构建 wheel，
+  支持 OBS 和公开 nightly 索引，来源限制及用法见 `tools/README.md`。
 - `tools/npu_profiler.py`: 采集并解析 torch_npu profiler 结果，详细用法见 `tools/README.md`。
 
 新增或调整脚本时，在对应脚本、同级 `README.md` 或本索引中维护用途、运行命令、输入输出和验证结论。

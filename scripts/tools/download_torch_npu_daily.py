@@ -7,8 +7,9 @@
   ``--list-branches`` 外均为必填。
 * ``--source``：构建来源，可选 ``daily``、``cache``，默认 ``daily``。``daily`` 保留带构建号的
   历史日构建；``cache`` 是按分支滚动更新的最新缓存。
-* ``--build``：日构建号，可选 ``latest`` 或 ``YYYYMMDD.N`` 格式，默认 ``latest``。仅适用于
-  ``--source daily``；``latest`` 会选择包含目标 Python 包的最新构建。
+* ``--build``：可选 ``latest``、日期 ``YYYYMMDD`` 或精确构建号 ``YYYYMMDD.N``，默认 ``latest``。
+  仅适用于 ``--source daily``；``latest`` 选择包含目标 Python 包的最新构建，指定日期则在当天
+  按构建号从大到小查找包含目标 Python 包的构建，无需手动填写 ``.N``。
 * ``--python-version``：目标 Python 版本，支持 ``3.11``、``311``、``python311`` 等写法，默认使用
   当前运行脚本的 Python 主次版本。
 * ``--arch``：目标架构，通常为 ``x86_64`` 或 ``aarch64``，默认使用当前机器架构。``amd64``、``x64``
@@ -189,11 +190,19 @@ def choose_object(objects: Iterable[ObjectInfo], python_tag: str, arch: str | No
 
 
 def resolve_daily(client: ObsClient, branch: str, build: str, python_tag: str) -> tuple[ObjectInfo, str]:
-    if build != "latest" and not BUILD_RE.fullmatch(build):
-        raise BuildError("--build must be 'latest' or have the form YYYYMMDD.N")
-    builds = [build] if build != "latest" else list_builds(client, branch)
+    if build == "latest":
+        builds = list_builds(client, branch)
+    elif re.fullmatch(r"\d{8}", build):
+        builds = [candidate for candidate in list_builds(client, branch) if candidate.startswith(f"{build}.")]
+    elif BUILD_RE.fullmatch(build):
+        builds = [build]
+    else:
+        raise BuildError("--build must be 'latest', YYYYMMDD, or YYYYMMDD.N")
+    selection = f"branch {branch!r}"
+    if build != "latest":
+        selection += f", requested build {build!r}"
     if not builds:
-        raise BuildError(f"no daily builds found for branch {branch!r}")
+        raise BuildError(f"no daily builds found for {selection}")
 
     for candidate in builds:
         prefix = f"pta/Daily/{branch}/{candidate}/"
@@ -201,7 +210,7 @@ def resolve_daily(client: ObsClient, branch: str, build: str, python_tag: str) -
         package = choose_object(objects, python_tag)
         if package is not None:
             return package, candidate
-    raise BuildError(f"no Python {python_tag[0]}.{python_tag[1:]} package found for branch {branch!r}")
+    raise BuildError(f"no Python {python_tag[0]}.{python_tag[1:]} package found for {selection}")
 
 
 def resolve_cache(client: ObsClient, branch: str, python_tag: str, arch: str) -> tuple[ObjectInfo, None]:
@@ -219,7 +228,11 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("branch", nargs="?", help="torch_npu branch, for example master or v2.7.1")
     parser.add_argument("--source", choices=("daily", "cache"), default="daily")
-    parser.add_argument("--build", default="latest", help="daily build ID (YYYYMMDD.N), default: latest")
+    parser.add_argument(
+        "--build",
+        default="latest",
+        help="daily date (YYYYMMDD, auto-select build number) or build ID (YYYYMMDD.N), default: latest",
+    )
     parser.add_argument(
         "--python-version",
         type=normalize_python_version,

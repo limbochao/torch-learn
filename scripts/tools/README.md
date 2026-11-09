@@ -13,15 +13,71 @@ TorchBench 配套软件安装使用 [torchbench_setup.py](../torchbench.md)，�
 python scripts/tools/download_torch_npu_daily.py master --python-version 3.11 --resolve-only
 ```
 
-指定历史构建，或下载滚动更新的分支缓存：
+指定日期时，自动按构建号从大到小查找当天包含目标 Python 包的构建，无需填写 `.N`。
+也可以精确指定构建号，或下载滚动更新的分支缓存：
 
 ```bash
+python scripts/tools/download_torch_npu_daily.py v2.7.1 --build 20260804 --python-version 3.11
 python scripts/tools/download_torch_npu_daily.py v2.7.1 --build 20260804.2 --python-version 3.11
 python scripts/tools/download_torch_npu_daily.py v2.7.1 \
   --source cache --python-version 3.11 --arch x86_64
 ```
 
 使用 `--list-branches` 查看分支，使用 `BRANCH --list-builds N` 查看最近 N 个日构建。
+
+## Triton-Ascend 日构建 wheel
+
+`download_triton_ascend_daily.py` 按 Python 版本、架构和日期下载 wheel，仅使用 Python 标准库。
+需与同目录的 `download_torch_npu_daily.py` 一起保留，以复用 OBS 分页查询和临时文件下载实现。
+Python 版本和架构默认取当前环境，支持与 torch_npu 脚本相同的版本及架构别名。
+下载目录默认为当前目录，可用 `--output-dir` 指定；使用临时文件下载，大小校验通过后才替换目标文件。
+
+共用参数与 torch_npu 脚本保持一致：`--source` 默认 `daily`、`--build` 默认 `latest`，
+并统一使用 `--python-version`、`--arch`、`--output-dir`、`--list-builds N`、`--resolve-only`
+和隐藏的 `--timeout`。Triton 来源没有分支目录，因此不要求 `branch`，也不提供 `--list-branches`；
+额外保留 `--source nightly` 和 `--wheel-url`，精确构建号使用来源实际的完整时间戳。
+
+两种来源明确区分，不自动切换：
+
+- `--source daily`（默认）：用户提供的 `ascend-triton-open` 桶，构建目录为 14 位时间戳。
+  `--build latest` 选择包含目标 wheel 的最新构建，`--build YYYYMMDD` 在当天从新到旧查找，
+  也支持完整时间戳。自动查询需要匿名列目录权限。
+- `--source nightly`：华为云公开的 [nightly 索引](https://mirrors.huaweicloud.com/ascend/repos/pypi/nightly/triton-ascend/)，
+  按索引中的文件名选择日期；它与 OBS 时间戳构建是不同的发布来源，可能存在更新延迟。
+
+从公开 nightly 索引自动选择最新包，或指定历史日期：
+
+```bash
+python scripts/tools/download_triton_ascend_daily.py --source nightly --resolve-only
+python scripts/tools/download_triton_ascend_daily.py --source nightly \
+  --build 20261103 --python-version 3.11 --arch aarch64 --output-dir /tmp/triton_wheels
+python scripts/tools/download_triton_ascend_daily.py --source nightly --list-builds 5
+```
+
+按日期自动识别 OBS 时间戳的命令如下；如果桶拒绝列目录，会明确报错：
+
+```bash
+python scripts/tools/download_triton_ascend_daily.py \
+  --build 20261108 --python-version 3.11 --arch x86_64 --resolve-only
+```
+
+已知 OBS 完整链接时，可以跳过列目录。脚本从链接提取时间戳，并校验目标 Python 版本和架构，
+将文件名中的 `+` 编码为 `%2B` 后请求下载：
+
+```bash
+wheel_url='https://ascend-triton-open.obs.cn-north-4.myhuaweicloud.com/triton-ascend/20261108223337/'
+wheel_url+='triton_ascend-3.6.0%2Bdev20261108223337-cp311-cp311-'
+wheel_url+='manylinux_2_27_x86_64.manylinux_2_34_x86_64.whl'
+python scripts/tools/download_triton_ascend_daily.py --python-version 3.11 --arch x86_64 \
+  --wheel-url "$wheel_url"
+```
+
+2026-11-09 本地查询：OBS 对象可以直接读取，但 V1/V2 列目录接口均返回 `403 AccessDenied`，
+目前无法仅凭日期自动发现该桶的时间戳。公开 nightly 索引当时最新为 `20261104`，
+能够自动选择对应 Python 版本和架构的 wheel；不能用这个日期推算 OBS 的完整时间戳。
+本地实际下载了 OBS `20261108223337` 的 cp311 x86_64 包（347126877 字节）和 nightly
+自动选中的 `20261104` cp312 x86_64 包（347321894 字节），大小校验、ZIP CRC 和包版本检查均通过。
+同时验证了给定 OBS 链接的 Python 3.10–3.14、aarch64/x86_64 共 10 种组合的 URL 解析和文件信息查询。
 
 ## Triton kernel extraction
 
