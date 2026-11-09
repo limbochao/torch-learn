@@ -90,7 +90,14 @@ python scripts/tools/extract_triton_kernel.py \
   -o /path/to/triton_poi_fused_add_0.py
 ```
 
-输出包括公共导入、Triton DSL、`async_compile.wait(...)`、从 `benchmark_compiled_module` 提取的输入，以及首次调用依赖的局部变量和 launch 语句。输入按变量赋值关系提取，支持 `arg*`、`primals_*`、`where_*` 等从 `call(args)` 解包出的名称。未指定 `-o` 时写到当前目录的 `<kernel_name>.py`。
+输出包括公共导入、Triton DSL、`async_compile.wait(...)`、输入构造，以及首次调用依赖的局部变量和 launch
+语句。输入优先从新版 wrapper 的 `get_args()` 提取，也兼容旧版 `benchmark_compiled_module()`，支持
+`Runner.call` 内的 launch。输入按变量赋值关系提取，支持 `arg*`、`primals_*`、`where_*` 等从 `call(args)`
+解包出的名称；遇到 `arg0_1 = copy_if_misaligned(arg0_1)` 等同名赋值时保留原始输入及后续处理。
+未指定 `-o` 时写到当前目录的 `<kernel_name>.py`。
+
+抽取保留依赖 buffer 的分配语句，不会执行上游 kernel。若 buffer 内容被用作 embedding 等间接索引，需在
+独立用例中补齐上游计算或有效索引数据，避免读取未初始化的内存。
 
 使用 `--include-eager` 可以根据 kernel 前的 `Graph fragment` metadata，在结果文件中额外生成
 `eager_forward(...)`：

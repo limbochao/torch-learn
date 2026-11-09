@@ -387,12 +387,13 @@ def simple_assignments(scope, before_line):
 
 
 def benchmark_assignments(tree):
-    for node in tree.body:
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == "benchmark_compiled_module"
-        ):
-            return simple_assignments(node, float("inf"))
+    for function_name in ("get_args", "benchmark_compiled_module"):
+        for node in tree.body:
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == function_name
+            ):
+                return simple_assignments(node, float("inf"))
     return {}
 
 
@@ -404,29 +405,29 @@ def latest_assignment(assignments, name, before_line):
 def collect_dependencies(launch, local_assignments, benchmark):
     selected_local = {}
     selected_inputs = {}
-    pending = [(name, launch.lineno) for name in loaded_names(launch)]
+    pending = [(name, launch.lineno, False) for name in loaded_names(launch)]
     seen = set()
 
     while pending:
-        name, before_line = pending.pop()
-        if name in seen or name == launch.func.value.id:
+        name, before_line, input_scope = pending.pop()
+        reference = (name, before_line, input_scope)
+        if reference in seen or name == launch.func.value.id:
             continue
-        seen.add(name)
+        seen.add(reference)
 
-        assignment = latest_assignment(local_assignments, name, before_line)
-        if assignment is not None:
-            selected_local[assignment.lineno] = assignment
-            pending.extend(
-                (dependency, assignment.lineno)
-                for dependency in loaded_names(assignment)
-            )
-            continue
+        if input_scope:
+            assignment = latest_assignment(benchmark, name, before_line)
+        else:
+            assignment = latest_assignment(local_assignments, name, before_line)
+            if assignment is None:
+                assignment = latest_assignment(benchmark, name, float("inf"))
+                input_scope = True
 
-        assignment = latest_assignment(benchmark, name, float("inf"))
         if assignment is not None:
-            selected_inputs[assignment.lineno] = assignment
+            selected = selected_inputs if input_scope else selected_local
+            selected[assignment.lineno] = assignment
             pending.extend(
-                (dependency, assignment.lineno)
+                (dependency, assignment.lineno, input_scope)
                 for dependency in loaded_names(assignment)
             )
         elif ARG_NAME.fullmatch(name):
