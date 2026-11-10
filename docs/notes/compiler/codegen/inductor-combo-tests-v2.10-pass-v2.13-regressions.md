@@ -2,193 +2,197 @@
 published: false
 ---
 
-# 2.10 已通过用例在 2.13 Combo 同步分支上的优先验收
+# 2.13 Combo 同步差异修复与失败项复验
 
-优先范围取自 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 中“最新结果”以“通过”开头的行。
-共 60 个独立源方法，均包含在 2.13 的 105 方法清单中。11 行嵌套函数随外层验证，不重复计数。
-当前按调试阶段范围执行：保留已有结果，剩余 foreach 每个源方法最多选择两个实例，
-20 个方法由 184 个实例缩为 34 个。本轮不再执行 foreach 完整参数范围；
-“抽样 PASS”只证明所选实例通过，尚不能声明这 60 个方法全部参数通过。
+优先范围是 2.10 基线表中已通过的 60 个源方法。总清单仍为 105 个源方法、116 行表格，
+嵌套函数不独立计数。foreach 沿用调试阶段每个源方法最多两个参数实例的抽样策略，
+本次只执行此前失败的参数实例，以及取消旧 NPU skip 后的实例，没有全量重跑。
+历史 PASS 保留原验证版本；不能把逐实例合并后的汇总理解为所有方法已在最新 overlay 上复测。
 
-本轮现已结束：105 方法为 44 PASS、54 FAIL、7 SKIP；60 个优先方法为 39 PASS、19 FAIL、2 SKIP，
-其中 14 个 PASS 方法为抽样通过。剩余 foreach 的 20 方法、34 实例全部通过，
-此前 `test_type_promotion` 的设备初始化失败仍保留为 FAIL，未被抽样结果覆盖。
+[当前表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；
+[2.10 基线](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
+[复测脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)。
 
-[2.10 基线表](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
-[2.13 当前表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；
-[自动生成的逐方法对照](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix/baseline-pass-comparison.json)。
-逐方法状态以后者和当前表为准，本文记录源码分析，不固定运行中的统计。
+## 修复范围及实际版本
 
-## 版本与验收口径
+NPU 分支为 `fix/combo-sync-interfaces-v2.13`，基础包提交 `64dc85c99c`，
+保留此前同步接口修复至 `5a5bda0ae3`。本次新增三个独立提交：
 
-2.10 基线为 `a8dcca84bf`，62 个执行方法中 60 PASS、2 FAIL，407/409 个实例通过。
-它使用的是经过 NPU 功能适配的 2.13 用例，不是完全原样的 CUDA 用例。
-[适配脚本](../../../../scripts/tests/combo_kernel_210/adapt_combo_210.py) 明确移除了所选方法的
-`generated_kernel_count`、CUDA `FileCheck` 断言，并将动态 grid 用例改为保留两组动态输入数值比较。
-因此不能从旧表的 PASS 推导“融合数和 CUDA 相同”，也不能只比较方法名就认定测试条件完全一致。
+| 提交 | 问题 | 修改后的行为 |
+| --- | --- | --- |
+| `bf2f56c6e4` | 动态 benchmark 调用已移除的 `size_hint` | 使用 2.13 的 `optimization_hint`，保留动态轴顺序和 unbacked fallback |
+| `257e31bde7` | persistent reduction body 引用了未定义的静态块参数 | 恢复常量 reduction 轴生成 `R*BLOCK_SUB` 的条件 |
+| `bb5e1d0a84` | Combo 回退后输入被重复 `del` | 在普通 kernel 边界重算 `last_usage`，每个输入在最后使用后释放一次 |
 
-2.13 当前环境为 torch `2.13.0+cpu`、torch_npu `2.13.0+git64dc85c`、Triton `3.6.0`，
-叠加 Python 修复 `5a5bda0ae3`，测试快照 `a889082`。
-foreach 已对齐 2.10 功能验证口径；其他文件保留当前测试快照中的断言。
-各阶段使用独立新缓存。安装文件哈希由运行脚本检查，不能仅以包版本字符串判断实际修复版本。
+只覆盖相关 Python 文件，未重新构建 wheel，版本字符串仍显示 `2.13.0+git64dc85c`。
+两批失败项复验先固定使用 `257e31bde7`；结束后才叠加 `bb5e1d0a84` 验证生命周期与环境失败。
+每批都核对安装源码执行前后的哈希；版本不能只看本地 HEAD 或 wheel 字符串。
+测试快照为 `c1ce068`，直接运行原生 `python -m pytest -vs`，不使用自定义插件。
 
-验收同时记录原始 pytest 状态和失败阶段：
+## size_hint 为什么需要改
 
-- 数值未完成、编译或运行崩溃：功能尚未通过。
-- 数值通过、数量或生成代码检查失败：原始状态仍为 FAIL，需要单独核对融合策略和测试适配。
-- SKIP：能力未验证，不能替代 PASS；残留的旧 NPU skip 需要单独处理。
-- 尚未执行：保持待执行，不复用 2.10 的 PASS。
-
-## 优先级一：动态 benchmark 的旧接口未替换
-
-已触发的方法：
-
-- `test_dynamic_shapes_2d_blocking`
-- `test_dynamic_shapes_mutated`
-- `test_dynamic_shapes_persistent_reduction_no_x_dim`
-- `test_dynamic_shapes_2d_blocking_round_robin`
-
-最终在优先范围内共 12 个方法被同一旧接口阻塞，另有 `test_persistent_reduction_no_x_dim`、
-`test_combo_kernel_size_hint_failure`、`test_dynamic_shapes_activations`、`test_dynamic_shapes_reduce`、
-`test_dynamic_shapes_activations_no_autotune`、`test_dynamic_shapes_persistent_reduction_no_x_dim_2`、
-`test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda`、`test_helper_fn_defined`。
-
-调用链是 `benchmark_combo_kernel → generate_combo_kernel_code → codegen_kernel_benchmark →
-kernel_benchmark_extra_args`，最后报：
-
-```text
-AttributeError: 'SizeVarAllocator' object has no attribute 'size_hint'
-```
-
-NPU 源码 `torch_npu/_inductor/codegen/triton_combo_kernel.py::kernel_benchmark_extra_args`
-仍调用 `V.graph.sizevars.size_hint(length, fallback=...)`。
-社区 2.13 对应方法已调用 `optimization_hint()`；`SizeVarAllocator` 的优化提示接口也已更名。
-这是明确的 2.13 接口适配遗漏，不是旧 F11 再次导致中间 buffer 残留 store。
-例如 `test_dynamic_shapes_mutated` 当前在生成 benchmark 时已失败，尚未到达旧 F11 的运行检查。
-
-处理方向是保留 NPU 动态轴参数顺序和实际长度来源，改用 2.13 的优化提示接口。
-修复后仍须验证动态输入和 mutation 数值，不能把越过该 AttributeError 等同于完整修复。
-原始报告见当前证据目录的 `68-`、`70-`、`72-`、`74-` 开头 XML。
-
-## 优先级二：普通回退生成重复的输入释放
-
-重合方法为 `test_combo_kernel_per_config_subkernel_red`。
-输入是两个 shape 为 `(32, 64, 128)` 的 contiguous 张量，dtype 为默认 float32，
-对 `(0, 2)` 两个维度归约，输出各为 64 个元素。
-当前报错发生在生成的 Python wrapper 运行阶段：
+`NPUComboKernel.kernel_benchmark_extra_args()` 根据动态轴长度生成 benchmark 的额外标量参数。
+原代码仍调用：
 
 ```python
-triton_red_fused_sum_0.run(arg0_1, buf0, 64, 4096, stream=raw_stream0)
-del arg0_1
-buf1 = empty_strided_npu((64, ), (1, ), torch.float32)
-triton_red_fused_sum_0.run(arg1_1, buf1, 64, 4096, stream=raw_stream0)
-del arg1_1
-del arg0_1
-del arg1_1
+V.graph.sizevars.size_hint(length, fallback=config.unbacked_symint_fallback)
 ```
 
-这段摘录保留真实语句顺序；省略了输入解包、对齐复制、注释和返回语句。
-第二次 `del arg0_1` 抛出 `UnboundLocalError`，不是数量断言或数值容差问题。
-原始异常见当前证据目录的 `17-test_combo_kernel_per_config_subkernel_red.xml`。
+社区 2.13 的 `SizeVarAllocator` 不再提供该方法，优化提示使用 `optimization_hint()`。
+社区 `ComboKernel.kernel_benchmark_extra_args()` 也已采用新接口。
+因此这是接口适配遗漏，不是 2.13 不支持动态 shape。修改仅替换方法名，
+保留 NPU 收集的动态轴列表、参数顺序、长度表达式和 unbacked fallback，
+没有为优化提示额外加入 shape guard，也没有把估算值写进实际调用的运行时参数。
 
-2.10 的审计记录显示，该方法原本就是 Combo TTIR 校验失败后回退普通 kernel，最终功能 PASS：
-[历史路线证据](../../../../artifacts/combo-liulm-0fd5a10-20261106/retests/full_a8dcca84bf_20261106/audit.test_combo_kernels.test_combo_kernel_per_config_subkernel_red.jsonl)。
-因此不能把 2.10 PASS 解释为该输入的 Combo 主路径已经支持。
+影响范围是动态 benchmark 的代表尺寸选择；实际 launch 仍由原符号参数驱动。
+风险主要在动态和 unbacked 表达式的估算行为，需要以相应用例的编译、执行和数值检查验证。
 
-源码检查发现两层生命周期管理存在交互：
+## persistent reduction 条件是漏移植吗
 
-1. Combo 回退先保存并清空外层 `pending_frees`，逐个调用普通 `codegen_node()`，结束时恢复并释放整个集合。
-2. 2.13 普通非线性回退新增 `_codegen_nolinear_groups()`，按重新分组后的 `last_usage` 逐组释放。
-3. 社区 `WrapperCodeGen.codegen_free()` 对 `InputBuffer` 写出 `FreeLine` 后立即返回，
-   不加入用于可复用 buffer 的 `freed` 集合；再次恢复外层释放集合时不能依赖该集合自动去重。
-
-生成代码已确认重复释放。定向日志也确认 Combo 编译失败后进入普通 kernel 回退，
-两个普通 Index kernel 又分别失败并进入 `_codegen_nolinear_groups()` 的非线性回退。
-结合源码，可定位到组内输入释放后再次恢复外层 `pending_frees` 的清理冲突。
-尚未通过修改清理集合后的复测确认最终修复点；
-不能只删生成代码中的第二个 `del`，也不能粗暴延长所有 buffer 的生命周期。
-两版社区的 InputBuffer 分支相同，当前差异重点在 NPU 2.13 新回退与移植的 Combo 清理流程组合。
-
-该方法在回退前还出现 `R2BLOCK_SUB is not defined`，说明存在更早的 Combo 静态块参数定义问题。
-2.10 历史 Combo 失败为 scalar pointer 写入 block value；当前定向日志也有这类候选失败。
-应分别处理缺失参数定义、候选合法性与回退生命周期，不能把所有异常合并为一个已确认根因。
-
-## 优先级三：功能通过，但融合数量检查与旧基线口径不同
-
-`test_combo_kernel_per_config_subkernel_per` 的 eager/compiled 数值比较已通过，
-失败为 `generated_kernel_count` 预期 1、实际 2。
-2.10 的适配脚本删除了这一数量断言及 CUDA DSL 结构检查，所以旧 PASS 不能证明它也生成 1 个 kernel。
-历史审计只证明走过 linear Combo 路径，未提供该方法最终数量与分区分布：
-[2.10 路线证据](../../../../artifacts/combo-liulm-0fd5a10-20261106/retests/full_a8dcca84bf_20261106/audit.test_combo_kernels.test_combo_kernel_per_config_subkernel_per.jsonl)。
-
-最新定向日志确认 `2 nodes partitioned into [2] groups`，随后 Combo 编译报
-`NameError('R1BLOCK_SUB is not defined')`，再回退两个普通 kernel。
-因此本例实际数量变化来自编译回退，不是上游或 NPU 主动拆为两个分区，也不是虚增计数。
-
-源码对照发现移植时 `codegen_static_numels_sub_kernel()` 的条件从：
+从生成协议看，属于移植时遗漏，找不到能够替代它的参数生成逻辑。
+2.10 的条件是：
 
 ```python
 if tree.is_no_loop_axis or (tree.is_reduction and sub_kernel.persistent_reduction):
 ```
 
-变为：
+移植后仅保留 `tree.is_no_loop_axis`。这两个条件并不等价：persistent reduction 轴未必同时标记
+`is_no_loop_axis`。这类轴不再生成循环，但 body 仍需要静态 reduction 块大小，
+相应 `R1BLOCK_SUB` 或 `R2BLOCK_SUB` 又没有作为 autotune 参数传入，因而出现未定义名称。
+
+此前定向日志已确认 `test_combo_kernel_per_config_subkernel_per` 被分为一个 `[2]` Combo 分区，
+随后因 `R1BLOCK_SUB is not defined` 回退为两个普通 kernel。它不是 NPU 主动收紧融合数量。
+`test_combo_kernel_per_config_subkernel_red` 在回退前也有同类 `R2BLOCK_SUB` 错误。
+[修复前证据](../../../../artifacts/combo-213-baseline-pass-diagnosis-20261110/evidence.json)。
+
+修复恢复第二个条件，仍只对能化简为常量的轴生成定义：unified SIMT 按原规则取 2 的幂，
+其他类型保持实际长度，符号 reduction 轴仍走原有处理。社区 2.13 的同名静态参数生成方法
+也保留 `tree.is_reduction and sub_kernel.persistent_reduction` 分支；NPU 使用自己的轴命名，
+对齐的是生成协议，而不是逐字复制 CUDA DSL。
+
+实际重生成的 `test_combo_kernel_per_config_subkernel_per` wrapper 只包含一次 `async_compile.triton`，
+两个子 kernel body 分别有 `R1BLOCK_SUB: tl.constexpr = 64` 和 `= 512`。
+这直接证明静态参数定义和单个 Combo 主路径已恢复，不是仅凭放宽数量断言获得 PASS。
+
+恢复该条件本身不增加 kernel 或额外计算；它使本应可编译的候选不再因缺少参数而退出。
+融合及 tiling 选择可能随候选恢复而变化，功能复验不能替代独立的性能测量。
+
+## 为什么还需要修复重复释放
+
+恢复静态参数后，`test_combo_kernel_per_config_subkernel_red` 仍报 `UnboundLocalError`。
+它存在另一层独立问题：Combo 不能通过编译校验时会进入普通 kernel 回退；修复前定向日志还记录了
+scalar pointer 与 block value 不匹配的候选失败，
+这类 Combo 候选在 2.10 也曾回退，并不能认为 2.10 PASS 就说明主路径已支持。
+
+2.13 普通非线性回退会按重新分组后的 `last_usage` 释放输入；移植的 Combo 外层却保存整组
+`pending_frees`，逐个生成普通 kernel 后又恢复并释放一次。社区 `WrapperCodeGen.codegen_free()`
+对 `InputBuffer` 直接写出 `FreeLine`，不登记到可复用 buffer 的 `freed` 集合，所以外层无法自动去重：
 
 ```python
-if tree.is_no_loop_axis:
+kernel.run(arg0_1, ...)
+del arg0_1
+kernel.run(arg1_1, ...)
+del arg1_1
+del arg0_1  # 再次释放，触发 UnboundLocalError
 ```
 
-原来的第二个分支为 persistent reduction 轴生成 body 内静态 `R*BLOCK_SUB`。
-当前生成代码继续引用该变量，但这个分支已删除；这与本次日志的未定义变量直接对应。
-属于明确的移植差异，应恢复正确的静态定义规则并验证两种 reduction kernel 类型。
-本次只定位、未修改安装源码，不能宣称修复后已 PASS。
+修复沿用现有非线性分组的生命周期算法：从外层实际还需使用的 buffer 集合开始，
+逆序为普通子 kernel 计算 `last_usage`，考虑 alias 与 mutation 的真实名称；
+再正序仅提交当前子 kernel 的最后使用集合。普通 codegen 负责释放，外层不恢复已消费的集合。
+这不是禁止释放或全局去重，也没有新加回退来掩盖错误。
 
-## 测试适配差异与环境失败
+实际重生成的 reduction 回退 wrapper 中 `del arg0_1`、`del arg1_1` 各只有一次，
+原失败方法的数值比较已通过。该 wrapper 可复用同一定义执行两个普通 kernel launch，
+不能把 `async_compile.triton` 定义数 1 误认为它恢复了单次 Combo launch。
 
-| 重合方法 | 当前证据 | 是否可归因为实现同步遗漏 |
-| --- | --- | --- |
-| `test_combo_kernel_dynamic_shapes_grid_changes` | NPU profiler 返回事件列表；测试按 `traceEvents` 字典读取，直接 TypeError。2.10 已移除该 profiler/grid 检查并保留两组动态输入数值检查 | 测试适配尚未对齐；后续数值和动态 grid 能力仍待验证 |
-| `test_rand_like_deterministic` | Combo=True 实例仍由源码中的“NPU Inductor does not support ComboKernel yet”主动 skip；2.10 适配曾去掉它 | 旧 skip 残留，不能据此判定算子或随机数实现缺失 |
-| `test_type_promotion` | `_foreach_clamp_max` 实例在编译子进程初始化设备时超时，随后 context 为空；其余实例数值检查有通过报告 | 当前是设备初始化失败证据；需重试该实例后才能判断是否另有编译或精度问题 |
+风险集中在共享输入、mutation 和 alias 的生命周期；重算必须保留后续 kernel 仍需使用的输入。
+算法与本分支已有 `_codegen_nolinear_groups()` 以及社区调度器的逆序最后使用分析一致；
+社区 CUDA 没有完全相同的 NPU 两层回退组合，因此是 NPU 调度适配，不是直接搬运上游补丁。
 
-`test_combo_kernel_filter_cpu` 最终也因宽泛的 NPU skip 记为 SKIP；该方法同属 60 个验收项，
-不能将其 SKIP 当作满足基线。
+## 用例适配同步的边界
 
-最终另外两个数量断言失败是 `test_reduce_functions`（要求 kernel 数量不大于 2）和
-`test_combo_kernel_per_config_subkernel_red_per`（预期 1，实际 2），数值检查均已通过，
-尚未对这两个方法单独采集回退日志。`test_reduce_benchmark` 则直接在 benchmark kernel 编译时
-报 `R1BLOCK_SUB is not defined`，与已定位的静态块参数生成问题一致。
+`c1ce068` 取消随机数 Combo=True 和 filter-CPU 用例的旧 NPU skip，并尝试此前跳过的 store-mask 用例。
+动态 grid 用例在 NPU 上仍执行两组输入并比较 eager/compiled 输出，但不按 CUDA 的 `traceEvents`
+及 `args.grid` 结构读取 NPU profiler。与 2.10 基线通过方法对应的数量及 CUDA `FileCheck` 检查，
+仅在非 NPU 后端保留；NPU 数值、mutation 和梯度检查不变。
 
-## 已有五个修复是否被漏带
+这与旧 2.10 功能验证策略一致，功能 PASS 不等于证明融合数、CUDA DSL 或新的分块算法均已支持。
+未重合的新功能用例继续保留原检查；不通过删除断言把能力缺失改成 PASS。
 
-以 `a8dcca84bf` 的有效补丁逐项检查当前 2.13 源码：
+## 复验结果
 
-| 旧修复 | 当前源码检查 | 验证边界 |
-| --- | --- | --- |
-| F10/F12：删除 inplace store 状态 | Combo 聚合 `inplaced_to_remove`，最终 `code.getvalue()` 在 Combo handler 中渲染 | `test_mean` 已 PASS；其他目标以运行表为准 |
-| F11：移除中间 buffer store | Combo 聚合 `removed_buffers` | `test_mutated_benchmark` 已 PASS；动态 mutation 当前被旧 size_hint 接口提前阻塞 |
-| F8：benchmark 尺寸收集副作用 | `generate_node_numel_expr()` 的空名称提前返回仍存在 | 目标用例被旧 size_hint 接口提前阻塞，未验证后续行为 |
-| F4：FloorDiv 无进位拆分 | 两个除法分析 helper 与旧修复的 AST 一致；mask 过滤为后续主动恢复 | pooling 的 Combo=False/True 已在本轮 2/2 PASS |
-| F5：值为 1 的常量 metadata | 普通 Index 和 Combo 的 `equal_1_arg_indices` 登记均存在 | 随机数 Combo=True 仍被测试 skip，需放开适用条件后验证 |
+2026-11-10 在 NPU 环境完成三批定向复验：
 
-因此当前证据不支持“旧五个修复整体没同步”的结论。优先处理确实暴露的 2.13 接口和回退协议差异，
-并将基线功能检查与额外的 CUDA 结构检查分开说明。
+| 批次 | 代码 overlay | 范围 | 方法结果 | 参数实例结果 |
+| --- | --- | --- | --- | --- |
+| 2.10 重合优先批次 | `257e31bde7` | 19 个失败方法及 2 个取消 skip 的方法，仅执行未通过实例 | 17 PASS / 4 FAIL | 17 PASS / 4 FAIL |
+| 其余失败项 | `257e31bde7` | 35 个失败方法及取消 skip 的 store-mask | 1 PASS / 35 FAIL | 1 PASS / 37 FAIL |
+| 生命周期与环境重试 | `bb5e1d0a84` | 4 个重复释放方法、2 个设备异常方法 | 6 PASS | 6 PASS |
 
-## 定向复现与结果更新
+前两批共覆盖 57 个独立方法、59 个不同参数实例；最后追加 6 个已失败实例。
+共 65 次参数实例执行，没有重跑历史 PASS。每批安装的 Inductor Python 源码前后哈希均一致。
+三个阶段使用独立新缓存；最后一批使用物理卡 6、2、3，设备异常未在换卡后复现。
+最初的动态二维 blocking 空句柄错误不能仅凭一次换卡通过就确定底层根因，但不再作为当前稳定失败分析。
 
-在相同 2.13 包和 Python 叠加源码下，使用独立新缓存执行原生 pytest：
+合并后的 105 个方法为 **68 PASS、33 FAIL、4 SKIP**；314 个已选参数实例为
+274 PASS、35 FAIL、5 SKIP。原清单还有 150 个未选择的泛化实例，未把它们记为 SKIP 或 PASS。
+其中 14 个方法仍是此前每方法两个代表实例的抽样 PASS，不能声明全参数通过。
+初始 44 个 PASS 方法没有重跑，本次新增转为 PASS 的方法有 24 个。
 
-```bash
-ASCEND_RT_VISIBLE_DEVICES=<allowed-card> \
-TORCHINDUCTOR_CACHE_DIR=<fresh-cache> INDUCTOR_ASCEND_LOG_LEVEL=DEBUG \
-python -m pytest -vs --tb=short --log-file=<debug-log> --log-file-level=DEBUG \
-  test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_red \
-  test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_per
-```
+2.10 已通过的 60 个优先方法现在是 **59 PASS、1 FAIL、0 SKIP**；
+唯一失败是下一节的 `test_helper_fn_defined`。原先 12 个方法的 `size_hint` 接口异常均已消除，
+其中 11 个通过、1 个进入 cumsum/helper 的后续代码检查。
+随机数 Combo=True、filter-CPU、动态 grid、类型提升、reduction 回退及 store-mask 均已通过相应定向实例。
 
-该定位运行与主任务分开，不覆盖主任务结果，也不修改安装源码。
-2026-11-10 定向执行上述两个原始方法，耗时约 104 秒，均仍 FAIL，安装源码前后哈希一致。
-已确认两个方法都分为 `[2]` 单个 Combo 分区，随后分别出现缺失静态 BLOCK_SUB 的编译异常并回退。
-证据摘要见
-[定向调度与失败证据](../../../../artifacts/combo-213-baseline-pass-diagnosis-20261110/evidence.json)。
-`publish_plain_pytest.py` 每次发布均重新读取 2.10 基线，生成 60 方法状态对照，
-在同一 116 行表格的“当前分析”中标出非 PASS 的优先项，不增加表格列；PASS 项不保留历史失败说明。
+[逐实例与分阶段证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-failure-fixes/)；
+[60 方法对照](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-failure-fixes/baseline-pass-comparison.json)；
+[生成代码：静态 reduction 参数](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-failure-fixes/generated/per-config-persistent-output-code.py)；
+[生成代码：输入释放修复后](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-failure-fixes/generated/red-fallback-output-code.py)。
+
+表格保留 116 行原顺序和原有五列。实例列注明复验提交和数量，PASS 当前分析为“—”。
+逐报告的 `validation` 保留实际代码版本；旧 PASS 与两批 overlay 的结果没有伪装成同一次全量运行。
+
+## 重合项中 cumsum 的特殊差异
+
+`test_helper_fn_defined` 在修复尺寸提示后通过数值比较，但仍失败于 helper 定义数量预期 1、实际 0。
+实际生成 wrapper 调用 `torch.ops.aten.cumsum.default`，没有 `tl.associative_scan` 或相应 helper。
+当前 `lowering.py::_register_npu_inductor_fallbacks` 为非标量 cumsum 注册了 `fallback_cumsum`，
+2.10 基线没有这项覆盖，因此两者的 lowering 路线不同，不能通过重新打印 helper 修复。
+
+上游 NPU 仓库已有 `ac0e1564ca`（port Triton cumsum support to 2.13.0），当前同步分支尚未包含它。
+该提交取消 cumsum 的 fallback/override，并适配 scan 的 mask、shape propagation 和 `_lift_helper` 新接口。
+所以不能说 2.13 上游没有支持；准确说法是当前验证基线尚未包含这项能力提交。
+本轮没有随意移除 helper 断言，也没有把普通 ATen cumsum 的数值正确当作 Combo scan 能力通过。
+
+## 未重合失败的判读
+
+- CUDA TMA descriptor、PDL：NPU 生成器没有对应 CUDA 功能；测试头部模拟 GPU capability，
+  使 CUDA 条件未能准确排除 NPU。当前失败不能作为通用 Combo 数值错误。
+- 独立子 kernel block/default-config、逐子 kernel reduction-hint 和 metadata：
+  NPU 使用 `combo_subkernel_meta`、自身轴名及 grid 协议，未完整实现社区新增的 CUDA 格式约定。
+- sequential autotune、metadata grouping、coordinate descent：测试观察社区 runtime 的日志或行为，
+  NPU 实际使用自己的 runtime。需分别核对功能接入和测试日志目标，不能仅以未出现社区日志认定算错。
+- optimize_mem、disable_ftz、带宽/FLOP metadata：NPU 当前 Combo 元数据没有全部携带社区新增字段，
+  其中训练前向的 optimize_mem 还涉及 benchmark 输入保护，值得进一步核对，不能统称无关字段。
+- profile-bandwidth：`NPUDebugAutotuner` 透传 `with_profiler`，父类 `NPUCostModelAutotuner`
+  不接受该关键字。这是实际 Python 构造接口错误，需单独修复，不能归为仅格式不同。
+- channels_last：用例 eager 的 `contiguous(memory_format=channels_last)` 就失败，未到 Combo 编译。
+- provenance：`cppCodeToPost` 映射没有达到测试预期，需要补追踪接入；不是已确认的数值错误。
+- profiler/grid、Grid1D 和轴名文本断言：部分用例比较 CUDA 生成代码格式；须核对数值断言是否先通过。
+- 峰值内存：阈值收紧与禁用 Combo 的实测峰值未形成预期差距；是否与融合决策、回退或计量有关仍待定位，
+  不能单凭峰值相等断言 NPU 不支持。
+
+
+## 剩余处理优先级
+
+1. 优先补齐重合项需要的 cumsum 能力：先评估合入上游已有 `ac0e1564ca`，而不是删除 helper 断言。
+   当前数值是外部 ATen 路径通过，Triton scan/Combo 覆盖仍未完成。本轮已完成原因定位，未额外搬入整项能力。
+2. 未重合项优先修复 profile-bandwidth 的 `with_profiler` 构造接口错误，这是确定的执行阻塞。
+   provenance 的追踪接入、训练前向 optimize_mem 的语义也值得单独核对。
+3. 独立分块、sequential/grouping autotune、资源/带宽 metadata 属于后续能力对齐，
+   先明确 NPU 对应协议，不能只为通过字符串检查照搬 CUDA 字段。
+4. TMA/PDL 和 CUDA profiler/grid 专用检查应区分后端适用性；
+   channels_last 是 eager 支持问题；峰值内存差异继续保留为待定位的性能/策略问题。
+
+本轮没有性能 benchmark 结论。尺寸接口与静态参数修复不直接增加计算，
+但恢复候选会改变 autotune 或融合选择；生命周期修复也需继续关注共享输入和 mutation 的回归范围。

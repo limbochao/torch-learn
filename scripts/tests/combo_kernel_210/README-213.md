@@ -248,3 +248,12 @@ python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
 `publish_plain_pytest.py --local-artifact <new-artifact> --name <artifact-name>
 --table-name inductor-combo-tests-native-v2.13-sync-64dc85c` 可从本地产物刷新同一 116 行表。
 表格逐项区分本轮复测数及历史结果，保留原有抽样标记；PASS 行不再保留历史失败分析。
+
+本次失败项复验已结束：前两批执行 57 方法、59 个失败或取消 skip 后的实例，
+最后追加 6 个生命周期/环境失败实例，6/6 PASS。合并历史后的方法结果为
+68 PASS、33 FAIL、4 SKIP；2.10 基线已通过的 60 方法为 59 PASS、1 FAIL。
+剩余重合失败是 cumsum fallback 不产生 Triton helper，当前包未含上游 `ac0e1564ca`；
+详细原因与风险见 [同步差异记录](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。
+
+运行脚本后续改为共享待执行队列：每张卡完成一个方法后领取下一个方法，
+不再将未执行的方法固定在某一张卡的长队列后。已经开始的方法继续在原卡执行。
