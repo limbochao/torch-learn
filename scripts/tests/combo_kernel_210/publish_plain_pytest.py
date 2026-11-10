@@ -102,7 +102,7 @@ def main():
         if state.get("foreach_functional"):
             policy = ("foreach 已按 2.10 的 NPU 功能验证口径调整：取消本轮 27 个方法的主动 NPU skip，"
                       "NPU 上不检查 kernel 数量及 foreach 专用生成代码；数值、原地修改、梯度断言保留。"
-                      "其他后端保留原融合检查，其余文件沿用原结果。功能 PASS 不证明 FOREACH 分组融合生效。")
+                      "其他后端保留原融合检查。功能 PASS 不证明 FOREACH 分组融合生效。")
         else:
             policy = ("保留指定目录已有的 NPU 适配和全部原始断言，没有沿用 2.10 foreach 放宽数量检查的修改。"
                       "该目录的 foreach 方法存在主动 NPU skip，原因为“不支持 NPU FOREACH 分组融合”。"
@@ -110,6 +110,7 @@ def main():
         text = (f"# 2.13 ComboKernel 同步分支验证\n\n"
                 f"使用 NPU_A5 的 `pta_213_case` 环境及本地 `sync/combo-kernel-master` 对应包。\n"
                 f"torch_npu：`{state.get('torch_npu', '待获取')}`，提交：`{state.get('torch_npu_git', '待获取')}`。\n"
+                f"NPU Python 修复叠加提交：`{state.get('npu_fix_commit') or '无'}`。\n"
                 f"PyTorch：`{state.get('torch', '待获取')}`，Triton：`{state.get('triton', '待获取')}`。\n"
                 f"测试快照：`{state.get('test_commit', '待获取')}`，目录为 `v2.13.0/inductor_npu`。\n\n"
                 f"状态：`{state['stage']}`；{len(table_rows)} 行表格、{len(selected)} 个独立源方法，"

@@ -95,6 +95,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--devices", required=True)
     parser.add_argument("--test-commit", required=True)
+    parser.add_argument("--npu-fix-commit", help="Python overlay commit applied to the installed NPU package")
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--representatives", action="store_true")
@@ -121,7 +122,8 @@ def main():
     state = {"stage": "collecting", "started": time.time(), "devices": devices,
              "test_root": str(base), "test_commit": args.test_commit, "python": sys.executable,
              "custom_pytest_plugin": False, "methods": len(selected)}
-    state.update(rerun_files=args.rerun_files, foreach_functional=args.foreach_functional)
+    state.update(rerun_files=args.rerun_files, foreach_functional=args.foreach_functional,
+                 npu_fix_commit=args.npu_fix_commit)
     save(output / "status.json", state)
     try:
         import torch
