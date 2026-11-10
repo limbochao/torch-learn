@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -73,7 +74,7 @@ def read_reports(path, nodes):
 
 def write_table(output, jobs):
     with (output / "results.csv").open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.writer(stream)
+        writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(["测试文件", "函数名", "最新结果", "实例结果", "当前分析"])
         for job in jobs:
             reports = job.get("reports", {})
@@ -97,6 +98,8 @@ def main():
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--representatives", action="store_true")
+    parser.add_argument("--reuse", type=Path, help="Reuse verified, completed jobs from this output directory")
+    parser.add_argument("--layout", type=Path, help="Original table row mapping, including nested functions")
     args = parser.parse_args()
     base, output = args.test_root.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -111,6 +114,8 @@ def main():
                           r["name"] == preferred.get(name)), next(r for r in selected if r["file"] == name))
                     for name in sorted({r["file"] for r in selected})]
     save(output / "manifest.json", selected)
+    if args.layout:
+        shutil.copy2(args.layout, output / "table_rows.json")
     state = {"stage": "collecting", "started": time.time(), "devices": devices,
              "test_root": str(base), "test_commit": args.test_commit, "python": sys.executable,
              "custom_pytest_plugin": False, "methods": len(selected)}
@@ -168,10 +173,40 @@ def main():
         save(output / "status.json", state)
         if args.collect_only:
             return
+        if args.reuse:
+            previous = args.reuse.resolve()
+            old_state = json.loads((previous / "status.json").read_text())
+            assert old_state["stage"] == "complete" and old_state["installed_source_unchanged"]
+            assert json.loads((previous / "installed_sha256.json").read_text()) == before
+            for key in ("torch_git", "torch_npu_git", "triton"):
+                assert old_state[key] == state[key], f"Changed environment: {key}"
+            old_jobs = {(j["file"], j["class"], j["name"]): j
+                        for j in json.loads((previous / "jobs.json").read_text())}
+            for job in jobs:
+                old = old_jobs.get((job["file"], job["class"], job["name"]))
+                if old is None:
+                    continue
+                assert (base / job["file"]).read_bytes() == (
+                    Path(old_state["test_root"]) / job["file"]).read_bytes(), "Changed test source"
+                assert set(old["nodes"]) == set(job["nodes"]) == set(old["reports"])
+                assert old["status"] in ("PASS", "FAIL", "SKIP") and old["returncode"] in (0, 1)
+                old_stem = f"{old['index']:02d}-{old['name']}"
+                new_stem = f"{job['index']:02d}-{job['name']}"
+                for extension in (".log", ".xml"):
+                    shutil.copy2(previous / (old_stem + extension), output / (new_stem + extension))
+                index = job["index"]
+                job.update(old, index=index, reused_from=str(previous))
+            state.update(reused_methods=sum("reused_from" in job for job in jobs),
+                         completed=sum("reused_from" in job for job in jobs))
+            save(output / "jobs.json", jobs)
+            save(output / "status.json", state)
+            write_table(output, jobs)
         lock = threading.Lock()
         lanes = {device: [] for device in devices}
         loads = dict.fromkeys(devices, 0)
         for job in sorted(jobs, key=lambda item: len(item["nodes"]), reverse=True):
+            if "reused_from" in job:
+                continue
             device = min(loads, key=loads.get)
             lanes[device].append(job)
             loads[device] += len(job["nodes"]) + 3
