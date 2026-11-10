@@ -1,5 +1,24 @@
 # 2.10 原生 Combo/foreach 用例执行结果
 
+最新 foreach 功能复测完成时间：2026-11-10 16:41:25（北京时间）。
+
+本次仅重跑 27 个 foreach 方法、373 个参数实例；其余 27 个方法保留前次结果。
+foreach 使用 2.10 测试源码，按用户要求采用此前的功能验证口径：
+仅 NPU 不检查 kernel 数量，不修改生产包、不补 FOREACH 能力；
+保留输入、stride、dtype、数值及突变检查。两个 backward 方法的参考计算及梯度断言
+与原 2.13 适配版对齐，确保 allclose 返回 False 会使测试失败。
+
+本轮方法结果：通过 27；
+实例结果：`{'passed': 373}`。安装源码运行前后校验一致。
+合并后的 54 行最新结果：失败 4，通过 50。
+功能 PASS 不代表 foreach 已生成 Combo kernel。
+
+测试提交：`3d9ca5392d6ec9f1d161565ebc14eae8acc03d3b`；
+[本轮证据](../../../../artifacts/combo-native210-foreach-functional-20261110/summary.json)。
+
+以下首轮严格执行与诊断记录保留为历史；文末表格为合并后的最新结果。
+
+<!-- foreach-functional-history -->
 执行时间：2026-11-10 12:07:17 至 2026-11-10 13:39:02（北京时间）。
 
 使用用户指定的 `v2.10.0/test_inductor` 测试目录，保留原始参数、配置、数值及结构断言。
@@ -76,33 +95,33 @@ NPU 的 `NPUComboKernel.horizontal_partition` 另外要求子 kernel 的类型�
 | test_combo_kernels.py | test_round_robin_dispatch | 通过（PASS 1；共 1） | — |
 | test_combo_kernels.py | test_2d_blocking_benchmark | 失败（FAIL 1；共 1） | 定向复测 generated_kernel_count=6，原断言要求 7–8；Combo 已生成且无回退。计数包含 benchmark 候选，最终分区为 1D 单节点及 2D 双节点；不能按该计数直接判定融合未生效 |
 | test_combo_kernels.py | test_persistent_reduction_no_x_dim | 通过（PASS 1；共 1） | — |
-| test_foreach.py | test_single_list | 失败（FAIL 32；共 32） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_single_scalar | 失败（FAIL 16；共 16） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_single_scalar_tensor | 失败（FAIL 16；共 16） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_scheduler_fusion_list | 失败（FAIL 32；共 32） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_scheduler_fusion_scalar | 失败（FAIL 16；共 16） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_broadcasting | 失败（FAIL 16；共 16） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_type_promotion | 失败（FAIL 20；共 20） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_kernel_split_arg_limit_list | 失败（FAIL 16；共 16） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 2 but got 124. / Absolute difference: 122；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_fusion_duplicate_buffer_list | 失败（PASS 9、FAIL 11；共 20） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 2 but got 1. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_non_foreach_producer_list | 失败（FAIL 32；共 32） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_non_foreach_producer_scalar | 失败（FAIL 16；共 16） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_non_foreach_consumer_producer_list | 失败（FAIL 32；共 32） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_non_foreach_consumer_producer_scalar | 失败（FAIL 16；共 16） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_enable_dynamic_shapes_python_wrapper | 失败（FAIL 1；共 1） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_decomp | 失败（FAIL 2；共 2） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_fuse_concat | 失败（FAIL 1；共 1） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 2 but got 6. / Absolute difference: 4；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_2d_blocking | 失败（FAIL 20；共 20） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_2d_blocking_partitioning_elems | 失败（FAIL 20；共 20） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 2 but got 3. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_2d_blocking_partitioning_mixed_sizes | 失败（FAIL 20；共 20） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 3. / Absolute difference: 2；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_reinplacing | 失败（FAIL 4；共 4） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_reinplacing_mut_before | 失败（FAIL 4；共 4） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_reinplacing_mut_after | 失败（FAIL 4；共 4） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 2. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_aliasing | 失败（FAIL 1；共 1） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 4 but got 3. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_2d_block_no_mixed_sizes_no_mask | 失败（FAIL 1；共 1） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 2 but got 3. / Absolute difference: 1；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_2d_block_mixed_sizes_with_mask | 失败（FAIL 1；共 1） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 1 but got 3. / Absolute difference: 2；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_foreach_map_backward_binary | 失败（FAIL 10；共 10） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 5 but got 12. / Absolute difference: 7；kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 5 but got 9. / Absolute difference: 4；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
-| test_foreach.py | test_foreach_map_backward_unary | 失败（FAIL 4；共 4） | kernel 数量断言未满足；AssertionError: Scalars are not equal! / Expected 5 but got 9. / Absolute difference: 4；后端未声明 FOREACH，原生 foreach 分组入口未启用；补能力后的本方法结果尚未复测 |
+| test_foreach.py | test_single_list | 通过（功能复测：PASS 32；共 32） | — |
+| test_foreach.py | test_single_scalar | 通过（功能复测：PASS 16；共 16） | — |
+| test_foreach.py | test_single_scalar_tensor | 通过（功能复测：PASS 16；共 16） | — |
+| test_foreach.py | test_scheduler_fusion_list | 通过（功能复测：PASS 32；共 32） | — |
+| test_foreach.py | test_scheduler_fusion_scalar | 通过（功能复测：PASS 16；共 16） | — |
+| test_foreach.py | test_broadcasting | 通过（功能复测：PASS 16；共 16） | — |
+| test_foreach.py | test_type_promotion | 通过（功能复测：PASS 20；共 20） | — |
+| test_foreach.py | test_kernel_split_arg_limit_list | 通过（功能复测：PASS 16；共 16） | — |
+| test_foreach.py | test_fusion_duplicate_buffer_list | 通过（功能复测：PASS 20；共 20） | — |
+| test_foreach.py | test_non_foreach_producer_list | 通过（功能复测：PASS 32；共 32） | — |
+| test_foreach.py | test_non_foreach_producer_scalar | 通过（功能复测：PASS 16；共 16） | — |
+| test_foreach.py | test_non_foreach_consumer_producer_list | 通过（功能复测：PASS 32；共 32） | — |
+| test_foreach.py | test_non_foreach_consumer_producer_scalar | 通过（功能复测：PASS 16；共 16） | — |
+| test_foreach.py | test_enable_dynamic_shapes_python_wrapper | 通过（功能复测：PASS 1；共 1） | — |
+| test_foreach.py | test_decomp | 通过（功能复测：PASS 2；共 2） | — |
+| test_foreach.py | test_fuse_concat | 通过（功能复测：PASS 1；共 1） | — |
+| test_foreach.py | test_2d_blocking | 通过（功能复测：PASS 20；共 20） | — |
+| test_foreach.py | test_2d_blocking_partitioning_elems | 通过（功能复测：PASS 20；共 20） | — |
+| test_foreach.py | test_2d_blocking_partitioning_mixed_sizes | 通过（功能复测：PASS 20；共 20） | — |
+| test_foreach.py | test_reinplacing | 通过（功能复测：PASS 4；共 4） | — |
+| test_foreach.py | test_reinplacing_mut_before | 通过（功能复测：PASS 4；共 4） | — |
+| test_foreach.py | test_reinplacing_mut_after | 通过（功能复测：PASS 4；共 4） | — |
+| test_foreach.py | test_aliasing | 通过（功能复测：PASS 1；共 1） | — |
+| test_foreach.py | test_2d_block_no_mixed_sizes_no_mask | 通过（功能复测：PASS 1；共 1） | — |
+| test_foreach.py | test_2d_block_mixed_sizes_with_mask | 通过（功能复测：PASS 1；共 1） | — |
+| test_foreach.py | test_foreach_map_backward_binary | 通过（功能复测：PASS 10；共 10） | — |
+| test_foreach.py | test_foreach_map_backward_unary | 通过（功能复测：PASS 4；共 4） | — |
 | test_unbacked_symints.py | test_combo_kernel_size_hint_failure | 通过（PASS 1；共 1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_activations | 通过（PASS 1；共 1） | — |
 | test_combo_kernels.py | test_dynamic_shapes_2d_blocking | 失败（FAIL 1；共 1） | 定向复测 generated_kernel_count=6，原断言要求 7–8；Combo 已生成且无回退。计数包含 benchmark 候选，最终分区为 1D 单节点及 2D 双节点；不能按该计数直接判定融合未生效 |
