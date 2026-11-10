@@ -151,7 +151,7 @@ if tree.is_no_loop_axis:
 | F10/F12：删除 inplace store 状态 | Combo 聚合 `inplaced_to_remove`，最终 `code.getvalue()` 在 Combo handler 中渲染 | `test_mean` 已 PASS；其他目标以运行表为准 |
 | F11：移除中间 buffer store | Combo 聚合 `removed_buffers` | `test_mutated_benchmark` 已 PASS；动态 mutation 当前被旧 size_hint 接口提前阻塞 |
 | F8：benchmark 尺寸收集副作用 | `generate_node_numel_expr()` 的空名称提前返回仍存在 | `test_combo_kernel_size_hint_failure` 尚待执行，不能仅凭代码存在宣布通过 |
-| F4：FloorDiv 无进位拆分 | `_floor_div_terms_do_not_carry`、`analyze_floordiv_expression` 与旧修复的 AST 一致 | 语义 mask 的过滤是后续主动恢复的逻辑，不能简单归类为漏合旧补丁；pooling 仍需实测 |
+| F4：FloorDiv 无进位拆分 | 两个除法分析 helper 与旧修复的 AST 一致；mask 过滤为后续主动恢复 | pooling 的 Combo=False/True 已在本轮 2/2 PASS |
 | F5：值为 1 的常量 metadata | 普通 Index 和 Combo 的 `equal_1_arg_indices` 登记均存在 | 随机数 Combo=True 仍被测试 skip，需放开适用条件后验证 |
 
 因此当前证据不支持“旧五个修复整体没同步”的结论。优先处理确实暴露的 2.13 接口和回退协议差异，
