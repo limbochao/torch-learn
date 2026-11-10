@@ -131,6 +131,12 @@ def main():
                 + environment + policy + "\n\n"
                 "表格中的异常摘要来自 JUnit 报告；尚未逐项定位的错误不能直接据此归因于 ComboKernel。"
                 "PASS 项不保留历史失败分析。\n")
+        preflight_file = artifact / "foreach-preflight.json"
+        if preflight_file.exists():
+            preflight = json.loads(preflight_file.read_text())
+            text += (f"\nforeach 全量前置验证：`{preflight.get('results', [])}`。"
+                     f"两项均通过才恢复完整任务：`{preflight.get('full_run_resumed', False)}`。"
+                     "前置实例不额外计入完整清单统计。\n")
         if layout.exists():
             text += ("\n表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。"
                      "嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。\n"

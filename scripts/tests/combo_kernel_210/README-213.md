@@ -84,6 +84,21 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 包版本仍显示 `2.13.0+git64dc85c`，不能仅凭版本字符串区分本次 Python 修复；结果额外记录叠加提交。
 
 先运行原失败路径和 foreach 数值、梯度代表实例，再启动完整清单。
+用户补充要求 foreach 全量前先验证 1–2 个实例。本轮暂停收集后的调度，使用最新叠加修复和
+独立缓存，先执行普通 `_foreach_abs` 与 `foreach_map(abs)` 反向传播；两项都 PASS 才恢复完整任务。
+前置验证证据为结果目录中的 `foreach-preflight.json`、`foreach-preflight.xml` 和日志，
+这两个前置实例不额外加入完整清单的统计。可直接执行：
+
+```bash
+# 在 pta_213_case 中进入本轮 cases/v2.13.0/inductor_npu 目录
+ASCEND_RT_VISIBLE_DEVICES=6 TORCHINDUCTOR_CACHE_DIR=/path/to/fresh-foreach-cache \
+python -m pytest -vs \
+  test_foreach.py::ForeachTests::test_single_list__foreach_abs \
+  test_foreach.py::ForeachTests::test_foreach_map_backward_unary_foreach_map_abs
+```
+
+本轮两项前置验证均 PASS，耗时约 145 秒，安装源码哈希一致；随后已自动恢复完整任务。
+前置失败时保留日志并分析原因，不能直接放行全部 foreach。
 全新缓存下，普通激活 Combo 与 benchmark 激活用例已通过，确认上述两条接口路径均可执行。
 foreach 的带 mask 用例与 abs 梯度代表实例也已通过数值验证。
 单节点两个实例已在新缓存下通过数值与数量断言：benchmark 关闭为 2、开启为 4；
