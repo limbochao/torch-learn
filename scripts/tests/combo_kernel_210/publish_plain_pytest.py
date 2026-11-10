@@ -25,8 +25,8 @@ def main():
     parser.add_argument("--push", action="store_true")
     parser.add_argument("--stop-timer")
     args = parser.parse_args()
-    if not args.name.replace("-", "").replace("_", "").isalnum():
-        raise ValueError("name must contain only letters, digits, hyphens and underscores")
+    if not args.name.replace("-", "").replace("_", "").replace(".", "").isalnum():
+        raise ValueError("name must contain only letters, digits, dots, hyphens and underscores")
     lock = Path("/home/qc/Repos/Ascend/tmp") / (args.name + ".publish.lock")
     lock.parent.mkdir(parents=True, exist_ok=True)
     with lock.open("w") as stream:
