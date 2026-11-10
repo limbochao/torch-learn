@@ -5,7 +5,7 @@
 `64dc85c99c1398a0bd2355b72cc2851d0688b964`。PyTorch 为 `2.13.0+cpu`，Triton 为 `3.6.0`。
 
 用例源为测试仓库 `v2.13.0/inductor_npu`，完整范围快照提交为 `3f5e543`。
-本次只为 Combo/foreach 补充缺失的 Triton 探测初始化，保留该目录已有的 NPU 适配代码，
+本次只为相关测试文件补充缺失或过晚的 Triton 探测初始化，保留该目录已有的 NPU 适配代码，
 不放宽 kernel 数量、源码或数值断言，不改安装包。
 该目录的 foreach 方法存在主动 NPU skip，理由为不支持 NPU FOREACH 分组融合；
 本轮保留并如实报告 SKIP，不把这些结果计为 PASS。
