@@ -191,7 +191,16 @@ def main():
             if args.representatives:
                 nodes = nodes[:1]
             full_nodes = sorted(nodes)
-            nodes = select_instances(full_nodes, args.max_instances_per_method)
+            if "only_nodes" in row:
+                requested = row["only_nodes"]
+                if not requested or len(requested) != len(set(requested)):
+                    raise RuntimeError(f"Empty or duplicated instance selection: {row['name']}")
+                missing = set(requested) - set(full_nodes)
+                if missing:
+                    raise RuntimeError(f"Selected instances were not collected: {sorted(missing)}")
+                nodes = sorted(requested)
+            else:
+                nodes = select_instances(full_nodes, args.max_instances_per_method)
             job = {**row, "index": index, "nodes": nodes, "status": "PENDING"}
             if nodes != full_nodes:
                 job.update(full_nodes=full_nodes, sample_limit=args.max_instances_per_method)
