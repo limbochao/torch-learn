@@ -4,6 +4,7 @@ import argparse
 import functools
 import json
 from pathlib import Path
+import sys
 import traceback
 
 import torch
@@ -17,6 +18,8 @@ torch.cuda.get_device_capability = lambda *args, **kwargs: (10, 0)
 import torch_npu.testing
 import torch_npu._inductor
 from torch._inductor import config, metrics
+from torch._inductor.codegen.common import BackendFeature
+from torch._inductor.graph import GraphLowering
 from torch._inductor.utils import run_and_get_code
 from torch_npu._inductor.codegen.npu_combined_scheduling import NPUCombinedScheduling
 from torch_npu._inductor.codegen.scheduling import NPUTritonScheduling
@@ -26,6 +29,8 @@ from torch_npu._inductor.codegen.triton_combo_kernel import NPUComboKernel
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--enable-foreach", action="store_true", help="Diagnostic process-local capability control")
+    parser.add_argument("--benchmark-test-root", type=Path, help="Run the two original native 2D benchmark methods")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     torch.npu.set_device(0)
@@ -35,6 +40,21 @@ def main():
     def record(event, **fields):
         events.append({"case": current, "event": event, **fields})
         (args.output / "events.json").write_text(json.dumps(events, indent=2) + "\n")
+
+    before = BackendFeature.FOREACH in NPUTritonScheduling.get_backend_features(torch.device("npu"))
+    if args.enable_foreach:
+        NPUTritonScheduling.backend_features.add(BackendFeature.FOREACH)
+    record("backend_capability", foreach_before=before,
+           foreach_after=BackendFeature.FOREACH in NPUTritonScheduling.get_backend_features(torch.device("npu")))
+    original_has_feature = GraphLowering.has_feature
+
+    def has_feature(self, device, feature):
+        result = original_has_feature(self, device, feature)
+        if feature == BackendFeature.FOREACH:
+            record("foreach_gate", device=str(device), enabled=result)
+        return result
+
+    GraphLowering.has_feature = has_feature
 
     def trace_method(cls, name):
         original = getattr(cls, name)
@@ -86,6 +106,30 @@ def main():
 
     NPUComboKernel.horizontal_partition = staticmethod(partition)
     results = []
+    if args.benchmark_test_root:
+        sys.path.insert(0, str(args.benchmark_test_root.resolve()))
+        import test_combo_kernels
+
+        for cls, method in [
+            (test_combo_kernels.ComboKernelBenchmarkTests, "test_2d_blocking_benchmark"),
+            (test_combo_kernels.ComboKernelDynamicShapesTests, "test_dynamic_shapes_2d_blocking"),
+        ]:
+            current = method
+            test = cls(method)
+            test.setUp()
+            try:
+                getattr(test, method)()
+                result = {"case": current, "result": "passed", "kernel_count": metrics.generated_kernel_count}
+            except Exception:
+                result = {"case": current, "error": traceback.format_exc(),
+                          "kernel_count": metrics.generated_kernel_count}
+            finally:
+                test.tearDown()
+            results.append(result)
+            record("result", **{key: value for key, value in result.items() if key != "case"})
+        (args.output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
+        print(json.dumps(results, indent=2), flush=True)
+        return
     for current, shapes, combo in [
         ("native_abs_mixed_shape", [(10, 10), (20, 20)], False),
         ("native_abs_same_shape", [(10, 10), (10, 10)], False),
