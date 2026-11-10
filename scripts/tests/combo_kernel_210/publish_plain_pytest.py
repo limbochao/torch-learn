@@ -206,7 +206,9 @@ def main():
                         "baseline_result": baseline["最新结果"],
                         "status": matched.get((file, name), {}).get("status", "待收集"),
                         "sampled": bool(matched.get((file, name), {}).get("full_nodes")),
-                        "selected_instances": len(matched.get((file, name), {}).get("nodes", []))}
+                        "selected_instances": len(matched.get((file, name), {}).get("nodes", [])),
+                        "available_instances": len(matched.get((file, name), {}).get(
+                            "full_nodes", matched.get((file, name), {}).get("nodes", [])))}
                        for (file, name), baseline in priority.items()]
             counts = dict(Counter(record["status"] for record in records))
             (artifact / "baseline-pass-comparison.json").write_text(

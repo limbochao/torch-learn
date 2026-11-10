@@ -6,7 +6,9 @@ published: false
 
 优先范围取自 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 中“最新结果”以“通过”开头的行。
 共 60 个独立源方法，均包含在 2.13 的 105 方法清单中。11 行嵌套函数随外层验证，不重复计数。
-本轮完整任务仍在执行，尚不能声明这 60 个方法全部通过。
+当前按调试阶段范围执行：保留已有结果，剩余 foreach 每个源方法最多选择两个实例，
+20 个方法由 184 个实例缩为 34 个。本轮不再执行 foreach 完整参数范围；
+“抽样 PASS”只证明所选实例通过，尚不能声明这 60 个方法全部参数通过。
 
 [2.10 基线表](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
 [2.13 当前表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；
@@ -169,7 +171,7 @@ python -m pytest -vs --tb=short --log-file=<debug-log> --log-file-level=DEBUG \
   test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_per
 ```
 
-该定位运行与完整任务分开，不覆盖完整结果，也不修改安装源码。
+该定位运行与主任务分开，不覆盖主任务结果，也不修改安装源码。
 2026-11-10 定向执行上述两个原始方法，耗时约 104 秒，均仍 FAIL，安装源码前后哈希一致。
 已确认两个方法都分为 `[2]` 单个 Combo 分区，随后分别出现缺失静态 BLOCK_SUB 的编译异常并回退。
 证据摘要见
