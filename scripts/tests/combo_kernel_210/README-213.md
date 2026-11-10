@@ -119,7 +119,7 @@ Python 侧覆盖不改变包版本，旧 FX/代码缓存可能仍被命中，已
 ```
 
 新本地 timer 为 `combo-sync-213-interface-fix-retry1-20261110.timer`，首次 10 分钟后检查，
-随后每 15 分钟检查；测试在 NPU_A5 的物理卡 1、6 执行。
+随后每 15 分钟检查；测试在 NPU_A5 执行，最新分配顺序见下文。
 完成后下载证据、更新同一份 116 行表并推送，停止 timer。手动检查命令：
 
 ```bash
@@ -128,6 +128,32 @@ python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
   --name inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix \
   --table-name inductor-combo-tests-native-v2.13-sync-64dc85c \
   --push --stop-timer combo-sync-213-interface-fix-retry1-20261110.timer
+```
+
+## 运行中调整：先其他文件，最后 foreach
+
+用户要求优先执行其他文件，并立即使用另外两张卡。已冻结原调度器发放任务，
+保留卡 1、6 正在执行的两个 foreach 方法和此前完成的五个方法。
+卡 2、3 单独执行其余文件的 78 个源方法、88 个实例，使用新缓存 `cache-non-foreach-first`。
+正在执行的 foreach 结束后不再接续；其他文件全部结束后，再将剩余 foreach 分到卡 1、2、3、6，
+使用新缓存 `cache-foreach-last`。所有阶段使用相同测试快照和安装源码，不重复计算前置探测。
+
+`reorder_live_run.py` 负责这次运行的交接和聚合，原始结果仍写入同一 `results/`，
+发布脚本、116 行表格和定时任务保持原入口。交接记录是运行根目录的 `handoff.json`，
+原状态备份在 `reorder-checkpoint/`，独立阶段的清单、进程号、命令和日志在 `phases/`。
+当前命令、阶段状态和清单也同步到总结果，随证据发布。
+
+交接前只暂停原调度器父进程，不暂停 pytest 子进程；通过原 JUnit 参数定位正在执行的进程组。
+交接器校验 PID、启动时间、工作目录及安装源码哈希，从仍由原父进程持有的 Linux zombie
+进程读取真实退出状态，再结合 JUnit 判定结果。全部活动任务退出后才终止旧调度器，
+防止旧队列恢复并继续发放 foreach。缺失报告和异常退出仍记为 ERROR。
+
+该交接器用于上述已经准备好的运行目录，不是任意运行的通用恢复命令，不能重复启动。
+在 `pta_213_case` 中进入该运行根目录后，由后台进程执行：
+
+```bash
+python -u reorder_live_run.py \
+  --run-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110
 ```
 
 ## 首次完整范围执行记录（已完成）

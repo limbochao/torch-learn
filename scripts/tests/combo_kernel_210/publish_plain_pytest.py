@@ -137,6 +137,14 @@ def main():
             text += (f"\nforeach 全量前置验证：`{preflight.get('results', [])}`。"
                      f"两项均通过才恢复完整任务：`{preflight.get('full_run_resumed', False)}`。"
                      "前置实例不额外计入完整清单统计。\n")
+        if state.get("execution_order") == "non_foreach_first":
+            text += ("\n执行顺序已调整：卡 1、6 当时正在执行的 foreach 方法继续到结束，"
+                     "卡 2、3 先执行其他文件的 78 个源方法（88 个实例）；"
+                     "这些方法完成后，剩余 foreach 才在卡 1、2、3、6 执行。"
+                     "已完成结果保留，未重跑；各阶段使用独立新缓存。"
+                     f"当前阶段：`{state.get('phase')}`，阶段状态：`{state.get('phase_state')}`。\n")
+            for phase, detail in state.get("phase_runs", {}).items():
+                text += f"\n阶段 `{phase}` 缓存：`{detail['cache_root']}`。\n"
         if layout.exists():
             text += ("\n表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。"
                      "嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。\n"
