@@ -154,7 +154,9 @@ def render_and_publish(args, state, artifact, table_name, terminal):
             status = "ERROR"
         instances = "; ".join(f"{key} {value}" for key, value in sorted(counts.items()))
         if state.get("failed_only_merge") and job.get("rerun_nodes"):
-            instances += f"；本轮复测 {len(job['rerun_nodes'])}，其余沿用历史结果"
+            versions = sorted({reports[node]["validation"]["npu_fix_commit"][:10]
+                               for node in job["rerun_nodes"]})
+            instances += f"；复验 {len(job['rerun_nodes'])}（{', '.join(versions)}），其余沿用历史结果"
         if job.get("full_nodes"):
             instances = (instances or "待执行") + f"；抽样 {len(job['nodes'])}/{len(job['full_nodes'])}"
             if status == "PASS":

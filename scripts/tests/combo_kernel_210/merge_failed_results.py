@@ -26,7 +26,6 @@ def main():
     jobs = json.loads((args.reference / "jobs.json").read_text())
     previous = provenance(args.reference, state)
     for job in jobs:
-        job.pop("rerun_nodes", None)
         execution_keys = ("command", "device", "returncode", "seconds", "started", "finished")
         execution = {key: job.pop(key) for key in execution_keys if key in job}
         if execution:
@@ -35,7 +34,7 @@ def main():
             report.setdefault("validation", previous)
     by_method = {(j["file"], j["class"], j["name"]): j for j in jobs}
     seen = set()
-    rerun_results = []
+    rerun_results = state.get("rerun_results", []).copy()
     fingerprints = []
     for directory in args.rerun:
         current = json.loads((directory / "status.json").read_text())
@@ -53,7 +52,7 @@ def main():
                 assert job["reports"][node]["status"] != "PASS", f"Reran a historical PASS: {node}"
                 seen.add(node)
                 job["reports"][node] = {**copy.deepcopy(report), "validation": source}
-            job["rerun_nodes"] = new["nodes"]
+            job["rerun_nodes"] = sorted(set(job.get("rerun_nodes", [])) | set(new["nodes"]))
             job.setdefault("rerun_history", []).append({**source, "nodes": new["nodes"],
                                                        "command": new["command"], "device": new["device"]})
             statuses = {report["status"] for report in job["reports"].values()}
