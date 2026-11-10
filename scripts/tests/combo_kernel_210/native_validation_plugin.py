@@ -24,7 +24,7 @@ from torch.testing._internal.common_device_type import get_desired_device_type_t
 torch.npu.set_device(0)
 # Upstream is_gpu() excludes the NPU device-test base even when HAS_GPU_AND_TRITON is true.
 if inductor_utils.GPU_TYPE == "npu":
-    npu_requested = any(getattr(base, "device_type", "") == "npu"
+    npu_requested = any(getattr(base, "device_type", "") in ("npu", "privateuse1")
                         for base in get_desired_device_type_test_bases(allow_xpu=True))
     assert npu_requested and torch.npu.is_available() and inductor_utils.HAS_GPU_AND_TRITON
     inductor_utils.RUN_GPU = True
