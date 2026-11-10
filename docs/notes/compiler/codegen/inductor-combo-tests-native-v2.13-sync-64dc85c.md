@@ -6,8 +6,8 @@ NPU Python 修复叠加提交：`5a5bda0ae36a30a865ea52f7cd1df2a5a2ea532c`。
 PyTorch：`2.13.0+cpu`，Triton：`3.6.0`。
 测试快照：`a889082`，目录为 `v2.13.0/inductor_npu`。
 
-状态：`collecting`；116 行表格、105 个独立源方法，待收集 个参数化实例。方法结果：`{}`。
-已报告实例结果：`{}`。
+状态：`testing`；116 行表格、105 个独立源方法，464 个参数化实例。方法结果：`{'PENDING': 100, 'PASS': 3, 'RUNNING': 2}`。
+已报告实例结果：`{'PASS': 99}`。
 
 [用例表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；[执行脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)；[原始证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix/)。
 
