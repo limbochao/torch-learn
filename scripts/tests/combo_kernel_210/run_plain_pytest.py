@@ -245,17 +245,15 @@ def main():
             save(output / "status.json", state)
             write_table(output, jobs)
         lock = threading.Lock()
-        lanes = {device: [] for device in devices}
-        loads = dict.fromkeys(devices, 0)
-        for job in sorted(jobs, key=lambda item: len(item["nodes"]), reverse=True):
-            if "reused_from" in job:
-                continue
-            device = min(loads, key=loads.get)
-            lanes[device].append(job)
-            loads[device] += len(job["nodes"]) + 3
+        pending = iter(sorted((job for job in jobs if "reused_from" not in job),
+                              key=lambda item: len(item["nodes"]), reverse=True))
 
-        def worker(device, assigned):
-            for job in assigned:
+        def worker(device):
+            while True:
+                with lock:
+                    job = next(pending, None)
+                if job is None:
+                    return
                 stem = f"{job['index']:02d}-{job['name']}"
                 env = dict(os.environ, ASCEND_RT_VISIBLE_DEVICES=str(device))
                 xml = output / (stem + ".xml")
@@ -278,7 +276,7 @@ def main():
                 print(f"{device}: {job['name']}: {status} ({len(reports)}/{len(job['nodes'])})", flush=True)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(devices)) as pool:
-            futures = [pool.submit(worker, device, assigned) for device, assigned in lanes.items()]
+            futures = [pool.submit(worker, device) for device in devices]
             for future in futures:
                 future.result()
         after = fingerprint(sources)
