@@ -30,6 +30,54 @@
 表格的实现差异说明沿用原版本对照表，描述 2.13 相对 2.10 的差异；
 本轮执行以指定目录的实际 2.10 实现为准，不补齐这些差异。
 
+## 直接使用 pytest 执行
+
+看护环境使用测试仓库 `ut/210_combo` 分支，至少更新到 `9ac2aaf`。
+`3b93844` 为 foreach 恢复 Triton 探测，`9ac2aaf` 为其余四个测试文件补齐同样的初始化，
+并在 `test_torchinductor.py` 中根据 NPU 可用性和测试设备选择重新判断 `RUN_GPU`，
+使 NPU 的 `GPUTests` 能够生成。本次仅修改初始化，未调整测试断言或生产代码。
+
+这些初始化已放入测试文件，不需要自定义 pytest 插件、`PYTHONPATH` 或 manifest 环境变量。
+进入看护环境实际的 `v2.10.0/test_inductor` 目录即可执行，例如：
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=1 pytest -vs \
+  test_combo_kernels.py::ComboKernelTests::test_activation_functions
+```
+
+如果看护系统已经设置 `ASCEND_RT_VISIBLE_DEVICES`，直接沿用其选卡配置。
+不要求设置 `PYTEST_DISABLE_PLUGIN_AUTOLOAD`、`TORCHINDUCTOR_COMPILE_THREADS` 或 `OMP_NUM_THREADS`，
+也不需要清除看护系统已有的 `PYTEST_ADDOPTS`、`PYTEST_PLUGINS`。
+
+按通过实例 TXT 精确选择用例，在同一目录执行：
+
+```bash
+mapfile -t cases < /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_native_210_passed_nodeids.txt
+ASCEND_RT_VISIBLE_DEVICES=1 pytest -vs "${cases[@]}"
+```
+
+该 TXT 的 397 个实例已在 NPU_A5 上使用原生 pytest 完成收集检查，无缺失。
+收集检查不代表本轮重新执行了全部实例，既有全量结果仍以用例表记录为准。
+
+2026-11-10 在 NPU_A5 日构建包上验证各文件代表用例，未加载自定义插件，仅指定选卡变量：
+
+| 文件 | 代表用例 | 结果 |
+| --- | --- | --- |
+| test_combo_kernels.py | ComboKernelTests.test_activation_functions | PASS |
+| test_torchinductor.py | GPUTests.test_combo_kernel_filter_cpu_npu | PASS |
+| test_foreach.py | ForeachTests.test_single_list__foreach_abs | PASS |
+| test_unbacked_symints.py | TestUnbackedSymintsPRIVATEUSE1.test_combo_kernel_size_hint_failure_npu | PASS（另经独立进程执行确认） |
+| test_provenance_tracing.py | TestProvenanceTracingArtifact.test_triton_kernel_to_post_grad_tracing_combo_kernel | FAIL（原有 provenance 问题） |
+
+以上代表用例均已进入执行，没有被跳过。provenance 失败仍为生成的
+`inductor_provenance_tracking_node_mappings.json` 中 `cppCodeToPost` 为空，
+期望的一条 kernel-to-post-grad 映射缺失，报 `0 != 1`，与此前全量表中的问题一致。
+初始化生效不表示该功能问题已经修复。
+
+用户收窄为每个文件一个之前，已启动的额外 Combo benchmark、动态形状及
+`test_torchinductor.py` 实例也已完成并通过。本次没有重新执行全量用例。
+日志与 JUnit XML 保存在 NPU_A5 工作目录的 `direct-pytest-native210-init-20261110/` 下。
+
 ## 与此前 2.13 适配版的范围变化
 
 此前 62 个方法中有以下 8 个在 2.10 目录没有定义，因此不再搬运或适配运行：
