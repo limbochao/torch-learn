@@ -6,8 +6,8 @@ NPU Python 修复叠加提交：`5a5bda0ae36a30a865ea52f7cd1df2a5a2ea532c`。
 PyTorch：`2.13.0+cpu`，Triton：`3.6.0`。
 测试快照：`a889082`，目录为 `v2.13.0/inductor_npu`。
 
-状态：`testing`；116 行表格、105 个独立源方法，464 个参数化实例。方法结果：`{'PASS': 18, 'SKIP': 4, 'PENDING': 56, 'FAIL': 26, 'RUNNING': 1}`。
-已报告实例结果：`{'PASS': 210, 'SKIP': 4, 'FAIL': 26}`。
+状态：`testing`；116 行表格、105 个独立源方法，464 个参数化实例。方法结果：`{'PASS': 20, 'SKIP': 5, 'FAIL': 32, 'RUNNING': 1, 'PENDING': 47}`。
+已报告实例结果：`{'PASS': 212, 'SKIP': 6, 'FAIL': 34}`。
 
 [用例表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；[执行脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)；[原始证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix/)。
 
@@ -26,4 +26,4 @@ foreach 全量前置验证：`[{'name': 'test_single_list__foreach_abs', 'status
 表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。
 已复用相同包、相同测试文件及相同 node ID 的既有结果：`0` 个方法。
 
-优先验收 2.10 基线 PASS 的 60 个源方法，当前结果：`{'PASS': 15, 'SKIP': 1, 'PENDING': 36, 'FAIL': 8}`。未完成、SKIP 和仅完成数值比较的方法不能提前作为完整 PASS。2.10 表来自适配后的 2.13 功能用例：部分 kernel 数量、CUDA DSL、profiler/grid 检查已移除；对照时须区分功能退化、测试适配差异与融合策略变化。当前分析和后续定时发布均优先标记这组方法。[重合项同步差异分析](inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。
+优先验收 2.10 基线 PASS 的 60 个源方法，当前结果：`{'PASS': 17, 'SKIP': 1, 'FAIL': 10, 'PENDING': 32}`。未完成、SKIP 和仅完成数值比较的方法不能提前作为完整 PASS。2.10 表来自适配后的 2.13 功能用例：部分 kernel 数量、CUDA DSL、profiler/grid 检查已移除；对照时须区分功能退化、测试适配差异与融合策略变化。当前分析和后续定时发布均优先标记这组方法。[重合项同步差异分析](inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。
