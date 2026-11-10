@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-10",
+  "torch_npu_base": "64dc85c99c",
+  "npu_python_overlay": "5a5bda0ae36a30a865ea52f7cd1df2a5a2ea532c",
+  "test_snapshot": "a889082",
+  "result": {
+    "returncode": 1,
+    "seconds": 104.22,
+    "installed_source_unchanged": true,
+    "device": 6
+  },
+  "command": [
+    "<workspace>",
+    "-m",
+    "pytest",
+    "-vs",
+    "-ra",
+    "--tb=short",
+    "--log-file=<workspace>",
+    "--log-file-level=DEBUG",
+    "--junitxml=<workspace>",
+    "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_red",
+    "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_per"
+  ],
+  "reports": [
+    {
+      "name": "test_combo_kernel_per_config_subkernel_red",
+      "status": "FAIL",
+      "detail": "UnboundLocalError: cannot access local variable 'arg0_1' where it is not associated with a value\n\nTo execute this test, run the following from the base repo dir:\n    python test_combo_kernels.py ComboKernelTests.test_combo_kernel_per_config_subkernel_red\n\nThis message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0"
+    },
+    {
+      "name": "test_combo_kernel_per_config_subkernel_per",
+      "status": "FAIL",
+      "detail": "AssertionError: Scalars are not equal!\n\nExpected 1 but got 2.\nAbsolute difference: 1\nRelative difference: 1.0\n\nTo execute this test, run the following from the base repo dir:\n    python test_combo_kernels.py ComboKernelTests.test_combo_kernel_per_config_subkernel_per\n\nThis message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0"
+    }
+  ],
+  "debug_excerpts": [
+    {
+      "source_line": 126,
+      "excerpt": "INFO     torch_npu._inductor.config:triton.py:3916 Selected golden vars: golden=(r1, r2), tiling_axis=['r2', 'r1'], different_expansions=None\nDEBUG    torch_npu._inductor.config:scheduling.py:530 ComboKernels: 2 nodes partitioned into [2] groups\nDEBUG    torch_npu._inductor.config:triton.py:2102 Disable grouped autotune for Placeholder.DESCRIPTIVE_NAME: Combo kernels do not support grouped autotune\nDEBUG    root:triton_heuristics.py:3376 [Placeholder.DESCRIPTIVE_NAME], combo candidate tiling count: [14]"
+    },
+    {
+      "source_line": 180,
+      "excerpt": "\nDEBUG    torch_npu._inductor.config:npu_combined_scheduling.py:272 linear combo codegen for node ForeachKernelSchedulerNode(nodes=op0_op1) raise error, fallback to individual kernels\nTraceback (most recent call last):\n  File \"<site-packages>/torch_npu/_inductor/codegen/npu_combined_scheduling.py\", line 267, in codegen_combo_kernel"
+    },
+    {
+      "source_line": 204,
+      "excerpt": "def triton_(in_ptr0, in_ptr1, out_ptr0, out_ptr1, X0BLOCK):\n    pid = tl.program_id(0)\n    num_blocks_0 = tl.cdiv(64, X0BLOCK)\n    num_blocks_1 = num_blocks_0 + tl.cdiv(64, X0BLOCK)\n    if pid < num_blocks_0:\n        pid_offset = pid\n        x0_numel = 64\n        r2_numel = 32\n        r1_numel = 128\n        x0_offset = pid_offset * X0BLOCK\n        base_r2= tl.arange(0, R2BLOCK_SUB)\n                              ^\nNameError('R2BLOCK_SUB is not defined') \nStack trace:Traceback (most recent call last):\n  File \"<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py\", line 996, in _triton_make_ttir"
+    },
+    {
+      "source_line": 286,
+      "excerpt": "def triton_(in_ptr0, in_ptr1, out_ptr0, out_ptr1, X0BLOCK):\n    pid = tl.program_id(0)\n    num_blocks_0 = tl.cdiv(64, X0BLOCK)\n    num_blocks_1 = num_blocks_0 + tl.cdiv(64, X0BLOCK)\n    if pid < num_blocks_0:\n        pid_offset = pid\n        x0_numel = 64\n        r2_numel = 32\n        r1_numel = 128\n        x0_offset = pid_offset * X0BLOCK\n        base_r2= tl.arange(0, R2BLOCK_SUB)\n                              ^\nNameError('R2BLOCK_SUB is not defined')\n\nDEBUG    torch_npu._inductor.config:triton.py:1476 Fallback to indexing_exprs for early Store key detection"
+    },
+    {
+      "source_line": 326,
+      "excerpt": "\nDEBUG    torch_npu._inductor.config:npu_combined_scheduling.py:189 index codegen for node SchedulerNode(name='op0') failed, falling back to no-linear codegen\nTraceback (most recent call last):\n  File \"<site-packages>/torch_npu/_inductor/codegen/npu_combined_scheduling.py\", line 186, in codegen_node"
+    },
+    {
+      "source_line": 510,
+      "excerpt": "\nDEBUG    torch_npu._inductor.config:npu_combined_scheduling.py:189 index codegen for node SchedulerNode(name='op1') failed, falling back to no-linear codegen\nTraceback (most recent call last):\n  File \"<site-packages>/torch_npu/_inductor/codegen/npu_combined_scheduling.py\", line 186, in codegen_node"
+    },
+    {
+      "source_line": 965,
+      "excerpt": "INFO     torch_npu._inductor.config:triton.py:3916 Selected golden vars: golden=(r1, x0), tiling_axis=['x0', 'r1'], different_expansions=None\nDEBUG    torch_npu._inductor.config:scheduling.py:530 ComboKernels: 2 nodes partitioned into [2] groups\nDEBUG    torch_npu._inductor.config:triton.py:2102 Disable grouped autotune for Placeholder.DESCRIPTIVE_NAME: Combo kernels do not support grouped autotune\nDEBUG    root:triton_heuristics.py:3376 [Placeholder.DESCRIPTIVE_NAME], combo candidate tiling count: [50]"
+    },
+    {
+      "source_line": 1013,
+      "excerpt": "\nDEBUG    torch_npu._inductor.config:npu_combined_scheduling.py:272 linear combo codegen for node ForeachKernelSchedulerNode(nodes=op0_op1) raise error, fallback to individual kernels\nTraceback (most recent call last):\n  File \"<site-packages>/torch_npu/_inductor/codegen/npu_combined_scheduling.py\", line 267, in codegen_combo_kernel"
+    },
+    {
+      "source_line": 1038,
+      "excerpt": "    pid = tl.program_id(0)\n    num_blocks_0 = tl.cdiv(1024, X0BLOCK)\n    num_blocks_1 = num_blocks_0 + tl.cdiv(1024, X0BLOCK)\n    if pid < num_blocks_0:\n        pid_offset = pid\n        x0_numel = 1024\n        r1_numel = 64\n        x0_offset = pid_offset * X0BLOCK\n        base_x0= tl.arange(0, X0BLOCK_SUB)\n        loops_x0 = (X0BLOCK + X0BLOCK_SUB - 1) // X0BLOCK_SUB\n        base_r1= tl.arange(0, R1BLOCK_SUB)\n                              ^\nNameError('R1BLOCK_SUB is not defined') \nStack trace:Traceback (most recent call last):\n  File \"<site-packages>/torch_npu/_inductor/runtime/triton_heuristics.py\", line 996, in _triton_make_ttir"
+    },
+    {
+      "source_line": 1121,
+      "excerpt": "    pid = tl.program_id(0)\n    num_blocks_0 = tl.cdiv(1024, X0BLOCK)\n    num_blocks_1 = num_blocks_0 + tl.cdiv(1024, X0BLOCK)\n    if pid < num_blocks_0:\n        pid_offset = pid\n        x0_numel = 1024\n        r1_numel = 64\n        x0_offset = pid_offset * X0BLOCK\n        base_x0= tl.arange(0, X0BLOCK_SUB)\n        loops_x0 = (X0BLOCK + X0BLOCK_SUB - 1) // X0BLOCK_SUB\n        base_r1= tl.arange(0, R1BLOCK_SUB)\n                              ^\nNameError('R1BLOCK_SUB is not defined')\n\nDEBUG    torch_npu._inductor.config:triton.py:1476 Fallback to indexing_exprs for early Store key detection"
+    }
+  ],
+  "sanitization": "User paths replaced; raw full logs remain outside the repository."
+}

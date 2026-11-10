@@ -156,6 +156,19 @@ python -u reorder_live_run.py \
   --run-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110
 ```
 
+## 优先验收 2.10 的 PASS 方法
+
+以 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 中最新结果为“通过”的 60 个源方法为优先范围，
+均已包含在当前完整清单。发布脚本自动生成 `baseline-pass-comparison.json`，并在当前 116 行表格的
+“当前分析”标记非 PASS 的重合项，不增加列；PASS 项仍不保留历史失败说明。
+旧基线去掉了部分 kernel 数量、CUDA DSL 和 profiler/grid 检查，不能把同名方法的 FAIL 一律视作实现回退。
+
+已对两个重合的 reduction 方法做独立新缓存的原生 pytest 定向定位，安装源码未变。
+日志确认均先分成一个包含两节点的 Combo，再因静态 BLOCK_SUB 未定义而回退；
+其中 red 方法回退后又重复释放输入。接口同步遗漏、回退生命周期和测试适配差异分别记录在
+[优先项分析](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。
+该定位运行不覆盖完整测试结果。
+
 ## 首次完整范围执行记录（已完成）
 
 完整范围快照及运行目录：`/home/l30023782/PTA_213/combo-sync-64dc85c-all116-20261110`。

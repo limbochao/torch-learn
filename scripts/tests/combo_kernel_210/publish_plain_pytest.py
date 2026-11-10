@@ -17,6 +17,41 @@ def command(args, **kwargs):
     return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
 
 
+def baseline_pass_methods():
+    path = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        return {(row["测试文件"], row["函数名"]): row for row in csv.DictReader(stream)
+                if row["最新结果"].startswith("通过")}
+
+
+def overlap_analysis(job, detail, original):
+    if job.get("status") == "PASS":
+        return "—"
+    name = job.get("name")
+    if job.get("status") == "FAIL":
+        if "'SizeVarAllocator' object has no attribute 'size_hint'" in detail:
+            original = ("2.13 接口同步遗漏：NPU kernel_benchmark_extra_args 仍使用 size_hint，"
+                        "上游已使用 optimization_hint；动态 benchmark 在生成期失败，尚未验证后续路径。")
+        elif name == "test_combo_kernel_per_config_subkernel_red" and "UnboundLocalError" in detail:
+            original = ("生成 wrapper 重复 del arg0_1，属于实际运行错误。2.10 审计记录为 Combo 编译失败后"
+                        "回退普通 kernel 并 PASS；2.13 定向日志先报 R2BLOCK_SUB 未定义，再回退；"
+                        "普通回退的 last_usage 与外层 pending_frees 清理存在重复释放风险。")
+        elif name == "test_combo_kernel_per_config_subkernel_per" and "generated_kernel_count" in detail:
+            original = ("数值比较通过，kernel 数量预期 1、实际 2。2.10 适配移除了该数量和 CUDA DSL 断言，"
+                        "但审计确认其走 Combo 主路径。2.13 定向日志确认先分为 [2]，再因 R1BLOCK_SUB 未定义回退；"
+                        "静态 BLOCK_SUB 生成条件漏掉 persistent reduction，属于移植回退问题。")
+        elif name == "test_combo_kernel_dynamic_shapes_grid_changes" and "list indices" in detail:
+            original = ("测试适配未同步：2.13 按 traceEvents 字典读取 NPU 事件列表，读取 profiler 时失败；"
+                        "2.10 移除了 CUDA profiler/grid 检查并保留两组动态输入的数值验证。")
+        elif name == "test_type_promotion" and "The context is empty" in detail:
+            original = ("编译子进程设备初始化超时、context 为空；不是已确认的类型提升精度错误，"
+                        "需在可用设备重试失败实例，不能据此判为 Combo 同步遗漏。")
+    elif job.get("status") == "SKIP":
+        original = ("当前仍被测试源码的 NPU skip 排除；2.10 功能适配曾去掉该 skip，"
+                    "当前 SKIP 不能证明 2.13 能力不支持，也不能作为 PASS。原因：" + detail.split("\n")[0])
+    return "2.10 基线 PASS；" + original
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--remote-root", required=True)
@@ -57,6 +92,7 @@ def main():
         jobs_file = artifact / "jobs.json"
         jobs = json.loads(jobs_file.read_text()) if jobs_file.exists() else []
         by_method = {(row["file"], row["class"], row["name"]): row for row in jobs}
+        priority = baseline_pass_methods() if layout.exists() else {}
         columns = ["测试文件", "函数名", "最新结果", "实例结果", "当前分析"]
         rows = []
         for row in table_rows:
@@ -88,6 +124,8 @@ def main():
                             "尚未确认融合决策与内存统计根因，不据此断言为代码生成错误。")
             if not analysis:
                 analysis = state.get("error", "待执行")
+            if (row["file"], source_name) in priority:
+                analysis = overlap_analysis(job, detail, analysis)
             if state["stage"] == "error" and status in ("待执行", "PENDING", "RUNNING"):
                 status = "ERROR"
             instances = "; ".join(f"{key} {value}" for key, value in sorted(counts.items()))
@@ -150,6 +188,21 @@ def main():
                      "嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。\n"
                      f"已复用相同包、相同测试文件及相同 node ID 的既有结果："
                      f"`{state.get('reused_methods', 0)}` 个方法。\n")
+        if priority:
+            matched = {(job["file"], job["name"]): job for job in jobs}
+            records = [{"file": file, "name": name,
+                        "baseline_result": baseline["最新结果"],
+                        "status": matched.get((file, name), {}).get("status", "待收集")}
+                       for (file, name), baseline in priority.items()]
+            counts = dict(Counter(record["status"] for record in records))
+            (artifact / "baseline-pass-comparison.json").write_text(
+                json.dumps(records, ensure_ascii=False, indent=2) + "\n")
+            text += (f"\n优先验收 2.10 基线 PASS 的 {len(priority)} 个源方法，当前结果：`{counts}`。"
+                     "未完成、SKIP 和仅完成数值比较的方法不能提前作为完整 PASS。"
+                     "2.10 表来自适配后的 2.13 功能用例：部分 kernel 数量、CUDA DSL、profiler/grid 检查已移除；"
+                     "对照时须区分功能退化、测试适配差异与融合策略变化。"
+                     "当前分析和后续定时发布均优先标记这组方法。"
+                     "[重合项同步差异分析](inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。\n")
         if terminal:
             text += (f"\n执行前后安装的 Inductor Python 源码哈希一致："
                      f"`{state.get('installed_source_unchanged', False)}`。\n")
