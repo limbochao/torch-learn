@@ -7,6 +7,8 @@
 用例源为测试仓库 `v2.13.0/inductor_npu`，快照提交为 `a2931d1`。
 本次只为 Combo/foreach 补充缺失的 Triton 探测初始化，保留该目录已有的 NPU 适配代码，
 不放宽 kernel 数量、源码或数值断言，不改安装包。
+该目录的 foreach 方法存在主动 NPU skip，理由为不支持 NPU FOREACH 分组融合；
+本轮保留并如实报告 SKIP，不把这些结果计为 PASS。
 
 `run_plain_pytest.py` 使用已有 `combo_npu_a5_selected.json` 中的 62 个源方法。
 逐文件执行原生 pytest 收集，从输出中解析实际参数化 node ID，按照源类名和最长方法名前缀精确匹配。

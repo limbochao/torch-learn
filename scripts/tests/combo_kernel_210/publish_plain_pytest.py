@@ -73,6 +73,7 @@ def main():
             writer.writerows(rows)
         notes = target.with_suffix(".md")
         summary = Counter(row[2] for row in rows)
+        instances = Counter(report["status"] for job in jobs for report in job.get("reports", {}).values())
         text = (f"# 2.13 ComboKernel 同步分支验证\n\n"
                 f"使用 NPU_A5 的 `pta_213_case` 环境及本地 `sync/combo-kernel-master` 对应包。\n"
                 f"torch_npu：`{state.get('torch_npu', '待获取')}`，提交：`{state.get('torch_npu_git', '待获取')}`。\n"
@@ -80,12 +81,14 @@ def main():
                 f"测试快照：`{state.get('test_commit', '待获取')}`，目录为 `v2.13.0/inductor_npu`。\n\n"
                 f"状态：`{state['stage']}`；{len(selected)} 个源方法，"
                 f"{state.get('instances', '待收集')} 个参数化实例。方法结果：`{dict(summary)}`。\n"
-                f"实例结果：`{state.get('instance_results', {})}`。\n\n"
+                f"已报告实例结果：`{dict(instances)}`。\n\n"
                 f"[用例表]({target.name})；"
                 f"[执行脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)；"
                 f"[原始证据](../../../../artifacts/{args.name}/)。\n\n"
                 "使用原生 pytest，无自定义 pytest 插件；仅设置选卡变量。"
                 "保留指定目录已有的 NPU 适配和全部原始断言，没有沿用 2.10 foreach 放宽数量检查的修改。\n\n"
+                "该目录的 foreach 方法存在主动 NPU skip，原因为“不支持 NPU FOREACH 分组融合”。"
+                "这类结果保留为 SKIP，不能作为数值正确或融合成功的证据。\n\n"
                 "表格中的异常摘要来自 JUnit 报告；尚未逐项定位的错误不能直接据此归因于 ComboKernel。"
                 "PASS 项不保留历史失败分析。\n")
         if terminal:
