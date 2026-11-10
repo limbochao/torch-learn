@@ -73,6 +73,9 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 - `4b4176acbf`：补齐 2.13 单节点分区协议。正式 codegen 生成普通 NPU kernel，
   benchmark 返回占位值并由社区调用者复用节点计时，避免生成仅含一个子 kernel 的 Combo 和重复计数。
   所有分区验证 TTIR 通过后才统一 mark_run、更新图状态，保留现有失败回退的前置验证条件。
+- `5a5bda0ae3`：单节点分区会丢弃预建的潜在 Combo 子 kernel，再创建普通 kernel；
+  `Kernel.__init__` 已为前者增加计数，丢弃时需要对应减去一次。
+  这与社区 `ComboKernel.create_sub_kernel` 移除子 kernel 独立计数的原则一致，避免把未生成的 kernel 计入指标。
 
 只在 `pta_213_case` 安装目录覆盖 `npu_combined_scheduling.py` 和 `scheduling.py` 两个 Python 文件，
 没有重新构建 wheel。覆盖前核对文件哈希与原完整测试快照一致，原文件保存在新运行目录的 `original/`，
@@ -80,12 +83,15 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 包版本仍显示 `2.13.0+git64dc85c`，不能仅凭版本字符串区分本次 Python 修复；结果额外记录叠加提交。
 
 先运行原失败路径和 foreach 数值、梯度代表实例，再启动完整清单。
+全新缓存下，普通激活 Combo 与 benchmark 激活用例已通过，确认上述两条接口路径均可执行。
+foreach 的带 mask 用例与 abs 梯度代表实例也已通过数值验证。
+其余融合数量、内存峰值和后端专用代码断言保持原样，由完整复测如实记录。
 完整清单不复用原包结果，仍使用原生 pytest。设置独立 `TORCHINDUCTOR_CACHE_DIR`：
 Python 侧覆盖不改变包版本，旧 FX/代码缓存可能仍被命中，已在早期探测中观察到旧 Combo 代码；
 不隔离缓存就不能把运行结果归到修复提交。不会清理其他任务的共享缓存。额外参数为：
 
 ```bash
---test-commit a889082 --npu-fix-commit 4b4176acbf \
+--test-commit a889082 --npu-fix-commit 5a5bda0ae36a30a865ea52f7cd1df2a5a2ea532c \
 --foreach-functional \
 --cache-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110/cache-full
 ```
