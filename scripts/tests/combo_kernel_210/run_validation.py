@@ -52,9 +52,12 @@ def main():
     parser.add_argument("--devices", default="1,2,3", help="Explicitly authorized physical cards")
     parser.add_argument("--with-f3", action="store_true", help="Enable the prepared F3 overlay plugin")
     parser.add_argument("--expected-instances", type=int)
+    parser.add_argument("--test-root", default="Community-Use-Case-Testing/v2.13.0/inductor_npu")
     parser.add_argument("--detach", action="store_true", help="Run in background; write validation.log/status JSON")
     args = parser.parse_args()
     root = args.root.resolve()
+    test_root = (root / args.test_root).resolve()
+    assert test_root.is_dir() and test_root.is_relative_to(root), test_root
     if args.detach:
         command = [sys.executable, str(Path(__file__).resolve()), *[x for x in sys.argv[1:] if x != "--detach"]]
         with (root / "validation.log").open("w") as log:
@@ -70,12 +73,14 @@ def main():
     env = dict(os.environ, COMBO_PHYSICAL_DEVICES=args.devices, COMBO_WITH_F3=str(int(args.with_f3)),
                ASCEND_RT_VISIBLE_DEVICES=str(devices[0]), PYTHONPATH=str(root),
                COMBO_SELECTED_MANIFEST=str(root / "combo_npu_a5_selected.json"),
-               PYTEST_DISABLE_PLUGIN_AUTOLOAD="1", TORCHINDUCTOR_COMPILE_THREADS="1", OMP_NUM_THREADS="1")
+               PYTEST_DISABLE_PLUGIN_AUTOLOAD="1", TORCHINDUCTOR_COMPILE_THREADS="1", OMP_NUM_THREADS="1",
+               COMBO_TEST_ROOT=str(test_root))
     if args.with_f3:
         assert (root / "combo_baseline_audit.py").exists() and (root / "f3_horizontal_partition.py").exists()
         assert "combo_baseline_audit.install()" in (root / "combo_validation_plugin.py").read_text()
     selected = json.loads((root / "combo_npu_a5_selected.json").read_text())
-    state = {"started": time.time(), "physical_devices": devices, "with_f3": args.with_f3}
+    state = {"started": time.time(), "physical_devices": devices, "with_f3": args.with_f3,
+             "test_root": str(test_root)}
 
     def save(stage, **kwargs):
         state.update(stage=stage, **kwargs)
@@ -90,8 +95,11 @@ def main():
         env["COMBO_COLLECTION_JSON"] = str(out / "collection.json")
         execute([sys.executable, "-m", "pytest", "-p", "combo_validation_plugin", "--collect-only", "-q",
                  *sorted({row["file"] for row in selected})],
-                root / "Community-Use-Case-Testing/v2.13.0/inductor_npu", "collection.log")
+                test_root, "collection.log")
         nodes = json.loads((out / "collection.json").read_text())
+        collected_methods = {(row["file"], row["class"], row["name"]) for row in nodes}
+        assert collected_methods == {(row["file"], row["class"], row["name"]) for row in selected}, (
+            "Collection does not cover exactly the selected source methods", collected_methods)
         assert args.expected_instances is None or len(nodes) == args.expected_instances
         expected_nodes = root / "expected_nodes.json"
         if expected_nodes.exists():

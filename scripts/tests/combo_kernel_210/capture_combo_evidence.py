@@ -1,6 +1,7 @@
 """Capture the environment and generated Python sources without changing the installed packages."""
 import hashlib
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -30,7 +31,8 @@ for relative in source_paths:
 test_hashes = {}
 selected = json.loads((ROOT / 'combo_npu_a5_selected.json').read_text())
 for filename in sorted({method['file'] for method in selected}):
-    executed = ROOT / 'Community-Use-Case-Testing/v2.13.0/inductor_npu' / filename
+    base = Path(os.environ.get('COMBO_TEST_ROOT', ROOT / 'Community-Use-Case-Testing/v2.13.0/inductor_npu'))
+    executed = base / filename
     original = ROOT / 'original_cases' / filename
     for kind, source in [('executed_tests', executed), ('original_tests', original if original.exists() else executed)]:
         target = OUT / kind / filename

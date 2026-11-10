@@ -1,0 +1,99 @@
+# 2.10 目录原生用例筛选
+
+本轮直接使用 `Community-Use-Case-Testing/v2.10.0/test_inductor` 中的测试，
+范围仍以原先 116 行 Combo/foreach 用例清单为准，不扩展到整个 test_inductor 目录。
+这里的“原生”指用户指定目录中的现有 2.10 版本，保留该目录已有的 NPU 迁移代码。
+
+筛选结果为 **54 个源测试方法**。本轮已在 NPU_A5 启动收集和执行，最终状态见用例表。
+旧适配版的 409 个实例和 PASS/FAIL 结果不能作为本轮结果。
+
+| 测试文件 | 源测试方法数 |
+| --- | ---: |
+| test_torchinductor.py | 4 |
+| test_combo_kernels.py | 21 |
+| test_foreach.py | 27 |
+| test_unbacked_symints.py | 1 |
+| test_provenance_tracing.py | 1 |
+| 合计 | 54 |
+
+- [用例表](../../../docs/notes/compiler/codegen/inductor-combo-tests-native-v2.10.csv)：54 行，保留原清单顺序，
+  记录文件名、函数名、存在性/实现差异、原生执行说明及本轮结果。
+- [执行选择清单](combo_native_210_selected.json)：54 个源方法，包含源类名，供后续收集时匹配参数化实例。
+- [筛选审计](combo_native_210_selection.json)：原 116 行逐行分类、来源提交和文件 SHA256。
+  54 行入选、11 行为嵌套函数（随外层执行）、51 行在指定文件中没有对应独立方法。
+
+表格的实现差异说明沿用原版本对照表，描述 2.13 相对 2.10 的差异；
+本轮执行以指定目录的实际 2.10 实现为准，不补齐这些差异。
+
+## 与此前 2.13 适配版的范围变化
+
+此前 62 个方法中有以下 8 个在 2.10 目录没有定义，因此不再搬运或适配运行：
+
+| 测试文件 | 函数名 |
+| --- | --- |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_poi |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_per |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red_per |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_red |
+| test_combo_kernels.py | test_combo_kernel_per_config_subkernel_block_size |
+| test_combo_kernels.py | test_combo_kernel_max_num_nodes |
+| test_combo_kernels.py | test_combo_kernel_dynamic_shapes_grid_changes |
+| test_combo_kernels.py | test_combo_inductor_meta_no_kernel_num_gb_without_profile |
+
+`test_mean` 的 2.10 方法没有主动开启 Combo，原样运行只能反映其原始配置下的行为。
+`test_adaptive_avg_pool2d1` 和 `test_rand_like_deterministic` 保留原版 Combo=False/True 参数化。
+Combo/foreach 方法保留原有 kernel 数量和生成代码检查；不套用旧适配脚本删除这些断言。
+
+## 重新生成
+
+在 torch-learn 仓库根目录运行：
+
+```bash
+python scripts/tests/combo_kernel_210/select_native_210.py
+```
+
+可用 `--source`、`--table`、`--output`、`--manifest`、`--audit` 覆盖路径。
+脚本只用 AST 解析源码，不导入 torch/test 模块，不改测试文件，不启动 NPU 测试。
+缺失同名方法不推断为“不支持该能力”，只记录不在本轮原生范围。
+
+`select_native_210.py` 会重新生成待执行表；本轮执行结果已发布后不要覆盖该表。
+
+## 执行及自动收尾
+
+已为 `test_combo_kernels.py` 补充与 foreach 相同的 NPU 初始化，提交 `f998b3d`，
+推送到测试仓库 `origin/ut/210_combo`。没有删除或放宽原始测试断言。
+
+`native_validation_plugin.py` 在 `transfer_to_npu` 之后恢复 NPU 的 Triton 可用性探测。
+社区 `is_gpu()` 也不识别 NPU 设备测试基类；插件确认实际 NPU/Triton 可用且测试设备选择包含 NPU 后，
+开启测试层的 `RUN_GPU`，使 `CommonTemplate` 的四个目标方法生成 NPU 实例。
+插件保留实际 skip，不伪造缺失工具符号，不叠加生产代码修复。
+
+准备独立 phase：从上述测试提交导出完整 `v2.10.0/test_inductor` 目录，复制
+`run_validation.py`、`run_combo_selected.py`、`export_combo_results.py`、`capture_combo_evidence.py`；
+将 `native_validation_plugin.py` 复制为 `combo_validation_plugin.py`，
+将 `combo_native_210_selected.json` 复制为 `combo_npu_a5_selected.json`。
+同时保存 `validation_context.json` 和安装源码的 `expected_source_sha256.json`。
+
+在 NPU_A5 Docker 工作目录中的该 phase 执行：
+
+```bash
+python run_validation.py --root "$PWD" \
+    --test-root Community-Use-Case-Testing/v2.10.0/test_inductor --devices 1,3,5 --detach
+```
+
+入口先收集，要求准确覆盖 54 个源方法，再按方法隔离进程并行执行；完成后核对逐实例
+setup/call/teardown 报告以及安装源码 SHA256。参数化实例数量以本轮实际收集为准。
+
+本地的 `publish_native_210.py` 每次只检查一次远端状态。完成后下载报告和日志、脱敏归档，
+刷新独立的原生用例 CSV/Markdown，不覆盖旧 2.13 适配版结果。
+带 `--push` 时，仅提交本轮表格和证据并推送 `origin/main`，保留其他工作区及暂存修改。
+
+```bash
+python scripts/tests/combo_kernel_210/publish_native_210.py \
+    --remote-phase /home/l30023782/PTA_210/combo-native210-daily20261110-run \
+    --raw-root /home/qc/Repos/Ascend/tmp/combo-native210-daily20261110-run-results --push
+```
+
+本次已在本地开发机创建用户 systemd 定时器 `combo-native210-daily20261110-run.timer`，
+首次 10 分钟后检查，此后每 15 分钟检查，完成或验证异常后停止。
+状态写入 raw-root 的 `publisher_status.json`，无需持续查看 pytest 日志。

@@ -11,7 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-BASE = ROOT / 'Community-Use-Case-Testing/v2.13.0/inductor_npu'
+BASE = Path(os.environ.get('COMBO_TEST_ROOT', ROOT / 'Community-Use-Case-Testing/v2.13.0/inductor_npu'))
 OUT = ROOT / 'evidence'
 COLLECTION = json.loads((OUT / 'collection.json').read_text())
 GROUPS = defaultdict(list)
