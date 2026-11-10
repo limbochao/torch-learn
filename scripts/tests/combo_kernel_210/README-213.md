@@ -37,7 +37,8 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
   --manifest /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_213_all_selected.json \
   --layout /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_213_table_rows.json \
   --output /path/to/fresh-output-directory \
-  --test-commit a889082 --devices 6,1 \
+  --test-commit a889082 --devices 6,1 --foreach-functional \
+  --npu-fix-commit 5a5bda0ae36a30a865ea52f7cd1df2a5a2ea532c \
   --cache-root /path/to/fresh-cache-directory
 ```
 
