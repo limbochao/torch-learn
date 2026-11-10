@@ -11,7 +11,8 @@
 最新 foreach 功能验证快照为 `a889082`，按 2.10 的 NPU 验证规则修改：
 取消本轮 27 个 foreach 方法的主动 NPU skip；NPU 上不检查 kernel 数量及 foreach 专用生成代码，
 保留数值、原地修改和梯度断言，以及其他后端原有的融合检查。
-功能 PASS 不证明 FOREACH 分组融合生效。其余不在本轮选择范围内的 skip 保持不变；不改安装包。
+功能 PASS 不证明 FOREACH 分组融合生效。其余不在本轮选择范围内的 skip 保持不变。
+后续按用户要求先修复同步接口，安装包叠加修复的范围见下文。
 
 执行范围以 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 的全部 116 行为准，
 不沿用 2.10 的排除范围。`select_213_table.py` 按 2.13 源码解析为 105 个独立方法和 11 行嵌套函数；
@@ -53,30 +54,45 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 复用前核对包提交、Triton 版本、安装源码哈希、对应测试文件内容和实际 node ID 集合；
 任一项不一致即停止复用。原日志、XML 和命令一并保存，已知失败和跳过也如实保留。
 
-## foreach 复测与结果复用
+## 同步接口修复后重跑
 
-最新运行目录为 `/home/l30023782/PTA_213/combo-sync-64dc85c-foreach-functional-20261110`。
-使用完整 105 方法清单重新收集，额外传入：
+用户要求先修复同步问题，原 foreach 单独复测已取消，对应
+`combo-sync-213-foreach-functional-20261110.timer` 已停止，不发布为最终结果。
+新运行目录为 `/home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110`。
+
+修复分支为 NPU 仓库的 `fix/combo-sync-interfaces-v2.13`，基于安装包对应的 `64dc85c99c`：
+
+- `19845c38a3`：移除 Combo 入口对已不存在的 `node_can_linear()` 的调用条件，
+  与当前 2.13 普通 kernel 调度一致，先尝试 index codegen，保留已有失败回退。
+  2.10 的旧方法读取 `inductor_ascend_linear_mode`；当前 2.13 同样没有该配置，因此不能直接复制旧方法。
+- `a79fb5eda3`：`generate_combo_kernel_code` 从四元 tuple 改为上游 `NodeInfo`。
+  2.10 分区代码以 `[1]` 取 tiling，2.13 则读取 `.tiling` 和 `.features`，旧数据结构无法满足新接口。
+  新 `NodeInfo` 复用创建 NPU 子 kernel 的 features、tiling 及实际 persistent-reduction 状态；
+  取 node_schedule 也同步改为字段访问。
+
+只在 `pta_213_case` 安装目录覆盖 `npu_combined_scheduling.py` 和 `scheduling.py` 两个 Python 文件，
+没有重新构建 wheel。覆盖前核对文件哈希与原完整测试快照一致，原文件保存在新运行目录的 `original/`，
+`overlay.json` 记录安装位置、备份位置及修改前后哈希。
+包版本仍显示 `2.13.0+git64dc85c`，不能仅凭版本字符串区分本次 Python 修复；结果额外记录叠加提交。
+
+先运行原失败路径和 foreach 数值、梯度代表实例，再启动完整清单。
+完整清单不复用原包结果，仍使用原生 pytest，额外参数为：
 
 ```bash
---reuse /home/l30023782/PTA_213/combo-sync-64dc85c-all116-20261110/results \
---rerun-files test_foreach.py --foreach-functional
+--test-commit a889082 --npu-fix-commit a79fb5eda39c5239583631f5e5e9830068bd365a \
+--foreach-functional
 ```
 
-只复用未修改的 78 个其他文件方法，重新执行 foreach 的 27 个方法、376 个实例。
-`--rerun-files` 显式排除修改文件的结果复用；`--foreach-functional` 只记录验证口径，
-不改变 pytest 或待测代码。原完整结果仍保存在带 `-all116` 后缀的证据目录。
-
-最新本地 timer 为 `combo-sync-213-foreach-functional-20261110.timer`，首次 10 分钟后检查，
-随后每 15 分钟检查；测试在 NPU_A5 执行。完成后下载结果、更新同一份 116 行表并推送。
-手动检查命令：
+新本地 timer 为 `combo-sync-213-interface-fix-20261110.timer`，首次 10 分钟后检查，
+随后每 15 分钟检查；测试在 NPU_A5 的物理卡 1、6 执行。
+完成后下载证据、更新同一份 116 行表并推送，停止 timer。手动检查命令：
 
 ```bash
 python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
-  --remote-root /home/l30023782/PTA_213/combo-sync-64dc85c-foreach-functional-20261110 \
-  --name inductor-combo-tests-native-v2.13-sync-64dc85c-foreach-functional \
+  --remote-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110 \
+  --name inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix \
   --table-name inductor-combo-tests-native-v2.13-sync-64dc85c \
-  --push --stop-timer combo-sync-213-foreach-functional-20261110.timer
+  --push --stop-timer combo-sync-213-interface-fix-20261110.timer
 ```
 
 ## 首次完整范围执行记录（已完成）
