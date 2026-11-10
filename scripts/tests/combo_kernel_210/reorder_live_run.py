@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from run_plain_pytest import fingerprint, read_reports, save, write_table
+from run_plain_pytest import fingerprint, read_reports, save, select_instances, write_table
 
 
 TERMINAL = {"PASS", "FAIL", "SKIP", "ERROR"}
@@ -34,7 +34,12 @@ def main():
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--timeout", type=int, default=3600)
+    parser.add_argument("--resume", action="store_true", help="Resume after the original dispatcher was retired")
+    parser.add_argument("--foreach-per-method", type=int, default=0,
+                        help="Sample this many instances per pending foreach source method; zero runs all")
     args = parser.parse_args()
+    if args.foreach_per_method < 0:
+        parser.error("--foreach-per-method must be nonnegative")
     root = args.run_root.resolve()
     output = root / "results"
     handoff = json.loads((root / "handoff.json").read_text())
@@ -44,15 +49,46 @@ def main():
     before = json.loads((output / "installed_sha256.json").read_text())
     assert fingerprint([Path(path) for path in before]) == before, "Installed sources changed"
     previous_pid = handoff["previous_runner_pid"]
-    command = Path(f"/proc/{previous_pid}/cmdline").read_bytes()
-    assert b"run_plain_pytest.py" in command
-    assert Path(f"/proc/{previous_pid}/cwd").resolve() == root
-    assert process_state(previous_pid)[0] in ("T", "t"), "Original dispatcher must be stopped"
     adopted = {}
-    for index, pid in handoff["active_processes"].items():
-        job = next(job for job in jobs if job["index"] == int(index))
-        assert job["status"] == "RUNNING" and os.getpgid(pid) == pid
-        adopted[int(index)] = {"pid": pid, "start_ticks": process_state(pid)[1], "job": job}
+    if args.resume:
+        assert state["stage"] == "testing" and state["phase"] == "non_foreach_first"
+        for pid in (previous_pid, state["controller_pid"]):
+            assert not Path(f"/proc/{pid}").exists() or process_state(pid)[0] == "Z", "Old dispatcher still alive"
+        assert not (root / "phases/foreach-last").exists(), "Foreach phase already started"
+    else:
+        command = Path(f"/proc/{previous_pid}/cmdline").read_bytes()
+        assert b"run_plain_pytest.py" in command
+        assert Path(f"/proc/{previous_pid}/cwd").resolve() == root
+        assert process_state(previous_pid)[0] in ("T", "t"), "Original dispatcher must be stopped"
+        for index, pid in handoff["active_processes"].items():
+            job = next(job for job in jobs if job["index"] == int(index))
+            assert job["status"] == "RUNNING" and os.getpgid(pid) == pid
+            adopted[int(index)] = {"pid": pid, "start_ticks": process_state(pid)[1], "job": job}
+    if args.foreach_per_method:
+        original_collection = output / "full-collection.json"
+        if not original_collection.exists():
+            shutil.copy2(output / "collection.json", original_collection)
+        for job in jobs:
+            if job["file"] != "test_foreach.py" or job["status"] != "PENDING":
+                continue
+            full_nodes = job.get("full_nodes", job["nodes"])
+            nodes = select_instances(full_nodes, args.foreach_per_method)
+            if nodes != full_nodes:
+                job.update(full_nodes=full_nodes, nodes=nodes, sample_limit=args.foreach_per_method)
+        state.update(foreach_sample_limit=args.foreach_per_method,
+                     full_instances=sum(len(job.get("full_nodes", job["nodes"])) for job in jobs),
+                     instances=sum(len(job["nodes"]) for job in jobs))
+        save(output / "collection.json", jobs)
+        save(output / "foreach-sampling.json", [
+            {"name": job["name"], "status_at_selection": job["status"], "nodes": job["nodes"],
+             "available_instances": len(job.get("full_nodes", job["nodes"]))}
+            for job in jobs if job["file"] == "test_foreach.py"
+        ])
+        (output / "nodeids.txt").write_text("\n".join(sorted(node for job in jobs for node in job["nodes"])) + "\n")
+        (output / "foreach-sample-nodeids.txt").write_text("\n".join(
+            node for job in jobs if job["file"] == "test_foreach.py" and job["status"] == "PENDING"
+            for node in job["nodes"]
+        ) + "\n")
     state.update(stage="testing", execution_order="non_foreach_first", devices=[1, 2, 3, 6],
                  previous_runner_pid=previous_pid, controller_pid=os.getpid(),
                  phase="non_foreach_first", non_foreach_devices=[2, 3], foreach_devices=[1, 2, 3, 6])
@@ -60,8 +96,9 @@ def main():
         "non-foreach-first": {"devices": [2, 3], "cache_root": str(root / "cache-non-foreach-first")},
         "foreach-last": {"devices": [1, 2, 3, 6], "cache_root": str(root / "cache-foreach-last")},
     }
+    state["phase_runs"]["foreach-last"]["max_instances_per_method"] = args.foreach_per_method
     save(output / "execution-order.json", handoff)
-    old_parent_stopped = True
+    old_parent_stopped = not args.resume
     copied = set()
 
     def publish():
@@ -153,6 +190,8 @@ def main():
                    "--output", str(directory / "results"), "--devices", "1,2,3,6",
                    "--test-commit", state["test_commit"], "--npu-fix-commit", state["npu_fix_commit"],
                    "--foreach-functional", "--cache-root", str(root / "cache-foreach-last")]
+        if args.foreach_per_method:
+            command += ["--max-instances-per-method", str(args.foreach_per_method)]
         with (directory / "run.log").open("w") as stream:
             process = subprocess.Popen(command, cwd=root, env=dict(os.environ, ASCEND_RT_VISIBLE_DEVICES="1"),
                                        stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,

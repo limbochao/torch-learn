@@ -43,6 +43,8 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 ```
 
 `--representatives` 每个文件只选一个实际参数化实例；`--collect-only` 仅收集、不执行。
+`--max-instances-per-method 2` 保留清单中的每个源方法，每个方法最多执行两个参数化实例，
+按 node ID 排序选择首尾；单实例方法全部保留。它与“每个文件一个”的 `--representatives` 不同。
 默认每个方法超时 3600 秒，可通过 `--timeout` 调整。输出目录必须不存在，以免覆盖历史证据。
 选卡须遵守当前任务授权和环境约束，不应直接沿用示例中的物理卡号。
 
@@ -155,6 +157,24 @@ python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
 python -u reorder_live_run.py \
   --run-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110
 ```
+
+### 调试阶段改为 foreach 抽样
+
+用户随后要求无需 foreach 全量。保留此前 7 个方法的已有结果，剩余 20 个方法从 184 个实例缩为 34 个。
+每个方法按收集到的 node ID 排序，选择首尾两个；只有一个实例的方法保留该实例。
+通常可同时覆盖 `_foreach` 与 `foreach_map` 路径；原地修改方法则覆盖两个算子。
+非 foreach 的任务与“foreach 最后跑”的顺序保持当前设置。
+
+调整时只暂停汇总调度器，独立的非 foreach runner 继续运行。
+原调度器退出后以 `--resume --foreach-per-method 2` 恢复，恢复前校验旧调度器已退出、
+安装源码哈希不变、尚未启动 foreach 阶段。该模式仅用于原始调度器已交接完毕的当前运行。
+启动 foreach 时将 `--max-instances-per-method 2` 传给执行脚本，并核对实际收集实例与已选清单一致。
+
+`full-collection.json` 保存原完整收集结果，`foreach-sampling.json` 保存每个方法的选择范围，
+`foreach-sample-nodeids.txt` 列出剩余 34 个实际执行 ID。方法数与表格行数不变，计划实例数从 464 改为 314，
+包括之前已经执行的完整方法；不把未选择的 150 个实例记为 SKIP。
+抽样方法内部按所选实例判定，发布表格标记“抽样 PASS”，并列出抽样/可用实例数；
+不会把抽样结果描述为整个方法的全参数验证通过。
 
 ## 优先验收 2.10 的 PASS 方法
 

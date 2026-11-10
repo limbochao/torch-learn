@@ -129,6 +129,10 @@ def main():
             if state["stage"] == "error" and status in ("待执行", "PENDING", "RUNNING"):
                 status = "ERROR"
             instances = "; ".join(f"{key} {value}" for key, value in sorted(counts.items()))
+            if job.get("full_nodes"):
+                instances = (instances or "待执行") + f"；抽样 {len(job['nodes'])}/{len(job['full_nodes'])}"
+                if status == "PASS":
+                    status = "抽样 PASS"
             if row.get("nested"):
                 status = "随外层验证/" + status
                 instances = "随 " + source_name + " 验证"
@@ -183,6 +187,14 @@ def main():
                      f"当前阶段：`{state.get('phase')}`，阶段状态：`{state.get('phase_state')}`。\n")
             for phase, detail in state.get("phase_runs", {}).items():
                 text += f"\n阶段 `{phase}` 缓存：`{detail['cache_root']}`。\n"
+        if state.get("foreach_sample_limit"):
+            text += (f"\n当前为问题修复阶段：剩余 foreach 每个源方法最多执行 "
+                     f"{state['foreach_sample_limit']} 个代表实例，按 node ID 排序选择两端以覆盖不同算子。"
+                     "此前完成的方法保留原报告。表格中的“抽样 PASS”只证明所选实例通过，"
+                     "不代表整个参数化方法全部通过。"
+                     f"原清单 {state.get('full_instances')} 个实例，本轮保留已执行结果并缩减后计划 "
+                     f"{state.get('instances')} 个实例；不是完整参数化全量。"
+                     "实际抽样 node ID 见证据目录的 `foreach-sample-nodeids.txt`。\n")
         if layout.exists():
             text += ("\n表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。"
                      "嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。\n"
@@ -192,7 +204,9 @@ def main():
             matched = {(job["file"], job["name"]): job for job in jobs}
             records = [{"file": file, "name": name,
                         "baseline_result": baseline["最新结果"],
-                        "status": matched.get((file, name), {}).get("status", "待收集")}
+                        "status": matched.get((file, name), {}).get("status", "待收集"),
+                        "sampled": bool(matched.get((file, name), {}).get("full_nodes")),
+                        "selected_instances": len(matched.get((file, name), {}).get("nodes", []))}
                        for (file, name), baseline in priority.items()]
             counts = dict(Counter(record["status"] for record in records))
             (artifact / "baseline-pass-comparison.json").write_text(
@@ -203,6 +217,8 @@ def main():
                      "对照时须区分功能退化、测试适配差异与融合策略变化。"
                      "当前分析和后续定时发布均优先标记这组方法。"
                      "[重合项同步差异分析](inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。\n")
+            sampled_pass = sum(record["sampled"] and record["status"] == "PASS" for record in records)
+            text += f"\n上述 PASS 中有 {sampled_pass} 个方法为抽样 PASS，完整参数范围未全部执行。\n"
         if terminal:
             text += (f"\n执行前后安装的 Inductor Python 源码哈希一致："
                      f"`{state.get('installed_source_unchanged', False)}`。\n")

@@ -88,6 +88,16 @@ def write_table(output, jobs):
                              "; ".join(f"{key} {value}" for key, value in sorted(counts.items())), analysis])
 
 
+def select_instances(nodes, limit):
+    """Select a deterministic spread, including both ends when limit is two."""
+    nodes = sorted(nodes)
+    if not limit or len(nodes) <= limit:
+        return nodes
+    if limit == 1:
+        return nodes[:1]
+    return [nodes[index * (len(nodes) - 1) // (limit - 1)] for index in range(limit)]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--test-root", type=Path, required=True)
@@ -100,11 +110,15 @@ def main():
     parser.add_argument("--cache-root", type=Path, help="Fresh, isolated Inductor cache outside the evidence directory")
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--representatives", action="store_true")
+    parser.add_argument("--max-instances-per-method", type=int, default=0,
+                        help="Sample up to this many instances from every selected source method; zero runs all")
     parser.add_argument("--reuse", type=Path, help="Reuse verified, completed jobs from this output directory")
     parser.add_argument("--rerun-files", nargs="*", default=[], help="Files explicitly excluded from reuse")
     parser.add_argument("--foreach-functional", action="store_true", help="Record the NPU functional test policy")
     parser.add_argument("--layout", type=Path, help="Original table row mapping, including nested functions")
     args = parser.parse_args()
+    if args.max_instances_per_method < 0:
+        parser.error("--max-instances-per-method must be nonnegative")
     base, output = args.test_root.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     devices = [int(value) for value in args.devices.split(",")]
@@ -124,7 +138,7 @@ def main():
              "test_root": str(base), "test_commit": args.test_commit, "python": sys.executable,
              "custom_pytest_plugin": False, "methods": len(selected)}
     state.update(rerun_files=args.rerun_files, foreach_functional=args.foreach_functional,
-                 npu_fix_commit=args.npu_fix_commit)
+                 npu_fix_commit=args.npu_fix_commit, max_instances_per_method=args.max_instances_per_method)
     if args.cache_root:
         cache = args.cache_root.resolve()
         assert cache != output and output not in cache.parents, "Keep the compilation cache outside evidence"
@@ -176,12 +190,18 @@ def main():
                 raise RuntimeError(f"No collected instances for {row['file']}::{row['class']}::{row['name']}")
             if args.representatives:
                 nodes = nodes[:1]
-            jobs.append({**row, "index": index, "nodes": sorted(nodes), "status": "PENDING"})
+            full_nodes = sorted(nodes)
+            nodes = select_instances(full_nodes, args.max_instances_per_method)
+            job = {**row, "index": index, "nodes": nodes, "status": "PENDING"}
+            if nodes != full_nodes:
+                job.update(full_nodes=full_nodes, sample_limit=args.max_instances_per_method)
+            jobs.append(job)
         nodes = [node for job in jobs for node in job["nodes"]]
         assert len(nodes) == len(set(nodes)), "Overlapping source method selection"
         save(output / "collection.json", jobs)
         (output / "nodeids.txt").write_text("\n".join(sorted(nodes)) + "\n")
         state.update(stage="collected" if args.collect_only else "testing", instances=len(nodes))
+        state["full_instances"] = sum(len(job.get("full_nodes", job["nodes"])) for job in jobs)
         save(output / "status.json", state)
         if args.collect_only:
             return
