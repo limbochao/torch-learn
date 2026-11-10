@@ -36,3 +36,27 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 `PASS` 要求该方法的全部预期实例都有报告且没有失败或跳过；报告缺失或异常退出记为 `ERROR`。
 脚本还核对执行前后的 torch/torch_npu Inductor Python 源码哈希，防止混入安装包变动。
 表格的“当前分析”保留实际异常摘要，不能把异常摘要直接当作根因结论。
+
+## 本轮执行与自动收尾
+
+远端快照及运行目录：`/home/l30023782/PTA_213/combo-sync-64dc85c-20261110`。
+`run.log` 记录调度结果，`results/status.json` 记录阶段，`results/` 保存逐方法证据。
+本轮使用物理卡 6 和 1；卡号沿用当前任务授权范围，未使用 4、5 卡或告警的 2 卡。
+
+本地开发机的用户级 systemd timer `combo-sync-213-20261110.timer` 检查远端状态，
+首次 10 分钟后检查，随后每 15 分钟检查一次。测试本身始终在 NPU_A5 上执行。
+完成后自动下载证据、刷新独立的 2.13 表格并推送 torch-learn，最后停止 timer。
+状态为 error 时同样保存证据和失败状态，不能把收集失败视为用例通过。
+
+手动检查一次：
+
+```bash
+python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
+  --remote-root /home/l30023782/PTA_213/combo-sync-64dc85c-20261110 \
+  --name inductor-combo-tests-native-v2.13-sync-64dc85c \
+  --push --stop-timer combo-sync-213-20261110.timer
+```
+
+`--initial` 可以提前发布正在运行的状态表；日常定时检查不下载中间日志。
+结果表为 `docs/notes/compiler/codegen/inductor-combo-tests-native-v2.13-sync-64dc85c.csv`，
+原始证据保存在同名 `artifacts/` 子目录，2.10 结果表保持原样。
