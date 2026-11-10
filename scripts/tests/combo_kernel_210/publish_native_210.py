@@ -42,9 +42,16 @@ def classify(method):
         return "执行异常", "报告与进程退出码不一致"
     details = []
     for failure in method["failures"]:
-        text = failure.get("longrepr", "")
-        lines = [line.strip() for line in text.splitlines() if re.match(r"E\s+", line)]
-        summary = " / ".join(lines[-3:]) if lines else " ".join(text.splitlines()[-3:])
+        text = failure.get("longrepr", "").split("To execute this test", 1)[0]
+        lines = [re.sub(r"^E\s+", "", line).strip() for line in text.splitlines()
+                 if re.match(r"E\s+\S", line)]
+        summary = " / ".join(lines[:3]) if lines else " ".join(text.splitlines()[-3:])
+        if "generated_kernel_count" in text:
+            summary = "kernel 数量断言未满足；" + summary
+        elif "Tensor-likes are not close!" in text:
+            summary = "数值比较失败；" + summary
+        elif "_check_provenance_tracing_kernel_to_post_grad" in text:
+            summary = "provenance 映射检查失败；" + summary
         summary = clean(summary)[:650]
         if summary not in details:
             details.append(summary)
@@ -85,6 +92,22 @@ def publish(repo, artifact, raw, state):
     summary = {"method_counts": dict(method_counts), "instance_counts": result["instance_counts"],
                "source_methods": 54, "instances": result["expected_instances"], "context": context,
                "validation_complete": True}
+    categories = Counter()
+    for method in result["methods"]:
+        failures = method["failures"]
+        if not failures:
+            continue
+        if all("generated_kernel_count" in failure.get("longrepr", "") for failure in failures):
+            category = "kernel 数量断言"
+        elif all("Tensor-likes are not close!" in failure.get("longrepr", "") for failure in failures):
+            category = "数值比较"
+        elif all("_check_provenance_tracing_kernel_to_post_grad" in failure.get("longrepr", "")
+                 for failure in failures):
+            category = "provenance 映射"
+        else:
+            category = "其他，待分析"
+        categories[category] += 1
+    summary["failure_categories_by_method"] = dict(categories)
     (artifact / "summary.json").write_text(json.dumps(clean_value(summary), ensure_ascii=False, indent=2) + "\n")
     started = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(state["started"] + 8 * 3600))
     finished = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(state["finished"] + 8 * 3600))
@@ -102,6 +125,10 @@ def publish(repo, artifact, raw, state):
             "方法只有在其全部实例通过时才计为 PASS；跳过和执行异常单独记录。",
             f"用户预期 51 个方法 PASS，实际为 {method_counts.get('通过', 0)} 个，"
             f"差值 {method_counts.get('通过', 0) - 51:+d}。旧 2.13 适配版曾删除部分结构断言，结果不直接等价。", "",
+            "失败方法按本轮实际触发的检查分类：" + "，".join(
+                f"{name} {count} 个" for name, count in categories.items()) + "。",
+            "kernel 数量断言失败表示生成数量不符合原版预期；本表仍按原测试判为失败，"
+            "不能直接归为算子功能不支持或数值错误。", "",
             "2.10 原版 `test_mean` 不主动开启 Combo，其通过仅说明原始配置下通过。", "",
             "[完整 CSV 表](inductor-combo-tests-native-v2.10.csv)；"
             f"[本轮证据](../../../../artifacts/{artifact.name}/summary.json)。", "",
