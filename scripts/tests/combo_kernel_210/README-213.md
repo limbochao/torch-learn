@@ -85,6 +85,9 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 先运行原失败路径和 foreach 数值、梯度代表实例，再启动完整清单。
 全新缓存下，普通激活 Combo 与 benchmark 激活用例已通过，确认上述两条接口路径均可执行。
 foreach 的带 mask 用例与 abs 梯度代表实例也已通过数值验证。
+单节点两个实例已在新缓存下通过数值与数量断言：benchmark 关闭为 2、开启为 4；
+生成的是普通 `GridNpu` kernel，源码中不含 `combo_grid_meta`。
+用例仍因要求 CUDA 的 `Grid1D` 字面值而 FAIL，未为得到 PASS 修改该断言。
 其余融合数量、内存峰值和后端专用代码断言保持原样，由完整复测如实记录。
 完整清单不复用原包结果，仍使用原生 pytest。设置独立 `TORCHINDUCTOR_CACHE_DIR`：
 Python 侧覆盖不改变包版本，旧 FX/代码缓存可能仍被命中，已在早期探测中观察到旧 Combo 代码；
