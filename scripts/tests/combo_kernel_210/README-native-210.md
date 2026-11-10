@@ -78,6 +78,12 @@ python scripts/tests/combo_kernel_210/publish_native_210.py \
 本地开发机用户 systemd timer 首次 10 分钟后检查，此后每 15 分钟检查；
 完成后自动下载、核对源码与实例完整性、更新表格、提交推送并停止 timer。
 
+本轮运行中按用户要求释放了物理卡 4，后续仅使用 1、3、5。
+`resume_migrated_validation.py` 使用 phase 中的 `migration_plan.json` 接管未停止的 pytest：
+等待原进程结束后，核对完整阶段报告和 JUnit XML，再继续该卡的新队列。
+被中断方法的部分报告放入 `evidence/interrupted/`，方法在其他卡重新执行；已完成方法不重跑。
+最终仍按原来的 373 个 node ID 和安装源码 SHA256 完整性检查收尾，publisher 不变。
+
 ## 重新生成
 
 在 torch-learn 仓库根目录运行：
