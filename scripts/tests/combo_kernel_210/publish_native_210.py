@@ -94,7 +94,8 @@ def publish(repo, artifact, raw, state):
             "仅为 Combo 文件补充与 foreach 一致的 NPU 初始化；测试插件只负责设备初始化、选择和记录。", "",
             f"测试源码提交：`{context['test_source_commit']}`。", "",
             f"安装包：`torch_npu {context['packages']['torch_npu']}`；"
-            f"`torch {context['packages']['torch']}`；`triton {context['packages']['triton']}`。", "",
+            f"`torch {context['packages']['torch']}`；"
+            f"`triton {context.get('triton_module_version', context['packages']['triton'])}`（实际导入版本）。", "",
             "本轮没有叠加生产代码修复。安装源码运行前后 SHA256 一致。", "",
             f"54 个源方法：" + "，".join(f"{key} {value}" for key, value in method_counts.items()) + "。",
             f"参数化实例共 {result['expected_instances']} 个：`{result['instance_counts']}`。", "",
