@@ -220,3 +220,31 @@ python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
 `--initial` 可以提前发布正在运行的状态表；日常定时检查不下载中间日志。
 结果表为 `docs/notes/compiler/codegen/inductor-combo-tests-native-v2.13-sync-64dc85c.csv`，
 完整范围证据保存在带 `-all116` 后缀的 `artifacts/` 子目录，首批证据和 2.10 结果表保持原样。
+
+## 失败实例复验（接口及静态 reduction 修复）
+
+生产分支 `fix/combo-sync-interfaces-v2.13` 新增：
+
+- `bf2f56c6e4`：benchmark 动态轴尺寸提示改为 2.13 的 `optimization_hint`。
+- `257e31bde7`：恢复 persistent reduction 常量轴的静态 `R*BLOCK_SUB` 定义。
+- `bb5e1d0a84`：Combo 回退按普通 kernel 边界重算输入最后使用位置，避免重复释放。
+
+测试快照 `c1ce068` 同步旧 NPU 功能验证策略：移除已支持场景的旧 skip，
+保留动态形状两组输入的数值比较，NPU 上不检查与 CUDA 绑定的数量和 DSL。
+未重合的新功能用例继续保留原检查，不因疑似不支持而改为 PASS。
+
+`run_plain_pytest.py` 的 manifest 可给每行增加 `only_nodes`，内容必须是
+该源方法实际收集到的完整 node ID，重复、空列表或无法收集的实例会直接报错。
+此模式只执行失败参数实例，不重跑同一 foreach 方法此前通过的参数。
+本次按 2.10 已通过的重合方法、其他失败方法两阶段执行，使用独立缓存。
+安装 Python 源码在两个阶段结束前保持不变；后续生命周期修复另开阶段验证。
+
+下载阶段产物后，用 `merge_failed_results.py --reference <previous-artifact>
+--rerun <priority-artifact> <remaining-artifact> --output <new-artifact>` 逐实例刷新结果。
+该工具不把旧 PASS 当作新包复测，保留每条报告的来源和验证提交；
+拒绝更新未完成阶段、重复覆盖的实例和历史 PASS。
+多个输入阶段的安装源码哈希必须相同；不同 overlay 的后续修复需单独再合并一层。
+
+`publish_plain_pytest.py --local-artifact <new-artifact> --name <artifact-name>
+--table-name inductor-combo-tests-native-v2.13-sync-64dc85c` 可从本地产物刷新同一 116 行表。
+表格逐项区分本轮复测数及历史结果，保留原有抽样标记；PASS 行不再保留历史失败分析。
