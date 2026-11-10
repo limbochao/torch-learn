@@ -98,6 +98,9 @@ python -m pytest -vs \
 ```
 
 本轮两项前置验证均 PASS，耗时约 145 秒，安装源码哈希一致；随后已自动恢复完整任务。
+恢复后，原收集进程报告物理卡 6 的设备子进程启动超时（E39007/507033），未执行任何测试实例。
+该次证据保留在远端 `results-collection-failed/`。已核对安装源码不变，重新启动完整任务，
+改在卡 1 收集清单，在卡 1、6 执行，使用新缓存 `cache-full-retry1`；继续沿用已通过的两项前置验证。
 前置失败时保留日志并分析原因，不能直接放行全部 foreach。
 全新缓存下，普通激活 Combo 与 benchmark 激活用例已通过，确认上述两条接口路径均可执行。
 foreach 的带 mask 用例与 abs 梯度代表实例也已通过数值验证。
@@ -112,10 +115,10 @@ Python 侧覆盖不改变包版本，旧 FX/代码缓存可能仍被命中，已
 ```bash
 --test-commit a889082 --npu-fix-commit 5a5bda0ae36a30a865ea52f7cd1df2a5a2ea532c \
 --foreach-functional \
---cache-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110/cache-full
+--cache-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110/cache-full-retry1
 ```
 
-新本地 timer 为 `combo-sync-213-interface-fix-20261110.timer`，首次 10 分钟后检查，
+新本地 timer 为 `combo-sync-213-interface-fix-retry1-20261110.timer`，首次 10 分钟后检查，
 随后每 15 分钟检查；测试在 NPU_A5 的物理卡 1、6 执行。
 完成后下载证据、更新同一份 116 行表并推送，停止 timer。手动检查命令：
 
@@ -124,7 +127,7 @@ python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
   --remote-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110 \
   --name inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix \
   --table-name inductor-combo-tests-native-v2.13-sync-64dc85c \
-  --push --stop-timer combo-sync-213-interface-fix-20261110.timer
+  --push --stop-timer combo-sync-213-interface-fix-retry1-20261110.timer
 ```
 
 ## 首次完整范围执行记录（已完成）
