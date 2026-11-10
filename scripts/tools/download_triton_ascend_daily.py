@@ -4,8 +4,8 @@
 * ``--source``：``daily``（默认，OBS 时间戳目录）或 ``nightly``（华为云公开 nightly 索引）。
   两者是不同的发布来源，不会自动切换。
 * ``--build``：``latest``（默认）、日期 ``YYYYMMDD`` 或精确时间戳 ``YYYYMMDDhhmmss``。
-  日期查询优先遍历 22 点的秒级时间戳，再遍历当天其他时段，找到目标 wheel 后停止。
-  ``latest`` 优先查北京时间最近 7 天的 22 点时段，再查其他时段；不保证选择当天最后一次构建。
+  优先探测脚本内置的构建时间窗口（中心前后各 60 秒），再查 22 点和其他时段。
+  ``latest`` 查北京时间最近 7 天；找到目标 wheel 后停止，不保证选择当天最后一次构建。
 * ``--python-version``：支持 ``3.11``、``311``、``python311``，默认当前 Python 主次版本。
 * ``--arch``：``x86_64`` 或 ``aarch64``，默认当前架构，也支持 ``amd64``、``x64``、``arm64``。
 * ``--output-dir``：下载目录，默认当前工作目录。
@@ -16,7 +16,8 @@
 * ``--package-version``：daily wheel 文件名中的基础版本号，默认 ``3.6.0``。
 * ``--timeout``：单次请求超时秒数，默认 30，这是隐藏的调试配置。
 
-daily 以 16 个线程 HEAD 探测公开目录占位对象，再检查 wheel，不需要列目录权限。
+daily 以 16 个线程 HEAD 探测公开目录占位对象，复用各线程的 HTTPS 连接，完成一个立即补充一个。
+时间窗口只是启发式顺序，未命中仍会完整遍历。仅探测可读对象，不需要列目录权限。
 兼容 manylinux_2_27 + manylinux_2_34/2_28，以及带或不带 +dev 时间戳的版本名。
 公开 nightly 索引是独立来源。HTTPS 与 torch_npu 脚本一致，不校验证书。仅下载，不安装。
 """
@@ -24,18 +25,21 @@ daily 以 16 个线程 HEAD 探测公开目录占位对象，再检查 wheel，�
 from __future__ import annotations
 
 import argparse
+import http.client
 import platform
 import re
+import socket
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from itertools import islice
 from pathlib import Path
+from threading import Event, Lock, local
 from time import monotonic, sleep
 from typing import Iterable, Iterator
 
@@ -49,18 +53,106 @@ BUILD_RE = re.compile(r"\d{8}(?:\d{6})?")
 BEIJING = timezone(timedelta(hours=8))
 PROBE_WORKERS = 16
 LOOKBACK_DAYS = 7
+# Repeated batches in the supplied 2026-10-29..2026-11-09 history:
+# 22:04:01 (7 observations), 22:33:37 (3), 18:21:03 (11, including 18:20).
+# Keep evening batches first; these are time-of-day windows, not exact-date hits.
+BUILD_TIME_WINDOWS = (("22:04:01", 60), ("22:33:37", 60), ("18:21:03", 60))
+
+
+class ProbeHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self) -> None:
+        http.client.HTTPConnection.connect(self)
+        hostname = self._tunnel_host or self.host
+        # Expose the TLS socket before the handshake so cancellation can interrupt it.
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=hostname, do_handshake_on_connect=False)
+        self.sock.do_handshake()
+
+
+class KeepAliveHTTPSHandler(urllib.request.HTTPSHandler):
+    """HEAD-only handler; urllib's proxy, authentication and redirect handlers remain in use."""
+
+    def __init__(self, context) -> None:
+        super().__init__(context=context)
+        self.connections: dict[tuple[str, str | None], http.client.HTTPSConnection] = {}
+
+    def https_open(self, req):
+        return self.do_open(ProbeHTTPSConnection, req, context=self._context)
+
+    def do_open(self, http_class, req, **http_conn_args):
+        key = (req.host, req._tunnel_host)
+        connection = self.connections.get(key)
+        headers = dict(req.unredirected_hdrs)
+        headers.update({name: value for name, value in req.headers.items() if name not in headers})
+        headers = {name.title(): value for name, value in headers.items()}
+        headers["Connection"] = "keep-alive"
+        proxy_auth = headers.pop("Proxy-Authorization", None) if req._tunnel_host else None
+        if connection is None:
+            connection = http_class(req.host, timeout=req.timeout, **http_conn_args)
+            if req._tunnel_host:
+                tunnel_headers = {"Proxy-Authorization": proxy_auth} if proxy_auth else {}
+                connection.set_tunnel(req._tunnel_host, headers=tunnel_headers)
+            self.connections[key] = connection
+        try:
+            connection.request(req.get_method(), req.selector, req.data, headers)
+            response = connection.getresponse()
+        except (OSError, http.client.HTTPException) as error:
+            connection.close()
+            raise urllib.error.URLError(error) from error
+        response.url = req.get_full_url()
+        response.msg = response.reason
+        return response
+
+    def interrupt(self) -> None:
+        for connection in list(self.connections.values()):
+            sock = connection.sock
+            if sock is not None:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+    def close(self) -> None:
+        for connection in list(self.connections.values()):
+            connection.close()
+        self.connections.clear()
 
 
 class DailyClient(ObsClient):
     def __init__(self, timeout: float = 30.0) -> None:
         super().__init__(timeout)
         self.endpoint = OBS_ENDPOINT
+        self._head_local = local()
+        self._head_handlers: list[KeepAliveHTTPSHandler] = []
+        self._head_lock = Lock()
+
+    def close_head_connections(self) -> None:
+        with self._head_lock:
+            handlers = list(self._head_handlers)
+        for handler in handlers:
+            handler.close()
+
+    def interrupt_head_connections(self) -> None:
+        with self._head_lock:
+            handlers = list(self._head_handlers)
+        for handler in handlers:
+            handler.interrupt()
+
+    def close(self) -> None:
+        self.close_head_connections()
+        self._head_handlers.clear()
 
     def _open(self, url: str, method: str = "GET"):
         request = urllib.request.Request(
             url, method=method, headers={"User-Agent": "triton-ascend-build-downloader/1.0"}
         )
         try:
+            if method == "HEAD":
+                if not hasattr(self._head_local, "opener"):
+                    handler = KeepAliveHTTPSHandler(self.ssl_context)
+                    self._head_local.opener = urllib.request.build_opener(handler)
+                    with self._head_lock:
+                        self._head_handlers.append(handler)
+                return self._head_local.opener.open(request, timeout=self.timeout)
             return urllib.request.urlopen(request, timeout=self.timeout, context=self.ssl_context)
         except urllib.error.HTTPError as error:
             raise BuildError(f"request failed with HTTP {error.code}: {url}") from error
@@ -81,8 +173,10 @@ class DailyClient(ObsClient):
                 raise BuildError(f"wheel has no positive Content-Length: {obj.key}")
             return ObjectInfo(obj.key, int(size), response.headers.get("Last-Modified", ""))
 
-    def probe_object(self, key: str) -> ObjectInfo | None:
+    def probe_object(self, key: str, stop: Event | None = None) -> ObjectInfo | None:
         for attempt in range(3):
+            if stop is not None and stop.is_set():
+                return None
             try:
                 with self._open(self.object_url(key), method="HEAD") as response:
                     size = int(response.headers.get("Content-Length", "0"))
@@ -91,6 +185,9 @@ class DailyClient(ObsClient):
                 cause = error.__cause__ if isinstance(error, BuildError) else error
                 if isinstance(cause, urllib.error.HTTPError):
                     cause.close()
+                if stop is not None and stop.is_set():
+                    return None
+                if isinstance(cause, urllib.error.HTTPError):
                     if cause.code in (403, 404):
                         return None
                     retryable = cause.code == 429 or 500 <= cause.code < 600
@@ -153,11 +250,29 @@ def candidate_timestamps(build: str) -> Iterator[str]:
     else:
         dates = [build]
     cutoff = now.strftime("%Y%m%d%H%M%S")
+    preferred: list[int] = []
+    seen: set[int] = set()
+    for center, radius in BUILD_TIME_WINDOWS:
+        hour, minute, second = map(int, center.split(":"))
+        center_second = hour * 3600 + minute * 60 + second
+        for distance in range(radius + 1):
+            for offset in ((0,) if distance == 0 else (-distance, distance)):
+                value = center_second + offset
+                if 0 <= value < 86400 and value not in seen:
+                    seen.add(value)
+                    preferred.append(value)
+    for date in dates:
+        for second in preferred:
+            candidate = f"{date}{second // 3600:02d}{second // 60 % 60:02d}{second % 60:02d}"
+            if candidate <= cutoff:
+                yield candidate
     hour_groups = [[22], [hour for hour in range(23, -1, -1) if hour != 22]]
     for hours in hour_groups:
         for date in dates:
             for hour in hours:
                 for second in range(3599, -1, -1):
+                    if hour * 3600 + second in seen:
+                        continue
                     candidate = f"{date}{hour:02d}{second // 60:02d}{second % 60:02d}"
                     if candidate <= cutoff:
                         yield candidate
@@ -167,25 +282,44 @@ def iter_obs_builds(client: DailyClient, build: str) -> Iterator[str]:
     candidates = candidate_timestamps(build)
     probed = 0
     last_progress = 0.0
-    previous_hour = ""
+    stop = Event()
 
     def probe(candidate: str) -> bool:
-        return client.probe_object(f"{OBS_PREFIX}{candidate}/") is not None
+        return client.probe_object(f"{OBS_PREFIX}{candidate}/", stop) is not None
 
-    with ThreadPoolExecutor(max_workers=PROBE_WORKERS) as pool:
-        while batch := list(islice(candidates, PROBE_WORKERS * 2)):
-            hour = batch[0][:10]
-            if hour != previous_hour or monotonic() - last_progress >= 5:
-                print(f"Probing OBS {batch[0]} (HEAD, {probed} timestamps checked)", file=sys.stderr, flush=True)
-                previous_hour = hour
+    pool = ThreadPoolExecutor(max_workers=PROBE_WORKERS)
+    pending = {}
+
+    def submit_one() -> None:
+        candidate = next(candidates, None)
+        if candidate is not None:
+            pending[pool.submit(probe, candidate)] = candidate
+
+    try:
+        for _ in range(PROBE_WORKERS):
+            submit_one()
+        while pending:
+            if monotonic() - last_progress >= 5:
+                candidate = next(iter(pending.values()))
+                print(f"Probing OBS {candidate} (HEAD, {probed} timestamps checked)", file=sys.stderr, flush=True)
                 last_progress = monotonic()
-            # Only queue one small batch, so stopping does not leave a day's requests queued.
-            results = list(pool.map(probe, batch))
-            probed += len(batch)
-            for candidate, found in zip(batch, results):
+            done, _ = wait(pending, timeout=1.0, return_when=FIRST_COMPLETED)
+            for future in done:
+                candidate = pending.pop(future)
+                found = future.result()
+                probed += 1
                 if found:
-                    print(f"Found OBS build: {candidate}", file=sys.stderr, flush=True)
+                    print(f"Found OBS build: {candidate} ({probed} HEAD checks)", file=sys.stderr, flush=True)
                     yield candidate
+                submit_one()
+    finally:
+        stop.set()
+        for future in pending:
+            future.cancel()
+        # Interrupt pending HEAD reads so an unrelated slow probe cannot delay a hit.
+        client.interrupt_head_connections()
+        pool.shutdown(wait=True, cancel_futures=True)
+        client.close_head_connections()
 
 
 def list_obs_builds(client: DailyClient, build: str, count: int) -> list[str]:
@@ -343,6 +477,8 @@ def main(argv: list[str] | None = None) -> int:
     except (BuildError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    finally:
+        client.close()
 
 
 if __name__ == "__main__":
