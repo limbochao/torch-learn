@@ -10,6 +10,10 @@ published: false
 20 个方法由 184 个实例缩为 34 个。本轮不再执行 foreach 完整参数范围；
 “抽样 PASS”只证明所选实例通过，尚不能声明这 60 个方法全部参数通过。
 
+本轮现已结束：105 方法为 44 PASS、54 FAIL、7 SKIP；60 个优先方法为 39 PASS、19 FAIL、2 SKIP，
+其中 14 个 PASS 方法为抽样通过。剩余 foreach 的 20 方法、34 实例全部通过，
+此前 `test_type_promotion` 的设备初始化失败仍保留为 FAIL，未被抽样结果覆盖。
+
 [2.10 基线表](inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv)；
 [2.13 当前表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；
 [自动生成的逐方法对照](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix/baseline-pass-comparison.json)。
@@ -43,6 +47,11 @@ foreach 已对齐 2.10 功能验证口径；其他文件保留当前测试快照
 - `test_dynamic_shapes_mutated`
 - `test_dynamic_shapes_persistent_reduction_no_x_dim`
 - `test_dynamic_shapes_2d_blocking_round_robin`
+
+最终在优先范围内共 12 个方法被同一旧接口阻塞，另有 `test_persistent_reduction_no_x_dim`、
+`test_combo_kernel_size_hint_failure`、`test_dynamic_shapes_activations`、`test_dynamic_shapes_reduce`、
+`test_dynamic_shapes_activations_no_autotune`、`test_dynamic_shapes_persistent_reduction_no_x_dim_2`、
+`test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda`、`test_helper_fn_defined`。
 
 调用链是 `benchmark_combo_kernel → generate_combo_kernel_code → codegen_kernel_benchmark →
 kernel_benchmark_extra_args`，最后报：
@@ -141,8 +150,13 @@ if tree.is_no_loop_axis:
 | `test_rand_like_deterministic` | Combo=True 实例仍由源码中的“NPU Inductor does not support ComboKernel yet”主动 skip；2.10 适配曾去掉它 | 旧 skip 残留，不能据此判定算子或随机数实现缺失 |
 | `test_type_promotion` | `_foreach_clamp_max` 实例在编译子进程初始化设备时超时，随后 context 为空；其余实例数值检查有通过报告 | 当前是设备初始化失败证据；需重试该实例后才能判断是否另有编译或精度问题 |
 
-`test_combo_kernel_filter_cpu` 虽尚待调度，源码也有宽泛的 NPU skip；该方法同属 60 个验收项，
-后续不能将其 SKIP 当作满足基线。当前不因静态发现 skip 就提前改变运行结果。
+`test_combo_kernel_filter_cpu` 最终也因宽泛的 NPU skip 记为 SKIP；该方法同属 60 个验收项，
+不能将其 SKIP 当作满足基线。
+
+最终另外两个数量断言失败是 `test_reduce_functions`（要求 kernel 数量不大于 2）和
+`test_combo_kernel_per_config_subkernel_red_per`（预期 1，实际 2），数值检查均已通过，
+尚未对这两个方法单独采集回退日志。`test_reduce_benchmark` 则直接在 benchmark kernel 编译时
+报 `R1BLOCK_SUB is not defined`，与已定位的静态块参数生成问题一致。
 
 ## 已有五个修复是否被漏带
 
@@ -152,7 +166,7 @@ if tree.is_no_loop_axis:
 | --- | --- | --- |
 | F10/F12：删除 inplace store 状态 | Combo 聚合 `inplaced_to_remove`，最终 `code.getvalue()` 在 Combo handler 中渲染 | `test_mean` 已 PASS；其他目标以运行表为准 |
 | F11：移除中间 buffer store | Combo 聚合 `removed_buffers` | `test_mutated_benchmark` 已 PASS；动态 mutation 当前被旧 size_hint 接口提前阻塞 |
-| F8：benchmark 尺寸收集副作用 | `generate_node_numel_expr()` 的空名称提前返回仍存在 | `test_combo_kernel_size_hint_failure` 尚待执行，不能仅凭代码存在宣布通过 |
+| F8：benchmark 尺寸收集副作用 | `generate_node_numel_expr()` 的空名称提前返回仍存在 | 目标用例被旧 size_hint 接口提前阻塞，未验证后续行为 |
 | F4：FloorDiv 无进位拆分 | 两个除法分析 helper 与旧修复的 AST 一致；mask 过滤为后续主动恢复 | pooling 的 Combo=False/True 已在本轮 2/2 PASS |
 | F5：值为 1 的常量 metadata | 普通 Index 和 Combo 的 `equal_1_arg_indices` 登记均存在 | 随机数 Combo=True 仍被测试 skip，需放开适用条件后验证 |
 
