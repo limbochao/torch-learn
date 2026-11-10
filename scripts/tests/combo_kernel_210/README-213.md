@@ -4,11 +4,14 @@
 目标安装包为 `torch_npu 2.13.0+git64dc85c`，对应 `sync/combo-kernel-master` 提交
 `64dc85c99c1398a0bd2355b72cc2851d0688b964`。PyTorch 为 `2.13.0+cpu`，Triton 为 `3.6.0`。
 
-用例源为测试仓库 `v2.13.0/inductor_npu`，完整范围快照提交为 `3f5e543`。
-本次只为相关测试文件补充缺失或过晚的 Triton 探测初始化，保留该目录已有的 NPU 适配代码，
-不放宽 kernel 数量、源码或数值断言，不改安装包。
-该目录的 foreach 方法存在主动 NPU skip，理由为不支持 NPU FOREACH 分组融合；
-本轮保留并如实报告 SKIP，不把这些结果计为 PASS。
+用例源为测试仓库 `v2.13.0/inductor_npu`，初次完整范围快照提交为 `3f5e543`，结果已归档：
+105 个独立方法为 1 PASS、70 FAIL、34 SKIP；464 个实例为 3 PASS、77 FAIL、384 SKIP。
+安装包的 Inductor Python 源码在执行前后保持一致。
+
+最新 foreach 功能验证快照为 `a889082`，按 2.10 的 NPU 验证规则修改：
+取消本轮 27 个 foreach 方法的主动 NPU skip；NPU 上不检查 kernel 数量及 foreach 专用生成代码，
+保留数值、原地修改和梯度断言，以及其他后端原有的融合检查。
+功能 PASS 不证明 FOREACH 分组融合生效。其余不在本轮选择范围内的 skip 保持不变；不改安装包。
 
 执行范围以 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 的全部 116 行为准，
 不沿用 2.10 的排除范围。`select_213_table.py` 按 2.13 源码解析为 105 个独立方法和 11 行嵌套函数；
@@ -33,7 +36,7 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
   --manifest /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_213_all_selected.json \
   --layout /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_213_table_rows.json \
   --output /path/to/fresh-output-directory \
-  --test-commit 3f5e543 --devices 6,1
+  --test-commit a889082 --devices 6,1
 ```
 
 `--representatives` 每个文件只选一个实际参数化实例；`--collect-only` 仅收集、不执行。
@@ -50,15 +53,41 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 复用前核对包提交、Triton 版本、安装源码哈希、对应测试文件内容和实际 node ID 集合；
 任一项不一致即停止复用。原日志、XML 和命令一并保存，已知失败和跳过也如实保留。
 
-## 本轮执行与自动收尾
+## foreach 复测与结果复用
+
+最新运行目录为 `/home/l30023782/PTA_213/combo-sync-64dc85c-foreach-functional-20261110`。
+使用完整 105 方法清单重新收集，额外传入：
+
+```bash
+--reuse /home/l30023782/PTA_213/combo-sync-64dc85c-all116-20261110/results \
+--rerun-files test_foreach.py --foreach-functional
+```
+
+只复用未修改的 78 个其他文件方法，重新执行 foreach 的 27 个方法、376 个实例。
+`--rerun-files` 显式排除修改文件的结果复用；`--foreach-functional` 只记录验证口径，
+不改变 pytest 或待测代码。原完整结果仍保存在带 `-all116` 后缀的证据目录。
+
+最新本地 timer 为 `combo-sync-213-foreach-functional-20261110.timer`，首次 10 分钟后检查，
+随后每 15 分钟检查；测试在 NPU_A5 执行。完成后下载结果、更新同一份 116 行表并推送。
+手动检查命令：
+
+```bash
+python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
+  --remote-root /home/l30023782/PTA_213/combo-sync-64dc85c-foreach-functional-20261110 \
+  --name inductor-combo-tests-native-v2.13-sync-64dc85c-foreach-functional \
+  --table-name inductor-combo-tests-native-v2.13-sync-64dc85c \
+  --push --stop-timer combo-sync-213-foreach-functional-20261110.timer
+```
+
+## 首次完整范围执行记录（已完成）
 
 完整范围快照及运行目录：`/home/l30023782/PTA_213/combo-sync-64dc85c-all116-20261110`。
 `run.log` 记录调度结果，`results/status.json` 记录阶段，`results/` 保存逐方法证据。
 本轮使用物理卡 6 和 1；卡号沿用当前任务授权范围，未使用 4、5 卡或告警的 2 卡。
 
-本地开发机的用户级 systemd timer `combo-sync-213-all116-20261110.timer` 检查远端状态，
+此前本地开发机的用户级 systemd timer `combo-sync-213-all116-20261110.timer` 检查远端状态，
 首次 10 分钟后检查，随后每 15 分钟检查一次。测试本身始终在 NPU_A5 上执行。
-完成后自动下载证据、刷新独立的 2.13 表格并推送 torch-learn，最后停止 timer。
+完成后已下载证据、刷新独立的 2.13 表格并推送 torch-learn，旧 timer 已停止。
 状态为 error 时同样保存证据和失败状态，不能把收集失败视为用例通过。
 
 手动检查一次：

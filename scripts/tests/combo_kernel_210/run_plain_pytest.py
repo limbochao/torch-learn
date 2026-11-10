@@ -99,6 +99,8 @@ def main():
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--representatives", action="store_true")
     parser.add_argument("--reuse", type=Path, help="Reuse verified, completed jobs from this output directory")
+    parser.add_argument("--rerun-files", nargs="*", default=[], help="Files explicitly excluded from reuse")
+    parser.add_argument("--foreach-functional", action="store_true", help="Record the NPU functional test policy")
     parser.add_argument("--layout", type=Path, help="Original table row mapping, including nested functions")
     args = parser.parse_args()
     base, output = args.test_root.resolve(), args.output.resolve()
@@ -119,6 +121,7 @@ def main():
     state = {"stage": "collecting", "started": time.time(), "devices": devices,
              "test_root": str(base), "test_commit": args.test_commit, "python": sys.executable,
              "custom_pytest_plugin": False, "methods": len(selected)}
+    state.update(rerun_files=args.rerun_files, foreach_functional=args.foreach_functional)
     save(output / "status.json", state)
     try:
         import torch
@@ -183,6 +186,8 @@ def main():
             old_jobs = {(j["file"], j["class"], j["name"]): j
                         for j in json.loads((previous / "jobs.json").read_text())}
             for job in jobs:
+                if job["file"] in args.rerun_files:
+                    continue
                 old = old_jobs.get((job["file"], job["class"], job["name"]))
                 if old is None:
                     continue
