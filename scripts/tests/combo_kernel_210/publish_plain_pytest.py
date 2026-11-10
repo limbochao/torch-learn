@@ -75,6 +75,11 @@ def main():
                 analysis = ("分区接口未对齐 2.13：NPU generate_combo_kernel_code 仍构造四元 tuple，"
                             "上游 horizontal_partition 要求 NodeInfo，并读取 .tiling 和 .features；"
                             "在生成、执行 kernel 前即失败。")
+            elif (status == "FAIL" and row["name"] == "test_single_combo_kernels"
+                  and "GridNpu" in detail and "Grid1D" in detail):
+                analysis = ("执行已越过同步接口错误；当前失败为生成代码断言要求 CUDA Grid1D，"
+                            "NPU 普通 kernel 使用 GridNpu。数值及该实例的 kernel 数量检查已通过，"
+                            "需区分测试中的后端特定检查与实际代码生成问题。")
             elif status == "FAIL" and "only supported contiguous memory format" in detail:
                 analysis = ("用例 eager 基准调用 channels_last contiguous 即失败，尚未进入 torch.compile；"
                             "属于 NPU eager 内存格式支持限制，不能归因为 ComboKernel 编译失败。")
@@ -107,6 +112,10 @@ def main():
             policy = ("保留指定目录已有的 NPU 适配和全部原始断言，没有沿用 2.10 foreach 放宽数量检查的修改。"
                       "该目录的 foreach 方法存在主动 NPU skip，原因为“不支持 NPU FOREACH 分组融合”。"
                       "这类结果保留为 SKIP，不能作为数值正确或融合成功的证据。")
+        environment = "使用原生 pytest，无自定义 pytest 插件；设置选卡变量。"
+        if state.get("cache_root"):
+            environment += (f"另设独立 TORCHINDUCTOR_CACHE_DIR：`{state['cache_root']}`，"
+                            "避免 Python 修复后复用旧编译代码；未清理共享缓存。")
         text = (f"# 2.13 ComboKernel 同步分支验证\n\n"
                 f"使用 NPU_A5 的 `pta_213_case` 环境及本地 `sync/combo-kernel-master` 对应包。\n"
                 f"torch_npu：`{state.get('torch_npu', '待获取')}`，提交：`{state.get('torch_npu_git', '待获取')}`。\n"
@@ -119,7 +128,7 @@ def main():
                 f"[用例表]({target.name})；"
                 f"[执行脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)；"
                 f"[原始证据](../../../../artifacts/{args.name}/)。\n\n"
-                "使用原生 pytest，无自定义 pytest 插件；仅设置选卡变量。" + policy + "\n\n"
+                + environment + policy + "\n\n"
                 "表格中的异常摘要来自 JUnit 报告；尚未逐项定位的错误不能直接据此归因于 ComboKernel。"
                 "PASS 项不保留历史失败分析。\n")
         if layout.exists():

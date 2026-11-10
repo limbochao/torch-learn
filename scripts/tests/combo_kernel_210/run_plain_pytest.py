@@ -97,6 +97,7 @@ def main():
     parser.add_argument("--test-commit", required=True)
     parser.add_argument("--npu-fix-commit", help="Python overlay commit applied to the installed NPU package")
     parser.add_argument("--timeout", type=int, default=3600)
+    parser.add_argument("--cache-root", type=Path, help="Fresh, isolated Inductor cache outside the evidence directory")
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--representatives", action="store_true")
     parser.add_argument("--reuse", type=Path, help="Reuse verified, completed jobs from this output directory")
@@ -124,6 +125,12 @@ def main():
              "custom_pytest_plugin": False, "methods": len(selected)}
     state.update(rerun_files=args.rerun_files, foreach_functional=args.foreach_functional,
                  npu_fix_commit=args.npu_fix_commit)
+    if args.cache_root:
+        cache = args.cache_root.resolve()
+        assert cache != output and output not in cache.parents, "Keep the compilation cache outside evidence"
+        cache.mkdir(parents=True, exist_ok=False)
+        os.environ["TORCHINDUCTOR_CACHE_DIR"] = str(cache)
+        state["cache_root"] = str(cache)
     save(output / "status.json", state)
     try:
         import torch

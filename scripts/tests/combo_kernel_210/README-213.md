@@ -23,7 +23,7 @@
 逐文件执行原生 pytest 收集，从输出中解析实际参数化 node ID，按照源类名和最长方法名前缀精确匹配。
 随后按源方法分组，以独立 pytest 子进程在指定物理卡上执行。
 每个子进程的入口均为 `python -m pytest -vs`，不加载自定义插件，不注入 Python monkeypatch。
-除选卡外，不强制设置编译线程、OMP 线程或 pytest 自动加载开关。
+不强制设置编译线程、OMP 线程或 pytest 自动加载开关。Python 修复后的复测另设独立编译缓存目录。
 
 在装有上述环境的机器中执行：
 
@@ -37,7 +37,8 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
   --manifest /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_213_all_selected.json \
   --layout /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_213_table_rows.json \
   --output /path/to/fresh-output-directory \
-  --test-commit a889082 --devices 6,1
+  --test-commit a889082 --devices 6,1 \
+  --cache-root /path/to/fresh-cache-directory
 ```
 
 `--representatives` 每个文件只选一个实际参数化实例；`--collect-only` 仅收集、不执行。
@@ -69,6 +70,9 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
   2.10 分区代码以 `[1]` 取 tiling，2.13 则读取 `.tiling` 和 `.features`，旧数据结构无法满足新接口。
   新 `NodeInfo` 复用创建 NPU 子 kernel 的 features、tiling 及实际 persistent-reduction 状态；
   取 node_schedule 也同步改为字段访问。
+- `4b4176acbf`：补齐 2.13 单节点分区协议。正式 codegen 生成普通 NPU kernel，
+  benchmark 返回占位值并由社区调用者复用节点计时，避免生成仅含一个子 kernel 的 Combo 和重复计数。
+  所有分区验证 TTIR 通过后才统一 mark_run、更新图状态，保留现有失败回退的前置验证条件。
 
 只在 `pta_213_case` 安装目录覆盖 `npu_combined_scheduling.py` 和 `scheduling.py` 两个 Python 文件，
 没有重新构建 wheel。覆盖前核对文件哈希与原完整测试快照一致，原文件保存在新运行目录的 `original/`，
@@ -76,11 +80,14 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 包版本仍显示 `2.13.0+git64dc85c`，不能仅凭版本字符串区分本次 Python 修复；结果额外记录叠加提交。
 
 先运行原失败路径和 foreach 数值、梯度代表实例，再启动完整清单。
-完整清单不复用原包结果，仍使用原生 pytest，额外参数为：
+完整清单不复用原包结果，仍使用原生 pytest。设置独立 `TORCHINDUCTOR_CACHE_DIR`：
+Python 侧覆盖不改变包版本，旧 FX/代码缓存可能仍被命中，已在早期探测中观察到旧 Combo 代码；
+不隔离缓存就不能把运行结果归到修复提交。不会清理其他任务的共享缓存。额外参数为：
 
 ```bash
---test-commit a889082 --npu-fix-commit a79fb5eda39c5239583631f5e5e9830068bd365a \
---foreach-functional
+--test-commit a889082 --npu-fix-commit 4b4176acbf \
+--foreach-functional \
+--cache-root /home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110/cache-full
 ```
 
 新本地 timer 为 `combo-sync-213-interface-fix-20261110.timer`，首次 10 分钟后检查，
