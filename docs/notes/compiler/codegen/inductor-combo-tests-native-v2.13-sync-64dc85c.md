@@ -6,8 +6,8 @@ NPU Python 修复叠加提交：`5a5bda0ae36a30a865ea52f7cd1df2a5a2ea532c`。
 PyTorch：`2.13.0+cpu`，Triton：`3.6.0`。
 测试快照：`a889082`，目录为 `v2.13.0/inductor_npu`。
 
-状态：`testing`；116 行表格、105 个独立源方法，464 个参数化实例。方法结果：`{'PENDING': 100, 'PASS': 3, 'RUNNING': 2}`。
-已报告实例结果：`{'PASS': 99}`。
+状态：`testing`；116 行表格、105 个独立源方法，464 个参数化实例。方法结果：`{'PASS': 16, 'RUNNING': 2, 'SKIP': 3, 'PENDING': 70, 'FAIL': 14}`。
+已报告实例结果：`{'PASS': 207, 'SKIP': 3, 'FAIL': 14}`。
 
 [用例表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；[执行脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)；[原始证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-interface-fix/)。
 
@@ -16,6 +16,12 @@ PyTorch：`2.13.0+cpu`，Triton：`3.6.0`。
 表格中的异常摘要来自 JUnit 报告；尚未逐项定位的错误不能直接据此归因于 ComboKernel。PASS 项不保留历史失败分析。
 
 foreach 全量前置验证：`[{'name': 'test_single_list__foreach_abs', 'status': 'PASS'}, {'name': 'test_foreach_map_backward_unary_foreach_map_abs', 'status': 'PASS'}]`。两项均通过才恢复完整任务：`True`。前置实例不额外计入完整清单统计。
+
+执行顺序已调整：卡 1、6 当时正在执行的 foreach 方法继续到结束，卡 2、3 先执行其他文件的 78 个源方法（88 个实例）；这些方法完成后，剩余 foreach 才在卡 1、2、3、6 执行。已完成结果保留，未重跑；各阶段使用独立新缓存。当前阶段：`non_foreach_first`，阶段状态：`testing`。
+
+阶段 `non-foreach-first` 缓存：`/home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110/cache-non-foreach-first`。
+
+阶段 `foreach-last` 缓存：`/home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110/cache-foreach-last`。
 
 表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。
 已复用相同包、相同测试文件及相同 node ID 的既有结果：`0` 个方法。
