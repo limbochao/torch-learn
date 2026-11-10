@@ -28,7 +28,7 @@ python scripts/tools/download_torch_npu_daily.py v2.7.1 \
 ## Triton-Ascend 日构建 wheel
 
 `download_triton_ascend_daily.py` 按 Python 版本、架构和日期下载 wheel，仅使用 Python 标准库。
-需与同目录的 `download_torch_npu_daily.py` 一起保留，以复用 OBS 分页查询和临时文件下载实现。
+需与同目录的 `download_torch_npu_daily.py` 一起保留，以复用公共对象信息和临时文件下载实现。
 Python 版本和架构默认取当前环境，支持与 torch_npu 脚本相同的版本及架构别名。
 下载目录默认为当前目录，可用 `--output-dir` 指定；使用临时文件下载，大小校验通过后才替换目标文件。
 
@@ -40,8 +40,11 @@ Python 版本和架构默认取当前环境，支持与 torch_npu 脚本相同�
 两种来源明确区分，不自动切换：
 
 - `--source daily`（默认）：用户提供的 `ascend-triton-open` 桶，构建目录为 14 位时间戳。
-  `--build latest` 选择包含目标 wheel 的最新构建，`--build YYYYMMDD` 在当天从新到旧查找，
-  也支持完整时间戳。自动查询需要匿名列目录权限。
+  `--build YYYYMMDD` 优先逐秒探测当天 `22:59:59` 至 `22:00:00`，未找到目标包则遍历当天
+  其他时段（从 `23:59:59` 向前，跳过已查询的 22 点时段）。找到首个匹配包即停止，
+  不保证是当天最后一次构建。`--build latest` 优先查北京时间最近 7 天的 22 点时段，
+  再查这 7 天的其他时段，跳过未来时间。
+  也支持完整时间戳，直接检查 wheel，无需遍历。
 - `--source nightly`：华为云公开的 [nightly 索引](https://mirrors.huaweicloud.com/ascend/repos/pypi/nightly/triton-ascend/)，
   按索引中的文件名选择日期；它与 OBS 时间戳构建是不同的发布来源，可能存在更新延迟。
 
@@ -54,12 +57,25 @@ python scripts/tools/download_triton_ascend_daily.py --source nightly \
 python scripts/tools/download_triton_ascend_daily.py --source nightly --list-builds 5
 ```
 
-按日期自动识别 OBS 时间戳的命令如下；如果桶拒绝列目录，会明确报错：
+按日期自动识别 OBS 时间戳，无需列目录权限：
 
 ```bash
 python scripts/tools/download_triton_ascend_daily.py \
   --build 20261108 --python-version 3.11 --arch x86_64 --resolve-only
+python scripts/tools/download_triton_ascend_daily.py --build 20261108 --list-builds 1
 ```
+
+脚本以 16 个线程对公开的时间戳目录占位对象发起 `HEAD` 请求；`200` 表示发现目录，
+`403/404` 表示该候选不可读，继续尝试。网络异常及 HTTP 429/5xx 最多尝试 3 次，
+持续失败或其他 HTTP 错误会终止查询，不会当成缺包。
+请求按小批次提交，发现目标后停止；进度写到 stderr，`--resolve-only` 不下载 wheel。
+全天最多探测 86400 个时间戳，22 点无包时可能耗时较长；`--list-builds N` 列出本次遍历
+首先发现的最多 N 个构建并按时间倒序输出，可用 `--build` 限定日期。
+
+定位目录后，按目标 Python 版本和架构尝试 wheel 文件名，兼容 manylinux_2_27 +
+manylinux_2_34/2_28，以及带或不带 `+dev时间戳` 的版本名。基础包版本默认 `3.6.0`，
+发布版本变化时用 `--package-version VERSION` 指定。若上传时没有目录占位对象，
+需提供完整时间戳或 `--wheel-url`；仅有日期时的探测依赖此桶现有的目录占位对象。
 
 已知 OBS 完整链接时，可以跳过列目录。脚本从链接提取时间戳，并校验目标 Python 版本和架构，
 将文件名中的 `+` 编码为 `%2B` 后请求下载：
@@ -72,12 +88,14 @@ python scripts/tools/download_triton_ascend_daily.py --python-version 3.11 --arc
   --wheel-url "$wheel_url"
 ```
 
-2026-11-09 本地查询：OBS 对象可以直接读取，但 V1/V2 列目录接口均返回 `403 AccessDenied`，
-目前无法仅凭日期自动发现该桶的时间戳。公开 nightly 索引当时最新为 `20261104`，
-能够自动选择对应 Python 版本和架构的 wheel；不能用这个日期推算 OBS 的完整时间戳。
-本地实际下载了 OBS `20261108223337` 的 cp311 x86_64 包（347126877 字节）和 nightly
-自动选中的 `20261104` cp312 x86_64 包（347321894 字节），大小校验、ZIP CRC 和包版本检查均通过。
-同时验证了给定 OBS 链接的 Python 3.10–3.14、aarch64/x86_64 共 10 种组合的 URL 解析和文件信息查询。
+2026-11-09 曾验证 OBS 对象可以直接读取，但 V1/V2 列目录接口均返回 `403 AccessDenied`。
+2026-11-10 改为 `HEAD` 遍历后，`--build 20261108` 已能自动定位 `20261108223337` 的
+cp311 x86_64 包（347126877 字节），不再请求目录列表。
+该日期自动发现后的完整下载、大小校验、ZIP CRC 和包版本检查均已通过。
+`--build 20261019` 在 22 点未发现构建后，继续遍历并定位到 `20261019205939`，
+成功解析 cp312 x86_64 的 manylinux_2_28 wheel，验证了其他时段回退。
+默认 `latest` 查询定位到 `20261109220338`。完整时间戳、架构别名、完整时间戳列构建及
+独立 nightly 来源查询也已验证。
 
 ## Triton kernel extraction
 
