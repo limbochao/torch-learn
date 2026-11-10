@@ -83,6 +83,9 @@ python scripts/tests/combo_kernel_210/publish_native_210.py \
 等待原进程结束后，核对完整阶段报告和 JUnit XML，再继续该卡的新队列。
 被中断方法的部分报告放入 `evidence/interrupted/`，方法在其他卡重新执行；已完成方法不重跑。
 最终仍按原来的 373 个 node ID 和安装源码 SHA256 完整性检查收尾，publisher 不变。
+随后用户将允许范围改为物理卡 1、2、3、6，进一步释放 5 卡；
+已有 1、3 卡的 lane driver 继续执行，由 `wait_drivers` 接管完成等待，
+被 SIGTERM 中断且报告不完整的方法单独补跑，不计为数值断言失败。
 
 ## 重新生成
 

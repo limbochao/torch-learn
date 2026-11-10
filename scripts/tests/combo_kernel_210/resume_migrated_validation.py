@@ -24,7 +24,8 @@ def main():
     state = json.loads((root / "validation_status.json").read_text())
     devices = plan["physical_devices"]
     assert devices and 4 not in devices
-    state.update(physical_devices=devices, stage="testing", migration="physical card 4 released")
+    state.update(physical_devices=devices, stage="testing",
+                 migration=plan.get("description", "physical card 4 released"))
 
     def save(**fields):
         state.update(fields)
@@ -85,6 +86,11 @@ def main():
             futures = [pool.submit(worker, device) for device in devices]
             for future in futures:
                 future.result()
+        # A later migration can retain whole lane drivers, which already write
+        # their own finish records, while this coordinator runs an interrupted job.
+        for job in plan.get("wait_drivers", []):
+            while alive(job):
+                time.sleep(30)
         save(stage="finalizing")
         env = dict(os.environ, COMBO_TEST_ROOT=state["test_root"])
         for script in ["export_combo_results.py", "capture_combo_evidence.py"]:
