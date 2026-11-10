@@ -111,6 +111,8 @@ def render_and_publish(args, state, artifact, table_name, terminal):
     jobs = json.loads(jobs_file.read_text()) if jobs_file.exists() else []
     by_method = {(row["file"], row["class"], row["name"]): row for row in jobs}
     priority = baseline_pass_methods() if layout.exists() else {}
+    analysis_file = artifact / "current-analysis.json"
+    analyses = json.loads(analysis_file.read_text()) if analysis_file.exists() else {}
     columns = ["测试文件", "函数名", "最新结果", "实例结果", "当前分析"]
     rows = []
     for row in table_rows:
@@ -144,6 +146,10 @@ def render_and_publish(args, state, artifact, table_name, terminal):
             analysis = state.get("error", "待执行")
         if (row["file"], source_name) in priority:
             analysis = overlap_analysis(job, detail, analysis)
+        key = f"{row['file']}::{row['class']}::{source_name}"
+        if job.get("status") != "PASS" and key in analyses:
+            prefix = "2.10 基线 PASS；" if (row["file"], source_name) in priority else ""
+            analysis = prefix + analyses[key]
         if state["stage"] == "error" and status in ("待执行", "PENDING", "RUNNING"):
             status = "ERROR"
         instances = "; ".join(f"{key} {value}" for key, value in sorted(counts.items()))

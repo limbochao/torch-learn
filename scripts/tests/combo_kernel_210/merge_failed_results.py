@@ -27,6 +27,10 @@ def main():
     previous = provenance(args.reference, state)
     for job in jobs:
         job.pop("rerun_nodes", None)
+        execution_keys = ("command", "device", "returncode", "seconds", "started", "finished")
+        execution = {key: job.pop(key) for key in execution_keys if key in job}
+        if execution:
+            job.setdefault("reference_execution", {**previous, **execution})
         for report in job["reports"].values():
             report.setdefault("validation", previous)
     by_method = {(j["file"], j["class"], j["name"]): j for j in jobs}
@@ -60,7 +64,9 @@ def main():
         state.update({key: current[key] for key in ("test_commit", "npu_fix_commit", "finished")})
     assert all(item == fingerprints[0] for item in fingerprints), "Rerun phases used different installed sources"
     args.output.mkdir(parents=True, exist_ok=False)
-    for name in ("manifest.json", "table_rows.json", "full-collection.json", "foreach-sampling.json"):
+    metadata = ("manifest.json", "table_rows.json", "full-collection.json",
+                "foreach-sampling.json", "foreach-sample-nodeids.txt")
+    for name in metadata:
         if (args.reference / name).exists():
             shutil.copy2(args.reference / name, args.output / name)
     state.update(failed_only_merge=True, reference_artifact=args.reference.name, rerun_results=rerun_results,
