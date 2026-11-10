@@ -5,8 +5,8 @@ torch_npu：`2.13.0+git64dc85c`，提交：`64dc85c99c1398a0bd2355b72cc2851d0688
 PyTorch：`2.13.0+cpu`，Triton：`3.6.0`。
 测试快照：`3f5e543`，目录为 `v2.13.0/inductor_npu`。
 
-状态：`testing`；116 行表格、105 个独立源方法，464 个参数化实例。方法结果：`{'FAIL': 41, 'SKIP': 30, 'RUNNING': 2, 'PENDING': 32}`。
-已报告实例结果：`{'FAIL': 48, 'PASS': 2, 'SKIP': 380}`。
+状态：`complete`；116 行表格、105 个独立源方法，464 个参数化实例。方法结果：`{'FAIL': 70, 'SKIP': 34, 'PASS': 1}`。
+已报告实例结果：`{'FAIL': 77, 'PASS': 3, 'SKIP': 384}`。
 
 [用例表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；[执行脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)；[原始证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-all116/)。
 
@@ -18,3 +18,5 @@ PyTorch：`2.13.0+cpu`，Triton：`3.6.0`。
 
 表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。
 已复用相同包、相同测试文件及相同 node ID 的既有结果：`62` 个方法。
+
+执行前后安装的 Inductor Python 源码哈希一致：`True`。
