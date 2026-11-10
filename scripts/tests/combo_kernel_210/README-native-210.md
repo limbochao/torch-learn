@@ -42,7 +42,41 @@
 
 `test_mean` 的 2.10 方法没有主动开启 Combo，原样运行只能反映其原始配置下的行为。
 `test_adaptive_avg_pool2d1` 和 `test_rand_like_deterministic` 保留原版 Combo=False/True 参数化。
-Combo/foreach 方法保留原有 kernel 数量和生成代码检查；不套用旧适配脚本删除这些断言。
+首轮严格执行保留 Combo/foreach 的 kernel 数量和生成代码检查。
+后续按用户要求，foreach 增加了下述 NPU 功能验证口径；Combo 文件保持首轮断言。
+
+## foreach 功能复测（2026-11-10）
+
+测试提交 `3d9ca53` 在 2.10 文件的 27 个入选 foreach 方法中，
+以 `check_kernel_count = GPU_TYPE != "npu"` 控制原数量断言，其他后端继续检查数量。
+NPU 保留数值、突变等功能检查；没有修改安装包、开启全局 Combo 或补 FOREACH 后端能力。
+两个 backward 方法同时对齐原 2.13 适配版：参考计算使用当前算子的 `original_op`，
+并用 `assertTrue` 检查梯度 `allclose` 的返回值。
+
+本轮只选择原清单中 `file == "test_foreach.py"` 的 27 个方法，
+并使用首轮 collection 中同文件的 373 个 node ID 作为 `expected_nodes.json`，防止漏跑或多跑。
+采用独立 phase，保留修改前 `test_foreach.py` 作为 `original_cases`，其余初始化和运行脚本沿用首轮。
+
+```bash
+python run_validation.py --root "$PWD" \
+    --test-root Community-Use-Case-Testing/v2.10.0/test_inductor \
+    --devices 1,3,4,5 --expected-instances 373 --detach
+```
+
+`validation_context.json` 中设置 `validation_scope: native_foreach_functional`。
+同一个 publisher 会按此标记只刷新 foreach 的 27 行，其余结果与历史严格执行证据保留。
+通过项的当前分析为 `—`，结果明确标为功能复测；功能 PASS 不表示 foreach 已融合。
+
+```bash
+python scripts/tests/combo_kernel_210/publish_native_210.py \
+    --remote-phase /home/l30023782/PTA_210/combo-native210-foreach-functional-20261110-run \
+    --raw-root /home/qc/Repos/Ascend/tmp/combo-native210-foreach-functional-20261110-results \
+    --artifact combo-native210-foreach-functional-20261110 --push \
+    --stop-timer combo-native210-foreach-functional-20261110.timer
+```
+
+本地开发机用户 systemd timer 首次 10 分钟后检查，此后每 15 分钟检查；
+完成后自动下载、核对源码与实例完整性、更新表格、提交推送并停止 timer。
 
 ## 重新生成
 
@@ -60,7 +94,7 @@ python scripts/tests/combo_kernel_210/select_native_210.py
 
 ## 执行及自动收尾
 
-已为 `test_combo_kernels.py` 补充与 foreach 相同的 NPU 初始化，提交 `f998b3d`，
+首轮为 `test_combo_kernels.py` 补充与 foreach 相同的 NPU 初始化，提交 `f998b3d`，
 推送到测试仓库 `origin/ut/210_combo`。没有删除或放宽原始测试断言。
 
 `native_validation_plugin.py` 在 `transfer_to_npu` 之后恢复 NPU 的 Triton 可用性探测。

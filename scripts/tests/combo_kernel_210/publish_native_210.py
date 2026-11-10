@@ -60,6 +60,8 @@ def classify(method):
 
 def publish(repo, artifact, raw, state):
     context = json.loads((raw / "validation_context.json").read_text())
+    if context.get("validation_scope") == "native_foreach_functional":
+        return publish_foreach(repo, artifact, raw, state, context)
     selected = json.loads((raw / "combo_npu_a5_selected.json").read_text())
     result = json.loads((raw / "evidence/functional_results.json").read_text())
     assert state["stage"] == "complete", "Run incomplete; archive evidence without replacing result table"
@@ -138,6 +140,80 @@ def publish(repo, artifact, raw, state):
                   for key in ["测试文件", "函数名", "最新结果", "当前分析"]]
         text.append("| " + " | ".join(values) + " |")
     table_path.with_suffix(".md").write_text("\n".join(text) + "\n")
+    return summary
+
+
+def publish_foreach(repo, artifact, raw, state, context):
+    """Merge only the approved foreach rerun; retain the other native results."""
+    result = json.loads((raw / "evidence/functional_results.json").read_text())
+    check = json.loads((raw / "evidence/integrity_checks.json").read_text())
+    selected = json.loads((raw / "combo_npu_a5_selected.json").read_text())
+    assert state["stage"] == "complete"
+    assert check["all_expected_instances_reported"] and check["installed_source_unchanged"]
+    methods = {(row["file"], row["name"]): row for row in result["methods"]}
+    approved = {(row["file"], row["name"]) for row in selected}
+    assert set(methods) == approved and len(approved) == 27
+    assert all(file == "test_foreach.py" for file, name in approved)
+    assert result["expected_instances"] == result["completed_instances"] == 373
+    table = repo / "docs/notes/compiler/codegen/inductor-combo-tests-native-v2.10.csv"
+    with table.open(encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream)
+        fields = reader.fieldnames
+        rows = list(reader)
+    assert len(rows) == 54
+    assert approved <= {(row["测试文件"], row["函数名"]) for row in rows}
+    target_counts = Counter()
+    for row in rows:
+        key = row["测试文件"], row["函数名"]
+        if key not in methods:
+            continue
+        method = methods[key]
+        status, analysis = classify(method)
+        target_counts[status] += 1
+        detail = "、".join(f"{label} {method['counts'][name]}" for name, label in (
+            ("passed", "PASS"), ("failed", "FAIL"), ("skipped", "SKIP")) if method["counts"].get(name))
+        row["最新结果"] = f"{status}（功能复测：{detail}；共 {method['expected_instances']}）"
+        row["当前分析"] = analysis
+        row["2.10 原生执行说明"] = "2.10 用例功能适配：NPU 不检查 kernel 数量，保留数值/突变检查"
+        if row["函数名"] in {"test_foreach_map_backward_binary", "test_foreach_map_backward_unary"}:
+            row["2.10 原生执行说明"] += "；参考计算及梯度断言与原 2.13 适配版对齐"
+    contents = io.StringIO(newline="")
+    writer = csv.DictWriter(contents, fieldnames=fields, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    table.write_text(contents.getvalue(), encoding="utf-8-sig")
+    combined = Counter(row["最新结果"].split("（", 1)[0] for row in rows)
+    summary = {"method_counts": dict(target_counts), "instance_counts": result["instance_counts"],
+               "source_methods": 27, "instances": 373, "context": context,
+               "validation_complete": True, "merged_table_method_counts": dict(combined)}
+    (artifact / "summary.json").write_text(json.dumps(clean_value(summary), ensure_ascii=False, indent=2) + "\n")
+    finished = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(state["finished"] + 8 * 3600))
+    md = table.with_suffix(".md")
+    original = md.read_text().split("| 测试文件 | 函数名 | 最新结果 | 当前分析 |", 1)[0]
+    title, previous = original.split("\n", 1)
+    marker = "<!-- foreach-functional-history -->"
+    if marker in previous:
+        previous = previous.split(marker, 1)[1]
+    introduction = [title, "", f"最新 foreach 功能复测完成时间：{finished}（北京时间）。", "",
+                    "本次仅重跑 27 个 foreach 方法、373 个参数实例；其余 27 个方法保留前次结果。",
+                    "foreach 使用 2.10 测试源码，按用户要求采用此前的功能验证口径：",
+                    "仅 NPU 不检查 kernel 数量，不修改生产包、不补 FOREACH 能力；",
+                    "保留输入、stride、dtype、数值及突变检查。两个 backward 方法的参考计算及梯度断言",
+                    "与原 2.13 适配版对齐，确保 allclose 返回 False 会使测试失败。", "",
+                    "本轮方法结果：" + "，".join(f"{key} {value}" for key, value in target_counts.items()) + "；",
+                    f"实例结果：`{result['instance_counts']}`。安装源码运行前后校验一致。",
+                    "合并后的 54 行最新结果：" + "，".join(f"{key} {value}" for key, value in combined.items()) + "。",
+                    "功能 PASS 不代表 foreach 已生成 Combo kernel。", "",
+                    f"测试提交：`{context['test_source_commit']}`；",
+                    f"[本轮证据](../../../../artifacts/{artifact.name}/summary.json)。", "",
+                    "以下首轮严格执行与诊断记录保留为历史；文末表格为合并后的最新结果。", "",
+                    marker, previous.strip(), "",
+                    "| 测试文件 | 函数名 | 最新结果 | 当前分析 |", "| --- | --- | --- | --- |"]
+    for row in rows:
+        values = [row[key].replace("|", "\\|").replace("\n", " ")
+                  for key in ["测试文件", "函数名", "最新结果", "当前分析"]]
+        introduction.append("| " + " | ".join(values) + " |")
+    md.write_text("\n".join(introduction) + "\n")
     return summary
 
 
