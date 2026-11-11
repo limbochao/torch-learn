@@ -157,7 +157,6 @@ def main():
                         "--repo", str(args.repo), "--artifact", args.artifact], check=True)
         status("publishing_retest", counts=result["instance_counts"])
         scopes = ["artifacts/" + args.artifact,
-                  "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md",
                   "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"]
 
         def other_index():

@@ -28,4 +28,4 @@ Its raw SHA refers to the pre-sanitization source; `archive-integrity.json` maps
 Personal home/installed paths, host/process identities, profiler trace identifiers and backend hashes are redacted.
 XML is parsed and reserialized to keep reports valid after redaction; numerical results and failure locations are unchanged.
 
-[Current assessment](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13-latest-failures.md)
+[Current assessment](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13.md#analysis213)

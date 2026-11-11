@@ -70,7 +70,7 @@ python capture_combo_evidence.py
 为 55/62 个方法、400/409 个实例通过，并非一次全量重跑或一个统一安装版本。
 本轮新结果来自新基线的完整执行，不将旧结果混入新计数。
 
-对应 [新基线表格](../../docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md)。
+对应 [新基线表格](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md#native210)。
 
 ## 本轮结论
 

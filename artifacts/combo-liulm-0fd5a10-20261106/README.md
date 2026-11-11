@@ -51,4 +51,4 @@ F3 overlay 来自 `e578ec524d592475fd52702b975ce03d1a95bbf2`，只替换 `horizo
 定向阶段的原始证据包校验值为：
 `f9c17e12e1abe724f7bc2f6ae3d59117efeba19ac7bdebea7444f21bbadea188`。
 
-详细结果和责任边界见[验证表](../../docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md)。
+详细结果和责任边界见[验证表](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md#native210)。

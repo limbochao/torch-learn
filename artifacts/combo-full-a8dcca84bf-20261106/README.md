@@ -41,6 +41,6 @@ PR：[liujm2001/pytorch !7](https://gitcode.com/liujm2001/pytorch/merge_requests
 控制器或源码完整性检查失败时保存证据，状态记为 `validation_error`，保留旧表并停止定时器。
 
 完成后的证据写入原结果目录的 `retests/full_a8dcca84bf_20261106/`，并更新
-[总表](../../docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md)。
+[总表](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md#native210)。
 脚本与重用方法见 [执行说明](../../scripts/tests/combo_kernel_210/README.md)。
 本地最终状态写入 `tmp/combo-full-a8dcca84bf-20261106/publisher_status.json`（工作区根目录下）。

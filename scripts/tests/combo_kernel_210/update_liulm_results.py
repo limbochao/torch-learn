@@ -2,7 +2,6 @@
 import argparse
 from collections import Counter, defaultdict
 import csv
-from datetime import date
 import json
 from pathlib import Path
 import re
@@ -94,13 +93,6 @@ def analysis(method, fallback):
     return "最新执行失败，待分析：" + next(iter(errors), "见报告")[:180]
 
 
-def markdown_table(rows, fields):
-    lines = ["| " + " | ".join(fields) + " |", "| " + " | ".join("---" for _ in fields) + " |"]
-    lines += ["| " + " | ".join(str(row[k]).replace("|", "\\|").replace("\n", " ") for k in fields) + " |"
-              for row in rows]
-    return "\n".join(lines)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, required=True)
@@ -109,9 +101,9 @@ def main():
     args = parser.parse_args()
     repo = args.repo.resolve()
     art = repo / "artifacts" / args.artifact
-    doc = repo / "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md"
-    originals = load_csv(doc.parent / "inductor-combo-tests-v2.13-vs-v2.10.csv")
-    previous = {(r["测试文件"], r["函数名"]): r for r in load_csv(doc.with_suffix(".csv"))}
+    table = repo / "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"
+    originals = load_csv(table.parent / "inductor-combo-tests-v2.13-vs-v2.10.csv")
+    previous = {(r["测试文件"], r["函数名"]): r for r in load_csv(table)}
     focused = json.loads((art / "with_fixes/functional_results.json").read_text())["methods"]
     focused_map = {(m["file"], m["name"]): m for m in focused}
     full_path = art / "full/functional_results.json"
@@ -184,7 +176,7 @@ def main():
             if note and row["最新结果"].startswith("失败") and key not in tested_keys:
                 row["当前分析"] = row["当前分析"].replace("仍存在", "历史失败") + "；" + note
     assert [(r["测试文件"], r["函数名"]) for r in rows] == [(r["测试文件"], r["函数名"]) for r in originals]
-    with doc.with_suffix(".csv").open("w", encoding="utf-8-sig", newline="") as stream:
+    with table.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=FIELDS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
@@ -194,107 +186,7 @@ def main():
     scope = "历史全量与定向复测的滚动汇总" if retests else "全量"
     text = (f"最新结果已刷新：{scope} {len(done)}/62 个方法有终态，其中 {good} 个通过、"
             f"{len(done)-good-invalid} 个失败、{invalid} 个执行异常；其余状态按实际记录展示。")
-    body = doc.read_text()
-    body = re.sub(r'(验证日期：[0-9-]+。)\*\*[^\n]+?\*\*', lambda m: m[1] + "**" + text + "**", body, count=1)
-    start, end = body.index("## 逐项结果"), body.index("## 证据与复现")
-    intro = (f"与上游对照总表保持 {len(rows)} 条记录及原始顺序，包含 62 个独立执行方法、43 个未运行方法、"
-             "11 条嵌套函数记录；嵌套记录不重复计数。未运行原因与原表逐字一致。\n\n"
-             f"最新结果来源：{stamp}。失败项复测覆盖对应方法的旧结果，未复测方法保留全量结果；"
-             "执行异常不记为功能失败或通过。历史轮次保存在证据及上方汇总中。\n\n")
-    body = body[:start] + "## 逐项结果\n\n" + intro + markdown_table(rows, FIELDS) + "\n\n" + body[end:]
-    body = body.replace("本表保留 `a369f6c` 旧基线的完整结果，并追加 `0fd5a10` 新包和已有 F3 修复的验证结果。",
-                        "本表按上游对照总表的行与顺序，记录 `0fd5a10` 新包叠加 F3 的最新结果；历史轮次保留在证据中。")
-    instance_passed = sum(m["counts"].get("passed", 0) for m in full_methods)
-    line = (f"| 0fd5a10 + F3 全量 | {sum(passed(m) for m in full_methods)} / 62 | {instance_passed} / 409 | "
-            "本轮全量原始记录；后续复测见下表 |")
-    body = re.sub(r'\| 0fd5a10 \+ F3 全量 \|[^\n]*', line, body, count=1)
-    focused_heading = next(h for h in ("## 原失败方法的最新复测", "## 历史定向复测（0fd5a10）") if h in body)
-    focused_start = body.index(focused_heading)
-    focused_end = body.index("\n## ", focused_start + 1)
-    focused_lines = body[focused_start:focused_end].splitlines()
-    for i, line in enumerate(focused_lines):
-        cells = [cell.strip() for cell in line.split("|")]
-        if len(cells) == 7 and cells[4].startswith("通过"):
-            cells[5] = "—"
-            focused_lines[i] = "| " + " | ".join(cells[1:-1]) + " |"
-    body = body[:focused_start] + "\n".join(focused_lines) + "\n" + body[focused_end:]
-    # Passing cases have no current analysis, including cases that used fallback.
-    if any(r["函数名"] == "test_combo_kernel_per_config_subkernel_red" and r["最新结果"].startswith("通过")
-           for r in rows):
-        body = re.sub(r'\| F2 \|[^\n]*\n', '', body)
-    if retests:
-        phase, result = retests[-1]
-        selected = {(m["file"], m["name"]) for m in result["methods"]}
-        repeated = [r for r in rows if (r["测试文件"], r["函数名"]) in selected]
-        heading = "## 失败项复测"
-        if heading in body:
-            start, end = body.index(heading), body.index("## 当前仍存在的问题")
-            body = body[:start] + body[end:]
-        label = result.get("validation_context", {}).get("label", "新包 + F3")
-        content = (heading + "\n\n" + f"{label}，独立目录 `{phase}`，复测 {len(selected)} 个方法、"
-                   f"{result['expected_instances']} 个实例：通过 {result['instance_counts'].get('passed', 0)}，"
-                   f"失败 {result['instance_counts'].get('failed', 0)}。数值断言与测试适配均未变更。\n\n"
-                   + markdown_table(repeated, ["测试文件", "函数名", "最新结果", "当前分析"]) + "\n\n")
-        body = body.replace("## 当前仍存在的问题", content + "## 当前仍存在的问题", 1)
-        problem_cases = {
-            "F4": {"test_adaptive_avg_pool2d1"}, "F5": {"test_rand_like_deterministic"},
-            "F6": {"test_combo_kernel_per_config_subkernel_block_size"},
-            "F7": {"test_triton_kernel_to_post_grad_tracing_combo_kernel"},
-            "F8": {"test_combo_kernel_size_hint_failure"},
-            "F10": {"test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda"},
-            "F11": {"test_mutated_benchmark", "test_dynamic_shapes_mutated", "test_round_robin_dispatch"},
-            "F12": {"test_mean"},
-        }
-        for problem, names in problem_cases.items():
-            tested = [m for m in result["methods"] if m["name"] in names]
-            if {m["name"] for m in tested} == names and all(passed(m) for m in tested):
-                start = body.index("## 当前仍存在的问题")
-                end = body.find("\n## ", start + 1)
-                end = len(body) if end < 0 else end
-                section = re.sub(r'\| ' + problem + r' \|[^\n]*\n', '', body[start:end])
-                body = body[:start] + section + body[end:]
-        stream_retest = next((m for m in result["methods"] if m["name"] == "test_round_robin_dispatch"), None)
-        if stream_retest and stream_retest["completed_instances"] == stream_retest["expected_instances"]:
-            body = re.sub(r'\| 环境执行异常 \|[^\n]*\n', '', body)
-            new_state = "通过" if passed(stream_retest) else "有效执行后功能失败，原因见复测表"
-            body = body.replace("因此不是 409 个实例均已完成验证，stream 异常项仍需复测。",
-                                f"原全量的 stream 资源异常本轮未再出现；该方法复测{new_state}，不再作为环境阻塞。")
-        context = result.get("validation_context", {})
-        if context.get("full_suite_run"):
-            commit = context["installed_commit"]
-            count = result["instance_counts"]
-            body = re.sub(r"验证日期：[0-9-]+", "验证日期：" + date.today().isoformat(), body, count=1)
-            body = re.sub(r"\n<!-- combo-full-run -->.*?<!-- /combo-full-run -->\n", "\n", body, flags=re.S)
-            if "## 最新全量复测" in body:
-                start = body.index("## 最新全量复测")
-                end = body.index("\n## ", start + 1)
-                body = body[:start] + body[end:]
-            full_intro = ("## 最新全量复测\n\n"
-                          f"启动源码提交 `{commit}`，[查看 PR]({context['pr_url']})。\n"
-                          f"本轮按 {len(selected)} 个方法、{result['expected_instances']} 个实例启动，"
-                          f"实际记录 {result['completed_instances']} 个实例；"
-                          f"实例通过 {count.get('passed', 0)}、失败 {count.get('failed', 0)}、"
-                          f"跳过 {count.get('skipped', 0)}。数值断言和测试适配未变更，"
-                          "没有加载函数修复或 F3 overlay。当前逐项结果均来自本轮，历史定向记录保留在后文。\n\n")
-            body = body.replace("## 最新 F4 优化与复测", "## F4 优化与历史定向复测", 1)
-            position = body.index("\n## ")
-            body = body[:position] + "\n" + full_intro + body[position:]
-            start = body.index("## 当前仍存在的问题")
-            end = body.find("\n## ", start + 1)
-            end = len(body) if end < 0 else end
-            unresolved = [r for r in rows if (r["测试文件"], r["函数名"]) in selected
-                          and not r["最新结果"].startswith("通过")]
-            problems = ("本轮全量未全部通过的用例如下；失败原因只依据本轮日志，"
-                        "尚未完成源码分析的项明确标为待分析。\n\n"
-                        + markdown_table(unresolved, ["测试文件", "函数名", "最新结果", "当前分析"])
-                        if unresolved else "本轮全量所有实例通过，没有新增失败项。")
-            body = body[:start] + "## 当前仍存在的问题\n\n" + problems + "\n" + body[end:]
-            full_line = (f"| {commit[:10]} 完整全量 | {sum(passed(m) for m in result['methods'])} / 62 | "
-                         f"{count.get('passed', 0)} / {result['expected_instances']} | 统一安装源码的本轮全量 |\n")
-            body = re.sub(r'\| ' + re.escape(commit[:10]) + r' 完整全量 \|[^\n]*\n', '', body)
-            position = body.index('\n“原 e32+F1/F3 结果”')
-            body = body[:position].rstrip() + "\n" + full_line + body[position:]
-    doc.write_text(body)
+    # Legacy adapted-case results remain in CSV/evidence, not the current native 2.10 report.
     readme = art / "README.md"
     content = re.sub(r'(`[A-Fa-f0-9]{40}`。)[^\n]*', lambda m: m[1] + text, readme.read_text(), count=1)
     readme.write_text(content)

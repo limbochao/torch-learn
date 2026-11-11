@@ -21,4 +21,4 @@
 
 用例通过表示适配后的功能检查通过，不保证使用 Combo，也不保证满足 CUDA 的 grid、融合数量或性能要求。
 失败的具体归因和逐项表格见
-[验证报告](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13-vs-v2.10.md)。
+[验证报告](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md#native210)。

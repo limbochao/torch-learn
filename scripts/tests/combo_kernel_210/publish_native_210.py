@@ -17,6 +17,7 @@ import time
 import uuid
 
 from archive_liulm_run import clean, clean_value
+from combo_documents import document_path, write_section
 
 
 def remote(host, root, code):
@@ -139,7 +140,7 @@ def publish(repo, artifact, raw, state):
         values = [row[key].replace("|", "\\|").replace("\n", " ")
                   for key in ["测试文件", "函数名", "最新结果", "当前分析"]]
         text.append("| " + " | ".join(values) + " |")
-    table_path.with_suffix(".md").write_text("\n".join(text) + "\n")
+    write_section(document_path(repo, "2.10"), "native210", "\n".join(text) + "\n")
     return summary
 
 
@@ -188,39 +189,36 @@ def publish_foreach(repo, artifact, raw, state, context):
                "validation_complete": True, "merged_table_method_counts": dict(combined)}
     (artifact / "summary.json").write_text(json.dumps(clean_value(summary), ensure_ascii=False, indent=2) + "\n")
     finished = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(state["finished"] + 8 * 3600))
-    md = table.with_suffix(".md")
-    original = md.read_text().split("| 测试文件 | 函数名 | 最新结果 | 当前分析 |", 1)[0]
-    title, previous = original.split("\n", 1)
-    marker = "<!-- foreach-functional-history -->"
-    if marker in previous:
-        previous = previous.split(marker, 1)[1]
-    introduction = [title, "", f"最新 foreach 功能复测完成时间：{finished}（北京时间）。", "",
-                    "本次仅重跑 27 个 foreach 方法、373 个参数实例；其余 27 个方法保留前次结果。",
-                    "foreach 使用 2.10 测试源码，按用户要求采用此前的功能验证口径：",
-                    "仅 NPU 不检查 kernel 数量，不修改生产包、不补 FOREACH 能力；",
-                    "保留输入、stride、dtype、数值及突变检查。两个 backward 方法的参考计算及梯度断言",
-                    "与原 2.13 适配版对齐，确保 allclose 返回 False 会使测试失败。", "",
-                    "本轮方法结果：" + "，".join(f"{key} {value}" for key, value in target_counts.items()) + "；",
-                    f"实例结果：`{result['instance_counts']}`。安装源码运行前后校验一致。",
-                    "合并后的 54 行最新结果：" + "，".join(f"{key} {value}" for key, value in combined.items()) + "。",
-                    "功能 PASS 不代表 foreach 已生成 Combo kernel。", "",
-                    f"测试提交：`{context['test_source_commit']}`；",
-                    f"[本轮证据](../../../../artifacts/{artifact.name}/summary.json)。", "",
-                    "以下首轮严格执行与诊断记录保留为历史；文末表格为合并后的最新结果。", "",
-                    marker, previous.strip(), "",
+    md = document_path(repo, "2.10")
+    introduction = ["## 2.10 原生 Combo/foreach 用例最新结果", "",
+                    f"最新 foreach 功能复测完成时间：{finished}（北京时间）。", "",
+                    "本次更新 27 个 foreach 方法、373 个参数实例；其他 27 个方法保留相同安装包的有效结果。",
+                    "合并后的 54 个方法：" + "，".join(f"{key} {value}" for key, value in combined.items()) + "。", "",
+                    f"foreach 测试源码：`{context['test_source_commit']}`；",
+                    f"包：`torch_npu {context['packages']['torch_npu']}`，"
+                    f"PyTorch `{context['packages']['torch']}`，"
+                    f"Triton 实际导入版本 `{context.get('triton_module_version', context['packages']['triton'])}`。", "",
+                    "foreach 使用 2.10 原生用例；NPU 保留数值、输入布局、mutation 和梯度断言，",
+                    "不要求 CUDA 的 kernel 数量和专用生成文本，功能 PASS 不证明 FOREACH 分组融合。",
+                    "本轮未修改生产代码，安装源码前后哈希一致。", "",
+                    f"[当前 foreach 证据](../../../../artifacts/{artifact.name}/summary.json)；",
+                    "[完整 CSV](inductor-combo-tests-native-v2.10.csv)。", "",
+                    "### 当前未通过用例", "",
                     "| 测试文件 | 函数名 | 最新结果 | 当前分析 |", "| --- | --- | --- | --- |"]
     for row in rows:
+        if row["最新结果"].startswith("通过"):
+            continue
         values = [row[key].replace("|", "\\|").replace("\n", " ")
                   for key in ["测试文件", "函数名", "最新结果", "当前分析"]]
         introduction.append("| " + " | ".join(values) + " |")
-    md.write_text("\n".join(introduction) + "\n")
+    write_section(md, "native210", "\n".join(introduction) + "\n")
     return summary
 
 
 def commit_results(repo, raw, artifact):
     scopes = [str(artifact.relative_to(repo)),
               "docs/notes/compiler/codegen/inductor-combo-tests-native-v2.10.csv",
-              "docs/notes/compiler/codegen/inductor-combo-tests-native-v2.10.md"]
+              "docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md"]
 
     def git(*arguments, env=None):
         return subprocess.check_output(["git", *arguments], cwd=repo, env=env)

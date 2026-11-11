@@ -1,6 +1,6 @@
 # Combo 五个修复的固定源码评审证据
 
-[五篇文档入口](../../docs/notes/compiler/codegen/inductor-combo-fixes-v2.10-review.md)。
+[2.10 当前结果](../../docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md#native210)。
 本目录在 2026-11-07 从固定 Git 对象提取，不重新运行 NPU 用例。
 既有测试结果继续引用原证据目录，避免复制后混淆来源。
 

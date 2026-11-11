@@ -2,64 +2,56 @@
 published: false
 ---
 
-# 2.13 Combo 最新代码失败项复验
+# 2.13 Combo/foreach 最新结果与问题分析
 
-## 验证范围与实际代码
+<a id="validation213"></a>
 
-2026-11-11，在 NPU_A5 的 `pta_213_case` 环境复验此前失败的 **33 个源方法、35 个参数实例**。
-只选历史 FAIL 的 node ID，没有重跑 foreach、历史 PASS 或 SKIP，也没有修改断言。
-测试源码保持 `c1ce0688898b9ca1edebc2a4ff4dbffd8b287f28`，189 个测试 Python 文件逐一核对哈希。
+<!-- combo-section:validation213:start -->
 
-生产分支是 `sync/combo-kernel-master`，提交 **`d12230b556f11b27c9ff752a0dd41635791efc83`**，
-直接基于 master `4939db51db87a42b9848e650735c1daa175bcf87`。
-安装包仍为 `torch_npu 2.13.0+git64dc85c`，本次将该提交的全部 **191 个 Inductor Python 文件**
-同步至安装目录，保存原文件并核对覆盖后的哈希。没有重新构建 wheel，C++ 扩展保持原包版本；
-因此结论适用于这组 Python overlay，不能表述为新构建完整 wheel 的验收。
-PyTorch 是 `2.13.0+cpu`（`cf30153c4c131c8164ee7798e5022d810682e2cb`），Triton 是 `3.6.0`。
+## 最新执行结果
 
-使用已有 [自动执行脚本](../../../../scripts/tests/combo_kernel_210/run_plain_pytest.py)，
-在物理卡 3、6 分两阶段执行，均采用独立新缓存，入口是原生 `python -m pytest -vs`。
-先验证 cumsum 和 profile-bandwidth，再自动执行其余 31 个方法、33 个失败实例。
-本地 systemd 用户定时任务每两分钟检查阶段状态，测试进程在远端独立运行。
+2026-11-11 已基于 `sync/combo-kernel-master:d12230b556` 完成此前失败项复验。
 
-## 本次结果
-
-| 统计范围 | PASS | FAIL | SKIP |
+| 范围 | PASS | FAIL | SKIP |
 | --- | ---: | ---: | ---: |
-| 本次复验的 33 个方法 | 1 | 32 | 0 |
-| 本次复验的 35 个参数实例 | 1 | 34 | 0 |
+| 本次 33 个失败方法 | 1 | 32 | 0 |
+| 本次 35 个失败参数实例 | 1 | 34 | 0 |
 | 保留历史结果后的 105 个方法 | 69 | 32 | 4 |
 | 保留历史结果后的 314 个已选实例 | 275 | 34 | 5 |
 | 2.10 基线 PASS 的 60 个重合方法 | 60 | 0 | 0 |
 
-**本次只重新执行此前失败的 35 个实例。** 重合的 60 个方法中，59 个保留历史 PASS，
-1 个 cumsum 方法本次转为 PASS；不能据此宣称 60 个方法均在 d12230b556 上重跑。
-总表的 69 个 PASS 中仍有 14 个是 foreach 代表实例抽样 PASS。
-原清单另有 150 个未选泛化实例，没有计入 PASS 或 SKIP。
+**本轮只重新执行失败实例，没有重跑历史 PASS、SKIP 或 foreach 全参数。**
+cumsum/helper 本次通过，其余 59 个重合方法沿用历史 PASS；总计 69 个 PASS 中有 14 个抽样 PASS。
+原清单 464 个泛化实例中有 150 个未选择，不记为 SKIP 或 PASS。
 
-两个阶段均正常结束，安装源码执行前后哈希一致，没有 ERROR 或需要换卡重试的设备失败。
-34 个仍失败的实例中，33 个停在与上轮相同的用例位置；只有 profile-bandwidth
-越过旧接口异常，进入缺少统计字段的后续断言。本轮没有新增其他失败类型。
-[逐实例前后对照](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/failure-delta.json)。
+重合对照使用既定的 60 方法“2.13 用例适配后在 2.10 执行”基线，
+与 2.10 最新文档中的 54 方法原生用例清单口径不同，不混算两者结果。
 
-## 已消除的问题
+[用例 CSV](inductor-combo-tests-native-v2.13-sync-64dc85c.csv) 保留 116 行原顺序和五列，
+嵌套函数随其外层方法验证。实例列保留实际复验版本，PASS 的当前分析为“—”。
+当前最值得处理的是 optimize_mem、provenance 和真实统计/聚合，
+详见 [最新问题分类、优先级与源码依据](inductor-combo-tests-v2.13.md#analysis213)。
 
-`test_helper_fn_defined` 已通过完整原断言和数值比较。实际生成 wrapper 中
-`_triton_helper_fn_add0` 只定义一次，存在 `tl.associative_scan`，没有调用 ATen cumsum。
-这确认了 scan 主路径恢复，不是 ATen fallback 的数值通过，也没有为了通过而删除 helper 检查。
-[生成 wrapper](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/generated/cumsum-scan-00.py)
-和 [结构检查](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/cumsum-generated-check.json)
-分别保留实际代码与检查结果。
+运行环境是 NPU_A5/Ascend950PR 的 `pta_213_case`；PyTorch `2.13.0+cpu`、Triton `3.6.0`。
+基础 wheel 仍为 `torch_npu 2.13.0+git64dc85c`，C++ 未重新构建；
+实际将 d12230b556 的全部 191 个 Inductor Python 文件覆盖到安装目录，并核对前后哈希一致。
+测试源码为 `c1ce0688898b9ca1edebc2a4ff4dbffd8b287f28`，189 个测试 Python 文件已核对哈希。
+本轮使用物理卡 3、6 和独立缓存，直接执行原生 `python -m pytest -vs`，没有自定义插件。
 
-原因是最新 master 已包含上游 `ac0e1564ca` 的完整 cumsum 适配：移除 NPU 强制 fallback/override，
-更新 helper 接口、shape/mask 及 scan 维度，并导出 `split_scan`。
-本轮没有另行修改生产代码。此前 fallback 的历史用途归档在
-[历史分析](inductor-combo-tests-v2.10-pass-v2.13-regressions.md)，不再列为当前失败原因。
-本例使用浮点输入，不能据此声明整数/bool 默认 dtype、其他设备和所有 scan 场景都已验证。
+foreach 沿用 2.10 的 NPU 功能适配：保留数值、mutation 和梯度断言，
+不检查 CUDA/foreach 专用融合数量和生成文本。抽样 PASS 不证明完整泛化范围通过，也不证明 FOREACH 分组融合。
+4 个历史 SKIP 不作为功能缺失证据，本轮没有重试。
 
-profile-bandwidth 仍失败，但原来的 `NPUDebugAutotuner` 构造关键字/旧 `input_grid` 接口错误未再复现。
-最新 master 的 `6fe3d7b969` 已带入接口适配；本次编译、执行和数值比较之后，失败于生成代码
-没有 `'kernel_num_gb'`。当前问题应归到 Combo 的统计聚合，而不再按旧接口异常安排重复修复。
+[执行脚本及命令](../../../../scripts/tests/combo_kernel_210/README-213.md)；
+[本轮日志、JUnit 和哈希证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/)；
+[重合方法对照](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/baseline-pass-comparison.json)。
+逐实例实际验证版本保存在证据 `jobs.json` 的 `validation` 字段。
+
+<!-- combo-section:validation213:end -->
+
+<a id="analysis213"></a>
+
+<!-- combo-section:analysis213:start -->
 
 ## 当前问题与建议优先级
 
@@ -114,7 +106,7 @@ FTZ 指把非正规浮点数冲刷为零，涉及真实数值行为，不能以 
 
 ## 未执行范围与复现
 
-4 个历史 SKIP 保持不变：XPU 专用、ROCm 专用各一个，另外两个
+4 个未执行的 SKIP 保持当前状态：XPU 专用、ROCm 专用各一个，另外两个
 `test_snode_runtime.py::InputDistanceTests` 方法仍被 NPU skip 排除。
 它们不计入本轮失败复测，也不能由 skip 推断 foreach 算子不支持。
 foreach 的既有功能结果沿用每方法最多两个代表实例的策略，抽样 PASS 不代表所有泛化实例通过。
@@ -125,10 +117,12 @@ foreach 的既有功能结果沿用每方法最多两个代表实例的策略，
 conda activate pta_213_case
 ASCEND_RT_VISIBLE_DEVICES=3 TORCHINDUCTOR_CACHE_DIR=/path/to/new-cache \
 python -m pytest -vs \
-  test_combo_kernels.py::ComboKernelDynamicShapesTests::test_helper_fn_defined
+  test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward
 ```
 
 完整失败实例清单、两阶段命令、JUnit 结果及实际代码哈希见
 [本轮证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/)。
 当前汇总表仍使用稳定文件名：
 [CSV](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)。
+
+<!-- combo-section:analysis213:end -->

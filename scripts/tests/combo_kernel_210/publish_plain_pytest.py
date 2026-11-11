@@ -9,6 +9,8 @@ from pathlib import Path
 import shlex
 import subprocess
 
+from combo_documents import document_path, write_section
+
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -171,7 +173,7 @@ def render_and_publish(args, state, artifact, table_name, terminal):
         writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(columns)
         writer.writerows(rows)
-    notes = target.with_suffix(".md")
+    notes = document_path(REPO, "2.13")
     summary = Counter(job["status"] for job in jobs)
     instances = Counter(report["status"] for job in jobs for report in job.get("reports", {}).values())
     if state.get("foreach_functional"):
@@ -205,8 +207,7 @@ def render_and_publish(args, state, artifact, table_name, terminal):
     if state.get("failed_only_merge"):
         text += ("\n本次仅复验原失败实例及取消旧 NPU skip 后的实例；未重跑历史 PASS。"
                  "当前表为逐实例更新后的汇总，不能视为全部方法在最新修复上重新执行。"
-                 "每条报告的验证版本与来源保存在 `jobs.json` 的 `validation` 字段中，"
-                 f"本轮运行统计：`{state['rerun_results']}`。\n")
+                 "每条报告的实际验证版本与来源保存在 `jobs.json` 的 `validation` 字段中。\n")
     if preflight_file.exists():
         preflight = json.loads(preflight_file.read_text())
         text += (f"\nforeach 全量前置验证：`{preflight.get('results', [])}`。"
@@ -251,13 +252,13 @@ def render_and_publish(args, state, artifact, table_name, terminal):
                  "2.10 表来自适配后的 2.13 功能用例：部分 kernel 数量、CUDA DSL、profiler/grid 检查已移除；"
                  "对照时须区分功能退化、测试适配差异与融合策略变化。"
                  "当前分析和后续定时发布均优先标记这组方法。"
-                 "[重合项同步差异分析](inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。\n")
+                 "[当前问题分析](inductor-combo-tests-v2.13.md#analysis213)。\n")
         sampled_pass = sum(record["sampled"] and record["status"] == "PASS" for record in records)
         text += f"\n上述 PASS 中有 {sampled_pass} 个方法为抽样 PASS，完整参数范围未全部执行。\n"
     if terminal:
         text += (f"\n执行前后安装的 Inductor Python 源码哈希一致："
                  f"`{state.get('installed_source_unchanged', False)}`。\n")
-    notes.write_text(text)
+    write_section(notes, "validation213", text)
     paths = [str(path.relative_to(REPO)) for path in (artifact, target, notes)]
     # Raw logs/JUnit/CSV evidence can contain original CRLF or trailing spaces.
     command(["git", "diff", "--check", "--", str(target), str(notes), "scripts/tests/combo_kernel_210"],

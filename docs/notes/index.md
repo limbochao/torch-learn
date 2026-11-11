@@ -29,14 +29,6 @@ title: 学习笔记
       <p>说明 Triton pointwise 为什么大于狭义 elementwise，并列出 broadcast、view/reindex、mask、copy、fill 等子类。</p>
     </div>
     <div>
-      <a href="compiler/codegen/inductor-combo-tests-v2.13-vs-v2.10.html">v2.13.0 Combo/Foreach 用例在 v2.10.0 的存在性核对</a>
-      <p>逐项核对 116 条记录及 2.10 支持范围，汇总 NPU_A5 的 409 个实例结果，附 CSV 表格。</p>
-    </div>
-    <div>
-      <a href="compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.html">liulm v2.10.0-combokernel-dev 的 Combo/Foreach 功能复测</a>
-      <p>单独记录 liulm 新能力基线的 62 个方法、409 个实例复测情况，并与旧基线结果对照。</p>
-    </div>
-    <div>
       <a href="compiler/codegen/torch-npu-master-npu-kernel-type.html">torch_npu master 的 npu_kernel_type 选择逻辑</a>
       <p>按源码说明四种 type 的适用场景、赋值覆盖、索引回退，以及 autotune 最终编译模式。</p>
     </div>

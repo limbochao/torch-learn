@@ -178,7 +178,6 @@ def main():
         status("publishing_results", summary=summary, raw_archive_sha256=expected_hash)
         assert git("branch", "--show-current").decode().strip() == "main", "Expected main; no automatic branch switch"
         scopes = ["artifacts/" + args.artifact,
-                  "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.md",
                   "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"]
 
         def unrelated_index():

@@ -34,3 +34,12 @@
   pretty-print、重排或拆分参数列表。
 - 只有用户明确要求 pretty JSON 等展示形式时才增加格式化换行；generated artifact 中的原始长行
   不受普通文档或代码行宽约束。
+
+## Combo 用例文档维护
+
+- Combo/foreach 测试与问题分析仅维护 `docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md`
+  和 `docs/notes/compiler/codegen/inductor-combo-tests-v2.13.md` 两份版本文档。
+- 文档只保留最新结果、实际验证版本和对应的当前问题分析；不再按分支、提交或执行批次新增文档。
+- 不在正文累积旧轮次结果、已解决问题或历史修复说明，历史内容通过 Git 和原始证据追溯。
+- 已 PASS 的用例不保留旧失败分析；脚本 README 仅说明运行方式，不重复维护结果和问题分析。
+- CSV 结果表和 `artifacts/` 原始证据独立保留；自动发布只更新固定版本文档的当前结果章节。
