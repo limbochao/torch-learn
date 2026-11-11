@@ -92,7 +92,7 @@ test_provenance_tracing.py,test_triton_kernel_to_post_grad_tracing_combo_kernel,
 test_user_streams.py,test_combo_kernel_fusion_within_same_stream,PASS,PASS 1,—
 test_combo_kernels.py,test_combo_kernel_tma_descriptor_block_name,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,CUDA TMA descriptor 代码检查不适用于当前 NPU 生成器；测试头部模拟 GPU capability 后进入该 CUDA 用例。未实现对应 CUDA 路径，不据此判为通用 Combo 精度错误。
 test_combo_kernels.py,test_combo_kernel_amd_special_config_args,SKIP,SKIP 2,未执行，保留原有适用条件：ROCm only
-test_combo_kernels.py,test_helper_fn_defined,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,2.10 基线 PASS；数值已通过，当前分支 cumsum 仍走外部 ATen。已联网确认最新 master 694f3b3714 包含 ac0e1564ca，主路径已移除强制 fallback/override，并补齐 scan 接口、shape 和 mask；测试分支尚未包含。应以 master 完整改动为同步依据，复验 helper、dtype 与 scan；历史回退原因未公开，尚未修复复验。
+test_combo_kernels.py,test_helper_fn_defined,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,2.10 基线 PASS；历史复验数值已通过，旧分支因 cumsum 走 ATen 导致 helper 预期 1、实际 0。当前分支已 rebase 到 master 4939db51db，顶端 d12230b556 已包含上游 ac0e1564ca 的 scan、shape/mask 与 fallback 注册修复；新基线尚未在设备复验，保留原 FAIL。
 test_combo_kernels.py,test_pdl_codegen_in_combo_kernel,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,要求 CUDA PDL 的 launch_pdl metadata；NPU 未接入该 CUDA 启动协议。当前失败保留，不通过移除断言认定该能力已支持。
 test_combo_kernels.py,test_pdl_combo_kernel_pointwise,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,要求 CUDA PDL 的 launch_pdl metadata；NPU 未接入该 CUDA 启动协议。当前失败保留，不通过移除断言认定该能力已支持。
 test_combo_kernels.py,test_pdl_combo_kernel_reduction,PASS,PASS 1,—
@@ -111,7 +111,7 @@ test_combo_kernels.py,test_combo_reduction_combo_grid_meta_has_per_subkernel_fie
 test_combo_kernels.py,test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的逐子 kernel 元数据接入：首先失败于缺少 inductor_meta_i。需按 NPU 实际地址轴记录 contiguous reduction 访问标记，并核对 standalone/Combo 一致性；社区字段可参考，但不能直接把 CUDA 轴推导结果当成 NPU 的结果。尚未修复复验。
 test_combo_kernels.py,test_combo_per_kernel_inductor_meta_matches_standalone,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的统计协议：standalone 元数据有 2 组，Combo 的 inductor_meta_i 为 0 组。应统一输出真实的逐 kernel 统计，并以相同输入对照；no_x_dim、tiling_scores 等必须对应 NPU 轴和 tiling，不能直接套用 CUDA 语义。尚未修复复验。
 test_combo_kernels.py,test_combo_kernel_num_gb_and_flop_match_standalone_sum,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的统计协议：NPU 普通 kernel 在 benchmark/profile 时估算 kernel_num_gb，Combo jit_line 未聚合各子 kernel 的带宽/FLOP。应统一 standalone/Combo 的有效统计口径并求和，核对 FLOP 估算；不能填 0 或只补字段。尚未修复复验。
-test_combo_kernels.py,test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可修复的 runtime 接口遗漏：NPUDebugAutotuner 未消费 with_profiler/with_bandwidth_info，前者透传父类即 TypeError；其 run 还要求旧 input_grid。需一起对齐 NPU 当前 run、候选选择、runtime blocks 和计时协议，再补 Combo 带宽统计；不能只删一个关键字。尚未修复复验。
+test_combo_kernels.py,test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,历史复验因 NPUDebugAutotuner 透传 with_profiler 报 TypeError。当前 d12230b556 已随 master 4939db51db 带入上游 6fe3d7b969，构造与 run 接口保持上游实现；尚未设备复验，Combo 带宽统计是否仍有后续问题未确认，保留原 FAIL。
 test_combo_kernels.py,test_combo_inductor_meta_no_kernel_num_gb_without_profile,PASS,PASS 1,—
 test_combo_kernels.py,test_benchmark_combo_kernel_emits_real_num_gb,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的 benchmark 统计：Combo 缺少各子 kernel 实际估计字节数的聚合，benchmark 未发出预期的真实 num_gb。应复用 NPU 字节估算并传到 benchmark，验证数值和设备字符串；尚未修复复验。
 test_combo_kernels.py,test_combo_kernel_peak_memory_wide_resnet,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,未满足收紧阈值后峰值内存降低的断言；当前 tight=616101888、disabled=616101888 字节；需结合实际融合/回退决策与内存统计定位，当前证据不足以认定为代码生成错误或能力完全不支持。

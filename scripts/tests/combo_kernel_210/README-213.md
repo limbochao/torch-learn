@@ -69,6 +69,11 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 通过 rebase 合并为 `38f959f435`，更新到 origin。源码树与合并前 `bb5e1d0a84` 完全一致，
 不重新标记历史验证结果；旧提交保留在本地备份分支
 `backup/sync-combo-kernel-master-before-squash-20261111-bb5e1d0a84`。
+随后已将该汇总提交 rebase 到最新 master `4939db51db`，当前顶端为 `d12230b556`，
+直接以 master 为父提交，保留一个 Combo 提交并已推送 origin。原 `38f959f435` 在
+`backup/sync-combo-kernel-master-before-rebase-20261111-38f959f435` 保留。
+冲突处理采用上游常量/config 生成实现；cumsum 与带宽调试器修复随 master 一并带入。
+本次仅完成本地语法、range-diff 与上游实现保留检查，没有重跑设备用例，旧报告的验证提交不变。
 后续生产修复继续提交到 `sync/combo-kernel-master`。
 
 以下为此前修复分支上的验证记录，基于安装包对应的 `64dc85c99c`：

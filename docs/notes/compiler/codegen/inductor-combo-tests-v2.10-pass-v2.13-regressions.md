@@ -20,7 +20,18 @@ published: false
 再将基线 `6c43e4db23` 之后的 8 个 Combo 提交通过 rebase 合并为 `38f959f435`，并更新 origin。
 新提交的父提交是 `6c43e4db23`，源码树与合并前 `bb5e1d0a84` 完全一致；后续生产修复也提交到该分支。
 合并前提交保留在本地备份分支 `backup/sync-combo-kernel-master-before-squash-20261111-bb5e1d0a84`。
-以下验证发生在原修复分支上，保留实际验证版本，不因分支汇总而改写测试结果。
+随后将这一个汇总提交 rebase 到新拉取的 master `4939db51db`，当前顶端提交为 **`d12230b556`**，
+其父提交就是该 master，分支只领先一个 Combo 提交，并已通过带旧提交校验的 force-with-lease 更新 origin。
+唯一冲突位于 Triton 常量/config 生成：保留上游提前绑定 equal-to-one 常量及所有 kernel 生成 configs 的实现，
+移除本地重复导入和旧的条件生成逻辑。`range-diff` 已核对其他 Combo 改动得到保留。
+
+当前基线同时带入上游 cumsum `ac0e1564ca` 和带宽调试器 `6fe3d7b969`，
+不再需要在 Combo 提交内重复实现这两项上游修复。
+已完成 13 个改动文件的 Python 语法、差异空白及上游 scan/DebugAutotuner/常量生成保留检查；
+本地缺少 torch、sympy 和 Triton，未运行依赖这些库的用例，也未新增设备复测。
+原汇总提交保留在 `backup/sync-combo-kernel-master-before-rebase-20261111-38f959f435`。
+
+以下测试结果和源码评估对应原验证快照，保留实际验证版本；本次 rebase 不将历史 FAIL 改为 PASS。
 
 验证时的分支为 `fix/combo-sync-interfaces-v2.13`，基础包提交 `64dc85c99c`，
 保留此前同步接口修复至 `5a5bda0ae3`。本次新增三个独立提交：
@@ -181,7 +192,7 @@ del arg0_1  # 再次释放，触发 UnboundLocalError
 重合的 60 个源方法仍是 **59 PASS、1 FAIL**。未重合的 45 个源方法是
 **9 PASS、32 FAIL、4 SKIP**。以下分类按源方法计数，不按参数实例计数。
 
-### 重合的唯一失败：测试分支缺少 master 已合入的 scan 改动
+### 重合的唯一历史失败：当前已同步 scan，待设备复验
 
 `test_helper_fn_defined` 有现成 scan 实现可供评估，不需要自行重写算法；
 远端最新 master 已采用这套方案；需要同步完整实现并验证，不能仅凭 helper 数量断言单独删除 fallback。
@@ -246,14 +257,14 @@ if (is_integer_dtype(x.get_dtype()) or is_boolean_dtype(x.get_dtype())) and dtyp
 HEAD 为 `694f3b371432032d5477fc0d5e47d83aafa7cc09`，已包含 `ac0e1564ca`。
 主路径三个注册文件的实际状态如下：
 
-| 文件 | 最新 master | 当前测试分支 bb5e1d0a84 |
+| 文件 | 当时拉取的 master | 历史验证快照 bb5e1d0a84 |
 | --- | --- | --- |
 | `lowering_fallback_list.py` | 不含 aten.cumsum 条目 | 仍有 aten.cumsum.out |
 | `lowering_override_list.py` | 不含 aten.cumsum | 仍在 override 列表 |
 | `lowering.py` | 已删除专用 cumsum lowering | 仍强制调用 fallback_cumsum |
 
 master 同时采用 `_lift_helper(combine_fn, values, dtypes)` 并导出 `split_scan`。
-因此这项差异是测试分支缺少已合入 master 的能力提交；这不是只移除一个列表项的修复。
+因此原验证快照缺少 master 已合入的能力提交；当前 d12230b556 已继承这套完整改动，尚未设备复验。
 社区通用 scan lowering 在无法创建 Scan 时仍有条件 fallback，不能把“移除 NPU 强制 fallback”
 解释成“任何场景都不允许 fallback”。此次仅更新远端引用，没有切换或修改生产工作分支。
 
@@ -374,8 +385,8 @@ FTZ 指把非正规数冲刷为零的处理方式，涉及真实数值语义；�
 | Triton Ascend `third_party/ascend/backend/compiler.py::NPUOptions`、`parse_options` | 本地源码未见与 CUDA enable_reflect_ftz 等价的现成选项 |
 | 用例 `test_combo_kernels.py`（1831 行附近） | max_persistent_rblock 测试自身明确说明 HIP 过滤用途 |
 
-cumsum 以最新 master 的完整 scan 改动作为同步依据，并定向验证 helper 与 dtype/scan 兼容性。
-可以独立推进的修复顺序为 **带宽调试器接口 → optimize_mem → provenance → 真实统计与聚合**。
+当前先定向复验已随 master 带入的 **cumsum 和带宽调试器**，确认是否仍有后续失败。
+其余可评估的修复顺序为 **optimize_mem → provenance → 真实统计与聚合**；均以新基线复验结果为准。
 每项应独立验证原失败方法，再讨论是否继续扩展分块和 autotune 能力。
 融合数量与峰值内存先保留为待定位项，不用放宽断言代替定位。
 
