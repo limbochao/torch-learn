@@ -64,7 +64,12 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 `combo-sync-213-foreach-functional-20261110.timer` 已停止，不发布为最终结果。
 新运行目录为 `/home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110`。
 
-修复分支为 NPU 仓库的 `fix/combo-sync-interfaces-v2.13`，基于安装包对应的 `64dc85c99c`：
+当前生产开发统一使用 NPU 仓库的 `sync/combo-kernel-master`。
+2026-11-11 已将此前修复分支 `fix/combo-sync-interfaces-v2.13` 的 7 个提交完整快进至该分支，
+并推送 origin，HEAD 为 `bb5e1d0a84`。提交与源码内容未变，不重新标记历史验证结果。
+后续生产修复继续提交到 `sync/combo-kernel-master`。
+
+以下为此前修复分支上的验证记录，基于安装包对应的 `64dc85c99c`：
 
 - `19845c38a3`：移除 Combo 入口对已不存在的 `node_can_linear()` 的调用条件，
   与当前 2.13 普通 kernel 调度一致，先尝试 index codegen，保留已有失败回退。
@@ -223,7 +228,7 @@ python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
 
 ## 失败实例复验（接口及静态 reduction 修复）
 
-生产分支 `fix/combo-sync-interfaces-v2.13` 新增：
+此前验证分支 `fix/combo-sync-interfaces-v2.13` 新增（现已汇总到 `sync/combo-kernel-master`）：
 
 - `bf2f56c6e4`：benchmark 动态轴尺寸提示改为 2.13 的 `optimization_hint`。
 - `257e31bde7`：恢复 persistent reduction 常量轴的静态 `R*BLOCK_SUB` 定义。

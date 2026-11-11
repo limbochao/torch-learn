@@ -15,7 +15,12 @@ published: false
 
 ## 修复范围及实际版本
 
-NPU 分支为 `fix/combo-sync-interfaces-v2.13`，基础包提交 `64dc85c99c`，
+当前 NPU 开发分支统一使用 `sync/combo-kernel-master`。
+2026-11-11 已将 `fix/combo-sync-interfaces-v2.13` 的 7 个修复提交完整快进到该分支并推送 origin，
+HEAD 为 `bb5e1d0a84`；提交哈希和源码内容均不变，后续生产修复也提交到该分支。
+以下验证发生在原修复分支上，保留实际验证版本，不因分支汇总而改写测试结果。
+
+验证时的分支为 `fix/combo-sync-interfaces-v2.13`，基础包提交 `64dc85c99c`，
 保留此前同步接口修复至 `5a5bda0ae3`。本次新增三个独立提交：
 
 | 提交 | 问题 | 修改后的行为 |
