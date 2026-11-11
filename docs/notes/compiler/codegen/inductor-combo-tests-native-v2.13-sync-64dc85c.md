@@ -1,29 +1,35 @@
 # 2.13 ComboKernel 同步分支验证
 
-使用 NPU_A5 的 `pta_213_case` 环境及本地 `sync/combo-kernel-master` 对应包。
-torch_npu：`2.13.0+git64dc85c`，提交：`64dc85c99c1398a0bd2355b72cc2851d0688b964`。
-NPU Python 修复叠加提交：`bb5e1d0a84`。
-PyTorch：`2.13.0+cpu`，Triton：`3.6.0`。
-测试快照：`c1ce068`，目录为 `v2.13.0/inductor_npu`。
+2026-11-11 已基于 `sync/combo-kernel-master:d12230b556` 完成此前失败项复验。
 
-状态：`complete`；116 行表格、105 个独立源方法，314 个参数化实例。方法结果：`{'PASS': 68, 'FAIL': 33, 'SKIP': 4}`。
-已报告实例结果：`{'PASS': 274, 'FAIL': 35, 'SKIP': 5}`。
+| 范围 | PASS | FAIL | SKIP |
+| --- | ---: | ---: | ---: |
+| 本次 33 个失败方法 | 1 | 32 | 0 |
+| 本次 35 个失败参数实例 | 1 | 34 | 0 |
+| 保留历史结果后的 105 个方法 | 69 | 32 | 4 |
+| 保留历史结果后的 314 个已选实例 | 275 | 34 | 5 |
+| 2.10 基线 PASS 的 60 个重合方法 | 60 | 0 | 0 |
 
-[用例表](inductor-combo-tests-native-v2.13-sync-64dc85c.csv)；[执行脚本说明](../../../../scripts/tests/combo_kernel_210/README-213.md)；[原始证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-failure-fixes/)。
+**本轮只重新执行失败实例，没有重跑历史 PASS、SKIP 或 foreach 全参数。**
+cumsum/helper 本次通过，其余 59 个重合方法沿用历史 PASS；总计 69 个 PASS 中有 14 个抽样 PASS。
+原清单 464 个泛化实例中有 150 个未选择，不记为 SKIP 或 PASS。
 
-使用原生 pytest，无自定义 pytest 插件；设置选卡变量。foreach 已按 2.10 的 NPU 功能验证口径调整：取消本轮 27 个方法的主动 NPU skip，NPU 上不检查 kernel 数量及 foreach 专用生成代码；数值、原地修改、梯度断言保留。其他后端保留原融合检查。功能 PASS 不证明 FOREACH 分组融合生效。
+[用例 CSV](inductor-combo-tests-native-v2.13-sync-64dc85c.csv) 保留 116 行原顺序和五列，
+嵌套函数随其外层方法验证。实例列保留实际复验版本，PASS 的当前分析为“—”。
+当前最值得处理的是 optimize_mem、provenance 和真实统计/聚合，
+详见 [最新问题分类、优先级与源码依据](inductor-combo-tests-v2.13-latest-failures.md)。
 
-表格中的异常摘要来自 JUnit 报告；尚未逐项定位的错误不能直接据此归因于 ComboKernel。PASS 项不保留历史失败分析。
+运行环境是 NPU_A5/Ascend950PR 的 `pta_213_case`；PyTorch `2.13.0+cpu`、Triton `3.6.0`。
+基础 wheel 仍为 `torch_npu 2.13.0+git64dc85c`，C++ 未重新构建；
+实际将 d12230b556 的全部 191 个 Inductor Python 文件覆盖到安装目录，并核对前后哈希一致。
+测试源码为 `c1ce0688898b9ca1edebc2a4ff4dbffd8b287f28`，189 个测试 Python 文件已核对哈希。
+本轮使用物理卡 3、6 和独立缓存，直接执行原生 `python -m pytest -vs`，没有自定义插件。
 
-本次仅复验原失败实例及取消旧 NPU skip 后的实例；未重跑历史 PASS。当前表为逐实例更新后的汇总，不能视为全部方法在最新修复上重新执行。每条报告的验证版本与来源保存在 `jobs.json` 的 `validation` 字段中，本轮运行统计：`[{'artifact': 'priority', 'test_commit': 'c1ce068', 'npu_fix_commit': '257e31bde7', 'method_results': {'PASS': 17, 'FAIL': 4}, 'instance_results': {'PASS': 17, 'FAIL': 4}}, {'artifact': 'remaining', 'test_commit': 'c1ce068', 'npu_fix_commit': '257e31bde7', 'method_results': {'FAIL': 35, 'PASS': 1}, 'instance_results': {'FAIL': 37, 'PASS': 1}}, {'artifact': 'cleanup', 'test_commit': 'c1ce068', 'npu_fix_commit': 'bb5e1d0a84', 'method_results': {'PASS': 6}, 'instance_results': {'PASS': 6}}]`。
+foreach 沿用 2.10 的 NPU 功能适配：保留数值、mutation 和梯度断言，
+不检查 CUDA/foreach 专用融合数量和生成文本。抽样 PASS 不证明完整泛化范围通过，也不证明 FOREACH 分组融合。
+4 个历史 SKIP 不作为功能缺失证据，本轮没有重试。
 
-当前为问题修复阶段：剩余 foreach 每个源方法最多执行 2 个代表实例，按 node ID 排序选择两端以覆盖不同算子。此前完成的方法保留原报告。表格中的“抽样 PASS”只证明所选实例通过，不代表整个参数化方法全部通过。原清单 464 个实例，本轮保留已执行结果并缩减后计划 314 个实例；不是完整参数化全量。实际抽样 node ID 见证据目录的 `foreach-sample-nodeids.txt`。
-
-表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。
-已复用相同包、相同测试文件及相同 node ID 的既有结果：`0` 个方法。
-
-优先验收 2.10 基线 PASS 的 60 个源方法，当前结果：`{'PASS': 59, 'FAIL': 1}`。未完成、SKIP 和仅完成数值比较的方法不能提前作为完整 PASS。2.10 表来自适配后的 2.13 功能用例：部分 kernel 数量、CUDA DSL、profiler/grid 检查已移除；对照时须区分功能退化、测试适配差异与融合策略变化。当前分析和后续定时发布均优先标记这组方法。[重合项同步差异分析](inductor-combo-tests-v2.10-pass-v2.13-regressions.md)。
-
-上述 PASS 中有 14 个方法为抽样 PASS，完整参数范围未全部执行。
-
-执行前后安装的 Inductor Python 源码哈希一致：`True`。
+[执行脚本及命令](../../../../scripts/tests/combo_kernel_210/README-213.md)；
+[本轮日志、JUnit 和哈希证据](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/)；
+[重合方法对照](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/baseline-pass-comparison.json)。
+逐实例实际版本保存在 `jobs.json` 的 `validation`，旧验证过程保存在历史 artifact 与 `rerun_history`。

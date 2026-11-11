@@ -1,5 +1,39 @@
 # 2.13 ComboKernel 分支验证
 
+最新失败项复验基于 `sync/combo-kernel-master:d12230b556`，详见
+[最新现状](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13-latest-failures.md)。
+以下初次完整范围和各阶段记录保留各自的实际版本，不能视为当前代码重新执行的结果。
+
+## d12230b556 失败实例复验
+
+本轮按历史 `jobs.json` 中报告状态为 FAIL 的 node ID 生成清单，共 33 个方法、35 个实例。
+不会因为一个方法部分参数失败而重跑其已通过参数。两个阶段分别为 cumsum/profile-bandwidth
+2 个方法、2 个实例，以及剩余 31 个方法、33 个实例。清单及结果保存在
+[本轮证据](../../../artifacts/inductor-combo-tests-native-v2.13-sync-d12230b-failure-rerun/)。
+
+运行前将 d12230b556 的全部 191 个 Inductor Python 文件覆盖到安装目录，并保存原文件，
+记录于 `overlay.json`；基础 wheel/C++ 没有重新构建。测试快照仍为 `c1ce068`，
+189 个测试 Python 文件逐一核对哈希，执行期间再次校验安装源码未变。
+
+在相同环境准备源码后，可复用以下命令；两个阶段分别替换 manifest/output/cache 参数即可：
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kernel_210/run_plain_pytest.py \
+  --test-root /path/to/cases/v2.13.0/inductor_npu \
+  --manifest /path/to/failed-manifest.json \
+  --output /path/to/new-results --cache-root /path/to/new-cache \
+  --test-commit c1ce0688898b9ca1edebc2a4ff4dbffd8b287f28 \
+  --npu-fix-commit d12230b556f11b27c9ff752a0dd41635791efc83 \
+  --devices 3,6 --foreach-functional
+```
+
+原生 pytest 执行逻辑不变，没有自定义插件。本地 systemd 用户定时任务
+`combo-d122-failed-watch-20261111.timer` 每两分钟读取远端阶段状态，远端进程独立运行。
+本轮结果发布后停止定时任务。`merge_failed_results.py` 逐实例合并结果，保留历史 PASS 的实际版本，
+再由 `publish_plain_pytest.py` 刷新稳定 CSV；不能把合并结果当作最新代码全量复测。
+
+## 初始验证与历史阶段
+
 本轮使用 NPU_A5 的 `pta_213_case` conda 环境，工作目录为 `/home/l30023782/PTA_213`。
 目标安装包为 `torch_npu 2.13.0+git64dc85c`，对应 `sync/combo-kernel-master` 提交
 `64dc85c99c1398a0bd2355b72cc2851d0688b964`。PyTorch 为 `2.13.0+cpu`，Triton 为 `3.6.0`。
@@ -73,7 +107,7 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 直接以 master 为父提交，保留一个 Combo 提交并已推送 origin。原 `38f959f435` 在
 `backup/sync-combo-kernel-master-before-rebase-20261111-38f959f435` 保留。
 冲突处理采用上游常量/config 生成实现；cumsum 与带宽调试器修复随 master 一并带入。
-本次仅完成本地语法、range-diff 与上游实现保留检查，没有重跑设备用例，旧报告的验证提交不变。
+rebase 当时仅完成本地语法、range-diff 与上游实现保留检查；随后已进行失败项设备复验，见最新现状。
 后续生产修复继续提交到 `sync/combo-kernel-master`。
 
 以下为此前修复分支上的验证记录，基于安装包对应的 `64dc85c99c`：
