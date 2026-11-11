@@ -174,10 +174,10 @@ del arg0_1  # 再次释放，触发 UnboundLocalError
 重合的 60 个源方法仍是 **59 PASS、1 FAIL**。未重合的 45 个源方法是
 **9 PASS、32 FAIL、4 SKIP**。以下分类按源方法计数，不按参数实例计数。
 
-### 重合的唯一失败：已有候选实现，移除 fallback 的前提尚未确认
+### 重合的唯一失败：测试分支缺少 master 已合入的 scan 改动
 
 `test_helper_fn_defined` 有现成 scan 实现可供评估，不需要自行重写算法；
-但不能仅凭 helper 数量断言失败，就认定删除 NPU override/fallback 是安全修复。
+远端最新 master 已采用这套方案；需要同步完整实现并验证，不能仅凭 helper 数量断言单独删除 fallback。
 本地已取得的上游提交 `ac0e1564ca` 包含 5 个生产文件，合计增加 18 行、删除 19 行；
 另外的测试文件不计入这一修改量。生产修改包括：
 
@@ -227,13 +227,29 @@ if (is_integer_dtype(x.get_dtype()) or is_boolean_dtype(x.get_dtype())) and dtyp
 所以候选补丁移除的是 NPU 的强制回退，不是所有 fallback；但这也不自动保证 NPU 所有不支持场景
 都能在该分支被正确识别，后续 codegen/编译失败未必会返回到这一层。
 
-当前结论调整为：**先保留现有实现，暂停将全量删除 override/fallback 当作已确认方案。**
-后续需要确认默认与显式 dtype、bool、标量、out、不同设备架构的 eager/compiled 行为；
-同时取得 !45800 的具体回退场景，或给出足够独立证据覆盖其可能涉及的 scan 正确性与编译限制。
-已有上游补丁中的 shape、mask 和 helper 修复可继续评估，但不能替代这些前置核对。
-没有为通过 helper 断言而增加只识别该用例的特殊开关，也没有修改生产代码。
+进一步联网核对后，结论是：**以最新 master 已合入的完整 cumsum 改动为同步依据。**
+历史 dtype 差异应作为回归验证范围，不能据此认定最新 master 仍要求保留 NPU 强制 fallback。
+应确认默认与显式 dtype、bool、标量、out 及目标设备的 eager/compiled 行为；
+!45800 的具体回退原因仍未公开，不能声称已逐一证明所有历史触发场景都被解决。
+本次没有单独删除 fallback，没有增加用例专用开关，也没有修改生产代码。
 
 [历史核对摘要](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-failure-fixes/cumsum-fallback-history.json)。
+
+2026-11-11 通过 `git ls-remote` 与 `git fetch upstream master` 核对远端最新 master，
+HEAD 为 `694f3b371432032d5477fc0d5e47d83aafa7cc09`，已包含 `ac0e1564ca`。
+主路径三个注册文件的实际状态如下：
+
+| 文件 | 最新 master | 当前测试分支 bb5e1d0a84 |
+| --- | --- | --- |
+| `lowering_fallback_list.py` | 不含 aten.cumsum 条目 | 仍有 aten.cumsum.out |
+| `lowering_override_list.py` | 不含 aten.cumsum | 仍在 override 列表 |
+| `lowering.py` | 已删除专用 cumsum lowering | 仍强制调用 fallback_cumsum |
+
+master 同时采用 `_lift_helper(combine_fn, values, dtypes)` 并导出 `split_scan`。
+因此这项差异是测试分支缺少已合入 master 的能力提交；这不是只移除一个列表项的修复。
+社区通用 scan lowering 在无法创建 Scan 时仍有条件 fallback，不能把“移除 NPU 强制 fallback”
+解释成“任何场景都不允许 fallback”。此次仅更新远端引用，没有切换或修改生产工作分支。
+
 
 ### 未重合的 32 个 FAIL 分类
 
@@ -351,7 +367,7 @@ FTZ 指把非正规数冲刷为零的处理方式，涉及真实数值语义；�
 | Triton Ascend `third_party/ascend/backend/compiler.py::NPUOptions`、`parse_options` | 本地源码未见与 CUDA enable_reflect_ftz 等价的现成选项 |
 | 用例 `test_combo_kernels.py`（1831 行附近） | max_persistent_rblock 测试自身明确说明 HIP 过滤用途 |
 
-cumsum 先完成上述历史回退及 dtype 兼容性确认，再决定是否启用候选实现。
+cumsum 以最新 master 的完整 scan 改动作为同步依据，并定向验证 helper 与 dtype/scan 兼容性。
 可以独立推进的修复顺序为 **带宽调试器接口 → optimize_mem → provenance → 真实统计与聚合**。
 每项应独立验证原失败方法，再讨论是否继续扩展分块和 autotune 能力。
 融合数量与峰值内存先保留为待定位项，不用放宽断言代替定位。
