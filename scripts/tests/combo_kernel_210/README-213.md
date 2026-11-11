@@ -65,8 +65,10 @@ ASCEND_RT_VISIBLE_DEVICES=6 python /path/to/torch-learn/scripts/tests/combo_kern
 新运行目录为 `/home/l30023782/PTA_213/combo-sync-64dc85c-interface-fix-20261110`。
 
 当前生产开发统一使用 NPU 仓库的 `sync/combo-kernel-master`。
-2026-11-11 已将此前修复分支 `fix/combo-sync-interfaces-v2.13` 的 7 个提交完整快进至该分支，
-并推送 origin，HEAD 为 `bb5e1d0a84`。提交与源码内容未变，不重新标记历史验证结果。
+2026-11-11 已汇总此前修复分支的 7 个提交，并将 `6c43e4db23` 之后的 8 个 Combo 提交
+通过 rebase 合并为 `38f959f435`，更新到 origin。源码树与合并前 `bb5e1d0a84` 完全一致，
+不重新标记历史验证结果；旧提交保留在本地备份分支
+`backup/sync-combo-kernel-master-before-squash-20261111-bb5e1d0a84`。
 后续生产修复继续提交到 `sync/combo-kernel-master`。
 
 以下为此前修复分支上的验证记录，基于安装包对应的 `64dc85c99c`：
