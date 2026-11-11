@@ -174,9 +174,10 @@ del arg0_1  # 再次释放，触发 UnboundLocalError
 重合的 60 个源方法仍是 **59 PASS、1 FAIL**。未重合的 45 个源方法是
 **9 PASS、32 FAIL、4 SKIP**。以下分类按源方法计数，不按参数实例计数。
 
-### 重合的唯一失败：可复用已有 cumsum 修复
+### 重合的唯一失败：已有候选实现，移除 fallback 的前提尚未确认
 
-`test_helper_fn_defined` 可以尝试修复，而且不需要自行重写 scan 算法。
+`test_helper_fn_defined` 有现成 scan 实现可供评估，不需要自行重写算法；
+但不能仅凭 helper 数量断言失败，就认定删除 NPU override/fallback 是安全修复。
 本地已取得的上游提交 `ac0e1564ca` 包含 5 个生产文件，合计增加 18 行、删除 19 行；
 另外的测试文件不计入这一修改量。生产修改包括：
 
@@ -193,6 +194,46 @@ runtime 文件的导入块因当前分支已有 grid 别名等改动而冲突，
 修改与 NPU 上游已有修复对齐。风险集中在 scan 的 dtype 提升、非整块尾部 mask、维度和动态 shape；
 已有数值 PASS 是外部 ATen 路径的结果，不能替代修复后 Triton scan 的验证。
 验收至少应重新执行原 `test_helper_fn_defined`，同时核查生成代码确实进入 scan、helper 定义一次且数值正确。
+
+### cumsum fallback 的历史用途与回退记录
+
+这部分在 2026-11-11 进一步核对 git 历史、GitCode 公开 PR/Issue 正文与讨论。
+来源与已知用途如下；“没有公开原因”表示查到的记录未提供，不能推定不存在历史问题。
+
+| PR / 提交 | 已确认的变更与用途 |
+| --- | --- |
+| [!20936](https://gitcode.com/Ascend/pytorch/merge_requests/20936) / `511183ea67` | 本地可追溯历史中最早加入专用 cumsum lowering；整数/bool 未指定 dtype 时用 int32，非标量调用 fallback_cumsum。PR 为整体 Inductor 2.6 集成，没有说明 cumsum 专属故障或为什么不能使用 scan |
+| [!25033](https://gitcode.com/Ascend/pytorch/merge_requests/25033) / `7f7312eca8` | 将这段专用 lowering 带入 master；是当前主体代码的 blame 来源 |
+| [!29301](https://gitcode.com/Ascend/pytorch/merge_requests/29301) / `0b6e500d8f` | 明确修复 A5 cumsum 输出 dtype，把设备分支改为 A5 使用 int64、其他设备仍 int32；说明 override 承担了真实兼容逻辑 |
+| [!41858](https://gitcode.com/Ascend/pytorch/merge_requests/41858) / `72ddcb1b5b` | 将 Inductor 适配到 2.13，保留 fallback；当前 dtype 判断使用 is_ascend950 |
+| [!45701](https://gitcode.com/Ascend/pytorch/merge_requests/45701) / `944989f5e9` | 2.10 曾开放 Triton cumsum，移除专用 lowering/fallback |
+| [!45800](https://gitcode.com/Ascend/pytorch/merge_requests/45800) / `ac90b06393` | 随后回退该能力，恢复 fallback 与 dtype 逻辑；关联 [Issue #4612](https://gitcode.com/Ascend/pytorch/issues/4612)，公开正文和讨论均未说明具体故障场景、错误类型或根因 |
+| [!48259](https://gitcode.com/Ascend/pytorch/merge_requests/48259) / `11396bdd77` | 后续重新开放 2.10 Triton cumsum，并补 shape/helper 等接口；现有公开记录没有把这些修改与 !45800 的具体触发原因逐一对应 |
+| [!49102](https://gitcode.com/Ascend/pytorch/merge_requests/49102) / `ac0e1564ca` | 移植到 2.13，继续处理 mask 与实际 scan 维度；可作为候选实现，不能代替历史兼容性验证 |
+
+当前 NPU override 的实际规则是：
+
+```python
+if (is_integer_dtype(x.get_dtype()) or is_boolean_dtype(x.get_dtype())) and dtype is None:
+    dtype = torch.int64 if is_ascend950 else torch.int32
+```
+
+而社区 `torch/_inductor/lowering.py::cumsum` 对整数/bool 的默认 dtype 一律是 int64。
+因此，删除整个 override 会改变非 Ascend950 设备当前 compiled 路径的默认 dtype 策略。
+这是可由源码直接确认的行为差异，尚不能断言修改后一定错误，也不能宣称没有兼容风险。
+原 helper 用例使用浮点输入，无法验证这项差异。
+
+社区 cumsum 在 `ir.Scan.create()` 返回 None 时仍会调用 `fallback_cumsum`。
+所以候选补丁移除的是 NPU 的强制回退，不是所有 fallback；但这也不自动保证 NPU 所有不支持场景
+都能在该分支被正确识别，后续 codegen/编译失败未必会返回到这一层。
+
+当前结论调整为：**先保留现有实现，暂停将全量删除 override/fallback 当作已确认方案。**
+后续需要确认默认与显式 dtype、bool、标量、out、不同设备架构的 eager/compiled 行为；
+同时取得 !45800 的具体回退场景，或给出足够独立证据覆盖其可能涉及的 scan 正确性与编译限制。
+已有上游补丁中的 shape、mask 和 helper 修复可继续评估，但不能替代这些前置核对。
+没有为通过 helper 断言而增加只识别该用例的特殊开关，也没有修改生产代码。
+
+[历史核对摘要](../../../../artifacts/inductor-combo-tests-native-v2.13-sync-64dc85c-failure-fixes/cumsum-fallback-history.json)。
 
 ### 未重合的 32 个 FAIL 分类
 
@@ -310,8 +351,9 @@ FTZ 指把非正规数冲刷为零的处理方式，涉及真实数值语义；�
 | Triton Ascend `third_party/ascend/backend/compiler.py::NPUOptions`、`parse_options` | 本地源码未见与 CUDA enable_reflect_ftz 等价的现成选项 |
 | 用例 `test_combo_kernels.py`（1831 行附近） | max_persistent_rblock 测试自身明确说明 HIP 过滤用途 |
 
-建议按 **cumsum → 带宽调试器接口 → optimize_mem → provenance → 真实统计与聚合** 的顺序实施。
-它们有相对明确的源码修改路径；每项应独立验证原失败方法，再讨论是否继续扩展分块和 autotune 能力。
+cumsum 先完成上述历史回退及 dtype 兼容性确认，再决定是否启用候选实现。
+可以独立推进的修复顺序为 **带宽调试器接口 → optimize_mem → provenance → 真实统计与聚合**。
+每项应独立验证原失败方法，再讨论是否继续扩展分块和 autotune 能力。
 融合数量与峰值内存先保留为待定位项，不用放宽断言代替定位。
 
 本轮没有新增设备验证或性能 benchmark 结论，也没有将任何 FAIL/SKIP 改为 PASS。

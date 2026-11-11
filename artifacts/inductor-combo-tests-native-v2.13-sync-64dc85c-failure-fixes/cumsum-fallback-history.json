@@ -1,0 +1,71 @@
+{
+  "assessment_date": "2026-11-11",
+  "scope": "Read-only git history, public GitCode API descriptions/comments, and source comparison; no new device validation",
+  "npu_commit": "bb5e1d0a84e5413b4d9b874659d778ed1ea7a33e",
+  "history": [
+    {
+      "commit": "511183ea67",
+      "pr": 20936,
+      "event": "Earliest tracked introduction of the specialized cumsum lowering; non-scalar values use fallback_cumsum; integer/bool default dtype forced to int32",
+      "reason_evidence": "PR is a broad Inductor 2.6 integration; no cumsum-specific defect or fallback rationale stated"
+    },
+    {
+      "commit": "7f7312eca8",
+      "pr": 25033,
+      "event": "Imports the specialized cumsum lowering into master",
+      "reason_evidence": "Broad master support integration"
+    },
+    {
+      "commit": "0b6e500d8f",
+      "pr": 29301,
+      "event": "A5 output dtype fix: choose int64 for the then-A5 SoC branch and int32 otherwise",
+      "reason_evidence": "PR title/body explicitly identify an A5 cumsum output dtype fix"
+    },
+    {
+      "commit": "72ddcb1b5b",
+      "pr": 41858,
+      "event": "2.13 integration retains fallback; current condition is is_ascend950",
+      "reason_evidence": "Port of Inductor 2.10 into master/2.13"
+    },
+    {
+      "commit": "944989f5e9",
+      "pr": 45701,
+      "event": "2.10 enables Triton cumsum and removes specialized lowering/fallback entries",
+      "issue": 4559
+    },
+    {
+      "commit": "ac90b06393",
+      "pr": 45800,
+      "event": "2.10 reverts Triton cumsum support and restores fallback and dtype policy",
+      "issue": 4612,
+      "reason_evidence": "Public PR and issue do not state a concrete failure scenario or root cause; no human technical explanation found in fetched discussion"
+    },
+    {
+      "commit": "11396bdd77",
+      "pr": 48259,
+      "event": "2.10 re-enables Triton cumsum with shape/interface adaptations",
+      "reason_evidence": "Provides implementation changes; does not identify or reproduce the earlier rollback trigger"
+    },
+    {
+      "commit": "ac0e1564ca",
+      "pr": 49102,
+      "event": "Ports Triton cumsum to 2.13; fixes NPU masks and actual scan-dimension shape handling",
+      "reason_evidence": "Candidate implementation, not evidence that every earlier fallback/revert constraint has been validated"
+    }
+  ],
+  "current_npu_default_integer_bool_dtype": "int64 if is_ascend950 else int32",
+  "community_default_integer_bool_dtype": "int64",
+  "community_fallback_retained": "Community cumsum still calls fallback_cumsum when ir.Scan.create returns None; removing NPU forced fallback does not remove every fallback",
+  "risk": "Removing the entire NPU override changes default compiled integer/bool dtype behavior on non-Ascend950 devices; target runtime semantics must be checked before claiming compatibility",
+  "decision": "Defer unconditional removal. Confirm dtype compatibility and investigate or independently cover historical rollback constraints before enabling the Triton path.",
+  "public_sources": {
+    "20936": "https://gitcode.com/Ascend/pytorch/merge_requests/20936",
+    "25033": "https://gitcode.com/Ascend/pytorch/merge_requests/25033",
+    "29301": "https://gitcode.com/Ascend/pytorch/merge_requests/29301",
+    "41858": "https://gitcode.com/Ascend/pytorch/merge_requests/41858",
+    "45701": "https://gitcode.com/Ascend/pytorch/merge_requests/45701",
+    "45800": "https://gitcode.com/Ascend/pytorch/merge_requests/45800",
+    "48259": "https://gitcode.com/Ascend/pytorch/merge_requests/48259",
+    "49102": "https://gitcode.com/Ascend/pytorch/merge_requests/49102"
+  }
+}
