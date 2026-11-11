@@ -11,24 +11,24 @@ test_combo_kernels.py,test_mutated_args,PASS,PASS 1,—
 test_combo_kernels.py,test_mutated,随外层验证/PASS,随 test_mutated_args 验证,—
 test_combo_kernels.py,test_reduce_split,PASS,PASS 1,—
 test_combo_kernels.py,test_2d_blocking_partitioning,PASS,PASS 1,—
-test_combo_kernels.py,test_persistent_reduction_size_hint,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,已执行 compiled，但数值断言在格式检查之后尚未执行；断言要求 CUDA 的 x/r0_ size_hints 文本，NPU 轴命名和聚合提示不同。当前是生成代码格式检查未适配，非 size_hint API 异常。
+test_combo_kernels.py,test_persistent_reduction_size_hint,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可适配的后端文本检查：compiled 已执行，但数值断言位于失败的格式检查之后尚未执行。当前检查写死 CUDA x/r0_ size_hints，NPU 使用自身轴名和提示聚合；应检查 NPU 等价语义并保留数值验证，不是已修接口再次报错。
 test_combo_kernels.py,test_sort_in_combo_kernel_forces_persistent_reduction,PASS,PASS 1；复验 1（bb5e1d0a84），其余沿用历史结果,—
 test_combo_kernels.py,test_fuse_mix_order_reductions_combo_kernels,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值比较已通过；失败在 kernel 数量断言，预期 3、实际 4；NPU 分区、可编译候选或回退策略与 CUDA 不同。尚未逐项证实拒绝原因，不推断为主动收紧融合，也不删除新功能断言。
 test_combo_kernels.py,test_combo_kernel_scalar_store_broadcast,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值比较已通过；失败在 kernel 数量断言，预期 1、实际 2；NPU 分区、可编译候选或回退策略与 CUDA 不同。尚未逐项证实拒绝原因，不推断为主动收紧融合，也不删除新功能断言。
-test_combo_kernels.py,test_single_combo_kernels,FAIL,FAIL 2；复验 2（257e31bde7），其余沿用历史结果,数值及前置数量检查已通过；失败要求 CUDA Grid1D，NPU 生成 GridNpu。属于后端专用生成代码检查差异，保留原始 FAIL。
+test_combo_kernels.py,test_single_combo_kernels,FAIL,FAIL 2；复验 2（257e31bde7），其余沿用历史结果,可适配的后端 grid 检查：数值及前置数量检查已通过，失败要求 CUDA Grid1D，而 NPU 生成 GridNpu。应检查 NPU 的等价 grid/dispatch 语义；当前原始结果仍为 FAIL。
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi,PASS,PASS 1,—
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_per,PASS,PASS 1；复验 1（257e31bde7），其余沿用历史结果,—
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red_per,PASS,PASS 1；复验 1（257e31bde7），其余沿用历史结果,—
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red,PASS,PASS 1；复验 1（bb5e1d0a84），其余沿用历史结果,—
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_r0_r1,PASS,PASS 1；复验 1（bb5e1d0a84），其余沿用历史结果,—
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi_3d,PASS,PASS 1,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_block_size,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,NPU eager 的 channels_last contiguous 不支持，执行在 torch.compile 前失败；不是 Combo 编译或融合错误。
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_block_size,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,NPU eager 的 channels_last contiguous 在 torch.compile 前报不支持。该场景需要 eager 内存格式能力，不是 Combo 同步小修；替换为普通 contiguous 会改变测试覆盖，不能当作修复。
 test_combo_kernels.py,test_combo_kernels_pointwise_only,PASS,PASS 2；复验 1（257e31bde7），其余沿用历史结果,—
 test_combo_kernels.py,test_combo_kernel_max_num_nodes,PASS,PASS 3,—
-test_combo_kernels.py,test_combo_kernel_yz_overflow,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,按 CUDA traceEvents/args.grid 结构解析 NPU profiler 事件列表时失败；该新用例尚未完成 NPU profiler/grid 适配，不能据此判为数值错误或 Y/Z overflow 已验证。
-test_combo_kernels.py,test_combo_kernel_no_bench_stitched_config,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值比较已通过；失败在新增 no-autotune 独立子 kernel block/default_config 或 carve-out 的结构检查。NPU 使用共享 split 轴和自身 grid 协议，未完整实现测试要求的 XBLOCK_i/候选拆分规则。
-test_combo_kernels.py,test_combo_kernel_no_bench_persistent_reduction,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值比较已通过；失败在新增 no-autotune 独立子 kernel block/default_config 或 carve-out 的结构检查。NPU 使用共享 split 轴和自身 grid 协议，未完整实现测试要求的 XBLOCK_i/候选拆分规则。
-test_combo_kernels.py,test_combo_kernel_no_bench_carve_out,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值比较已通过；失败在新增 no-autotune 独立子 kernel block/default_config 或 carve-out 的结构检查。NPU 使用共享 split 轴和自身 grid 协议，未完整实现测试要求的 XBLOCK_i/候选拆分规则。
+test_combo_kernels.py,test_combo_kernel_yz_overflow,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可适配的 profiler/grid 检查：测试按 CUDA traceEvents/args.grid 读取 NPU 事件列表而失败。需按 NPU 事件与实际 launch 维度验证等价边界，不能只移除检查宣称 Y/Z overflow 已覆盖；当前未确认实际溢出缺陷。
+test_combo_kernels.py,test_combo_kernel_no_bench_stitched_config,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值已通过；独立子 kernel 分块协议尚未完整对齐：测试要求 XBLOCK_0/1/2，NPU 当前默认配置使用共享 split block。需贯通参数、grid、launch 与默认配置，属于能力补齐，不是加几个字符串字段即可修好。
+test_combo_kernels.py,test_combo_kernel_no_bench_persistent_reduction,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值已通过；测试要求逐子 kernel 的独立 block/default_config，NPU 当前走共享 split block。需同步 persistent reduction 的独立分块及启动约束，属于能力对齐；不应仅添加未被 runtime 使用的 XBLOCK_i。
+test_combo_kernels.py,test_combo_kernel_no_bench_carve_out,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值已通过；kernel 数量预期 2、实际 1。仍需检查实际分区及大子 kernel carve-out 条件，当前不能确认是迁移遗漏、NPU 策略差异或缺少独立调优；保留待定位，不按功能缺失定性。
 test_combo_kernels.py,test_activation_benchmark,PASS,PASS 1,—
 test_combo_kernels.py,test_activations,随外层验证/PASS,随 test_activation_benchmark 验证,—
 test_combo_kernels.py,test_reduce_benchmark,PASS,PASS 1；复验 1（257e31bde7），其余沿用历史结果,—
@@ -39,8 +39,8 @@ test_combo_kernels.py,test_round_robin_dispatch,PASS,PASS 1,—
 test_combo_kernels.py,test_mutated,随外层验证/PASS,随 test_round_robin_dispatch 验证,—
 test_combo_kernels.py,test_2d_blocking_benchmark,PASS,PASS 1,—
 test_combo_kernels.py,test_persistent_reduction_no_x_dim,PASS,PASS 1；复验 1（257e31bde7），其余沿用历史结果,—
-test_combo_kernels.py,test_combo_kernel_per_subkernel_reduction_hint,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值比较已通过；未发出社区要求的 reduction_hint_0/1。NPU 当前使用 combo_subkernel_meta，逐子 kernel reduction-hint 格式尚未对齐。
-test_combo_kernels.py,test_combo_rms_norm_forwards_add_persistent_rblock,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
+test_combo_kernels.py,test_combo_kernel_per_subkernel_reduction_hint,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,数值已通过；缺少社区 reduction_hint_0/1；NPU 当前选首个子 kernel 的 reduction_hint，并携带自身逐子 kernel 轴元数据。需逐子 kernel hint 到调优消费者的完整接入，属于调优协议未对齐，不宜只打印字段。
+test_combo_kernels.py,test_combo_rms_norm_forwards_add_persistent_rblock,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,尚未对齐的调优能力：测试要求各 inductor_meta_i 携带 add_persistent_rblock 并生成大 RBLOCK 候选；NPU Combo 的元数据和 tile 搜索走自身协议。应先确认 NPU 候选等价性与资源限制，再接入，不能仅复制布尔字段宣称支持。
 test_foreach.py,test_single_list,PASS,PASS 33,—
 test_foreach.py,test_single_scalar,抽样 PASS,PASS 2；抽样 2/16,—
 test_foreach.py,test_single_scalar_tensor,抽样 PASS,PASS 2；抽样 2/16,—
@@ -68,8 +68,8 @@ test_foreach.py,test_2d_block_no_mixed_sizes_no_mask,PASS,PASS 1,—
 test_foreach.py,test_2d_block_mixed_sizes_with_mask,PASS,PASS 1,—
 test_foreach.py,test_foreach_map_backward_binary,抽样 PASS,PASS 2；抽样 2/10,—
 test_foreach.py,test_foreach_map_backward_unary,抽样 PASS,PASS 2；抽样 2/4,—
-test_snode_runtime.py,test_foreach_basic,SKIP,SKIP 1,未执行，保留原有适用条件：NPU does not support
-test_snode_runtime.py,test_foreach_after_extern,SKIP,SKIP 1,未执行，保留原有适用条件：NPU does not support
+test_snode_runtime.py,test_foreach_basic,SKIP,SKIP 1,未执行，保留原有 NPU does not support skip；该方法检查 scheduler 输入距离，并不能仅凭装饰器判断 foreach 算子不支持。可后续单独取消该方法 skip 做适用性验证，当前不计入 32 个未重合 FAIL。
+test_snode_runtime.py,test_foreach_after_extern,SKIP,SKIP 1,未执行，保留原有 NPU does not support skip；该方法检查 mm 后 foreach 的 scheduler 输入距离，尚无失败执行证据，不能直接定性为能力缺失。可后续单独检查适用性，当前不计入 32 个未重合 FAIL。
 test_torchinductor.py,test_combo_kernel_store_mask,PASS,PASS 1；复验 1（bb5e1d0a84），其余沿用历史结果,—
 test_unbacked_symints.py,test_combo_kernel_size_hint_failure,PASS,PASS 1；复验 1（257e31bde7），其余沿用历史结果,—
 test_combo_kernels.py,test_combo_kernel_dynamic_shapes_grid_changes,PASS,PASS 1；复验 1（257e31bde7），其余沿用历史结果,—
@@ -88,30 +88,30 @@ test_combo_kernels.py,test_dynamic_shapes_2d_blocking_round_robin,PASS,PASS 1；
 test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda,PASS,PASS 1；复验 1（257e31bde7），其余沿用历史结果,—
 test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu,SKIP,SKIP 1,未执行，保留原有适用条件：requires xpu and triton
 test_torchinductor.py,test_combo_kernel_filter_cpu,PASS,PASS 1；复验 1（bb5e1d0a84），其余沿用历史结果,—
-test_provenance_tracing.py,test_triton_kernel_to_post_grad_tracing_combo_kernel,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,provenance 的 cppCodeToPost 映射为空，预期 1 项。NPU define_kernel 未接社区 set_kernel_post_grad_provenance_tracing，属于追踪信息接入缺失；不是已确认的数值错误。
+test_provenance_tracing.py,test_triton_kernel_to_post_grad_tracing_combo_kernel,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的追踪接入：cppCodeToPost 映射 0 项、预期 1 项；NPU define_kernel 未调用社区 provenance hook。需展开 Combo 真实子节点登记 origins，并在 wrapper 写 debug handle，覆盖复用路径；不能仅传 node 为空的 Combo 外壳。尚未修复复验。
 test_user_streams.py,test_combo_kernel_fusion_within_same_stream,PASS,PASS 1,—
 test_combo_kernels.py,test_combo_kernel_tma_descriptor_block_name,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,CUDA TMA descriptor 代码检查不适用于当前 NPU 生成器；测试头部模拟 GPU capability 后进入该 CUDA 用例。未实现对应 CUDA 路径，不据此判为通用 Combo 精度错误。
 test_combo_kernels.py,test_combo_kernel_amd_special_config_args,SKIP,SKIP 2,未执行，保留原有适用条件：ROCm only
-test_combo_kernels.py,test_helper_fn_defined,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,2.10 基线 PASS；数值比较已通过；当前 cumsum lowering 调用外部 ATen，不生成测试要求的 Triton helper（预期 1、实际 0）。上游已有 ac0e1564ca，当前基线未包含该 cumsum 能力提交；并非 size_hint 或 helper 输出遗漏。
+test_combo_kernels.py,test_helper_fn_defined,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,2.10 基线 PASS；数值比较已通过；cumsum 当前走外部 ATen，helper 预期 1、实际 0。可移植上游 ac0e1564ca 的 5 个生产文件，恢复 Triton scan 并同步 mask、shape 与 _lift_helper 接口；4 文件补丁上下文检查通过，runtime 的 split_scan 导入需适配。当前尚未移植或复验。
 test_combo_kernels.py,test_pdl_codegen_in_combo_kernel,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,要求 CUDA PDL 的 launch_pdl metadata；NPU 未接入该 CUDA 启动协议。当前失败保留，不通过移除断言认定该能力已支持。
 test_combo_kernels.py,test_pdl_combo_kernel_pointwise,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,要求 CUDA PDL 的 launch_pdl metadata；NPU 未接入该 CUDA 启动协议。当前失败保留，不通过移除断言认定该能力已支持。
 test_combo_kernels.py,test_pdl_combo_kernel_reduction,PASS,PASS 1,—
-test_combo_kernels.py,test_combo_kernel_max_autotune,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,未观察到测试要求的社区 sequential/grouping/coordinate-descent autotune 日志或行为；NPU 实际使用独立 runtime 和 tiling 流程，当前未对齐该新增协议。对应数值断言位于失败的日志检查之后，不能提前计为数值 PASS。
-test_combo_kernels.py,test_combo_kernel_max_autotune_with_reduction,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,未观察到测试要求的社区 sequential/grouping/coordinate-descent autotune 日志或行为；NPU 实际使用独立 runtime 和 tiling 流程，当前未对齐该新增协议。对应数值断言位于失败的日志检查之后，不能提前计为数值 PASS。
-test_combo_kernels.py,test_combo_autotune_many_subkernels,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,未观察到测试要求的社区 sequential/grouping/coordinate-descent autotune 日志或行为；NPU 实际使用独立 runtime 和 tiling 流程，当前未对齐该新增协议。对应数值断言位于失败的日志检查之后，不能提前计为数值 PASS。
-test_combo_kernels.py,test_combo_autotune_grouping,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,未观察到测试要求的社区 sequential/grouping/coordinate-descent autotune 日志或行为；NPU 实际使用独立 runtime 和 tiling 流程，当前未对齐该新增协议。对应数值断言位于失败的日志检查之后，不能提前计为数值 PASS。
+test_combo_kernels.py,test_combo_kernel_max_autotune,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前尚未对齐社区逐子 kernel 调优协议：测试要求 sequential autotune、metadata grouping 或 coordinate-descent 的行为/日志，NPU 使用自身 cost-model 与共享 tile 搜索。应核对实际候选及日志目标，再决定补能力或适配观察方式；不能仅补日志判 PASS。数值断言在当前失败检查之后，尚未执行。
+test_combo_kernels.py,test_combo_kernel_max_autotune_with_reduction,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前尚未对齐社区逐子 kernel 调优协议：测试要求 sequential autotune、metadata grouping 或 coordinate-descent 的行为/日志，NPU 使用自身 cost-model 与共享 tile 搜索。应核对实际候选及日志目标，再决定补能力或适配观察方式；不能仅补日志判 PASS。数值断言在当前失败检查之后，尚未执行。
+test_combo_kernels.py,test_combo_autotune_many_subkernels,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前尚未对齐社区逐子 kernel 调优协议：测试要求 sequential autotune、metadata grouping 或 coordinate-descent 的行为/日志，NPU 使用自身 cost-model 与共享 tile 搜索。应核对实际候选及日志目标，再决定补能力或适配观察方式；不能仅补日志判 PASS。数值断言在当前失败检查之后，尚未执行。
+test_combo_kernels.py,test_combo_autotune_grouping,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前尚未对齐社区逐子 kernel 调优协议：测试要求 sequential autotune、metadata grouping 或 coordinate-descent 的行为/日志，NPU 使用自身 cost-model 与共享 tile 搜索。应核对实际候选及日志目标，再决定补能力或适配观察方式；不能仅补日志判 PASS。数值断言在当前失败检查之后，尚未执行。
 test_combo_kernels.py,test_combo_autotune_grouping_by_metadata_fingerprint,PASS,PASS 1,—
-test_combo_kernels.py,test_combo_max_persistent_rblock_gated_on_per_subkernel,FAIL,FAIL 1; PASS 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_kernel_coordesc_tunes_largest_subkernel_first,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,未观察到测试要求的社区 sequential/grouping/coordinate-descent autotune 日志或行为；NPU 实际使用独立 runtime 和 tiling 流程，当前未对齐该新增协议。对应数值断言位于失败的日志检查之后，不能提前计为数值 PASS。
-test_combo_kernels.py,test_combo_inductor_meta_has_optimize_mem,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_inductor_meta_optimize_mem_false_in_training_forward,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_triton_meta_has_disable_ftz,FAIL,FAIL 2；复验 2（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_reduction_combo_grid_meta_has_per_subkernel_fields,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_per_kernel_inductor_meta_matches_standalone,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_kernel_num_gb_and_flop_match_standalone_sum,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
-test_combo_kernels.py,test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,真实 runtime 接口错误：NPUDebugAutotuner 将 with_profiler 透传给不接受它的 NPUCostModelAutotuner，编译生成期报 TypeError；不是单纯 metadata 格式断言，需要单独修复。
+test_combo_kernels.py,test_combo_max_persistent_rblock_gated_on_per_subkernel,FAIL,FAIL 1; PASS 1；复验 1（257e31bde7），其余沿用历史结果,后端资源策略差异：False 参数失败于缺少 max_persistent_rblock。上游该字段用于 HIP 的 XBLOCK*RBLOCK<=4096 过滤，防止 ROCm 编译膨胀；NPU 当前不走该规则。应按 NPU 资源协议检查适用性，不应照搬 HIP 阈值以通过字符串断言。
+test_combo_kernels.py,test_combo_kernel_coordesc_tunes_largest_subkernel_first,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前尚未对齐社区逐子 kernel 调优协议：测试要求 sequential autotune、metadata grouping 或 coordinate-descent 的行为/日志，NPU 使用自身 cost-model 与共享 tile 搜索。应核对实际候选及日志目标，再决定补能力或适配观察方式；不能仅补日志判 PASS。数值断言在当前失败检查之后，尚未执行。
+test_combo_kernels.py,test_combo_inductor_meta_has_optimize_mem,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的语义字段：NPU Combo jit_line 未写 optimize_mem，runtime 默认 True；当前推理值虽与期望相同，生成协议不完整。应与社区一致用 is_inference or is_backward，并与训练前向一起验证；尚未修复复验。
+test_combo_kernels.py,test_combo_inductor_meta_optimize_mem_false_in_training_forward,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可修复的训练图语义接入遗漏：NPU Combo 未写 optimize_mem，runtime 默认 True，训练前向应为 False。该值影响 autotune 的输入复制/恢复策略，应对齐社区 is_inference or is_backward；尚未观察到该用例数值算错，尚未修复复验。
+test_combo_kernels.py,test_combo_triton_meta_has_disable_ftz,FAIL,FAIL 2；复验 2（257e31bde7），其余沿用历史结果,需要跨层评估的数值语义能力：NPU Combo 未输出 disable_ftz，当前 NPU 编译路径也没有将其映射为后端选项；社区映射 enable_reflect_ftz=False 的分支仅限 CUDA。本地 Ascend 编译器未见等价选项，不能只补 metadata 就认定支持保留非正规数；尚未验证硬件语义。
+test_combo_kernels.py,test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的逐子 kernel 统计接入：当前 combo_subkernel_meta 仅携带 NPU 轴/tiling 等约束，缺少测试要求的 inductor_meta_i 及 load/store/reduction 等统计。需核对 NPU 的计数更新和字段语义后输出真实值；不代表补字段即可获得独立分块调优。尚未修复复验。
+test_combo_kernels.py,test_combo_reduction_combo_grid_meta_has_per_subkernel_fields,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的逐子 kernel 统计接入：当前 combo_subkernel_meta 缺少测试要求的 inductor_meta_i 与 load/store/reduction 统计。可统一普通 kernel 与 Combo 的统计生成，需核对 NPU 实际计数；不能只伪造字段满足 FileCheck。尚未修复复验。
+test_combo_kernels.py,test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的逐子 kernel 元数据接入：首先失败于缺少 inductor_meta_i。需按 NPU 实际地址轴记录 contiguous reduction 访问标记，并核对 standalone/Combo 一致性；社区字段可参考，但不能直接把 CUDA 轴推导结果当成 NPU 的结果。尚未修复复验。
+test_combo_kernels.py,test_combo_per_kernel_inductor_meta_matches_standalone,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的统计协议：standalone 元数据有 2 组，Combo 的 inductor_meta_i 为 0 组。应统一输出真实的逐 kernel 统计，并以相同输入对照；no_x_dim、tiling_scores 等必须对应 NPU 轴和 tiling，不能直接套用 CUDA 语义。尚未修复复验。
+test_combo_kernels.py,test_combo_kernel_num_gb_and_flop_match_standalone_sum,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的统计协议：NPU 普通 kernel 在 benchmark/profile 时估算 kernel_num_gb，Combo jit_line 未聚合各子 kernel 的带宽/FLOP。应统一 standalone/Combo 的有效统计口径并求和，核对 FLOP 估算；不能填 0 或只补字段。尚未修复复验。
+test_combo_kernels.py,test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可修复的 runtime 接口遗漏：NPUDebugAutotuner 未消费 with_profiler/with_bandwidth_info，前者透传父类即 TypeError；其 run 还要求旧 input_grid。需一起对齐 NPU 当前 run、候选选择、runtime blocks 和计时协议，再补 Combo 带宽统计；不能只删一个关键字。尚未修复复验。
 test_combo_kernels.py,test_combo_inductor_meta_no_kernel_num_gb_without_profile,PASS,PASS 1,—
-test_combo_kernels.py,test_benchmark_combo_kernel_emits_real_num_gb,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,当前失败在 metadata 字段/格式检查，NPU Combo 尚未满足该用例要求的社区字段/逐子 kernel 格式（optimize_mem、disable_ftz、inductor_meta_i、带宽/FLOP 或 max_persistent_rblock）。需按字段补能力或对齐协议，不能将结构检查失败等同于算错。
+test_combo_kernels.py,test_benchmark_combo_kernel_emits_real_num_gb,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,可补齐的 benchmark 统计：Combo 缺少各子 kernel 实际估计字节数的聚合，benchmark 未发出预期的真实 num_gb。应复用 NPU 字节估算并传到 benchmark，验证数值和设备字符串；尚未修复复验。
 test_combo_kernels.py,test_combo_kernel_peak_memory_wide_resnet,FAIL,FAIL 1；复验 1（257e31bde7），其余沿用历史结果,未满足收紧阈值后峰值内存降低的断言；当前 tight=616101888、disabled=616101888 字节；需结合实际融合/回退决策与内存统计定位，当前证据不足以认定为代码生成错误或能力完全不支持。
