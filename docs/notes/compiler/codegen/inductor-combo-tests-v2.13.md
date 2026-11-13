@@ -61,10 +61,12 @@ foreach 继续沿用 NPU 功能适配：保留数值、mutation 和梯度检查�
 <!-- combo-section:analysis213:start -->
 ## 当前问题与优先级
 
-2026-11-13 核对 Ascend `upstream/master` 为 **`44555141711c0c825c5a201e303dcadad1f5fcb4`**，
-逐项分析全部 **14 FAIL + 17 SKIP，共 31 个源方法**（15 个失败实例、18 个跳过实例）。
+2026-11-13 确认 Ascend 远端 master 为 **`acfc0910ab6184c50faa009b452894f65820e7f8`**。
+全部 **14 FAIL + 17 SKIP，共 31 个源方法**（15 个失败实例、18 个跳过实例）的逐项分析，
+使用 `44555141711c0c825c5a201e303dcadad1f5fcb4` 快照；其引用的 35 段 NPU 源码在新 master 仍逐字匹配。
+本节新增的融合能力核查直接使用新 master，版本对照与逐段核对收据见 [E15][E15]、[完整源码索引][source-index]。
 配套社区 Torch 源码为实际 2.13 环境提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`，
-测试源码为已推送的 `e71a557`；最新 Triton-Ascend `origin/main` 为
+测试源码为已推送的 `e71a557`；Triton-Ascend `origin/main` 的参考源码快照为
 `62f6b54e0f2420d6b718e0d4f89fa7a464d2e78f`。
 
 **最新 master 的源码分析与设备诊断分别记录，未把 master 装包复测。**
@@ -75,6 +77,103 @@ foreach 继续沿用 NPU 功能适配：保留数值、mutation 和梯度检查�
 下表按具体字段或功能列出作用、当前缺口和适配内容，编号链接到后文的源码与验证证据。
 一行对应一项字段或功能；同一方法可涉及多行，同一字段也可由多个方法检查。
 方法数仍为 **14 FAIL、17 SKIP**，不按表格行数重复计数。
+
+<a id="fusion-capabilities"></a>
+
+### 上游水平、垂直融合与 NPU 待适配能力
+
+**社区 2.13 的 Combo/foreach 体系支持水平融合与垂直融合的组合，但这套基础机制在 2.10 已存在。**
+对照社区 `v2.10.0`（`449b1768410104d3ed79d3bcfe4ba1d65c7f22c0`），
+两版都有 `ForeachKernelSchedulerNode.can_fuse/fuse` 和下表四个 foreach 用例。
+因此应写“2.13 支持的上游能力，NPU 待适配”，不能把这些基础机制全部称为“2.13 首次新增”。
+版本、测试原断言和 NPU 入口的固定源码摘录见 [E15][E15]。
+
+在这里，**水平融合**是把彼此没有 producer/consumer 依赖的成员放进一个 Combo；
+**垂直融合**是沿数据依赖把生产算子与消费算子融入同一个成员的计算链。
+例如先在成员内融合 `add → foreach op → mul`，再把两个独立成员合为一个 kernel。
+普通调度先执行 `fuse_nodes`，自动 Combo 分组随后执行 `create_combo_kernel_nodes`；
+后者明确分组 parallel nodes。成员间需要独立，依赖融合发生在成员内部并受 `can_fuse` 条件约束。
+foreach 的外部 producer/consumer 仍有归约等限制，跨多个成员读取的 consumer 也不能随意吸收。
+
+<a id="fusion-cases"></a>
+
+**哪些现有用例能体现：** 下表方法均在当前正式结果中为 PASS，
+最后一列说明适配后的 PASS 实际覆盖范围。前一列是社区原融合目标，不是本次新增设备结果。
+第一个方法来自 `test_combo_kernels.py::ComboKernelTests`，其余来自 `test_foreach.py::ForeachTests`。
+
+| 上游用例 | 体现的功能 | 社区原目标 | NPU 适配后的验证 |
+| --- | --- | --- | --- |
+| `test_activation_functions` | 独立 relu/sigmoid/tanh 水平打包 | 1 kernel | 关闭数量断言，验证数值 |
+| `test_single_list` | foreach 列表成员水平打包 | 1 kernel | 关闭数量断言，验证计算 |
+| `test_scheduler_fusion_list` | foreach→foreach 垂直融合，再水平打包成员 | 1 kernel | 关闭数量断言，验证计算 |
+| `test_non_foreach_producer_list` | 普通 producer→foreach 的成员融合 | 1 kernel | 关闭数量断言，验证计算 |
+| `test_non_foreach_consumer_producer_list` | 普通 producer→foreach→普通 consumer，叠加水平融合 | 1 kernel | 关闭数量断言 |
+
+最完整的例子是 `test_non_foreach_consumer_producer_list` 的 unary 分支：
+
+```python
+def fn(a0, a1):
+    c0 = torch.add(a0, a0)
+    c1 = torch.mul(a1, a1)
+    d = op([c0, c1])
+    e0 = torch.mul(d[0], a0)
+    e1 = torch.mul(d[1], a1)
+    return [e0, e1]
+```
+
+第一条链是 `add(a0,a0) → op 的第 0 个成员 → mul(d[0],a0)`，
+第二条链是 `mul(a1,a1) → op 的第 1 个成员 → mul(d[1],a1)`。
+每条链体现垂直融合，两条独立链打包体现水平融合；社区要求整个图生成 1 个 kernel。
+只比较 eager/compiled 数值，无法证明这个融合目标。
+
+**NPU 缺口定位：** 默认 NPU Inductor Triton 路径注册 `NPUCombinedScheduling`，
+其 backend features 来自 `NPUTritonScheduling`，列表中没有 `BackendFeature.FOREACH`。
+社区 lowering 在该 feature 为真时才 realize 成员并 `register_operation_list`，
+因此当前没有启用原 FOREACH 分组入口。
+NPU 的 `can_fuse_vertical` 及 foreach `can_fuse` 委托仍存在，普通垂直融合能力不能据此判为缺失。
+当前 foreach 用例通过 `check_kernel_count = GPU_TYPE != "npu"` 绕过单 kernel 验收，
+所以需接通、验证的是完整的 FOREACH 分组与依赖链组合路径。
+
+<a id="fusion-capability-tracking"></a>
+
+**需要作为 NPU 功能适配讨论的具体目标：** C01–C04 共用 FOREACH 入口缺失这一原因，
+分行是为了分别说明验收目标；以下 6 行不代表新增 6 个正式 FAIL。
+
+| 功能目标 | 作用 | 当前缺口或覆盖限制 |
+| --- | --- | --- |
+| <a id="c01"></a>C01 列表成员水平打包 | 减少独立 tensor 分支的 kernel 启动 | FOREACH 成员列表未注册，原单 kernel 目标未验收 |
+| <a id="c02"></a>C02 两个 foreach 阶段的成员配对融合 | 沿各成员的依赖融合前后操作 | 分组入口未启用，需接通 foreach→foreach 组合路径 |
+| <a id="c03"></a>C03 普通 producer 接入 foreach 成员 | 把前置 add/mul 融入成员 | 普通融合入口已有，FOREACH 内 producer 吸收目标未验收 |
+| <a id="c04"></a>C04 foreach 成员接入普通 consumer | 把后置 mul 接入成员链 | 缺完整分组链路验收，当前 PASS 不能证明融合完成 |
+| <a id="c05"></a>C05 共享输入的 mixed-order 联合归约 | 联合处理 x 的行归约与列归约 | `mix_order_reduction=False`；社区 3 kernel，NPU 4 kernel |
+| <a id="c06"></a>C06 不同轴布局成员的水平组合 | 在一个 Combo 中容纳不同分块接口 | 当前 `(x0,r1)` 与 `(r0)` 分成 2 个普通 kernel |
+
+C01 对应 `test_single_list`；C02 对应 `test_scheduler_fusion_list`；
+C03 对应 `test_non_foreach_producer_list`；C04 连同前置链由
+`test_non_foreach_consumer_producer_list` 体现。接通后应保留数值检查，
+并恢复原单 kernel 目标、检查成员实际计算链，防止普通拆分计算的 PASS 被误当作功能完成。
+普通激活用例的数量断言也被关闭，当前报告不能单独证明其三成员水平组合；
+NPU 已有真实双成员 Combo 的证据见 [F01](#f01) 和 store-mask 场景，水平组合能力已有部分覆盖。
+
+C05 对应 `test_fuse_mix_order_reductions_combo_kernels`：
+`x.sum(1)` 与 `x.sum(0)` 共享输入，但彼此没有 producer/consumer 依赖，属于两个方向的联合归约。
+社区将二者融合为 1 个 `FusedMixOrderReductions` kernel，
+依赖行归约结果的 `row_sum.sum()` 单独执行，独立的 y/z 归约组成 Combo，总计 3 个 kernel。
+NPU 当前行归约、列归约、消费者分别执行，仅 y/z 组成 Combo，总计 4 个 kernel。
+**这一差异应记录为 mixed-order 联合归约待适配；“纵向合并”不是该用例的准确功能名称。**
+`FusedMixOrderReductions` 与对应配置在 2.10 已存在，2.13 清单增加的是这个 Combo 共存场景的测试覆盖。
+[F01](#f01) 使用两个不同输入，已生成双成员 Combo；其逐成员 hint 缺失与 C05 是两项问题。
+
+C06 对应 `test_combo_kernel_scalar_store_broadcast`：社区要求 1 个 kernel，
+其中 `scalar_sum → d * scalar_sum → sum` 是依赖链，`c.sum(1)` 是独立分支；
+社区单 kernel 目标同时体现链内融合与分支间水平组合。
+NPU 适配检查 2 个 `GridNpu`、两种实际轴布局及不存在 `combo_grid_meta`。
+当前按模式和轴接口分区是实现限制的来源；若对齐上游目标，需要扩展跨接口的分块、dispatch 与资源适配，
+验收真实的单 Combo 结构、标量输出和广播计算数值。
+这项应记录为水平组合能力待扩展，而不是只用“融合策略不同”结束分析。
+
+这些能力目标单独跟踪，正式 CSV 的 PASS 仍保留“—”，正式方法和实例统计不变。
+本次证据是固定版本源码、适配断言及已有执行报告，没有新增 master 装包或设备复测。
 
 **FAIL：图阶段策略、逐成员归约分类与算子来源映射**
 
@@ -193,6 +292,7 @@ allocator 的 raw pickle 留在原任务目录，仅归档不含地址的峰值�
 | [E12][E12] | 字节/FLOP 估算、Combo 聚合与 benchmark 消费 |
 | [E13][E13] | WRN 组合节点过滤、native bench、192 MiB 清缓存分配 |
 | [E14][E14] | 安装/最新 Triton Options 与 HMF exp/exp2 数学入口 |
+| [E15][E15] | 2.10/2.13 水平与垂直融合、FOREACH 入口、mixed-order 与跨轴组合目标 |
 
 [主机重放][host-results] 确认一次有效 store 的 NPU num_store=0、社区为 1；
 provenance 外壳有 handle 而无 mapping，按实际 partition 展开叶子后 mapping 完整。
@@ -221,7 +321,8 @@ native runtime 使用 combo_subkernel_meta 的轴、尺寸和资源约束生成�
 共享候选必须同时满足所有分支；不能只打印 INNER/OUTER，也不能把 GPU 的 XBLOCK_i 搜索直接移植。
 
 **是否符合 NPU 设计：** 保留逐成员访问分类符合 NPU 设计；逐成员独立调优属于额外能力。
-现有共享块可以承载这两个不同物理 stride 的归约，因此不需要为了此测试取消 ABI 分区或打开 mix-order 纵向融合。
+现有共享块已承载这两个不同 stride 的归约；本例检查逐成员分类。
+共享输入的 mixed-order 联合归约是独立的待适配能力，见 [C05](#c05)。
 
 **验证与结论边界：** 以原输入对照成员 FX 和地址公式，确认分类与两个方向一致；观测真实候选和 winner 对两种布局的处理，再保留数值比较。
 已归档的 generated code 来自 d12230b556，不是 master 设备复测。
@@ -1000,8 +1101,9 @@ foreach 分解为普通节点仍保持依赖语义，符合现有 NPU lowering �
 | --- | --- | --- |
 | persistent reduction size hint | split-axis 尺寸求和，其余轴取最大；不照搬 GPU 的二次幂 hint | `NPUComboKernel.select_combo_heuristics` |
 | 普通 kernel 与 Combo grid | 普通 kernel 使用 `GridNpu`；Combo 使用一维 `SequentialComboKernelGrid`。动态尺寸用例从真实 launcher 读取 grid，排除 autotune 启动，检查两组尺寸的 X grid 不同及 Y/Z 为 1，并保留数值检查 | `CompiledKernel.launch_metadata`、`SIMDDispatch`、`SequentialComboKernelGrid` |
-| mixed-order 数量 | NPU 关闭 mix_order_reduction 纵向合并；行归约、列归约、消费者及 y/z Combo 共 4 个定义，并检查仅有一个双成员 Combo | `torch_npu/_inductor/config.py` 显式设置 `mix_order_reduction=False` |
-| scalar broadcast 数量 | `(x0,r1)` 与 `(r0)` 轴布局使用不同分块接口，生成 2 个普通 kernel；检查数量、两类实际轴布局和数值 | `NPUComboKernel.horizontal_partition` 按 kernel 类型、模式和轴标记细分分区 |
+| foreach 水平与垂直组合 | 计算 PASS；原单 kernel 目标未验收，见 [C01–C04](#fusion-capability-tracking) | [E15][E15] |
+| mixed-order 数量 | 共享输入联合归约关闭；当前 4 个 kernel，待适配见 [C05](#c05) | [E15][E15] |
+| scalar broadcast 数量 | 不同轴接口分成 2 个普通 kernel；水平组合待扩展见 [C06](#c06) | [E1][E1]、[E15][E15] |
 | bucketize 数量 | bucketize 调用 ATen fallback；其余两个逐点成员合为 1 个 Triton Combo。检查 fallback 调用及双成员结构，不能把 Triton 定义数当作全部设备 launch 数 | `lowering_fallback_list.py` 注册 `aten.bucketize.Tensor`；实际 wrapper 保留对应调用 |
 | max-autotune 与 grouping | 检查完整共享配置有多个实际候选、执行计时、选出赢家并保留一个 launcher；检查成员数量及输出数值。NPU 不要求 GPU 逐成员分组日志 | `_triton_config_npu_index_combo`、`ComboTileGenerator`、`NPUCachingAutotuner.autotune_to_one_config` |
 | persistent RBLOCK 上限 | 不带 HIP 专用的 `max_persistent_rblock=1024`，NPU 按自身资源模型筛选共享候选 | NPU `jit_line` 与共享 tiling 候选生成 |
@@ -1062,6 +1164,9 @@ TMA/PDL 的硬件协议来源保存在
 [E13]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/wrn-grouping-and-autotune-memory.txt
 
 [E14]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/ftz-compiler-and-math-library.txt
+
+[E15]:
+  ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/fusion-capabilities.txt
 
 [host-results]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/host-probe-results.json
 

@@ -1,0 +1,1441 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:3119-3263
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 3119: class ForeachKernelSchedulerNode(FusedSchedulerNode):
+ 3120:     """
+ 3121:     This is a schedular node that consists of a set of scheduler nodes that
+ 3122:     has no data dependencies among them and can be executed in parallel.
+ 3123:     """
+ 3124:
+ 3125:     def get_consumer_subnode_for(
+ 3126:         self, producer: BaseSchedulerNode
+ 3127:     ) -> BaseSchedulerNode | None:
+ 3128:         for buf in producer.get_outputs():
+ 3129:             if buf.get_name() in self.read_to_node:
+ 3130:                 return self.read_to_node[buf.get_name()]
+ 3131:
+ 3132:         return None
+ 3133:
+ 3134:     def get_producer_subnode_for(
+ 3135:         self, consumer: BaseSchedulerNode
+ 3136:     ) -> BaseSchedulerNode | None:
+ 3137:         producers = OrderedSet[BaseSchedulerNode]()
+ 3138:         for rd in consumer.read_writes.reads:
+ 3139:             if rd.name not in self.scheduler.name_to_buf:
+ 3140:                 continue
+ 3141:
+ 3142:             node_name = self.scheduler.name_to_buf[rd.name].defining_op_name()
+ 3143:             if node_name in self.name_to_node:
+ 3144:                 producers.add(self.name_to_node[node_name])
+ 3145:
+ 3146:         # Don't permit fusion if there are multiple subnodes
+ 3147:         # that this consumer reads from
+ 3148:         if len(producers) == 1:
+ 3149:             return next(iter(producers))
+ 3150:         else:
+ 3151:             return None
+ 3152:
+ 3153:     @classmethod
+ 3154:     def can_fuse(cls, producer: BaseSchedulerNode, consumer: BaseSchedulerNode) -> bool:
+ 3155:         why = WhyNoFuse(producer, consumer)
+ 3156:         if producer.is_foreach() and consumer.is_foreach():
+ 3157:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 3158:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 3159:             foreach_match = len(producer.snodes) == len(consumer.snodes)
+ 3160:             if not foreach_match:
+ 3161:                 why("foreach do not have same length")
+ 3162:             return foreach_match and all(
+ 3163:                 producer.scheduler.can_fuse(l, r)
+ 3164:                 for l, r in zip(producer.snodes, consumer.snodes)
+ 3165:             )
+ 3166:         elif consumer.is_foreach():
+ 3167:             if producer.is_reduction():
+ 3168:                 why(
+ 3169:                     "candidate producer is a reduction, foreach ops cannot be fused with reductions currently"
+ 3170:                 )
+ 3171:                 return False
+ 3172:
+ 3173:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 3174:             consumer_subnode = consumer.get_consumer_subnode_for(producer)
+ 3175:             if consumer_subnode is not None:
+ 3176:                 return consumer.scheduler.can_fuse(producer, consumer_subnode)
+ 3177:
+ 3178:             why("candidate producer is not dep of any foreach consumer")
+ 3179:             return False
+ 3180:
+ 3181:         elif producer.is_foreach():
+ 3182:             if consumer.is_reduction():
+ 3183:                 why(
+ 3184:                     "candidate consumer is a reduction, foreach ops cannot be fused with reductions currently"
+ 3185:                 )
+ 3186:                 return False
+ 3187:
+ 3188:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 3189:             producer_subnode = producer.get_producer_subnode_for(consumer)
+ 3190:             if producer_subnode is not None:
+ 3191:                 return producer.scheduler.can_fuse(producer_subnode, consumer)
+ 3192:
+ 3193:             why("candidate consumer has no dep in any foreach producer")
+ 3194:             return False
+ 3195:
+ 3196:         raise AssertionError(
+ 3197:             "At least one node passed to ForeachKernelSchedulerNode.can_fuse should be a foreach node"
+ 3198:         )
+ 3199:
+ 3200:     @classmethod
+ 3201:     def fuse(
+ 3202:         cls, producer: BaseSchedulerNode, consumer: BaseSchedulerNode
+ 3203:     ) -> ForeachKernelSchedulerNode:
+ 3204:         assert producer.is_foreach() or consumer.is_foreach()
+ 3205:         if producer.is_foreach():
+ 3206:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 3207:             use_custom_partition_algo = producer.use_custom_partition_algo
+ 3208:             enable_autotune = producer.enable_autotune
+ 3209:         else:
+ 3210:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 3211:             use_custom_partition_algo = consumer.use_custom_partition_algo
+ 3212:             enable_autotune = consumer.enable_autotune
+ 3213:         prev_node_1 = None
+ 3214:         prev_node_2 = None
+ 3215:         fused_nodes: list[BaseSchedulerNode]
+ 3216:         if producer.is_foreach() and consumer.is_foreach():
+ 3217:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 3218:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 3219:             fused_nodes = [
+ 3220:                 FusedSchedulerNode.fuse(l, r)
+ 3221:                 for l, r in zip(producer.snodes, consumer.snodes)
+ 3222:             ]
+ 3223:         elif producer.is_foreach():
+ 3224:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 3225:             producer_subnode = producer.get_producer_subnode_for(consumer)
+ 3226:             fused_nodes = []
+ 3227:             prev_node_1 = producer
+ 3228:             prev_node_2 = None
+ 3229:             for node in producer.snodes:
+ 3230:                 if node is producer_subnode:
+ 3231:                     new_node = FusedSchedulerNode.fuse(node, consumer)
+ 3232:                     prev_node_2 = new_node
+ 3233:                     fused_nodes.append(new_node)
+ 3234:                 else:
+ 3235:                     fused_nodes.append(node)
+ 3236:
+ 3237:         elif consumer.is_foreach():
+ 3238:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 3239:             consumer_subnode = consumer.get_consumer_subnode_for(producer)
+ 3240:             fused_nodes = []
+ 3241:             prev_node_1 = consumer
+ 3242:             prev_node_2 = None
+ 3243:
+ 3244:             for node in consumer.snodes:
+ 3245:                 if node is consumer_subnode:
+ 3246:                     new_node = FusedSchedulerNode.fuse(producer, node)
+ 3247:                     prev_node_2 = new_node
+ 3248:                     fused_nodes.append(new_node)
+ 3249:                 else:
+ 3250:                     fused_nodes.append(node)
+ 3251:         else:
+ 3252:             raise AssertionError(
+ 3253:                 "At least one node passed to ForeachKernelSchedulerNode.fuse should be a foreach node"
+ 3254:             )
+ 3255:
+ 3256:         return cls(
+ 3257:             producer.scheduler,
+ 3258:             fused_nodes,
+ 3259:             use_custom_partition_algo=use_custom_partition_algo,
+ 3260:             prev_node_1=prev_node_1,
+ 3261:             prev_node_2=prev_node_2,
+ 3262:             enable_autotune=enable_autotune,
+ 3263:         )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:4139-4165
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 4139:         self.nodes = self.fuse_nodes(self.nodes)
+ 4140:         if config._post_fusion_custom_pass is not None:
+ 4141:             self.nodes = config._post_fusion_custom_pass(self.nodes)
+ 4142:
+ 4143:         if any(
+ 4144:             isinstance(node, FusedExternTritonKernelSchedulerNode)
+ 4145:             for node in self.nodes
+ 4146:         ):
+ 4147:             # if a user triton kernel has been epilogue-fused,
+ 4148:             # there is likely an opportunity to prune an NopKernel
+ 4149:             # (which is originally used to generate the buffer which the triton kernel writes to)
+ 4150:             self.dead_node_elimination()
+ 4151:
+ 4152:         self.merge_loops()
+ 4153:         self.finalize_multi_template_buffers()
+ 4154:         if (
+ 4155:             config.max_autotune_gemm or config.max_autotune
+ 4156:         ) and use_pipelined_autotuning():
+ 4157:             torch._inductor.select_algorithm.PrecompileThreadPool.shutdown_instance()
+ 4158:
+ 4159:         if config.combo_kernels:
+ 4160:             with dynamo_timed(
+ 4161:                 "Scheduler.create_combo_kernel_nodes",
+ 4162:                 log_pt2_compile_event=True,
+ 4163:                 log_waitcounter=True,
+ 4164:             ):
+ 4165:                 self.create_combo_kernel_nodes(num_ck_nodes=None)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:6076-6086
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 6076:     def create_combo_kernel_nodes(self, num_ck_nodes: int | None = None) -> None:
+ 6077:         """Group parallel nodes into combo kernels.
+ 6078:
+ 6079:         Each parallel group is split into windows whose baseline-index
+ 6080:         span is at most `combo_kernel_max_distance` (set the config to a
+ 6081:         negative value to disable splitting). If a peak-memory threshold is set,
+ 6082:         each window goes through the gate, which simulates the
+ 6083:         post-fusion peak and accepts the combo only if the peak stays
+ 6084:         under the threshold; rejected windows are halved and retried.
+ 6085:         Without a threshold, every window becomes a combo directly.
+ 6086:         """
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:2854-2917
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 2854: class FusedMixOrderReductions(FusedSchedulerNode):
+ 2855:     """Fused node for two reductions with different iteration orders (inner + outer)."""
+ 2856:
+ 2857:     def __init__(self, node1: BaseSchedulerNode, node2: BaseSchedulerNode) -> None:
+ 2858:         if not MixOrderReduction.is_contiguous_node(node1):
+ 2859:             assert MixOrderReduction.is_contiguous_node(node2)
+ 2860:             node1, node2 = node2, node1
+ 2861:
+ 2862:         self.node1 = node1
+ 2863:         self.node2 = node2
+ 2864:         super().__init__(
+ 2865:             node1.scheduler, list(node1.get_nodes()) + list(node2.get_nodes())
+ 2866:         )
+ 2867:         self.numel = MixOrderReduction.get_numel(self.node1)
+ 2868:
+ 2869:     def sub_node_can_fuse(
+ 2870:         self,
+ 2871:         node1: BaseSchedulerNode,
+ 2872:         node2: BaseSchedulerNode,
+ 2873:         other_nodes: tuple[BaseSchedulerNode, ...],
+ 2874:     ):
+ 2875:         """
+ 2876:         node1 is from the current mix order reduction; node2 is another node we want to fuse in.
+ 2877:
+ 2878:         other_nodes are passed in to check if fusion will introduce producer/consumer relationship
+ 2879:         between the inner and outer reduction. If yes, we don't fuse.
+ 2880:         """
+ 2881:         assert not isinstance(node1, FusedMixOrderReductions)
+ 2882:         assert not isinstance(node2, FusedMixOrderReductions)
+ 2883:
+ 2884:         # When we fuse extra nodes into a FusedMixOrderReductions node,
+ 2885:         # we should not allow recursive mix-order reduction being
+ 2886:         # created.
+ 2887:         if not self.scheduler.can_fuse(node1, node2, allow_mix_order_reduction=False):
+ 2888:             return False
+ 2889:
+ 2890:         # Since node1 is from the current mix order reduction, if node1 is
+ 2891:         # contiguous, the fused node should also be contiguous.
+ 2892:         if MixOrderReduction.is_contiguous_node(
+ 2893:             node1
+ 2894:         ) and not MixOrderReduction.is_contiguous_node(node2):
+ 2895:             return False
+ 2896:
+ 2897:         def _get_ancestors(nodes: tuple[BaseSchedulerNode, ...]) -> OrderedSet[str]:
+ 2898:             out = OrderedSet()
+ 2899:             return out.union(*(n.ancestors for n in nodes))
+ 2900:
+ 2901:         def _get_operation_names(
+ 2902:             nodes: tuple[BaseSchedulerNode, ...],
+ 2903:         ) -> OrderedSet[str]:
+ 2904:             out = OrderedSet()
+ 2905:             return out.union(*(n.get_operation_names() for n in nodes))
+ 2906:
+ 2907:         if other_nodes:
+ 2908:             if (_get_ancestors((node1, node2)) & _get_operation_names(other_nodes)) or (
+ 2909:                 _get_ancestors(other_nodes) & _get_operation_names((node1, node2))
+ 2910:             ):
+ 2911:                 return False
+ 2912:
+ 2913:         return (
+ 2914:             not node2.is_reduction()
+ 2915:             or self.scheduler.score_fusion_memory(node1, node2, count_bytes=False)
+ 2916:             >= self.numel
+ 2917:         )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/lowering.py:903-918
+source_sha256=d969efbd0db1bde6a7f6c0b58a8549de1654c97df56b772b41d08d11f8a563fe
+
+  903:     for (device, use_foreach), group in groups.items():
+  904:         operation_list: list[str] = []
+  905:         for output_ind, args in group:
+  906:             output = apply_fn(args)
+  907:             outputs[output_ind] = output
+  908:
+  909:             if (
+  910:                 V.graph.has_feature(device, BackendFeature.FOREACH)
+  911:                 and use_foreach
+  912:                 and realize_outputs
+  913:             ):
+  914:                 output.realize()
+  915:                 operation_list.append(output.get_operation_name())
+  916:
+  917:         if operation_list:
+  918:             V.graph.register_operation_list(operation_list)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/lowering.py:950-959
+source_sha256=d969efbd0db1bde6a7f6c0b58a8549de1654c97df56b772b41d08d11f8a563fe
+
+  950: @register_lowering(torch._higher_order_ops._foreach_map, type_promotion_kind=None)
+  951: def _foreach_map(subgraph, *args, **kwargs):
+  952:     """
+  953:     This lowers an invocation of foreach_map
+  954:     The way this works is that an arbitrary N-arg func is provided by the user, looped over by the
+  955:     polyfill with the same semantics as a foreach op (a loop applying an n-ary function to n args)
+  956:     and then traced into a subgraph by dynamo.
+  957:     This code allows us to inline the subgraph into the main graph lowering using the PontwiseSubgraphLowering.
+  958:     The graph outputs represent the vertically fused sequence of ops, and then register_operation_list
+  959:     below registers the buffers as horizontally fuseable in the scheduler.
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/lowering.py:984-989
+source_sha256=d969efbd0db1bde6a7f6c0b58a8549de1654c97df56b772b41d08d11f8a563fe
+
+  984:             if V.graph.has_feature(device, BackendFeature.FOREACH) and use_foreach:
+  985:                 output.realize()
+  986:                 operation_list.append(output.get_operation_name())
+  987:
+  988:         if operation_list:
+  989:             V.graph.register_operation_list(operation_list)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/cuda_combined_scheduling.py:34-53
+source_sha256=1438a502671eb173cda7aadfe0d3aa4efdd71db88924688bbf6db7937040746f
+
+   34: class CUDACombinedScheduling(BaseScheduling):
+   35:     """
+   36:     Scheduler for CUDA Kernels, which delegates calls as appropriate
+   37:     to the CUDA-C++ and Triton Schedulers, which both work for CUDA devices
+   38:     and use a unified-wrapper for codegen.
+   39:
+   40:     If Scheduling code needs to be specialized for the case of mixed Triton / CUDA C++ code,
+   41:     this would also be the place to do it.
+   42:     """
+   43:
+   44:     def __init__(self, scheduler: Scheduler | None) -> None:
+   45:         super().__init__(scheduler)
+   46:         self._triton_scheduling = TritonScheduling(scheduler)
+   47:         self._cutlass_scheduling = CUTLASSScheduling(scheduler)
+   48:         self._rocm_cpp_scheduling = ROCmCPPScheduling(scheduler)
+   49:         self._cutedsl_scheduling = CuteDSLScheduling(scheduler)
+   50:         self._nv_universal_gemm_scheduling = NVUniversalGemmScheduling(scheduler)
+   51:
+   52:     def get_backend_features(self, device: torch.device) -> OrderedSet[BackendFeature]:
+   53:         return self._triton_scheduling.get_backend_features(device)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:7178-7187
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 7178:     @classmethod
+ 7179:     def get_backend_features(cls, device: torch.device):
+ 7180:         if (
+ 7181:             config.triton.cooperative_reductions
+ 7182:             or config.triton.force_cooperative_reductions
+ 7183:         ):
+ 7184:             return OrderedSet(
+ 7185:                 [*cls.backend_features, BackendFeature.REDUCE_TO_SINGLE_ELEMENT]
+ 7186:             )
+ 7187:         return cls.backend_features
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_foreach.py:283-287
+source_sha256=7f171d7c48ffbb91e1214f33b38b918d0636900fe10f7ddc0ede3588ffd1d428
+
+  283:     @requires_gpu
+  284:     @all_ops
+  285:     def test_single_list(self, op):
+  286:         self._test_single_list(op)
+  287:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_foreach.py:301-327
+source_sha256=7f171d7c48ffbb91e1214f33b38b918d0636900fe10f7ddc0ede3588ffd1d428
+
+  301:     @requires_gpu
+  302:     @all_ops
+  303:     def test_scheduler_fusion_list(self, op):
+  304:         if op in un_ops_under_test:
+  305:
+  306:             def fn(a0, a1):
+  307:                 c = op([a0, a1])
+  308:                 return torch._foreach_sqrt(c)
+  309:
+  310:         elif op in bin_ops_under_test:
+  311:
+  312:             def fn(a0, a1, b0, b1):
+  313:                 c = op([a0, a1], [b0, b1])
+  314:                 return c, torch._foreach_add([a0, a1], c)
+  315:
+  316:         else:
+  317:
+  318:             def fn(a0, a1, b0, b1, c0, c1):
+  319:                 c = op([a0, a1], [b0, b1], [c0, c1])
+  320:                 return c, torch._foreach_add([a0, a1], c)
+  321:
+  322:         self.check_model_gpu(
+  323:             fn,
+  324:             gen_args(op),
+  325:         )
+  326:
+  327:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_foreach.py:534-562
+source_sha256=7f171d7c48ffbb91e1214f33b38b918d0636900fe10f7ddc0ede3588ffd1d428
+
+  534:     @requires_gpu
+  535:     @all_ops
+  536:     def test_non_foreach_producer_list(self, op):
+  537:         if op in un_ops_under_test:
+  538:
+  539:             def fn(a0, a1):
+  540:                 c0 = torch.add(a0, a0)
+  541:                 c1 = torch.add(a1, a1)
+  542:                 return op([c0, c1])
+  543:
+  544:         elif op in bin_ops_under_test:
+  545:
+  546:             def fn(a0, a1, b0, b1):
+  547:                 c0 = torch.add(a0, b0)
+  548:                 c1 = torch.add(a1, b1)
+  549:                 return op([a0, a1], [c0, c1])
+  550:
+  551:         else:
+  552:
+  553:             def fn(a0, a1, b0, b1, c0, c1):
+  554:                 c0 = torch.add(a0, b0)
+  555:                 c1 = torch.add(a1, b1)
+  556:                 return op([a0, a1], [b0, b1], [c0, c1])
+  557:
+  558:         self.check_model_gpu(
+  559:             fn, gen_args(op), reference_in_float=False, check_lowp=False
+  560:         )
+  561:
+  562:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_foreach.py:584-624
+source_sha256=7f171d7c48ffbb91e1214f33b38b918d0636900fe10f7ddc0ede3588ffd1d428
+
+  584:     @requires_gpu
+  585:     @all_ops
+  586:     def test_non_foreach_consumer_producer_list(self, op):
+  587:         if op in un_ops_under_test:
+  588:
+  589:             def fn(a0, a1):
+  590:                 c0 = torch.add(a0, a0)
+  591:                 c1 = torch.mul(a1, a1)
+  592:                 d = op([c0, c1])
+  593:                 e0 = torch.mul(d[0], a0)
+  594:                 e1 = torch.mul(d[1], a1)
+  595:                 return [e0, e1]
+  596:
+  597:         elif op in bin_ops_under_test:
+  598:
+  599:             def fn(a0, a1, b0, b1):
+  600:                 c0 = torch.add(a0, b0)
+  601:                 c1 = torch.add(a1, b1)
+  602:                 d = op([a0, a1], [c0, c1])
+  603:                 e0 = torch.mul(d[0], a0)
+  604:                 e1 = torch.mul(d[1], a1)
+  605:                 return [e0, e1]
+  606:
+  607:         else:
+  608:
+  609:             def fn(a0, a1, b0, b1, c0, c1):
+  610:                 c0 = torch.add(a0, b0)
+  611:                 c1 = torch.add(a1, b1)
+  612:                 d = op([a0, a1], [b0, b1], [c0, c1])
+  613:                 e0 = torch.mul(d[0], a0)
+  614:                 e1 = torch.mul(d[1], a1)
+  615:                 return [e0, e1]
+  616:
+  617:         self.check_model_gpu(
+  618:             fn,
+  619:             gen_args(op),
+  620:             reference_in_float=False,
+  621:             check_lowp=False,
+  622:         )
+  623:
+  624:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_foreach.py:230-249
+source_sha256=7f171d7c48ffbb91e1214f33b38b918d0636900fe10f7ddc0ede3588ffd1d428
+
+  230:     def _test_single_list(self, op):
+  231:         if op in un_ops_under_test:
+  232:
+  233:             def fn(a0, a1):
+  234:                 return op([a0, a1])
+  235:
+  236:         elif op in bin_ops_under_test:
+  237:
+  238:             def fn(a0, a1, b0, b1):
+  239:                 return op([a0, a1], [b0, b1])
+  240:
+  241:         else:
+  242:
+  243:             def fn(a0, a1, b0, b1, c0, c1):
+  244:                 return op([a0, a1], [b0, b1], [c0, c1])
+  245:
+  246:         self.check_model_gpu(
+  247:             fn,
+  248:             gen_args(op),
+  249:         )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_combo_kernels.py:80-98
+source_sha256=d82eeb4034a2869e06bef32dc8b7f7d65ff6340a6d1f3e20f833025ec61006a6
+
+   80:     @requires_gpu_and_triton
+   81:     def test_activation_functions(self):
+   82:         def test_activations(a, b, c):
+   83:             a1 = torch.nn.functional.relu(a)
+   84:             b1 = torch.nn.functional.sigmoid(b)
+   85:             c1 = torch.nn.functional.tanh(c)
+   86:             return a1, b1, c1
+   87:
+   88:         inps = [
+   89:             torch.rand(10, 10, device=GPU_TYPE),
+   90:             torch.rand(20, 20, device=GPU_TYPE),
+   91:             torch.rand(10, 10, device=GPU_TYPE),
+   92:         ]
+   93:
+   94:         out_eager = test_activations(*inps)
+   95:         out_compiled = torch.compile(test_activations)(*inps)
+   96:
+   97:         self.assertEqual(out_eager, out_compiled)
+   98:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_combo_kernels.py:313-341
+source_sha256=d82eeb4034a2869e06bef32dc8b7f7d65ff6340a6d1f3e20f833025ec61006a6
+
+  313:     @requires_gpu_and_triton
+  314:     def test_fuse_mix_order_reductions_combo_kernels(self):
+  315:         def fn(x, y, z):
+  316:             # FusedMixOrderReductions produces row_sum (buf0)
+  317:             row_sum = x.sum(dim=1)
+  318:             col_sum = x.sum(dim=0)
+  319:
+  320:             # consumer of row_sum - excluded from combo kernels
+  321:             row_sum_reduced = row_sum.sum()  # reads buf0
+  322:
+  323:             # independent reductions - combo-kerneled
+  324:             y_sum = y.sum()
+  325:             z_sum = z.sum()
+  326:
+  327:             return row_sum_reduced, col_sum, y_sum, z_sum
+  328:
+  329:         inps = [
+  330:             torch.rand(8192, 1024, device=GPU_TYPE),
+  331:             torch.rand(2048, device=GPU_TYPE),
+  332:             torch.rand(2048, device=GPU_TYPE),
+  333:         ]
+  334:         out_eager = fn(*inps)
+  335:         fn_c = torch.compile(fn)
+  336:         out_compiled, code = run_and_get_code(fn_c, *inps)
+  337:         self.assertEqual(out_eager, out_compiled)
+  338:         # [row_sum, col_sum] will became 1 kernel MixOrderReductionGrid
+  339:         # [row_sum_reduced] will become a separate kernel due to the consumer
+  340:         # [y_sum, z_sum] will become a combo kernel
+  341:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 3)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+test/inductor/test_combo_kernels.py:343-361
+source_sha256=d82eeb4034a2869e06bef32dc8b7f7d65ff6340a6d1f3e20f833025ec61006a6
+
+  343:     @requires_gpu_and_triton
+  344:     def test_combo_kernel_scalar_store_broadcast(self):
+  345:         def fn(a, b, c, d):
+  346:             scalar_sum = a + b
+  347:             vector_result = c.sum(dim=1)
+  348:             scalar_red = (d * scalar_sum).sum()
+  349:             return scalar_sum, vector_result, scalar_red
+  350:
+  351:         inps = [
+  352:             torch.tensor(1.0, device=GPU_TYPE),
+  353:             torch.tensor(2.0, device=GPU_TYPE),
+  354:             torch.randn(2048, 2048, device=GPU_TYPE),
+  355:             torch.randn(2048, 1, device=GPU_TYPE),
+  356:         ]
+  357:         out_eager = fn(*inps)
+  358:         fn_c = torch.compile(fn)
+  359:         out_compiled, code = run_and_get_code(fn_c, *inps)
+  360:         torch.testing.assert_close(out_eager, out_compiled, rtol=1e-4, atol=1e-4)
+  361:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+torch/_inductor/scheduler.py:2160-2305
+source_sha256=ddf1b3b27fad3eb0e8ebe454ba90d90dab09f72eb78a0e0071c529ce60266825
+
+ 2160: class ForeachKernelSchedulerNode(FusedSchedulerNode):
+ 2161:     """
+ 2162:     This is a schedular node that consists of a set of scheduler nodes that
+ 2163:     has no data dependencies among them and can be executed in parallel.
+ 2164:     """
+ 2165:
+ 2166:     def get_consumer_subnode_for(
+ 2167:         self, producer: BaseSchedulerNode
+ 2168:     ) -> Optional[BaseSchedulerNode]:
+ 2169:         for buf in producer.get_outputs():
+ 2170:             if buf.get_name() in self.read_to_node:
+ 2171:                 return self.read_to_node[buf.get_name()]
+ 2172:
+ 2173:         return None
+ 2174:
+ 2175:     def get_producer_subnode_for(
+ 2176:         self, consumer: BaseSchedulerNode
+ 2177:     ) -> Optional[BaseSchedulerNode]:
+ 2178:         producers = OrderedSet[BaseSchedulerNode]()
+ 2179:         for rd in consumer.read_writes.reads:
+ 2180:             if rd.name not in self.scheduler.name_to_buf:
+ 2181:                 continue
+ 2182:
+ 2183:             node_name = self.scheduler.name_to_buf[rd.name].defining_op_name()
+ 2184:             if node_name in self.name_to_node:
+ 2185:                 producers.add(self.name_to_node[node_name])
+ 2186:
+ 2187:         # Don't permit fusion if there are multiple subnodes
+ 2188:         # that this consumer reads from
+ 2189:         if len(producers) == 1:
+ 2190:             return next(iter(producers))
+ 2191:         else:
+ 2192:             return None
+ 2193:
+ 2194:     @classmethod
+ 2195:     def can_fuse(cls, producer: BaseSchedulerNode, consumer: BaseSchedulerNode) -> bool:
+ 2196:         why = WhyNoFuse(producer, consumer)
+ 2197:         if producer.is_foreach() and consumer.is_foreach():
+ 2198:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 2199:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 2200:             foreach_match = len(producer.snodes) == len(consumer.snodes)
+ 2201:             if not foreach_match:
+ 2202:                 why("foreach do not have same length")
+ 2203:             return foreach_match and all(
+ 2204:                 producer.scheduler.can_fuse(l, r)
+ 2205:                 for l, r in zip(producer.snodes, consumer.snodes)
+ 2206:             )
+ 2207:         elif consumer.is_foreach():
+ 2208:             if producer.is_reduction():
+ 2209:                 why(
+ 2210:                     "candidate producer is a reduction, foreach ops cannot be fused with reductions currently"
+ 2211:                 )
+ 2212:                 return False
+ 2213:
+ 2214:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 2215:             consumer_subnode = consumer.get_consumer_subnode_for(producer)
+ 2216:             if consumer_subnode is not None:
+ 2217:                 return consumer.scheduler.can_fuse(producer, consumer_subnode)
+ 2218:
+ 2219:             why("candidate producer is not dep of any foreach consumer")
+ 2220:             return False
+ 2221:
+ 2222:         elif producer.is_foreach():
+ 2223:             if consumer.is_reduction():
+ 2224:                 why(
+ 2225:                     "candidate consumer is a reduction, foreach ops cannot be fused with reductions currently"
+ 2226:                 )
+ 2227:                 return False
+ 2228:
+ 2229:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 2230:             producer_subnode = producer.get_producer_subnode_for(consumer)
+ 2231:             if producer_subnode is not None:
+ 2232:                 return producer.scheduler.can_fuse(producer_subnode, consumer)
+ 2233:
+ 2234:             why("candidate consumer has no dep in any foreach producer")
+ 2235:             return False
+ 2236:
+ 2237:         raise AssertionError(
+ 2238:             "At least one node passed to ForeachKernelSchedulerNode.can_fuse should be a foreach node"
+ 2239:         )
+ 2240:
+ 2241:     @classmethod
+ 2242:     def fuse(
+ 2243:         cls, producer: BaseSchedulerNode, consumer: BaseSchedulerNode
+ 2244:     ) -> ForeachKernelSchedulerNode:
+ 2245:         assert producer.is_foreach() or consumer.is_foreach()
+ 2246:         if producer.is_foreach():
+ 2247:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 2248:             use_custom_partition_algo = producer.use_custom_partition_algo
+ 2249:             enable_autotune = producer.enable_autotune
+ 2250:         else:
+ 2251:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 2252:             use_custom_partition_algo = consumer.use_custom_partition_algo
+ 2253:             enable_autotune = consumer.enable_autotune
+ 2254:         prev_node_1 = None
+ 2255:         prev_node_2 = None
+ 2256:         fused_nodes: list[BaseSchedulerNode]
+ 2257:         if producer.is_foreach() and consumer.is_foreach():
+ 2258:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 2259:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 2260:             fused_nodes = [
+ 2261:                 FusedSchedulerNode.fuse(l, r)
+ 2262:                 for l, r in zip(producer.snodes, consumer.snodes)
+ 2263:             ]
+ 2264:         elif producer.is_foreach():
+ 2265:             producer = typing.cast(ForeachKernelSchedulerNode, producer)
+ 2266:             producer_subnode = producer.get_producer_subnode_for(consumer)
+ 2267:             fused_nodes = []
+ 2268:             prev_node_1 = producer
+ 2269:             prev_node_2 = None
+ 2270:             for node in producer.snodes:
+ 2271:                 if node is producer_subnode:
+ 2272:                     new_node = FusedSchedulerNode.fuse(node, consumer)
+ 2273:                     prev_node_2 = new_node
+ 2274:                     fused_nodes.append(new_node)
+ 2275:                 else:
+ 2276:                     fused_nodes.append(node)
+ 2277:
+ 2278:         elif consumer.is_foreach():
+ 2279:             consumer = typing.cast(ForeachKernelSchedulerNode, consumer)
+ 2280:             consumer_subnode = consumer.get_consumer_subnode_for(producer)
+ 2281:             fused_nodes = []
+ 2282:             prev_node_1 = consumer
+ 2283:             prev_node_2 = None
+ 2284:
+ 2285:             for node in consumer.snodes:
+ 2286:                 if node is consumer_subnode:
+ 2287:                     new_node = FusedSchedulerNode.fuse(producer, node)
+ 2288:                     prev_node_2 = new_node
+ 2289:                     fused_nodes.append(new_node)
+ 2290:                 else:
+ 2291:                     fused_nodes.append(node)
+ 2292:         else:
+ 2293:             raise AssertionError(
+ 2294:                 "At least one node passed to ForeachKernelSchedulerNode.fuse should be a foreach node"
+ 2295:             )
+ 2296:
+ 2297:         return cls(
+ 2298:             producer.scheduler,
+ 2299:             fused_nodes,
+ 2300:             use_custom_partition_algo=use_custom_partition_algo,
+ 2301:             prev_node_1=prev_node_1,
+ 2302:             prev_node_2=prev_node_2,
+ 2303:             enable_autotune=enable_autotune,
+ 2304:         )
+ 2305:
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+torch/_inductor/scheduler.py:2077-2097
+source_sha256=ddf1b3b27fad3eb0e8ebe454ba90d90dab09f72eb78a0e0071c529ce60266825
+
+ 2077: class FusedMixOrderReductions(FusedSchedulerNode):
+ 2078:     def __init__(self, node1: BaseSchedulerNode, node2: BaseSchedulerNode) -> None:
+ 2079:         self.node1 = node1
+ 2080:         self.node2 = node2
+ 2081:         super().__init__(
+ 2082:             node1.scheduler, list(node1.get_nodes()) + list(node2.get_nodes())
+ 2083:         )
+ 2084:         self.numel = MixOrderReduction.get_numel(self.node1)
+ 2085:
+ 2086:     def sub_node_can_fuse(
+ 2087:         self,
+ 2088:         node1: BaseSchedulerNode,
+ 2089:         node2: BaseSchedulerNode,
+ 2090:         other_nodes: tuple[BaseSchedulerNode, ...],
+ 2091:     ):
+ 2092:         """
+ 2093:         node1 is from the current mix order reduction; node2 is another node we want to fuse in.
+ 2094:
+ 2095:         other_nodes are passed in to check if fusion will introduce producer/consumer relationship
+ 2096:         between the inner and outer reduction. If yes, we don't fuse.
+ 2097:         """
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+torch/_inductor/config.py:1666-1669
+source_sha256=35742623dd7b4b523940a68f0eccd2f68286cc624fe355286ce3783d878aee9c
+
+ 1666:     mix_order_reduction = (
+ 1667:         os.environ.get("TORCHINDUCTOR_MIX_ORDER_REDUCTION", "0" if is_fbcode() else "1")
+ 1668:         == "1"
+ 1669:     )
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+test/inductor/test_foreach.py:279-283
+source_sha256=5fe1ad47f46cc17e2d97feff3c2f9c0a931fd55145e0d220635fd0586be60d4d
+
+  279:     @requires_gpu
+  280:     @all_ops
+  281:     def test_single_list(self, op):
+  282:         self._test_single_list(op)
+  283:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+test/inductor/test_foreach.py:297-323
+source_sha256=5fe1ad47f46cc17e2d97feff3c2f9c0a931fd55145e0d220635fd0586be60d4d
+
+  297:     @requires_gpu
+  298:     @all_ops
+  299:     def test_scheduler_fusion_list(self, op):
+  300:         if op in un_ops_under_test:
+  301:
+  302:             def fn(a0, a1):
+  303:                 c = op([a0, a1])
+  304:                 return torch._foreach_sqrt(c)
+  305:
+  306:         elif op in bin_ops_under_test:
+  307:
+  308:             def fn(a0, a1, b0, b1):
+  309:                 c = op([a0, a1], [b0, b1])
+  310:                 return c, torch._foreach_add([a0, a1], c)
+  311:
+  312:         else:
+  313:
+  314:             def fn(a0, a1, b0, b1, c0, c1):
+  315:                 c = op([a0, a1], [b0, b1], [c0, c1])
+  316:                 return c, torch._foreach_add([a0, a1], c)
+  317:
+  318:         self.check_model_gpu(
+  319:             fn,
+  320:             gen_args(op),
+  321:         )
+  322:
+  323:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+test/inductor/test_foreach.py:530-558
+source_sha256=5fe1ad47f46cc17e2d97feff3c2f9c0a931fd55145e0d220635fd0586be60d4d
+
+  530:     @requires_gpu
+  531:     @all_ops
+  532:     def test_non_foreach_producer_list(self, op):
+  533:         if op in un_ops_under_test:
+  534:
+  535:             def fn(a0, a1):
+  536:                 c0 = torch.add(a0, a0)
+  537:                 c1 = torch.add(a1, a1)
+  538:                 return op([c0, c1])
+  539:
+  540:         elif op in bin_ops_under_test:
+  541:
+  542:             def fn(a0, a1, b0, b1):
+  543:                 c0 = torch.add(a0, b0)
+  544:                 c1 = torch.add(a1, b1)
+  545:                 return op([a0, a1], [c0, c1])
+  546:
+  547:         else:
+  548:
+  549:             def fn(a0, a1, b0, b1, c0, c1):
+  550:                 c0 = torch.add(a0, b0)
+  551:                 c1 = torch.add(a1, b1)
+  552:                 return op([a0, a1], [b0, b1], [c0, c1])
+  553:
+  554:         self.check_model_gpu(
+  555:             fn, gen_args(op), reference_in_float=False, check_lowp=False
+  556:         )
+  557:
+  558:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+test/inductor/test_foreach.py:580-620
+source_sha256=5fe1ad47f46cc17e2d97feff3c2f9c0a931fd55145e0d220635fd0586be60d4d
+
+  580:     @requires_gpu
+  581:     @all_ops
+  582:     def test_non_foreach_consumer_producer_list(self, op):
+  583:         if op in un_ops_under_test:
+  584:
+  585:             def fn(a0, a1):
+  586:                 c0 = torch.add(a0, a0)
+  587:                 c1 = torch.mul(a1, a1)
+  588:                 d = op([c0, c1])
+  589:                 e0 = torch.mul(d[0], a0)
+  590:                 e1 = torch.mul(d[1], a1)
+  591:                 return [e0, e1]
+  592:
+  593:         elif op in bin_ops_under_test:
+  594:
+  595:             def fn(a0, a1, b0, b1):
+  596:                 c0 = torch.add(a0, b0)
+  597:                 c1 = torch.add(a1, b1)
+  598:                 d = op([a0, a1], [c0, c1])
+  599:                 e0 = torch.mul(d[0], a0)
+  600:                 e1 = torch.mul(d[1], a1)
+  601:                 return [e0, e1]
+  602:
+  603:         else:
+  604:
+  605:             def fn(a0, a1, b0, b1, c0, c1):
+  606:                 c0 = torch.add(a0, b0)
+  607:                 c1 = torch.add(a1, b1)
+  608:                 d = op([a0, a1], [b0, b1], [c0, c1])
+  609:                 e0 = torch.mul(d[0], a0)
+  610:                 e1 = torch.mul(d[1], a1)
+  611:                 return [e0, e1]
+  612:
+  613:         self.check_model_gpu(
+  614:             fn,
+  615:             gen_args(op),
+  616:             reference_in_float=False,
+  617:             check_lowp=False,
+  618:         )
+  619:
+  620:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TORCH_210 449b1768410104d3ed79d3bcfe4ba1d65c7f22c0
+test/inductor/test_combo_kernels.py:59-77
+source_sha256=cbf611c744e613a077290b30302b1ceb25ce59a89af11ab708f54ea92db4be54
+
+   59:     @requires_gpu_and_triton
+   60:     def test_activation_functions(self):
+   61:         def test_activations(a, b, c):
+   62:             a1 = torch.nn.functional.relu(a)
+   63:             b1 = torch.nn.functional.sigmoid(b)
+   64:             c1 = torch.nn.functional.tanh(c)
+   65:             return a1, b1, c1
+   66:
+   67:         inps = [
+   68:             torch.rand(10, 10, device=GPU_TYPE),
+   69:             torch.rand(20, 20, device=GPU_TYPE),
+   70:             torch.rand(10, 10, device=GPU_TYPE),
+   71:         ]
+   72:
+   73:         out_eager = test_activations(*inps)
+   74:         out_compiled = torch.compile(test_activations)(*inps)
+   75:
+   76:         self.assertEqual(out_eager, out_compiled)
+   77:         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/__init__.py:258-269
+source_sha256=2017c815869b551f0a1f4c4ecbb3111ce3b4f30b79c6d76b4039d753f6eef24a
+
+  258:     def _inductor_register_backend_for_device():
+  259:         from .codegen.cpp_wrapper_npu import CppWrapperNpu
+  260:         from .codegen.npu_combined_scheduling import NPUCombinedScheduling
+  261:         from .codegen.wrapper import NPUPythonWrapperCodeGen
+  262:
+  263:         from .compile_options import register_npu_backend
+  264:
+  265:         register_npu_backend(
+  266:             NPUCombinedScheduling, NPUPythonWrapperCodeGen, CppWrapperNpu
+  267:         )
+  268:
+  269:     _inductor_register_backend_for_device()
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/compile_options.py:23-60
+source_sha256=edc24ac76ff85691ef3e09e860adf750b9c177bb3a8beafa6e6370cd364fa353
+
+   23:
+   24: def register_npu_backend(
+   25:     scheduling, wrapper_codegen, cpp_wrapper_codegen=None, backend_config=None
+   26: ):
+   27:     """Register the npu codegen backend and its device config.
+   28:
+   29:     backend_config: a backend's own ConfigModule (e.g. triton_experimental's
+   30:     ncfg). On torch without pytorch#194998 it keeps the device config slot,
+   31:     so its values stay in the FX graph cache key exactly as before. On torch
+   32:     with pytorch#194998 this module owns the slot for the "npu.*" option
+   33:     routing, and backend_config is registered under its own module name so
+   34:     the FX cache key snapshot and the out-of-process config transport (both
+   35:     per-module upstream) keep covering it.
+   36:     """
+   37:     # import inside the function: install_config_module above moves
+   38:     # module-level values of config types into _config, which would delete
+   39:     # the name from this module's globals.
+   40:     from torch._inductor.codegen.common import (
+   41:         custom_backend_codegen_configs,
+   42:         register_backend_for_device,
+   43:     )
+   44:     from torch_npu._compat.inductor import namespaced_compile_options
+   45:
+   46:     if namespaced_compile_options():
+   47:         device_custom_config = sys.modules[__name__]
+   48:         if backend_config is not None and backend_config is not sys.modules[__name__]:
+   49:             # keeps the backend config in the registry under its own module
+   50:             # name: upstream collects and restores these per module
+   51:             custom_backend_codegen_configs[backend_config.__name__] = backend_config
+   52:     else:
+   53:         device_custom_config = backend_config
+   54:     register_backend_for_device(
+   55:         "npu",
+   56:         scheduling,
+   57:         wrapper_codegen,
+   58:         cpp_wrapper_codegen,
+   59:         device_custom_config=device_custom_config,
+   60:     )
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/codegen/npu_combined_scheduling.py:33-59
+source_sha256=b6566abcd6da4603d55ec7ca8f3da5980d81aa4abd337df73cf0bd0960e425eb
+
+   33: class NPUCombinedScheduling(CUDACombinedScheduling, TritonScheduling):
+   34:     """
+   35:     Scheduler for NPU Kernels, which delegates calls as appropriate
+   36:     to the CATLASS and Triton Schedulers, which both work for NPU devices
+   37:     and use a unified-wrapper for codegen.
+   38:
+   39:     If Scheduling code needs to be specialized for the case of mixed Triton / CATLASS code,
+   40:     this would also be the place to do it.
+   41:
+   42:     instead of patch is_triton() function, we make NPUCombinedScheduling extends TritonScheduling
+   43:     """
+   44:
+   45:     def __init__(self, scheduler: Scheduler | None) -> None:
+   46:         BaseScheduling.__init__(self, scheduler)
+   47:         self._nolinear_triton_scheduling = NPUNoLinearTritonScheduling(scheduler)
+   48:         self._triton_scheduling = NPUTritonScheduling(scheduler)
+   49:         self._catlass_scheduling = CATLASSScheduling(scheduler)
+   50:
+   51:     def choose_node_backend(self, node: BaseSchedulerNode) -> BaseScheduling:
+   52:         if self._catlass_scheduling.is_catlass_template(node):
+   53:             return self._catlass_scheduling
+   54:         return self._triton_scheduling
+   55:
+   56:     def can_fuse_vertical(self, node1: BaseSchedulerNode, node2: BaseSchedulerNode):
+   57:         if self._catlass_scheduling.can_fuse_vertical(node1, node2):
+   58:             return True
+   59:         return self._triton_scheduling.can_fuse_vertical(node1, node2)
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/codegen/scheduling.py:190-202
+source_sha256=5b65295323dd0c6a277377cb919e0b1ddb3ee541eb9c4f5bcc6ac52275967a91
+
+  190: class NPUTritonScheduling(TritonScheduling):
+  191:     kernel_type = NPUIndexTritonKernel
+  192:     backend_features = OrderedSet(
+  193:         [
+  194:             BackendFeature.BUCKETIZE,
+  195:             BackendFeature.INPLACE_BUFFERS,
+  196:             BackendFeature.MASKED_SCATTER_WITH_INDEX,
+  197:             BackendFeature.SCAN,
+  198:             BackendFeature.SORT,
+  199:             BackendFeature.TRITON_TEMPLATES,
+  200:             BackendFeature.TUPLE_REDUCTION,
+  201:         ]
+  202:     )
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/codegen/scheduling.py:803-812
+source_sha256=5b65295323dd0c6a277377cb919e0b1ddb3ee541eb9c4f5bcc6ac52275967a91
+
+  803:     def can_fuse(self, node1, node2):
+  804:         """
+  805:         Hook called by Scheduler to determine if the Triton backend
+  806:         can fuse node1 and node2.  These nodes might already be
+  807:         FusedSchedulerNodes.
+  808:         """
+  809:         if isinstance(node1, scheduler.ForeachKernelSchedulerNode) or isinstance(
+  810:             node2, scheduler.ForeachKernelSchedulerNode
+  811:         ):
+  812:             return scheduler.ForeachKernelSchedulerNode.can_fuse(node1, node2)
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/codegen/scheduling.py:975-981
+source_sha256=5b65295323dd0c6a277377cb919e0b1ddb3ee541eb9c4f5bcc6ac52275967a91
+
+  975:         if not (node1.is_reduction() and not node2.is_reduction()):
+  976:             raise AssertionError
+  977:         # swap args to hit the case above
+  978:         return self.can_fuse_horizontal(node2, node1)
+  979:
+  980:     can_fuse_vertical = can_fuse
+  981:     can_fuse_horizontal = can_fuse
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/config.py:179-181
+source_sha256=dec7d9fbc93972f4ade7a71376e8452e256fc82a27eea67caf9aca2f0f5d630f
+
+  179: inductor_config.triton.coalesce_tiling_analysis = False
+  180: inductor_config.triton.mix_order_reduction = False
+  181: inductor_config.loop_reindexing_after_fusion = False
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/codegen/triton_combo_kernel.py:74-128
+source_sha256=5bd282aee7759abc472217a6a7976869335e480d65b2f43d892c8148e2ddd3b0
+
+   74:     def horizontal_partition(
+   75:         nodes, triton_scheduling, kernel_map, node_info_map, custom_algorithm=False
+   76:     ):
+   77:         original_groups = []
+   78:         try:
+   79:             if custom_algorithm:
+   80:                 # Community partitioning expects scalar sizes; NPU codegen needs
+   81:                 # the original per-axis groups after the partition is selected.
+   82:                 for node in nodes:
+   83:                     device, sizes = node.group
+   84:                     if any(isinstance(size, NumelList) for size in sizes):
+   85:                         original_groups.append((node, node.group))
+   86:                         node.group = (
+   87:                             device,
+   88:                             tuple(
+   89:                                 sympy.sympify(size.numels())
+   90:                                 if isinstance(size, NumelList)
+   91:                                 else size
+   92:                                 for size in sizes
+   93:                             ),
+   94:                         )
+   95:             partitions = ComboKernel.horizontal_partition(
+   96:                 nodes, triton_scheduling, node_info_map, custom_algorithm
+   97:             )
+   98:         finally:
+   99:             for node, group in original_groups:
+  100:                 node.group = group
+  101:         compatible_partitions = []
+  102:         for partition in partitions:
+  103:             groups = {}
+  104:             for node in partition:
+  105:                 kernel = kernel_map[node]
+  106:                 # One launcher/autotuner supplies block arguments for the whole
+  107:                 # combo. Only combine kernels with the same block ABI and mode.
+  108:                 key = (
+  109:                     kernel.npu_kernel_type,
+  110:                     kernel.inside_reduction,
+  111:                     kernel.persistent_reduction,
+  112:                     tuple(
+  113:                         (
+  114:                             axis.name, axis.is_split_axis, axis.is_tiling_axis,
+  115:                             axis.is_no_loop_axis, axis.is_reduction,
+  116:                         )
+  117:                         for axis in kernel.sorted_axis
+  118:                     ),
+  119:                 )
+  120:                 groups.setdefault(key, []).append(node)
+  121:             compatible_partitions.extend(groups.values())
+  122:         return compatible_partitions
+  123:
+  124:     def select_combo_heuristics(
+  125:         self, heuristics_list: list[str], size_hints_list: list[dict[str, int]]
+  126:     ) -> tuple[str, dict[str, int], TritonKernel]:
+  127:         # This shape only describes the shared search envelope. Preserve every
+  128:         # subkernel's actual shape separately for grid and resource calculations.
+
+NPU_LATEST acfc0910ab6184c50faa009b452894f65820e7f8
+torch_npu/_inductor/runtime/triton_heuristics.py:1754-1829
+source_sha256=92638d36d2ec14fe578675568cab016aa421766c6319c0c2b66e3b876041c0af
+
+ 1754:
+ 1755:     def _should_skip_autotune_for_determinism(self):
+ 1756:         """
+ 1757:         When deterministic algorithms are enabled, skip benchmarking for
+ 1758:         reduction kernels and use the largest successfully compiled tile.
+ 1759:         All configs are still compiled so that compilation failures on NPU
+ 1760:         do not crash the program.
+ 1761:         Pointwise kernels are unaffected because their tiling does not change
+ 1762:         floating-point numerics.
+ 1763:         """
+ 1764:         return (
+ 1765:             (
+ 1766:                 self.inductor_meta.get("deterministic")
+ 1767:                 or self.inductor_meta.get("are_deterministic_algorithms_enabled")
+ 1768:             )
+ 1769:             and self.heuristic_type in (
+ 1770:                 HeuristicType.REDUCTION,
+ 1771:                 HeuristicType.PERSISTENT_REDUCTION,
+ 1772:             )
+ 1773:         )
+ 1774:
+ 1775:     @staticmethod
+ 1776:     def _candidate_tile_size(entry):
+ 1777:         candidate = entry["candidate"]
+ 1778:         full_config = candidate.get("full_config")
+ 1779:         if full_config is None:
+ 1780:             kwargs = getattr(entry["launcher"].config, "kwargs", {})
+ 1781:         else:
+ 1782:             kwargs = full_config.get("kwargs", full_config)
+ 1783:         # BLOCK can describe a runtime loop range. BLOCK_SUB is the actual
+ 1784:         # compiled tile on that axis; never count both for the same axis.
+ 1785:         blocks = {
+ 1786:             name: value for name, value in kwargs.items()
+ 1787:             if name.endswith("BLOCK")
+ 1788:         }
+ 1789:         blocks.update({
+ 1790:             name.removesuffix("_SUB"): value
+ 1791:             for name, value in kwargs.items() if name.endswith("BLOCK_SUB")
+ 1792:         })
+ 1793:         return math.prod(blocks.values())
+ 1794:
+ 1795:     @staticmethod
+ 1796:     def _deterministic_candidate_key(entry):
+ 1797:         full_config = entry["candidate"].get("full_config")
+ 1798:         if full_config is None:
+ 1799:             kwargs = getattr(entry["launcher"].config, "kwargs", {})
+ 1800:         else:
+ 1801:             kwargs = full_config.get("kwargs", full_config)
+ 1802:         return (
+ 1803:             NPUCachingAutotuner._candidate_tile_size(entry),
+ 1804:             bool(kwargs.get("multibuffer", False)),
+ 1805:         )
+ 1806:
+ 1807:     def _pick_largest_compiled_candidate(self, reason):
+ 1808:         """Prefer the largest tile, then multibuffer, then stable plan order."""
+ 1809:         self._first_compiled_candidate_entry()  # Preserve the no-candidate error.
+ 1810:         entry = builtins.max(
+ 1811:             self.compiled_candidate_entries, key=self._deterministic_candidate_key
+ 1812:         )
+ 1813:         candidate = entry["candidate"]
+ 1814:         launcher = entry["launcher"]
+ 1815:         self._set_best_candidate(candidate, launcher)
+ 1816:         self.launchers = [launcher]
+ 1817:         log.info(
+ 1818:             "[%s] picked=largest_tile(%s) config=%s",
+ 1819:             self.get_fn_name(),
+ 1820:             reason,
+ 1821:             candidate.get("full_config", launcher.config),
+ 1822:         )
+ 1823:         if self.save_cache_hook:
+ 1824:             best_config = (
+ 1825:                 self.best_candidate_config
+ 1826:                 if self.best_candidate_config is not None
+ 1827:                 else launcher.config
+ 1828:             )
+ 1829:             self.save_cache_hook(
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_foreach.py:274-280
+source_sha256=0cfc71894e89a2bca2b02c9c5f937f3ac752a975b32af4e88847aa17a022c304
+
+  274: @instantiate_parametrized_tests
+  275: class ForeachTests(TestCase):
+  276:     check_model_gpu = check_model_gpu
+  277:     check_model_cpu = check_model
+  278:     # NPU validates foreach numerics; its FOREACH grouped fusion path is not enabled.
+  279:     # Keep kernel-count and foreach-specific code checks for other backends.
+  280:     check_kernel_count = GPU_TYPE != "npu"
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_foreach.py:343-348
+source_sha256=0cfc71894e89a2bca2b02c9c5f937f3ac752a975b32af4e88847aa17a022c304
+
+  343:     @requires_gpu
+  344:     @all_ops
+  345:     def test_single_list(self, op):
+  346:         self._test_single_list(op)
+  347:         if self.check_kernel_count:
+  348:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_foreach.py:364-391
+source_sha256=0cfc71894e89a2bca2b02c9c5f937f3ac752a975b32af4e88847aa17a022c304
+
+  364:     @requires_gpu
+  365:     @all_ops
+  366:     def test_scheduler_fusion_list(self, op):
+  367:         if op in un_ops_under_test:
+  368:
+  369:             def fn(a0, a1):
+  370:                 c = op([a0, a1])
+  371:                 return torch._foreach_sqrt(c)
+  372:
+  373:         elif op in bin_ops_under_test:
+  374:
+  375:             def fn(a0, a1, b0, b1):
+  376:                 c = op([a0, a1], [b0, b1])
+  377:                 return c, torch._foreach_add([a0, a1], c)
+  378:
+  379:         else:
+  380:
+  381:             def fn(a0, a1, b0, b1, c0, c1):
+  382:                 c = op([a0, a1], [b0, b1], [c0, c1])
+  383:                 return c, torch._foreach_add([a0, a1], c)
+  384:
+  385:         self.check_model_gpu(
+  386:             fn,
+  387:             gen_args(op),
+  388:         )
+  389:
+  390:         if self.check_kernel_count:
+  391:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_foreach.py:603-632
+source_sha256=0cfc71894e89a2bca2b02c9c5f937f3ac752a975b32af4e88847aa17a022c304
+
+  603:     @requires_gpu
+  604:     @all_ops
+  605:     def test_non_foreach_producer_list(self, op):
+  606:         if op in un_ops_under_test:
+  607:
+  608:             def fn(a0, a1):
+  609:                 c0 = torch.add(a0, a0)
+  610:                 c1 = torch.add(a1, a1)
+  611:                 return op([c0, c1])
+  612:
+  613:         elif op in bin_ops_under_test:
+  614:
+  615:             def fn(a0, a1, b0, b1):
+  616:                 c0 = torch.add(a0, b0)
+  617:                 c1 = torch.add(a1, b1)
+  618:                 return op([a0, a1], [c0, c1])
+  619:
+  620:         else:
+  621:
+  622:             def fn(a0, a1, b0, b1, c0, c1):
+  623:                 c0 = torch.add(a0, b0)
+  624:                 c1 = torch.add(a1, b1)
+  625:                 return op([a0, a1], [b0, b1], [c0, c1])
+  626:
+  627:         self.check_model_gpu(
+  628:             fn, gen_args(op), reference_in_float=False, check_lowp=False
+  629:         )
+  630:
+  631:         if self.check_kernel_count:
+  632:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_foreach.py:655-696
+source_sha256=0cfc71894e89a2bca2b02c9c5f937f3ac752a975b32af4e88847aa17a022c304
+
+  655:     @requires_gpu
+  656:     @all_ops
+  657:     def test_non_foreach_consumer_producer_list(self, op):
+  658:         if op in un_ops_under_test:
+  659:
+  660:             def fn(a0, a1):
+  661:                 c0 = torch.add(a0, a0)
+  662:                 c1 = torch.mul(a1, a1)
+  663:                 d = op([c0, c1])
+  664:                 e0 = torch.mul(d[0], a0)
+  665:                 e1 = torch.mul(d[1], a1)
+  666:                 return [e0, e1]
+  667:
+  668:         elif op in bin_ops_under_test:
+  669:
+  670:             def fn(a0, a1, b0, b1):
+  671:                 c0 = torch.add(a0, b0)
+  672:                 c1 = torch.add(a1, b1)
+  673:                 d = op([a0, a1], [c0, c1])
+  674:                 e0 = torch.mul(d[0], a0)
+  675:                 e1 = torch.mul(d[1], a1)
+  676:                 return [e0, e1]
+  677:
+  678:         else:
+  679:
+  680:             def fn(a0, a1, b0, b1, c0, c1):
+  681:                 c0 = torch.add(a0, b0)
+  682:                 c1 = torch.add(a1, b1)
+  683:                 d = op([a0, a1], [b0, b1], [c0, c1])
+  684:                 e0 = torch.mul(d[0], a0)
+  685:                 e1 = torch.mul(d[1], a1)
+  686:                 return [e0, e1]
+  687:
+  688:         self.check_model_gpu(
+  689:             fn,
+  690:             gen_args(op),
+  691:             reference_in_float=False,
+  692:             check_lowp=False,
+  693:         )
+  694:
+  695:         if self.check_kernel_count:
+  696:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_combo_kernels.py:121-140
+source_sha256=1f2143823e2e21cc3d0e485de0d5e1d214479203891619fa57bcb6db9746ff03
+
+  121:     @requires_gpu_and_triton
+  122:     def test_activation_functions(self):
+  123:         def test_activations(a, b, c):
+  124:             a1 = torch.nn.functional.relu(a)
+  125:             b1 = torch.nn.functional.sigmoid(b)
+  126:             c1 = torch.nn.functional.tanh(c)
+  127:             return a1, b1, c1
+  128:
+  129:         inps = [
+  130:             torch.rand(10, 10, device=GPU_TYPE),
+  131:             torch.rand(20, 20, device=GPU_TYPE),
+  132:             torch.rand(10, 10, device=GPU_TYPE),
+  133:         ]
+  134:
+  135:         out_eager = test_activations(*inps)
+  136:         out_compiled = torch.compile(test_activations)(*inps)
+  137:
+  138:         self.assertEqual(out_eager, out_compiled)
+  139:         if GPU_TYPE != "npu":
+  140:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_combo_kernels.py:369-405
+source_sha256=1f2143823e2e21cc3d0e485de0d5e1d214479203891619fa57bcb6db9746ff03
+
+  369:     @requires_gpu_and_triton
+  370:     def test_fuse_mix_order_reductions_combo_kernels(self):
+  371:         def fn(x, y, z):
+  372:             # FusedMixOrderReductions produces row_sum (buf0)
+  373:             row_sum = x.sum(dim=1)
+  374:             col_sum = x.sum(dim=0)
+  375:
+  376:             # consumer of row_sum - excluded from combo kernels
+  377:             row_sum_reduced = row_sum.sum()  # reads buf0
+  378:
+  379:             # independent reductions - combo-kerneled
+  380:             y_sum = y.sum()
+  381:             z_sum = z.sum()
+  382:
+  383:             return row_sum_reduced, col_sum, y_sum, z_sum
+  384:
+  385:         inps = [
+  386:             torch.rand(8192, 1024, device=GPU_TYPE),
+  387:             torch.rand(2048, device=GPU_TYPE),
+  388:             torch.rand(2048, device=GPU_TYPE),
+  389:         ]
+  390:         out_eager = fn(*inps)
+  391:         fn_c = torch.compile(fn)
+  392:         out_compiled, code = run_and_get_code(fn_c, *inps)
+  393:         self.assertEqual(out_eager, out_compiled)
+  394:         if GPU_TYPE == "npu":
+  395:             # NPU disables mix-order reduction. Row/column/consumer reductions
+  396:             # are separate; only the independent y/z reductions form a Combo.
+  397:             self.assertFalse(torch._inductor.config.triton.mix_order_reduction)
+  398:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 4)
+  399:             combined = " ".join(code)
+  400:             self.assertEqual(combined.count("async_compile.triton("), 4)
+  401:             self.assertEqual(combined.count("'combo_grid_meta'"), 1)
+  402:             FileCheck().check("'num_kernels': 2").run(combined)
+  403:         else:
+  404:             # Mix-order row/column reduction + consumer + independent y/z Combo.
+  405:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 3)
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_combo_kernels.py:407-437
+source_sha256=1f2143823e2e21cc3d0e485de0d5e1d214479203891619fa57bcb6db9746ff03
+
+  407:     @requires_gpu_and_triton
+  408:     def test_combo_kernel_scalar_store_broadcast(self):
+  409:         def fn(a, b, c, d):
+  410:             scalar_sum = a + b
+  411:             vector_result = c.sum(dim=1)
+  412:             scalar_red = (d * scalar_sum).sum()
+  413:             return scalar_sum, vector_result, scalar_red
+  414:
+  415:         inps = [
+  416:             torch.tensor(1.0, device=GPU_TYPE),
+  417:             torch.tensor(2.0, device=GPU_TYPE),
+  418:             torch.randn(2048, 2048, device=GPU_TYPE),
+  419:             torch.randn(2048, 1, device=GPU_TYPE),
+  420:         ]
+  421:         out_eager = fn(*inps)
+  422:         fn_c = torch.compile(fn)
+  423:         out_compiled, code = run_and_get_code(fn_c, *inps)
+  424:         torch.testing.assert_close(out_eager, out_compiled, rtol=1e-4, atol=1e-4)
+  425:         if GPU_TYPE == "npu":
+  426:             # The vector reduction has axes (x0, r1), while the scalar reduction
+  427:             # has (r0). NPU partitions incompatible block ABIs into ordinary kernels.
+  428:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 2)
+  429:             combined = " ".join(code)
+  430:             self.assertEqual(combined.count("async_compile.triton("), 2)
+  431:             self.assertEqual(combined.count("'grid_type': 'GridNpu'"), 2)
+  432:             self.assertNotIn("combo_grid_meta", combined)
+  433:             FileCheck().check("'axis_names': ['x0', 'r1']").check(
+  434:                 "'axis_names': ['r0']"
+  435:             ).run(combined)
+  436:         else:
+  437:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)

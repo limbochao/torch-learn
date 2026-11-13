@@ -1,6 +1,6 @@
 {
   "analysis_date": "2026-11-13",
-  "master": "44555141711c0c825c5a201e303dcadad1f5fcb4",
+  "master": "acfc0910ab6184c50faa009b452894f65820e7f8",
   "methods": {
     "FAIL": 14,
     "SKIP": 17
@@ -23,8 +23,8 @@
   "production_code_changed": false,
   "master_device_retest": false,
   "limitations": [
-    "Latest NPU/Triton source analyzed; device diagnostics use unchanged 64dc85c wheel plus d12230b556 Python overlay.",
-    "No installation or device rerun of the latest master; no production adaptation was implemented in this task.",
+    "31 non-PASS method analyses retain the 4455514171 snapshot; all 35 cited NPU excerpts match acfc0910ab master. Fusion capability analysis uses acfc0910ab directly; device diagnostics use unchanged 64dc85c wheel plus d12230b556 overlay.",
+    "No installation or device rerun of acfc0910ab master; no production adaptation was implemented.",
     "WRN has no eligible Combo candidate in the measured lowering; a new positive-delta NPU gate graph was not tested.",
     "FTZ results identify the installed HMF math boundary; min-normal zeros and other ULP differences are distinguished.",
     "Two foreach methods passed diagnostics with original assertions; official test files/jobs/statuses remain unchanged.",
@@ -44,7 +44,7 @@
       "reported_symptom": "数值比较完成后，found_hints 为空，缺 reduction_hint_0，随后对 reduction_hint_1 和 INNER/OUTER 的检查未到达。",
       "master_source_cause": "失败执行的代码确实只有一个双成员 persistent Combo：行归约加载 r1+256*x0，列归约加载 x0+256*r1，两个成员的 low_dims 分别为 {1}/{0}，不能解释成“混合行列被拆成普通 kernel”。master 的 jit_line 只传首成员的 reduction_hint，combo_grid_meta 未导出 reduction_hint_i。native runtime 使用 combo_subkernel_meta 的轴、尺寸和资源约束生成共享 tile，没有逐成员 hint 消费者；字段缺失不证明没有归约调优，也不等同于 mix_order_reduction 功能。",
       "adaptation_required": "需要补齐真实的逐成员归约分类观测，或把用例接到 NPU 的实际成员布局；若要求 hint 影响优化，还需接入 native 候选生成/评价。共享候选必须同时满足所有分支；不能只打印 INNER/OUTER，也不能把 GPU 的 XBLOCK_i 搜索直接移植。",
-      "npu_design_assessment": "保留逐成员访问分类符合 NPU 设计；逐成员独立调优属于额外能力。现有共享块可以承载这两个不同物理 stride 的归约，因此不需要为了此测试取消 ABI 分区或打开 mix-order 纵向融合。",
+      "npu_design_assessment": "保留逐成员访问分类符合 NPU 设计；逐成员独立调优属于额外能力。现有共享块已承载这两个不同 stride 的归约；本例检查逐成员分类。共享输入的 mixed-order 联合归约是独立的待适配能力，见 C05。",
       "verification": "以原输入对照成员 FX 和地址公式，确认分类与两个方向一致；观测真实候选和 winner 对两种布局的处理，再保留数值比较。已归档的 generated code 来自 d12230b556，不是 master 设备复测。",
       "evidence": [
         "E1",
@@ -1133,5 +1133,130 @@
     "reference_install_files": 574,
     "all_install_hashes_match_reference": true
   },
-  "device_diagnostic_evidence": "device-findings.json"
+  "device_diagnostic_evidence": "device-findings.json",
+  "original_analysis_master": "44555141711c0c825c5a201e303dcadad1f5fcb4",
+  "latest_source_comparison": {
+    "source_index_field": "npu_source_snapshot_comparison",
+    "npu_excerpt_ranges_unchanged": 35,
+    "fusion_analysis_master": "acfc0910ab6184c50faa009b452894f65820e7f8",
+    "device_retest": false
+  },
+  "capability_tracking": {
+    "formal_statuses_and_counts_unchanged": true,
+    "scope": "Separate capability acceptance targets for adapted PASS cases; rows are not new FAIL methods or independent bug counts.",
+    "ordinary_vertical_fusion_entry_exists": true,
+    "representative_activation_case": {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_activation_functions",
+      "upstream_kernel_count": 1,
+      "adapted_npu_count_check_disabled": true,
+      "coverage_limit": "Numeric PASS does not establish a three-member Combo in this case.",
+      "evidence": [
+        "E15"
+      ]
+    },
+    "targets": [
+      {
+        "id": "C01",
+        "function": "foreach 列表成员水平打包",
+        "purpose": "将各 tensor 的独立分支合为一次 kernel 启动。",
+        "method": "test_foreach.py::ForeachTests::test_single_list",
+        "official_status": "PASS",
+        "original_upstream_kernel_count": 1,
+        "adapted_npu_kernel_count_assertion": null,
+        "gap_or_coverage_limit": "FOREACH 分组入口未启用；NPU 关闭原单 kernel 断言，需接通分组并验收实际成员。",
+        "shared_cause": "NPUTritonScheduling lacks BackendFeature.FOREACH, so lowering does not register the original operation list.",
+        "tracking_kind": "npu_capability_adaptation_and_original_target_validation",
+        "analysis_master": "acfc0910ab6184c50faa009b452894f65820e7f8",
+        "evidence": [
+          "E15"
+        ],
+        "device_retest_of_master": false
+      },
+      {
+        "id": "C02",
+        "function": "两个 foreach 阶段的成员配对融合",
+        "purpose": "沿各成员的 producer/consumer 依赖融合前后 foreach 操作。",
+        "method": "test_foreach.py::ForeachTests::test_scheduler_fusion_list",
+        "official_status": "PASS",
+        "original_upstream_kernel_count": 1,
+        "adapted_npu_kernel_count_assertion": null,
+        "gap_or_coverage_limit": "配对融合规则由上游提供，但当前分组入口未启用；需验证完整依赖链和单 kernel 目标。",
+        "shared_cause": "NPUTritonScheduling lacks BackendFeature.FOREACH, so lowering does not register the original operation list.",
+        "tracking_kind": "npu_capability_adaptation_and_original_target_validation",
+        "analysis_master": "acfc0910ab6184c50faa009b452894f65820e7f8",
+        "evidence": [
+          "E15"
+        ],
+        "device_retest_of_master": false
+      },
+      {
+        "id": "C03",
+        "function": "普通 producer 接入 foreach 成员",
+        "purpose": "将前置普通 add/mul 融入对应列表成员。",
+        "method": "test_foreach.py::ForeachTests::test_non_foreach_producer_list",
+        "official_status": "PASS",
+        "original_upstream_kernel_count": 1,
+        "adapted_npu_kernel_count_assertion": null,
+        "gap_or_coverage_limit": "普通垂直融合入口存在；完整 FOREACH 内 producer 吸收目标因分组路径未启用而未验收。",
+        "shared_cause": "NPUTritonScheduling lacks BackendFeature.FOREACH, so lowering does not register the original operation list.",
+        "tracking_kind": "npu_capability_adaptation_and_original_target_validation",
+        "analysis_master": "acfc0910ab6184c50faa009b452894f65820e7f8",
+        "evidence": [
+          "E15"
+        ],
+        "device_retest_of_master": false
+      },
+      {
+        "id": "C04",
+        "function": "foreach 成员接入普通 consumer",
+        "purpose": "把后置 mul 接入成员链，并保持列表水平打包。",
+        "method": "test_foreach.py::ForeachTests::test_non_foreach_consumer_producer_list",
+        "official_status": "PASS",
+        "original_upstream_kernel_count": 1,
+        "adapted_npu_kernel_count_assertion": null,
+        "gap_or_coverage_limit": "本例包含普通 producer→foreach→普通 consumer；NPU 数值 PASS 未验证完整分组融合。",
+        "shared_cause": "NPUTritonScheduling lacks BackendFeature.FOREACH, so lowering does not register the original operation list.",
+        "tracking_kind": "npu_capability_adaptation_and_original_target_validation",
+        "analysis_master": "acfc0910ab6184c50faa009b452894f65820e7f8",
+        "evidence": [
+          "E15"
+        ],
+        "device_retest_of_master": false
+      },
+      {
+        "id": "C05",
+        "function": "共享输入的 mixed-order 联合归约",
+        "purpose": "共同处理 x 的行归约与列归约；两个归约彼此独立。",
+        "method": "test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels",
+        "official_status": "PASS",
+        "original_upstream_kernel_count": 3,
+        "adapted_npu_kernel_count_assertion": 4,
+        "gap_or_coverage_limit": "NPU 显式关闭 mix_order_reduction；行/列/消费者分开，仅 y/z 是 Combo。待适配联合归约目标，与 F01 不同。",
+        "shared_cause": "NPU config disables the mixed-order reduction path.",
+        "tracking_kind": "npu_capability_adaptation_and_original_target_validation",
+        "analysis_master": "acfc0910ab6184c50faa009b452894f65820e7f8",
+        "evidence": [
+          "E15"
+        ],
+        "device_retest_of_master": false
+      },
+      {
+        "id": "C06",
+        "function": "不同轴布局成员的水平组合",
+        "purpose": "在一个 Combo 中容纳 (x0,r1) 与 (r0) 分块接口。",
+        "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast",
+        "official_status": "PASS",
+        "original_upstream_kernel_count": 1,
+        "adapted_npu_kernel_count_assertion": 2,
+        "gap_or_coverage_limit": "按模式和轴接口分成两个 GridNpu，无 combo_grid_meta；需扩展跨接口组合并验收单 Combo 及数值。",
+        "shared_cause": "Current NPU Combo partitioning requires compatible block ABI and mode.",
+        "tracking_kind": "npu_capability_adaptation_and_original_target_validation",
+        "analysis_master": "acfc0910ab6184c50faa009b452894f65820e7f8",
+        "evidence": [
+          "E15"
+        ],
+        "device_retest_of_master": false
+      }
+    ]
+  }
 }
