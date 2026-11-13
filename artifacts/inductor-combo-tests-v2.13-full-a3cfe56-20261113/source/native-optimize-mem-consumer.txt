@@ -1,0 +1,151 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:661-755
+
+  661: class NPUCachingAutotuner(CachingAutotuner):
+  662:     def __init__(
+  663:             self,
+  664:             fn,
+  665:             triton_meta,  # passed directly to triton
+  666:             configs,
+  667:             save_cache_hook,
+  668:             mutated_arg_names: List[str],  # see [Note: clone mutated buffers]
+  669:             optimize_mem,
+  670:             heuristic_type,
+  671:             size_hints=None,
+  672:             inductor_meta=None,  # metadata not relevant to triton
+  673:             custom_kernel=False,  # whether the kernel is inductor-generated or custom
+  674:             filename: Optional[str] = None,
+  675:             reset_to_zero_arg_names: Optional[List[str]] = None,
+  676:             autotune_cache_info: Optional[Dict[str, Any]] = None,
+  677:     ):
+  678:         super().__init__(fn, triton_meta, configs, save_cache_hook, mutated_arg_names, optimize_mem, heuristic_type,
+  679:                          size_hints, inductor_meta, custom_kernel, filename, reset_to_zero_arg_names,
+  680:                          autotune_cache_info)
+  681:         self._plugins.insert(0, _NPUSkipPrecompilePlugin())
+  682:
+  683:         self.exceptions = []
+  684:         self.fn_name = None
+  685:         self.runtime_block_arg_names = tuple(
+  686:             (inductor_meta or {}).get("runtime_block_arg_names", ())
+  687:         )
+  688:         # candidate_plan keeps the full runtime candidate space, while
+  689:         # variant_launcher_map points to the deduplicated compiled variants.
+  690:         self.candidate_plan = None
+  691:         self.variant_launcher_map = {}
+  692:         self.compiled_candidate_entries = ()
+  693:         self.best_candidate_config = None
+  694:         self.best_runtime_blocks = ()
+  695:         self.best_launcher = None
+  696:
+  697:     def copy_args_to_cpu_if_needed(self, *args, **kwargs):
+  698:         if not self.optimize_mem:
+  699:             return {}
+  700:
+  701:         copies = {}
+  702:         try:
+  703:             if torch.accelerator.current_accelerator() is None:
+  704:                 return {}
+  705:             budget = (
+  706:                 torch.accelerator.max_memory_allocated()
+  707:                 - torch.accelerator.memory_allocated()
+  708:             )
+  709:         except RuntimeError:
+  710:             return {}
+  711:
+  712:         def maybe_copy(name, arg):
+  713:             if name in self.mutated_arg_names and arg.device.type in (
+  714:                 "cuda",
+  715:                 "xpu",
+  716:                 "npu",
+  717:             ):
+  718:                 nonlocal budget
+  719:                 assert isinstance(arg, torch.Tensor)
+  720:                 required_storage_length = compute_required_storage_length(
+  721:                     arg.size(), arg.stride(), 0,
+  722:                 )
+  723:                 size = required_storage_length * arg.element_size()
+  724:                 if size > budget:
+  725:                     try:
+  726:                         cpu_arg = torch.empty_strided(
+  727:                             (required_storage_length,),
+  728:                             (1,),
+  729:                             dtype=arg.dtype,
+  730:                             device="cpu",
+  731:                             pin_memory=True,
+  732:                         )
+  733:                         cpu_arg.copy_(
+  734:                             arg.as_strided(
+  735:                                 (required_storage_length,), (1,)
+  736:                             ),
+  737:                             non_blocking=True,
+  738:                         )
+  739:                     except RuntimeError:
+  740:                         cpu_arg = arg.to("cpu")
+  741:                     copies[name] = (arg, cpu_arg)
+  742:                 else:
+  743:                     budget -= size
+  744:
+  745:         for name, arg in zip(self.fn.arg_names, args):
+  746:             maybe_copy(name, arg)
+  747:         for name, arg in kwargs.items():
+  748:             maybe_copy(name, arg)
+  749:
+  750:         return copies
+  751:
+  752:     def _set_best_candidate(
+  753:         self,
+  754:         candidate,
+  755:         launcher,
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:3325-3343
+
+ 3325:     mutated_arg_names = inductor_meta.pop("mutated_arg_names", ())
+ 3326:     optimize_mem = inductor_meta.pop("optimize_mem", True)
+ 3327:
+ 3328:     if "restore_value" in triton_meta:
+ 3329:         mutated_arg_names += triton_meta.pop("restore_value")
+ 3330:
+ 3331:     reset_to_zero_arg_names: List[str] = []
+ 3332:     if "reset_to_zero" in triton_meta:
+ 3333:         reset_to_zero_arg_names.extend(triton_meta.pop("reset_to_zero"))
+ 3334:
+ 3335:     def decorator(fn):
+ 3336:
+ 3337:         if inductor_meta.get("profile_bandwidth"):
+ 3338:             return debug_autotuner_cls(
+ 3339:                 fn,
+ 3340:                 triton_meta=triton_meta,
+ 3341:                 inductor_meta=inductor_meta,
+ 3342:                 regex_filter=inductor_meta["profile_bandwidth_regex"],
+ 3343:                 with_profiler=inductor_meta[
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6466-6478
+
+ 6466:         # Skip memory optimization for forward of the training loop where we expect
+ 6467:         # every new node will increase the peak memory and our greedy approach would
+ 6468:         # introduce a lot of unnecessary cpu copies.
+ 6469:         optimize_mem = V.graph.is_inference or V.graph.is_backward
+ 6470:
+ 6471:         inductor_meta = {
+ 6472:             "grid_type": self._get_grid_type().__name__,
+ 6473:             "kernel_name": str(Placeholder.DESCRIPTIVE_NAME),
+ 6474:             "mutated_arg_names": mutated_args,
+ 6475:             "optimize_mem": optimize_mem,
+ 6476:             **self.inductor_meta_per_kernel(),
+ 6477:             **self.inductor_meta_common(),
+ 6478:         }
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton_combo_kernel.py:774-782
+
+  774:             "grid_type": dispatch.grid_expr.__name__,
+  775:             "combo_grid_meta": self.combo_grid_meta(size_hints_list),
+  776:             "kernel_name": str(Placeholder.DESCRIPTIVE_NAME),
+  777:             "mutated_arg_names": mutated_args,
+  778:             # Matches triton.py:codegen_kernel(): inference/backward graphs skip
+  779:             # CPU-copy of mutated args during autotune retries; training-forward
+  780:             # graphs must keep it to preserve benchmark inputs across retries.
+  781:             "optimize_mem": V.graph.is_inference or V.graph.is_backward,
+  782:             **self.triton_kernel_cls.inductor_meta_common(),

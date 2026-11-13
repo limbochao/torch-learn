@@ -1,0 +1,348 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/ir.py:437-459
+
+  437: def generate_body_indexing(body, indices):
+  438:     index = list(itertools.chain.from_iterable(indices))
+  439:
+  440:     if not (len(index) == len(body.var_ranges)):
+  441:         raise RuntimeError(
+  442:             "assert len(index) == len(body.var_ranges), (index, body.var_ranges)"
+  443:         )
+  444:     if not (all(v not in body.var_ranges for v in index)):
+  445:         raise RuntimeError("assert all(v not in body.var_ranges for v in index)")
+  446:
+  447:     replacements = dict(zip(body.var_ranges.keys(), index))
+  448:     indexing_map = dict(zip(index, body.var_ranges.keys()))
+  449:     body.indexing_map = indexing_map
+  450:     body.indexing = {
+  451:         name: sympy_subs(expr, replacements)
+  452:         for name, expr in body.indexing_exprs.items()
+  453:     }
+  454:
+  455:     body.indirect_replacements = {}
+  456:     body.generate_indirect_replacements()
+  457:
+  458:     body.masked_indexing = {}
+  459:     body.generate_masked_indexing()
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/ir.py:1614-1658
+
+ 1614: def transform_dims_in_indexing(self, indices):
+ 1615:     # Step 1: Generate basic indexing (always executed)
+ 1616:     if self.indexing is None:
+ 1617:         remove_zero_terms(self.indexing_exprs, self.var_ranges)
+ 1618:         generate_body_indexing(self, indices)
+ 1619:
+ 1620:     # Step 3: Perform memory access linearization
+ 1621:     log.debug(
+ 1622:         "[Linear] ori indexing:%s\nV.kernel.range_tree_nodes: %s",
+ 1623:         self.indexing,
+ 1624:         V.kernel.range_tree_nodes,
+ 1625:     )
+ 1626:     dim_symbol_index_map, axioms_index_map, symbol_range_map = build_symbolvar_data(self.indexing)
+ 1627:     V.kernel.dim_symbol_index_map = dim_symbol_index_map
+ 1628:     V.kernel.axioms_index_map = axioms_index_map
+ 1629:     V.kernel.symbol_range_map = symbol_range_map
+ 1630:     for key, index_expr in self.indexing.items():
+ 1631:         self.indexing[key] = simplify_index_max_and_mod(index_expr)
+ 1632:         index_expr = self.indexing[key]
+ 1633:         analyse_res = analyze_expression(index_expr, V.kernel.range_tree_nodes)
+ 1634:         log.debug("[Linear] linear analyse res: %s", analyse_res)
+ 1635:
+ 1636:         if not analyse_res["can_split_all"]:
+ 1637:             if is_ascend950:
+ 1638:                 log.warning(
+ 1639:                     "Skip memory access linearization due to can not split expression: %s"
+ 1640:                     "\nrange_tree_nodes:%s"
+ 1641:                     "\nanalyse_res:%s",
+ 1642:                     self.indexing,
+ 1643:                     V.kernel.range_tree_nodes,
+ 1644:                     analyse_res,
+ 1645:                 )
+ 1646:                 # Set SIMT_ONLY compile option for dynamic shapes on A5
+ 1647:                 V.kernel.npu_kernel_type = NPUKernelType.SIMT_ONLY
+ 1648:                 return
+ 1649:             else:
+ 1650:                 raise ValueError(
+ 1651:                     f"Can not split expression:{self.indexing}"
+ 1652:                     f"\nrange_tree_nodes:{V.kernel.range_tree_nodes}"
+ 1653:                     f"\nanalyse_res:{analyse_res}"
+ 1654:                 )
+ 1655:         self.indexing[key] = split_expression(index_expr)
+ 1656:
+ 1657:     if V.kernel is not None and isinstance(V.kernel, NPUIndexTritonKernel):
+ 1658:         rebuild_flattened_dims(self.indexing)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/ir.py:2028-2035
+
+ 2028:     def loopbody__call__(self, *indices, allow_same_symbol_in_index=False):
+ 2029:         if V.kernel is not None and not isinstance(V.kernel, NPUIndexTritonKernel):
+ 2030:             return origin_loopbody_call(self, *indices, allow_same_symbol_in_index=allow_same_symbol_in_index)
+ 2031:         if self.indexing is None:
+ 2032:             generate_body_indexing(self, indices)
+ 2033:         result = self.root_block()
+ 2034:         self.indexing = None
+ 2035:         return result
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:1220-1227
+
+ 1220:         with self:
+ 1221:             self._mark_store_index_keys()
+ 1222:             self._transform_schedule_indexing()
+ 1223:             self._remove_unused_dim_up_axes()
+ 1224:             self._record_store_unified_indexing()
+ 1225:             self._remove_substituted_dims_from_kernel()
+ 1226:             self._finalize_kernel_codegen_dims()
+ 1227:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:1480-1504
+
+ 1480:     def _transform_schedule_indexing(self):
+ 1481:         """
+ 1482:         Transform loop-body indexing and collect substitution candidates.
+ 1483:         """
+ 1484:         stack = contextlib.ExitStack()
+ 1485:         for node in self.node_schedule:
+ 1486:             if node is DisableReduction:
+ 1487:                 stack.enter_context(self.disable_reduction())
+ 1488:             elif node is EnableReduction:
+ 1489:                 stack.close()
+ 1490:             else:
+ 1491:                 index_vars = self.split_and_set_ranges(node.get_ranges())
+ 1492:                 node._body.transform_dims_in_indexing(index_vars)
+ 1493:
+ 1494:         self.additional_nodes_to_be_subs()
+ 1495:
+ 1496:         for node in self._iter_schedule_nodes(self.node_schedule):
+ 1497:             indexing = node._body.indexing
+ 1498:             node._body.substituted_dims_in_indexing(
+ 1499:                 indexing, self, self.range_tree_nodes_substituted
+ 1500:             )
+ 1501:
+ 1502:     def _record_store_unified_indexing(self):
+ 1503:         """
+ 1504:         Record Store indexing expressions used by unified-axis guards.
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:2598-2674
+
+ 2598:
+ 2599:     def is_isolated_symbol(self, input_str, range_val):
+ 2600:         patterns = [r"\b" + re.escape(range_val.name) + r"\b"]
+ 2601:         for var in range_val.var_directions:
+ 2602:             pattern = r"\b" + re.escape(var.name) + r"\b"
+ 2603:             patterns.append(pattern)
+ 2604:
+ 2605:         for pattern in patterns:
+ 2606:             if re.search(pattern, input_str):
+ 2607:                 return True
+ 2608:         return False
+ 2609:
+ 2610:     def _axis_used_in_coordinate_transforms(self, axis_name):
+ 2611:         if not hasattr(self, "coordinate_transforms") or not self.coordinate_transforms:
+ 2612:             return False
+ 2613:         return any(
+ 2614:             transform_info.get("unified_var") == axis_name
+ 2615:             for transform_info in self.coordinate_transforms.values()
+ 2616:         )
+ 2617:
+ 2618:     def _iter_codegen_lines(self):
+ 2619:         loads = (
+ 2620:             self._original_loads_buf
+ 2621:             if self._original_loads_buf is not None
+ 2622:             else self.loads
+ 2623:         )
+ 2624:         for line in loads._lines:
+ 2625:             yield line
+ 2626:         compute = (
+ 2627:             self._original_compute_buf
+ 2628:             if self._original_compute_buf is not None
+ 2629:             else self.compute
+ 2630:         )
+ 2631:         for line in compute._lines:
+ 2632:             yield line
+ 2633:         for line in self.post_loop_store._lines:
+ 2634:             yield line.line if isinstance(line, DeferredLine) else line
+ 2635:         stores = (
+ 2636:             self._original_stores_buf
+ 2637:             if self._original_stores_buf is not None
+ 2638:             else self.stores
+ 2639:         )
+ 2640:         for line in stores._lines:
+ 2641:             yield line.line if isinstance(line, DeferredLine) else line
+ 2642:
+ 2643:     def _emit_coordinate_transforms(self):
+ 2644:         """
+ 2645:         Emit coordinate transformation code into the kernel body.
+ 2646:         """
+ 2647:         if not hasattr(self, "coordinate_transforms") or not self.coordinate_transforms:
+ 2648:             return
+ 2649:
+ 2650:         self.body.writeline(
+ 2651:             "# Coordinate transformation for different expansion patterns"
+ 2652:         )
+ 2653:         for name, transform_info in self.coordinate_transforms.items():
+ 2654:             self.body.writeline(f"# Transform for {name}")
+ 2655:             transform_lines = self._generate_coordinate_transform_lines(
+ 2656:                 transform_info["unified_var"],
+ 2657:                 transform_info["dims"],
+ 2658:                 transform_info["numels"],
+ 2659:             )
+ 2660:             for line in transform_lines:
+ 2661:                 self.body.writeline(line)
+ 2662:
+ 2663:     def find_axis_in_load_store(self, range_val):
+ 2664:         if not range_val:
+ 2665:             return False
+ 2666:
+ 2667:         if self._axis_used_in_coordinate_transforms(range_val.name):
+ 2668:             return True
+ 2669:
+ 2670:         return any(
+ 2671:             self.is_isolated_symbol(line, range_val)
+ 2672:             for line in self._iter_codegen_lines()
+ 2673:         )
+ 2674:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/scheduling.py:519-572
+
+  519:         for pn, nodes in zip(subkernel_nodes, fused_node_lists):
+  520:             _, (numel, rnumel) = max(nodes, key=lambda x: int(x.is_reduction())).group
+  521:             if npu_config.enable_welford:
+  522:                 numel = _canonical_group_size(numel)
+  523:                 rnumel = _canonical_group_size(rnumel)
+  524:             node_schedule = self.generate_node_schedule(nodes, numel, rnumel)
+  525:             tiling = self.select_tiling(node_schedule, numel, rnumel)
+  526:             features = NPUKernelFeatures(node_schedule, numel, rnumel)
+  527:             subkernel = NPUComboKernel.create_triton_kernel(
+  528:                 tiling,
+  529:                 features=features,
+  530:                 optimize_mask=not mixed_sizes,
+  531:             )
+  532:             subkernel_map[pn] = subkernel
+  533:             node_schedule_map[pn] = NodeInfo(
+  534:                 node_schedule=node_schedule,
+  535:                 tiling=tiling,
+  536:                 tiling_scores=None,
+  537:                 numel=numel,
+  538:                 rnumel=rnumel,
+  539:                 features=features,
+  540:                 is_persistent_reduction=subkernel.persistent_reduction,
+  541:             )
+  542:
+  543:         partitions = NPUComboKernel.horizontal_partition(
+  544:             nodes=subkernel_nodes,
+  545:             triton_scheduling=self,
+  546:             custom_algorithm=custom_part_algorithm,
+  547:             kernel_map=subkernel_map,
+  548:             node_info_map=node_schedule_map,
+  549:         )
+  550:         log.debug(
+  551:             "ComboKernels: %d nodes partitioned into %s groups",
+  552:             len(subkernel_nodes),
+  553:             [len(p) for p in partitions],
+  554:         )
+  555:         kernel_code_list = []
+  556:         for node_group in partitions:
+  557:             if len(node_group) == 1:
+  558:                 # ABI partitioning constructed a potential combo subkernel.
+  559:                 # It is discarded here, so exclude it from emitted-kernel metrics.
+  560:                 metrics.generated_kernel_count -= 1
+  561:                 if only_gen_src_code:
+  562:                     # The 2.13 benchmark caller reuses the node's cached timing.
+  563:                     kernel_code_list.append((None, None, node_group))
+  564:                 else:
+  565:                     node_info = node_schedule_map[node_group[0]]
+  566:                     kernel = self.kernel_type(node_info.tiling, features=node_info.features)
+  567:                     self.codegen_node_schedule_with_kernel(node_info.node_schedule, kernel)
+  568:                     with V.set_kernel_handler(kernel):
+  569:                         src_code = kernel.codegen_kernel()
+  570:                     kernel_code_list.append((src_code, kernel, node_group))
+  571:                 continue
+  572:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/npu_combined_scheduling.py:240-289
+
+  240:     def codegen_combo_kernel(self, node) -> None:
+  241:         subkernel_nodes = node.get_subkernel_nodes()
+  242:         # The 2.13 scheduler always attempts index codegen first; the legacy
+  243:         # linear-mode configuration and its predicate no longer exist.
+  244:         kernel_count = metrics.generated_kernel_count
+  245:         original_groups = [
+  246:             (snode, snode.group)
+  247:             for subkernel_node in subkernel_nodes
+  248:             for snode in subkernel_node.get_nodes()
+  249:         ]
+  250:         original_groups.extend(
+  251:             (subkernel_node, subkernel_node.group)
+  252:             for subkernel_node in subkernel_nodes
+  253:         )
+  254:         try:
+  255:             group_fn = self._nolinear_triton_scheduling.group_fn
+  256:             for subkernel_node in subkernel_nodes:
+  257:                 # get_nodes() is flattened, whereas get_subkernel_nodes()
+  258:                 # contains fused groups. Zipping them assigns later groups
+  259:                 # the dimensions of an unrelated node as soon as one
+  260:                 # subkernel has multiple nodes.
+  261:                 subnodes = subkernel_node.get_nodes()
+  262:                 for snode in subnodes:
+  263:                     snode.group = (snode.group[0], group_fn(snode._sizes))
+  264:                 subkernel_node.group = max(
+  265:                     subnodes, key=lambda snode: int(snode.is_reduction())
+  266:                 ).group
+  267:             return self._triton_scheduling.codegen_combo_kernel(node)
+  268:         except Exception:
+  269:             metrics.generated_kernel_count = kernel_count
+  270:             for snode, group in original_groups:
+  271:                 snode.group = group
+  272:             log.debug(
+  273:                 "linear combo codegen for node %s raise error, "
+  274:                 "fallback to individual kernels",
+  275:                 node,
+  276:                 exc_info=True,
+  277:             )
+  278:
+  279:         # Recompute lifetimes at the ordinary kernel boundaries, just as the
+  280:         # no-linear fallback does. Restoring the whole combo's pending frees
+  281:         # after that fallback would emit a second del for graph inputs.
+  282:         scheduler = self.scheduler
+  283:         future_used_buffers = OrderedSet(
+  284:             scheduler.mutation_real_name.get(name, name)
+  285:             for name in node.used_or_aliased_buffer_names()
+  286:         ) - node.last_usage
+  287:         for subkernel_node in reversed(subkernel_nodes):
+  288:             subkernel_node.set_last_usage(future_used_buffers, scheduler.mutation_real_name)
+  289:             future_used_buffers.update(subkernel_node.last_usage)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/common.py:2447-2469
+
+ 2447:     def rename_indexing(
+ 2448:         self, index: list[sympy.Expr] | tuple[sympy.Expr, ...] | sympy.Expr
+ 2449:     ) -> sympy.Expr:
+ 2450:         # adds the necessary kernel args for index expressions
+ 2451:         # and renames variables in index expressions to kernel arg names
+ 2452:         if isinstance(index, (list, tuple)):
+ 2453:             return [self.rename_indexing(x) for x in index]
+ 2454:         index = V.graph.sizevars.simplify(index)
+ 2455:         sorted_symbols = sorted(index.free_symbols, key=lambda s: s.name)
+ 2456:         replacements = {
+ 2457:             x: self.args.size(x)
+ 2458:             for x in sorted_symbols
+ 2459:             if symbol_is_type(
+ 2460:                 x,
+ 2461:                 (
+ 2462:                     SymT.UNBACKED_INT,
+ 2463:                     SymT.SIZE,
+ 2464:                     SymT.PRECOMPUTED_SIZE,
+ 2465:                     SymT.UNBACKED_FLOAT,
+ 2466:                 ),
+ 2467:             )
+ 2468:         }
+ 2469:         return sympy_subs(index, replacements)

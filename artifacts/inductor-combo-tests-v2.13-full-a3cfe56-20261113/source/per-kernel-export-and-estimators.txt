@@ -1,0 +1,264 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/common.py:2894-2928
+
+ 2894:     def store(
+ 2895:         self, name: str, index: sympy.Expr, value: CSEVariable, mode: StoreMode = None
+ 2896:     ) -> None:
+ 2897:         self.kernel.store_buffer_names.add(name)
+ 2898:         # Update store cache when mode is None or "tma"
+ 2899:         if mode != "atomic_add":
+ 2900:             self._update_store_cache(name, value)
+ 2901:         if name not in V.graph.removed_buffers:
+ 2902:             self.kernel.store(name, index, value, mode=mode)
+ 2903:             self.kernel.num_store += 1
+ 2904:
+ 2905:     def device_assert_async(self, cond: CSEVariable, msg: str) -> None:
+ 2906:         self.kernel.device_assert_async(cond, msg)
+ 2907:
+ 2908:     # pyrefly: ignore [bad-override]
+ 2909:     def partial_accumulate(self, *args: Any) -> None:
+ 2910:         self.kernel.partial_accumulate(*args)
+ 2911:
+ 2912:     def store_reduction(self, name: str, index: sympy.Expr, value: CSEVariable) -> None:
+ 2913:         self.kernel.store_buffer_names.add(name)
+ 2914:         self._update_store_cache(name, value)
+ 2915:
+ 2916:         if name not in V.graph.removed_buffers:
+ 2917:             self.kernel.num_store += 1
+ 2918:             return self.kernel.store_reduction(name, index, value)
+ 2919:
+ 2920:     def reduction(
+ 2921:         self,
+ 2922:         dtype: torch.dtype,
+ 2923:         src_dtype: torch.dtype,
+ 2924:         reduction_type: ReductionType,
+ 2925:         value: CSEVariable | tuple[CSEVariable, ...],
+ 2926:     ) -> CSEVariable | tuple[CSEVariable, ...]:
+ 2927:         self.kernel.num_reduction += 1
+ 2928:         return self.kernel.reduction(dtype, src_dtype, reduction_type, value)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:3186-3218
+
+ 3186:     def _has_stride1_on_rdim(index) -> bool:
+ 3187:         # These analysis is only needed in deterministic mode so far
+ 3188:         # to filter triton configs. Return false immediately to avoid
+ 3189:         # increasing compilation time when the mode is off.
+ 3190:         if not (
+ 3191:             config.deterministic or config.test_configs.force_filter_reduction_configs
+ 3192:         ):
+ 3193:             return False
+ 3194:         support_vars = index.free_symbols
+ 3195:         reduce_vars = [
+ 3196:             var
+ 3197:             for var in support_vars
+ 3198:             if symbol_is_type(var, TritonSymbols.reduction_types)
+ 3199:         ]
+ 3200:
+ 3201:         if len(reduce_vars) == 0:
+ 3202:             return False
+ 3203:
+ 3204:         # for expression "x0 + 150528*((x1//(s27*s38))) + 3*(ModularIndexing(x1, 1, s38)) + 672*(ModularIndexing(x1, s38, s27))"
+ 3205:         # stride_vars will results in DivisionByZero error
+ 3206:         try:
+ 3207:             stride_vars = V.graph.sizevars.stride_vars(index, reduce_vars, support_vars)
+ 3208:         except ZeroDivisionError:
+ 3209:             return False
+ 3210:
+ 3211:         return any(stride == 1 for stride in stride_vars)
+ 3212:
+ 3213:     @property
+ 3214:     def has_store_with_contiguous_rdim(self) -> bool:
+ 3215:         return not all(
+ 3216:             is_buffer_removed(name) for name in self.stores_with_contiguous_rdim
+ 3217:         )
+ 3218:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6235-6335
+
+ 6235:     def inductor_meta_per_kernel(self) -> dict[str, Any]:
+ 6236:         """
+ 6237:         Used by both standalone codegen_kernel() and ComboKernel.combo_grid_meta()
+ 6238:         (which calls this on each sub_kernel).
+ 6239:         """
+ 6240:         out: dict[str, Any] = {
+ 6241:             "no_x_dim": self.no_x_dim,
+ 6242:             "atomic_add_found": self.atomic_add_found,
+ 6243:             "num_load": self.num_load,
+ 6244:             "num_store": self.num_store,
+ 6245:             "num_reduction": self.num_reduction,
+ 6246:             # Triton will not accept an OrderedSet for autotune_hints
+ 6247:             "autotune_hints": set(self.autotune_hints),  # noqa: set_linter
+ 6248:         }
+ 6249:         if self.mix_order_reduction:
+ 6250:             out["RSPLIT_SIZE"] = self.rsplit_size
+ 6251:         if config.deterministic or config.test_configs.force_filter_reduction_configs:
+ 6252:             out["has_loadstore_with_contiguous_rdim"] = (
+ 6253:                 self.has_load_with_contiguous_rdim
+ 6254:                 or self.has_store_with_contiguous_rdim
+ 6255:             )
+ 6256:         if self.tma_min_block_sizes:
+ 6257:             out["tma_min_block_sizes"] = self.tma_min_block_sizes
+ 6258:         if self.tiling_scores:
+ 6259:             out["tiling_scores"] = self.tiling_scores
+ 6260:         if self.min_xblock is not None:
+ 6261:             out["min_xblock"] = self.min_xblock
+ 6262:         if self.min_rblock is not None:
+ 6263:             out["min_rblock"] = self.min_rblock
+ 6264:         if self.cooperative_reduction:
+ 6265:             out["persistent_reduction"] = self.persistent_reduction
+ 6266:         if (rblock := self._get_native_matmul_persistent_rblock()) is not None:
+ 6267:             out["native_matmul_persistent_rblock"] = rblock
+ 6268:         if self.add_persistent_rblock:
+ 6269:             out["add_persistent_rblock"] = True
+ 6270:         if (
+ 6271:             config.benchmark_kernel
+ 6272:             or config.profile_bandwidth
+ 6273:             or config.benchmark_combo_kernel
+ 6274:         ):
+ 6275:             num_gb = self.estimate_kernel_num_bytes() / 1e9
+ 6276:             if num_gb is not None:
+ 6277:                 out["kernel_num_gb"] = num_gb
+ 6278:         if config.benchmark_kernel or config.benchmark_combo_kernel:
+ 6279:             flops = self.estimate_flops()
+ 6280:             if flops is not None:
+ 6281:                 out["kernel_flop"] = flops
+ 6282:         return out
+ 6283:
+ 6284:     @functools.cached_property
+ 6285:     def add_persistent_rblock(self) -> bool:
+ 6286:         # Bail on 3d tiling, which has more complicated coalesce patterns
+ 6287:         looped_red = self.features.is_reduction() and not self.persistent_reduction
+ 6288:         tiling_scores = self.tiling_scores
+ 6289:         two_d_red = len(self.tiling) == 2
+ 6290:         if looped_red and two_d_red:
+ 6291:             memory_stats = self.features.memory_stats(self.tiling)
+ 6292:             dim_stats = memory_stats.persistent.memory.dim[0]
+ 6293:             mem_ops_per_thread = dim_stats.count_per_thread
+ 6294:
+ 6295:             if (
+ 6296:                 tiling_scores is not None
+ 6297:                 and "x" in tiling_scores
+ 6298:                 and "r0_" in tiling_scores
+ 6299:             ):
+ 6300:                 # large rblock inhibits xblock size, dont attempt if there is a decent amount of
+ 6301:                 # reads coalesced by xblock
+ 6302:                 r_coalesce_ratio = tiling_scores["r0_"] / max(tiling_scores["x"], 1)
+ 6303:                 contiguous_red = r_coalesce_ratio >= INNER_REDUCTION_RATIO_THRESHOLD
+ 6304:             else:
+ 6305:                 contiguous_red = (
+ 6306:                     self.features.get_reduction_hint(tiling_scores)
+ 6307:                     == ReductionHint.INNER
+ 6308:                 )
+ 6309:
+ 6310:             looped_mem = memory_stats.looped.memory.bytes
+ 6311:             persistent_mem = memory_stats.persistent.memory.bytes
+ 6312:             # check that we save significant memory by doing persistent
+ 6313:             saved_bytes_ratio = V.graph.sizevars.optimization_hint(looped_mem) / max(
+ 6314:                 V.graph.sizevars.optimization_hint(persistent_mem),
+ 6315:                 1,
+ 6316:             )
+ 6317:
+ 6318:             # TODO - rnumel should be reasonably close to power of 2
+ 6319:             if (
+ 6320:                 # significant memory bandwidth savings
+ 6321:                 saved_bytes_ratio >= 1.3
+ 6322:                 and contiguous_red
+ 6323:                 # TODO - need more detailed register analysis
+ 6324:                 and V.graph.sizevars.statically_known_leq(
+ 6325:                     self.features.reduction_numel, 32768
+ 6326:                 )
+ 6327:                 # We will already generate a persistent config in this case
+ 6328:                 and V.graph.sizevars.statically_known_gt(
+ 6329:                     self.features.reduction_numel, 2048
+ 6330:                 )
+ 6331:                 and mem_ops_per_thread <= 10
+ 6332:             ):
+ 6333:                 return True
+ 6334:         return False
+ 6335:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/simd.py:1266-1296
+
+ 1266:     def estimate_flops(self) -> int | None:
+ 1267:         flops = [
+ 1268:             node.estimate_flops()
+ 1269:             for node in NodeScheduleMarker.only_nodes(self.features.node_schedule)
+ 1270:         ]
+ 1271:         return sum(filter(None, flops))
+ 1272:
+ 1273:     def estimate_kernel_num_bytes(self):
+ 1274:         """
+ 1275:         Try the best to estimate the total size (in bytes) of the
+ 1276:         kernel's inputs and outputs, which is used for estimating the memory
+ 1277:         throughput of this kernel. This information is used for checking how
+ 1278:         far we are from the peak memory bandwidth. It's important that
+ 1279:         we want to avoid overestimating the sizes of the inputs and outputs,
+ 1280:         because it can wrongfully give us a very large memory traffic value,
+ 1281:         which may be even larger than the theoretical bandwidth and thus
+ 1282:         become very misleading. This is particularly problematic for cases
+ 1283:         where we slice some inputs. In those cases, we should only count
+ 1284:         the size of the "slices" instead of the original inputs, because
+ 1285:         only the slices contribute to the real memory traffic.
+ 1286:         """
+ 1287:         nbytes = []
+ 1288:         ninplace_args = len(unique(self.args.inplace_buffers.values()))
+ 1289:         _, call_args, _, _ = self.args.python_argdefs()
+ 1290:         buf_accesses = self.features.buf_accesses()
+ 1291:
+ 1292:         # For pointwise and reduction kernels, this is the upper-bound numels
+ 1293:         # for the output buffer.
+ 1294:         # FIXME: This is not exactly right for cases like below:
+ 1295:         #    def foo(tensor0, tensor1):
+ 1296:         #        x0 = narrow(tensor0)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:1146-1190
+
+ 1146:         """
+ 1147:         if not self.inside_reduction:
+ 1148:             return False
+ 1149:         if not config.triton.persistent_reductions:
+ 1150:             return False
+ 1151:         reduction_numel = self.features.reduction_numel
+ 1152:         if isinstance(reduction_numel, NumelList):
+ 1153:             reduction_numel = reduction_numel.numels()
+ 1154:         if npu_config.is_ascend950:
+ 1155:             threshold = {ReductionHint.INNER: 4096, ReductionHint.DEFAULT: 4096}.get(
+ 1156:                 self.features.get_reduction_hint(), 64
+ 1157:             )
+ 1158:         else:
+ 1159:             threshold = {ReductionHint.INNER: 1024, ReductionHint.DEFAULT: 1024}.get(
+ 1160:                 self.features.get_reduction_hint(), 64
+ 1161:             )
+ 1162:         # Many early loads over a large reduction can keep enough values live
+ 1163:         # to overflow UB. Use 256 KiB as an empirical input-pressure watermark,
+ 1164:         # not as the device's usable UB capacity. Keep the existing threshold
+ 1165:         # when exceeding the watermark cannot be proven statically.
+ 1166:         if (
+ 1167:             npu_config.is_ascend950
+ 1168:             and not V.graph.sizevars.statically_known_leq(reduction_numel, 1024)
+ 1169:             and V.graph.sizevars.statically_known_gt(
+ 1170:                 self._estimate_reduction_input_bytes(reduction_numel), 256 * 1024
+ 1171:             )
+ 1172:         ):
+ 1173:             # Reduce only the base threshold. Cooperative reduction and
+ 1174:             # multi-kernel paths may have different resource requirements,
+ 1175:             # so preserve their existing threshold adjustments below.
+ 1176:             threshold = min(threshold, 1024)
+ 1177:         if self.cooperative_reduction:
+ 1178:             # The RSPLIT of cooperative reductions means each thread block is operating on fewer elements
+ 1179:             try:
+ 1180:                 threshold *= 32 // min(
+ 1181:                     V.graph.sizevars.optimization_hint(self.features.numel), 32
+ 1182:                 )
+ 1183:             except ValueError:
+ 1184:                 pass  # unbacked symint
+ 1185:
+ 1186:         if config.triton.multi_kernel:
+ 1187:             threshold *= 16
+ 1188:         return V.graph.sizevars.statically_known_leq(
+ 1189:             self.features.reduction_numel, threshold
+ 1190:         )  # type: ignore[arg-types]

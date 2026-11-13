@@ -1,0 +1,223 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/config.py:176-183
+
+  176: if not enable_inplace_buffers:
+  177:     inductor_config.inplace_buffers = False
+  178:
+  179: inductor_config.triton.coalesce_tiling_analysis = False
+  180: inductor_config.triton.mix_order_reduction = False
+  181: inductor_config.loop_reindexing_after_fusion = False
+  182:
+  183:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/npu_combined_scheduling.py:33-48
+
+   33: class NPUCombinedScheduling(CUDACombinedScheduling, TritonScheduling):
+   34:     """
+   35:     Scheduler for NPU Kernels, which delegates calls as appropriate
+   36:     to the CATLASS and Triton Schedulers, which both work for NPU devices
+   37:     and use a unified-wrapper for codegen.
+   38:
+   39:     If Scheduling code needs to be specialized for the case of mixed Triton / CATLASS code,
+   40:     this would also be the place to do it.
+   41:
+   42:     instead of patch is_triton() function, we make NPUCombinedScheduling extends TritonScheduling
+   43:     """
+   44:
+   45:     def __init__(self, scheduler: Scheduler | None) -> None:
+   46:         BaseScheduling.__init__(self, scheduler)
+   47:         self._nolinear_triton_scheduling = NPUNoLinearTritonScheduling(scheduler)
+   48:         self._triton_scheduling = NPUTritonScheduling(scheduler)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:1192-1193
+
+ 1192:     def _get_grid_type(self) -> type[triton_heuristics.GridExpr]:
+ 1193:         return npu_triton_heuristics.GridNpu
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:192-201
+
+  192: def _is_gpu_triton_backend(
+  193:     node1: BaseSchedulerNode,
+  194:     node2: BaseSchedulerNode,
+  195: ) -> bool:
+  196:     if not node1.is_gpu() or not node2.is_gpu():
+  197:         return False
+  198:     device_type = node1.get_device().type  # type: ignore[union-attr]
+  199:     return (
+  200:         device_type in ("cuda", "xpu") and get_current_backend(device_type) == "triton"
+  201:     )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:336-364
+
+  336:     def can_fuse(cls, node1: BaseSchedulerNode, node2: BaseSchedulerNode) -> bool:
+  337:         """
+  338:         Check whether we can fuse two reductions with mix loop orders.
+  339:         """
+  340:         if not config.triton.mix_order_reduction:
+  341:             return False
+  342:
+  343:         # TODO: Mix order reduction is not supported with cpp_wrapper yet
+  344:         if V.graph.cpp_wrapper:
+  345:             return False
+  346:
+  347:         if not _is_gpu_triton_backend(node1, node2):
+  348:             return False
+  349:         if not node1.is_reduction() or not node2.is_reduction():
+  350:             return False
+  351:
+  352:         if (node1.ancestors & node2.get_operation_names()) or (
+  353:             node2.ancestors & node1.get_operation_names()
+  354:         ):
+  355:             # Mix-order reductions are sibling reductions, not producer-consumer.
+  356:             return False
+  357:
+  358:         # check for mix reduction orders
+  359:         if not cls.has_mix_reduction_orders(node1, node2):
+  360:             return False
+  361:
+  362:         # check common buffer accesses
+  363:         common_reads = MixOrderReduction.get_common_read(node1, node2)
+  364:         if len(common_reads) == 0:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/cuda_combined_scheduling.py:148-149
+
+  148:     def codegen_mix_order_reduction(self, node):
+  149:         return self._triton_scheduling.codegen_mix_order_reduction(node)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/simd.py:2294-2332
+
+ 2294:     def _generate_kernel_code_for_mix_order_reduction(
+ 2295:         self, kernel_features, split_size, for_benchmark
+ 2296:     ):
+ 2297:         """
+ 2298:         for_benchmark:
+ 2299:             True if the generated code is for benchmarking. We need make
+ 2300:             sure benchmark harness code is generated.
+ 2301:         """
+ 2302:         numel, rnumel = kernel_features.numel, kernel_features.reduction_numel
+ 2303:         node_schedule = kernel_features.node_schedule
+ 2304:
+ 2305:         kernel = self.create_kernel_choices(
+ 2306:             kernel_features,
+ 2307:             [{"x": numel, "r0_": rnumel}],
+ 2308:             {
+ 2309:                 "features": kernel_features,
+ 2310:                 "tiling_scores": None,
+ 2311:                 "mix_order_reduction": True,
+ 2312:                 "override_persistent_reduction": True,
+ 2313:             },
+ 2314:         )[0]
+ 2315:         assert kernel.persistent_reduction
+ 2316:         assert kernel.mix_order_reduction
+ 2317:         kernel.rsplit_size = split_size
+ 2318:         self.codegen_node_schedule_with_kernel(node_schedule, kernel)
+ 2319:
+ 2320:         # allocate workspace for this kernel
+ 2321:         _, ws_name, ws_off = kernel.args.workspace(
+ 2322:             len(kernel.saved_partial_accumulate)
+ 2323:             * kernel.numels["r0_"]
+ 2324:             * ((kernel.numels["x"] + kernel.rsplit_size - 1) // kernel.rsplit_size),
+ 2325:             False,
+ 2326:             dtype=torch.float,
+ 2327:         )
+ 2328:         assert ws_off == 0, f"{ws_off=}"
+ 2329:         with kernel:
+ 2330:             kernel.codegen_body()
+ 2331:
+ 2332:         stack = contextlib.ExitStack()
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/simd.py:2376-2392
+
+ 2376:         metrics.codegen_mix_order_reduction += 1
+ 2377:
+ 2378:         # split epilogue out of node2
+ 2379:         node2_reductions, node2_epilogue = self._split_mix_order_reduction_epilogue(
+ 2380:             node2
+ 2381:         )
+ 2382:
+ 2383:         converted_nodes = []
+ 2384:         for subnode in node2_reductions:
+ 2385:             subnode.cancel_reduction_split()
+ 2386:             converted = subnode.extract_pw_from_reduction()
+ 2387:             converted.swap_pw_red_dimension()
+ 2388:             converted_nodes.append(converted)
+ 2389:         node_schedule = self.generate_node_schedule(
+ 2390:             node1.get_nodes() + converted_nodes, numel, rnumel
+ 2391:         )
+ 2392:         kernel_features = SIMDKernelFeatures(node_schedule, numel, rnumel)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/simd.py:2466-2518
+
+ 2466:         # workspace args is still needed after the call
+ 2467:         kernel.call_kernel(kernel.kernel_name, deallocate_ws=False)
+ 2468:         V.graph.removed_buffers |= kernel.removed_buffers
+ 2469:         V.graph.inplaced_to_remove |= kernel.inplaced_to_remove
+ 2470:
+ 2471:         # an extra round of reduction
+ 2472:         assert len(converted_nodes) == len(kernel.saved_partial_accumulate)
+ 2473:         nsplit = V.graph.wrapper_code.codegen_python_sizevar(
+ 2474:             (numel + split_size - 1) // split_size
+ 2475:         )
+ 2476:         for idx, partial_accum in enumerate(kernel.saved_partial_accumulate):
+ 2477:             buffer_name = partial_accum.buffer_name
+ 2478:
+ 2479:             stride_str = f"({nsplit}) * ({rnumel})"
+ 2480:             start = f"{idx} * {stride_str}"
+ 2481:             end = f"({idx} + 1) * {stride_str}"
+ 2482:             reduction_type2op = {
+ 2483:                 "min": "amin",
+ 2484:                 "max": "amax",
+ 2485:             }
+ 2486:             opname = reduction_type2op.get(
+ 2487:                 partial_accum.reduction_type, partial_accum.reduction_type
+ 2488:             )
+ 2489:             final_reduce = f"{buffer_name} = {ws_name}[{start} : {end}].view({nsplit}, {rnumel}).{opname}(dim=0)"
+ 2490:
+ 2491:             # Restore the exact original shape via .view() to handle keepdim
+ 2492:             # and multi-dimensional reductions correctly.
+ 2493:             buffer = V.graph.get_buffer(buffer_name)
+ 2494:             if buffer is not None:
+ 2495:                 final_shape = [
+ 2496:                     V.graph.wrapper_code.codegen_python_sizevar(s)
+ 2497:                     for s in buffer.get_layout().size
+ 2498:                 ]
+ 2499:                 final_shape_str = f"[{', '.join(final_shape)}]"
+ 2500:                 final_reduce += f".view({final_shape_str})"
+ 2501:
+ 2502:             # The workspace tensor is in torch.float, need a cast if the buffer is
+ 2503:             # not.
+ 2504:             if (buffer_dtype := V.graph.get_dtype(buffer_name)) != torch.float:
+ 2505:                 final_reduce += f".to({buffer_dtype})"
+ 2506:             V.graph.wrapper_code.writeline(final_reduce)
+ 2507:             # mark the buffer as allocated, so we don't try to allocate
+ 2508:             # it again when it's later used
+ 2509:             V.graph.wrapper_code.allocated.add(buffer_name)
+ 2510:
+ 2511:         kernel.deallocate_workspaces()
+ 2512:
+ 2513:         if node2_epilogue:
+ 2514:             self._codegen_nodes(node2_epilogue)
+ 2515:
+ 2516:         self.free_buffers_in_scheduler()
+ 2517:
+ 2518:     def codegen_nested_reduction(self, node):
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6665-6672
+
+ 6665:     def _get_grid_type(self) -> type[triton_heuristics.GridExpr]:
+ 6666:         n = sum([int(not tree.is_reduction) for tree in self.range_trees])
+ 6667:         if self.mix_order_reduction:
+ 6668:             assert n == 1
+ 6669:             return triton_heuristics.MixOrderReductionGrid
+ 6670:         elif self.cooperative_reduction:
+ 6671:             assert n == 1
+ 6672:             return triton_heuristics.CooperativeReductionGrid
