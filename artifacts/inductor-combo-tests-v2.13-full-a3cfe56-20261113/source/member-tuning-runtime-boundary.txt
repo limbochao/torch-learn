@@ -1,0 +1,322 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1725-1741
+
+ 1725:                     *args,
+ 1726:                     runtime_blocks=entry["runtime_blocks"],
+ 1727:                     **kwargs,
+ 1728:                 )
+ 1729:
+ 1730:         for candidate_id, timing in timings.items():
+ 1731:             candidate = candidate_map.get(candidate_id)
+ 1732:             if candidate is None:
+ 1733:                 continue
+ 1734:             self.coordesc_tuner.cache_benchmark_result(
+ 1735:                 config_from_dict(candidate["full_config"]), timing
+ 1736:             )
+ 1737:
+ 1738:         if not timings or all(value == float("inf") for value in timings.values()):
+ 1739:             raise RuntimeError(
+ 1740:                 f"All runtime block candidates for [{self.fn.__name__}] are not runnable."
+ 1741:             )
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1803-1843
+
+ 1803:     def autotune_to_one_config(self, *args, **kwargs):
+ 1804:         """Do the actual autotuning"""
+ 1805:         start_time = time.time_ns()
+ 1806:         if self.candidate_plan is None:
+ 1807:             self.candidate_plan = build_candidate_plan(
+ 1808:                 self.configs, self.runtime_block_arg_names
+ 1809:             )
+ 1810:         timings = self._benchmark_candidate_entries(*args, **kwargs)
+ 1811:         benchmark_time_taken_ns = time.time_ns() - start_time
+ 1812:         candidate_map = {
+ 1813:             candidate["candidate_id"]: candidate
+ 1814:             for candidate in self.candidate_plan["candidate_entries"]
+ 1815:         }
+ 1816:         best_candidate_id, _ = builtins.min(
+ 1817:             timings.items(), key=lambda item: item[1]
+ 1818:         )
+ 1819:         best_candidate = candidate_map[best_candidate_id]
+ 1820:         if not self.variant_launcher_map:
+ 1821:             self._refresh_variant_launchers()
+ 1822:         best_launcher = self.variant_launcher_map[best_candidate["variant_id"]]
+ 1823:         self._set_best_candidate(best_candidate, best_launcher)
+ 1824:         self.launchers = [best_launcher]
+ 1825:         self.autotune_time_taken_ns = (
+ 1826:             self.precompile_time_taken_ns + benchmark_time_taken_ns
+ 1827:         )
+ 1828:         if self.save_cache_hook:
+ 1829:             best_config = (
+ 1830:                 self.best_candidate_config
+ 1831:                 if self.best_candidate_config is not None
+ 1832:                 else self.launchers[0].config
+ 1833:             )
+ 1834:             self.save_cache_hook(
+ 1835:                 best_config,
+ 1836:                 self.autotune_time_taken_ns,
+ 1837:                 found_by_coordesc=self.inductor_meta.get(
+ 1838:                     "coordinate_descent_tuning", False
+ 1839:                 ),
+ 1840:                 triton_cache_hash=getattr(self.launchers[0], "cache_hash", None)
+ 1841:             )
+ 1842:
+ 1843:     @lru_cache(None)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1927-1999
+
+ 1927:     def run(
+ 1928:         self, *args, stream, benchmark_run=False, **kwargs
+ 1929:     ):  # type:ignore[override]
+ 1930:
+ 1931:         if self.triton_interpret:
+ 1932:             cfg = self.best_candidate_config or self.configs[0]
+ 1933:             runtime_blocks = self.best_runtime_blocks
+ 1934:             args, grid = self._interpret_args_grid(args, cfg, runtime_blocks)
+ 1935:             launch_args = self._build_runtime_launch_args(args, runtime_blocks)
+ 1936:             copied_kwargs = copy.copy(cfg.kwargs)
+ 1937:             copied_kwargs.pop('split_axis', None)
+ 1938:             copied_kwargs.pop('split_blocks', None)
+ 1939:             for name in self.runtime_block_arg_names:
+ 1940:                 copied_kwargs.pop(name, None)
+ 1941:
+ 1942:             return self.fn[grid](
+ 1943:                 *launch_args,
+ 1944:                 **kwargs,
+ 1945:                 **copied_kwargs,
+ 1946:             )
+ 1947:
+ 1948:         if len(self.launchers) == 1 and hasattr(self.launchers[0], "fallback"):
+ 1949:             return self.launchers[0](
+ 1950:                 *args,
+ 1951:                 **kwargs,
+ 1952:             )
+ 1953:
+ 1954:         self.autotuner(*args, stream=stream, benchmark_run=benchmark_run, **kwargs)
+ 1955:         launcher = self.best_launcher if self.best_launcher is not None else self.launchers[0]
+ 1956:         runtime_blocks = self.best_runtime_blocks
+ 1957:
+ 1958:         if launcher.store_cubin and (not benchmark_run or not self.cuda_kernel_saved):
+ 1959:             self.save_gpu_kernel(stream, launcher)
+ 1960:
+ 1961:         launch_args = self._build_runtime_launch_args(args, runtime_blocks)
+ 1962:         if self.dump_launch_params:
+ 1963:             dump_cfg = self.best_candidate_config or launcher.config
+ 1964:             _, grid = self._interpret_args_grid(args, dump_cfg, runtime_blocks)
+ 1965:             orig_cfg_kwargs = launcher.config.kwargs
+ 1966:             if hasattr(self.fn, "arg_names"):
+ 1967:                 valid_kwargs = set(self.fn.arg_names) - set(
+ 1968:                     getattr(self, "runtime_block_arg_names", ())
+ 1969:                 )
+ 1970:                 launcher.config.kwargs = {
+ 1971:                     k: v for k, v in orig_cfg_kwargs.items() if k in valid_kwargs
+ 1972:                 }
+ 1973:             try:
+ 1974:                 _dump_launch_params(
+ 1975:                     launch_args, kwargs, launcher, self.fn.__name__, grid
+ 1976:                 )
+ 1977:             finally:
+ 1978:                 launcher.config.kwargs = orig_cfg_kwargs
+ 1979:
+ 1980:         # Dispatch-point guards, evaluated at dispatch time:
+ 1981:         # 1) benchmark_run=True is autotune candidate timing, not a real forward
+ 1982:         #    — dumping would spam "no valid dump_path" warnings and compare
+ 1983:         #    against uninitialized buffers, so it is skipped;
+ 1984:         # 2) suspend_check_accuracy is set during the tool's own internal timing
+ 1985:         #    (fusion decisions / candidate benchmarking), which is issued through
+ 1986:         #    generated code and cannot carry the benchmark_run flag.
+ 1987:         # Not folded into is_run_debug(): it is lru_cache'd per instance, so a
+ 1988:         # suspend decision cached there would leak into later real forwards.
+ 1989:         if (
+ 1990:                 not npu_config.suspend_check_accuracy
+ 1991:                 and self.is_run_debug()
+ 1992:                 and not benchmark_run
+ 1993:                 and not self.heuristic_type == HeuristicType.USER_AUTOTUNE
+ 1994:         ):
+ 1995:             debug_cfg = self.best_candidate_config or launcher.config
+ 1996:             _, grid = self._interpret_args_grid(args, debug_cfg, runtime_blocks)
+ 1997:             debug_mode = self.maybe_run_debug(*launch_args, grid_=grid, stream=stream, launcher=launcher, **kwargs)
+ 1998:             if debug_mode:
+ 1999:                 log.info("Kernel %s goes into %s and return.", self.get_fn_name(), debug_mode)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1625-1692
+
+ 1625:         """
+ 1626:         combo_tuning_groups = self.inductor_meta.get("combo_tuning_groups")
+ 1627:         if not combo_tuning_groups:
+ 1628:             return launcher
+ 1629:
+ 1630:         self._ensure_kernel_loaded()
+ 1631:
+ 1632:         signature_keys = OrderedSet(self.triton_meta["signature"])
+ 1633:         best_config = launcher.config
+ 1634:         current_kwargs = dict(best_config.kwargs)
+ 1635:         base_num_warps = best_config.num_warps
+ 1636:         base_num_stages = best_config.num_stages
+ 1637:
+ 1638:         start_time = time.time_ns()
+ 1639:         best_time = self.bench(launcher, *args, **kwargs)
+ 1640:         counters["inductor"]["combo_autotune_bench"] += 1
+ 1641:         self.coordesc_tuner.cache_benchmark_result(launcher.config, best_time)
+ 1642:         log.debug(
+ 1643:             "  Phase 1 baseline: %s warps=%d time=%f",
+ 1644:             dict(current_kwargs),
+ 1645:             base_num_warps,
+ 1646:             best_time,
+ 1647:         )
+ 1648:
+ 1649:         # Phase 1: Tune block sizes per sub-kernel (largest first).
+ 1650:         # warps/stages stay fixed at base config values.
+ 1651:         for gi, group in enumerate(combo_tuning_groups):
+ 1652:             member_indices = group["member_indices"]
+ 1653:             cfgs = group["configs"]
+ 1654:             skip_rblock = group["skip_rblock"]
+ 1655:
+ 1656:             if len(cfgs) <= 1:
+ 1657:                 log.debug("  Phase 1 group %d SK%s: 1 config, skip", gi, member_indices)
+ 1658:                 continue
+ 1659:
+ 1660:             log.debug(
+ 1661:                 "  Phase 1 group %d SK%s: trying %d configs, current_kwargs=%s",
+ 1662:                 gi,
+ 1663:                 member_indices,
+ 1664:                 len(cfgs),
+ 1665:                 dict(current_kwargs),
+ 1666:             )
+ 1667:             for ci, cfg in enumerate(cfgs):
+ 1668:                 trial_kwargs = dict(current_kwargs)
+ 1669:                 for idx in member_indices:
+ 1670:                     _update_combo_kernel_kwargs(
+ 1671:                         trial_kwargs, cfg.kwargs, idx, skip_rblock, signature_keys
+ 1672:                     )
+ 1673:
+ 1674:                 if trial_kwargs == current_kwargs:
+ 1675:                     log.debug("    cfg[%d] skip (same as current)", ci)
+ 1676:                     continue
+ 1677:
+ 1678:                 trial_config = triton.Config(
+ 1679:                     trial_kwargs,
+ 1680:                     num_warps=base_num_warps,
+ 1681:                     num_stages=base_num_stages,
+ 1682:                 )
+ 1683:
+ 1684:                 with self.lock:
+ 1685:                     trial_launcher = self._precompile_config(
+ 1686:                         trial_config
+ 1687:                     ).make_launcher()
+ 1688:                 trial_time = self.bench(trial_launcher, *args, **kwargs)
+ 1689:                 counters["inductor"]["combo_autotune_bench"] += 1
+ 1690:                 self.coordesc_tuner.cache_benchmark_result(trial_config, trial_time)
+ 1691:
+ 1692:                 improved = trial_time < best_time
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:3569-3631
+
+ 3569: def _subkernel_fingerprint(combo_meta: dict[str, Any], i: int) -> tuple[Any, ...]:
+ 3570:     """Per-sub-kernel heuristic inputs as a hashable tuple. Identical
+ 3571:     fingerprints imply identical heuristic output.
+ 3572:
+ 3573:     Per-kernel fields (num_load, autotune_hints, tiling_scores, etc.) live
+ 3574:     inside combo_meta[f"inductor_meta_{i}"] (single source of truth — see
+ 3575:     TritonKernel.inductor_meta_per_kernel). Combo-level fields (heuristic,
+ 3576:     size_hints, tile_hint, reduction_hint) remain top-level in combo_meta.
+ 3577:     """
+ 3578:     sub_meta = combo_meta.get(f"inductor_meta_{i}", {})
+ 3579:     tma = sub_meta.get("tma_min_block_sizes") or {}
+ 3580:     tiling_scores = sub_meta.get("tiling_scores") or {}
+ 3581:     return (
+ 3582:         combo_meta[f"heuristic_{i}"],
+ 3583:         tuple(sorted(combo_meta[f"size_hints_{i}"].items())),
+ 3584:         sub_meta.get("num_load"),
+ 3585:         sub_meta.get("num_store"),
+ 3586:         sub_meta.get("num_reduction"),
+ 3587:         tuple(sorted(sub_meta.get("autotune_hints") or [], key=str)),
+ 3588:         sub_meta.get("atomic_add_found"),
+ 3589:         sub_meta.get("no_x_dim"),
+ 3590:         combo_meta.get(f"reduction_hint_{i}"),
+ 3591:         combo_meta.get(f"tile_hint_{i}"),
+ 3592:         sub_meta.get("add_persistent_rblock", False),
+ 3593:         sub_meta.get("has_loadstore_with_contiguous_rdim"),
+ 3594:         tuple(sorted(tma.items())),
+ 3595:         tuple(sorted(tiling_scores.items())),
+ 3596:     )
+ 3597:
+ 3598:
+ 3599: def _update_combo_kernel_kwargs(
+ 3600:     kwargs: dict[str, Any],
+ 3601:     cfg_kwargs: dict[str, Any],
+ 3602:     subkernel_idx: int,
+ 3603:     skip_rblock: bool,
+ 3604:     signature_keys: OrderedSet[str],
+ 3605: ) -> None:
+ 3606:     for key, value in cfg_kwargs.items():
+ 3607:         if skip_rblock and key.startswith("R") and "BLOCK" in key:
+ 3608:             continue
+ 3609:         suffixed_key = f"{key}_{subkernel_idx}"
+ 3610:         # Only suffix keys that actually exist in the combo kernel signature.
+ 3611:         # Signature keys are real per-subkernel constexpr args such as XBLOCK_0.
+ 3612:         # Everything else must stay unsuffixed so HIP-specific compile options like
+ 3613:         # waves_per_eu continue to flow through the backend-options path above.
+ 3614:         kwargs[suffixed_key if suffixed_key in signature_keys else key] = value
+ 3615:
+ 3616:
+ 3617: def _handle_combo_kernel_per_subkernel_blocks(
+ 3618:     size_hints: dict[str, int],
+ 3619:     inductor_meta: dict[str, Any],
+ 3620:     triton_meta: dict[str, Any],
+ 3621:     filename: str | None = None,
+ 3622:     reduction_hint: bool = False,
+ 3623:     tile_hint: Any = None,
+ 3624:     min_elem_per_thread: int = 0,
+ 3625: ) -> list[Config] | None:
+ 3626:     """
+ 3627:     Handle per-subkernel config generation for combo kernels.
+ 3628:
+ 3629:     Each sub-kernel gets its own block sizes (XBLOCK_0, XBLOCK_1, etc.) generated
+ 3630:     using the same heuristics as standalone Triton kernels.
+ 3631:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:3740-3776
+
+ 3740:
+ 3741:         all_num_warps.append(cfg.num_warps)
+ 3742:         all_num_stages.append(cfg.num_stages)
+ 3743:         for c in cfgs:
+ 3744:             unique_warp_stage_pairs.add((c.num_warps, c.num_stages))
+ 3745:
+ 3746:         group_key = (
+ 3747:             _subkernel_fingerprint(combo_meta, i)
+ 3748:             if combo_meta.get("autotune_grouping")
+ 3749:             else (i,)
+ 3750:         )
+ 3751:         if group_key in group_map:
+ 3752:             group_map[group_key]["member_indices"].append(i)
+ 3753:         else:
+ 3754:             group_map[group_key] = {
+ 3755:                 "member_indices": [i],
+ 3756:                 "configs": cfgs,
+ 3757:                 "skip_rblock": skip_rblock,
+ 3758:                 "size_hints": size_hints_i,
+ 3759:                 "coordesc_fields": list(group_coordesc_fields),
+ 3760:             }
+ 3761:
+ 3762:     unique_warp_stage_pairs.add((max(all_num_warps), max(all_num_stages)))
+ 3763:
+ 3764:     combo_tuning_groups = list(group_map.values())
+ 3765:     # Largest sub-kernels tuned first — they dominate runtime and get most freedom
+ 3766:     combo_tuning_groups.sort(
+ 3767:         key=lambda g: -functools.reduce(operator.mul, g["size_hints"].values())
+ 3768:     )
+ 3769:     inductor_meta["combo_tuning_groups"] = combo_tuning_groups
+ 3770:     inductor_meta["combo_coordesc_field_order"] = [
+ 3771:         field for group in combo_tuning_groups for field in group["coordesc_fields"]
+ 3772:     ]
+ 3773:     inductor_meta["combo_coordesc_field_limits"] = combo_coordesc_field_limits
+ 3774:     # Candidates for num_warps/num_stages re-tuning after block sizes are finalized
+ 3775:     inductor_meta["combo_warp_stage_candidates"] = list(unique_warp_stage_pairs)
+ 3776:

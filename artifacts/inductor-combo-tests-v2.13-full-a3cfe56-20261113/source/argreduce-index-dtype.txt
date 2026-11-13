@@ -1,0 +1,68 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:4438-4470
+
+ 4438:             if reduction_type in {"argmax", "argmin", "max", "min"}:
+ 4439:                 if reduction_type == "argmax" or reduction_type == "argmin":
+ 4440:                     if logical_index is not None:
+ 4441:                         # Non-contiguous input: use the loader-computed
+ 4442:                         # logical row-major index instead of the axis-derived
+ 4443:                         # physical one
+ 4444:                         accumulator_index = str(
+ 4445:                             self.cse.generate(
+ 4446:                                 self.compute,
+ 4447:                                 f"({str(logical_index)}).to(tl.int64)",
+ 4448:                                 dtype=torch.int64,
+ 4449:                                 shape=masked_value.shape,
+ 4450:                             )
+ 4451:                         )
+ 4452:                     else:
+ 4453:                         reduce_axis = get_reduction_axis()
+ 4454:                         broadcast_string: str
+ 4455:                         reshape_str = self.reduce_analysis.get_reduce_dim_reshape(
+ 4456:                             reduce_axis
+ 4457:                         )
+ 4458:                         broadcast_string = (
+ 4459:                             f"tl.broadcast_to({reduce_axis.symbol()}.reshape({reshape_str}), "
+ 4460:                             f"{masked_value}.shape)"
+ 4461:                         )
+ 4462:                         accumulator_index = str(
+ 4463:                             self.cse.generate(
+ 4464:                                 self.compute, broadcast_string, dtype=torch.int64, shape=masked_value.shape,
+ 4465:                             )
+ 4466:                         )
+ 4467:                     root_op = {"argmax": "max", "argmin": "min"}[reduction_type]
+ 4468:                     final_argreduce(
+ 4469:                         self.compute, result_var, masked_value, accumulator_index
+ 4470:                     )
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:5348-5375
+
+ 5348:                         csevar = V.kernel.cse.generate(
+ 5349:                             V.kernel.compute,
+ 5350:                             v,
+ 5351:                             bounds=bounds,
+ 5352:                             dtype=output_dtype,
+ 5353:                             shape=output_shape,
+ 5354:                         )
+ 5355:
+ 5356:                         nonlocal output_idx
+ 5357:                         if (
+ 5358:                             config.test_configs.runtime_triton_dtype_assert
+ 5359:                             and triton_backend
+ 5360:                         ):
+ 5361:                             from torch._inductor.codegen.triton import triton_type
+ 5362:
+ 5363:                             # we tree_map over the output, so we need to fetch corresponding dtype
+ 5364:                             if isinstance(output_dtype, (list, tuple)):
+ 5365:                                 output_dtype = output_dtype[output_idx]
+ 5366:
+ 5367:                             V.kernel.compute.writeline(
+ 5368:                                 f"tl.static_assert({csevar}.dtype == {triton_type(output_dtype)})"
+ 5369:                             )
+ 5370:                         output_idx += 1
+ 5371:
+ 5372:                         csevar.update_on_args(name, args, kwargs)
+ 5373:                         V.kernel._update_layout_on_args(csevar, args, kwargs)
+ 5374:
+ 5375:                         return csevar

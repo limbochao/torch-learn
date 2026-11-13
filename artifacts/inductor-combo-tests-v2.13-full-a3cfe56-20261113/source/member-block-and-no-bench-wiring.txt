@@ -1,0 +1,338 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:3340-3361
+
+ 3340:         self.group = (device, ((sympy.Expr("combo_kernel"),),))
+ 3341:         self.origins = OrderedSet[torch.fx.Node]()
+ 3342:         self.enable_autotune = enable_autotune
+ 3343:         self.per_subkernel_blocks = per_subkernel_blocks
+ 3344:
+ 3345:     @classmethod
+ 3346:     def combinable_nodes(
+ 3347:         cls, nodes: list[BaseSchedulerNode]
+ 3348:     ) -> list[BaseSchedulerNode]:
+ 3349:         extern = [x for x in nodes if isinstance(x, ExternKernelSchedulerNode)]
+ 3350:         if extern:
+ 3351:             log.debug(
+ 3352:                 "ComboKernels: %d external nodes are filtered %s",
+ 3353:                 len(extern),
+ 3354:                 [node.node.get_origins() for node in extern if node.node is not None],
+ 3355:             )
+ 3356:         grouped = [x for x in nodes if isinstance(x, GroupedSchedulerNode)]
+ 3357:         if grouped:
+ 3358:             log.debug(
+ 3359:                 "ComboKernels: %d grouped nodes are filtered",
+ 3360:                 len(grouped),
+ 3361:             )
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/scheduling.py:471-592
+
+  471:         self.scheduler.free_buffers()
+  472:         return None
+  473:
+  474:     def codegen_combo_kernel(self, combo_kernel_node):
+  475:         subkernel_nodes = combo_kernel_node.get_subkernel_nodes()
+  476:         custom_part_algorithm = combo_kernel_node.use_custom_partition_algo
+  477:         enable_autotune = combo_kernel_node.enable_autotune
+  478:         mixed_sizes = config.combo_kernel_allow_mixed_sizes > 1 or (
+  479:             config.combo_kernel_allow_mixed_sizes == 1 and custom_part_algorithm
+  480:         )
+  481:
+  482:         kernel_code_list = self.generate_combo_kernel_code(
+  483:             subkernel_nodes, custom_part_algorithm, enable_autotune, mixed_sizes,
+  484:         )
+  485:
+  486:         # Validate every partition before allocating buffers or emitting any
+  487:         # wrapper code. A failed check can then fall back to ordinary kernels.
+  488:         for src_code, kernel, _ in kernel_code_list:
+  489:             with V.set_kernel_handler(kernel):
+  490:                 self.make_ttir_for_check(src_code)
+  491:
+  492:         for src_code, kernel, node_group in kernel_code_list:
+  493:             subkernels = kernel.sub_kernels if isinstance(kernel, NPUComboKernel) else [kernel]
+  494:             for subkernel_node, subkernel in zip(node_group, subkernels):
+  495:                 with V.set_kernel_handler(subkernel):
+  496:                     for snode in subkernel_node.get_nodes():
+  497:                         snode.mark_run()
+  498:                 V.graph.removed_buffers |= subkernel.removed_buffers
+  499:                 V.graph.inplaced_to_remove |= subkernel.inplaced_to_remove
+  500:             kernel_name, _ = self.define_kernel(src_code, [combo_kernel_node], kernel, None)
+  501:             self.codegen_comment([combo_kernel_node], kernel_name)
+  502:             log.debug("ComboKernels: generated kernel %s.", kernel_name)
+  503:             kernel.call_kernel(kernel_name)
+  504:
+  505:         self.free_buffers_in_scheduler()
+  506:
+  507:     def generate_combo_kernel_code(
+  508:         self,
+  509:         subkernel_nodes: list[BaseSchedulerNode],
+  510:         custom_part_algorithm: bool,
+  511:         enable_autotune: bool,
+  512:         mixed_sizes: bool,
+  513:         only_gen_src_code: bool = False,
+  514:         per_subkernel_blocks: bool = False,
+  515:     ) -> list[tuple[str | None, Any, Any]]:
+  516:
+  517:         fused_node_lists = [node.get_nodes() for node in subkernel_nodes]
+  518:         subkernel_map, node_schedule_map = {}, {}
+  519:         for pn, nodes in zip(subkernel_nodes, fused_node_lists):
+  520:             _, (numel, rnumel) = max(nodes, key=lambda x: int(x.is_reduction())).group
+  521:             if npu_config.enable_welford:
+  522:                 numel = _canonical_group_size(numel)
+  523:                 rnumel = _canonical_group_size(rnumel)
+  524:             node_schedule = self.generate_node_schedule(nodes, numel, rnumel)
+  525:             tiling = self.select_tiling(node_schedule, numel, rnumel)
+  526:             features = NPUKernelFeatures(node_schedule, numel, rnumel)
+  527:             subkernel = NPUComboKernel.create_triton_kernel(
+  528:                 tiling,
+  529:                 features=features,
+  530:                 optimize_mask=not mixed_sizes,
+  531:             )
+  532:             subkernel_map[pn] = subkernel
+  533:             node_schedule_map[pn] = NodeInfo(
+  534:                 node_schedule=node_schedule,
+  535:                 tiling=tiling,
+  536:                 tiling_scores=None,
+  537:                 numel=numel,
+  538:                 rnumel=rnumel,
+  539:                 features=features,
+  540:                 is_persistent_reduction=subkernel.persistent_reduction,
+  541:             )
+  542:
+  543:         partitions = NPUComboKernel.horizontal_partition(
+  544:             nodes=subkernel_nodes,
+  545:             triton_scheduling=self,
+  546:             custom_algorithm=custom_part_algorithm,
+  547:             kernel_map=subkernel_map,
+  548:             node_info_map=node_schedule_map,
+  549:         )
+  550:         log.debug(
+  551:             "ComboKernels: %d nodes partitioned into %s groups",
+  552:             len(subkernel_nodes),
+  553:             [len(p) for p in partitions],
+  554:         )
+  555:         kernel_code_list = []
+  556:         for node_group in partitions:
+  557:             if len(node_group) == 1:
+  558:                 # ABI partitioning constructed a potential combo subkernel.
+  559:                 # It is discarded here, so exclude it from emitted-kernel metrics.
+  560:                 metrics.generated_kernel_count -= 1
+  561:                 if only_gen_src_code:
+  562:                     # The 2.13 benchmark caller reuses the node's cached timing.
+  563:                     kernel_code_list.append((None, None, node_group))
+  564:                 else:
+  565:                     node_info = node_schedule_map[node_group[0]]
+  566:                     kernel = self.kernel_type(node_info.tiling, features=node_info.features)
+  567:                     self.codegen_node_schedule_with_kernel(node_info.node_schedule, kernel)
+  568:                     with V.set_kernel_handler(kernel):
+  569:                         src_code = kernel.codegen_kernel()
+  570:                     kernel_code_list.append((src_code, kernel, node_group))
+  571:                 continue
+  572:
+  573:             fused_node_lists = [node.get_nodes() for node in node_group]
+  574:             kernel = NPUComboKernel(
+  575:                 triton_kernel_cls=self.kernel_type,
+  576:                 enable_autotune=enable_autotune,
+  577:                 mixed_sizes=mixed_sizes,
+  578:                 per_subkernel_blocks=per_subkernel_blocks,
+  579:             )
+  580:
+  581:             for pn, nodes in zip(node_group, fused_node_lists):
+  582:                 self.codegen_node_schedule_with_kernel(
+  583:                     node_schedule_map[pn].node_schedule,
+  584:                     kernel.create_sub_kernel(subkernel_map[pn]),
+  585:                 )
+  586:
+  587:             # Defer graph updates and mark_run until every partition passes
+  588:             # make_ttir_for_check in codegen_combo_kernel.
+  589:
+  590:             src_code = kernel.codegen_kernel()
+  591:             kernel_code_list.append((src_code, kernel, node_group))
+  592:         return kernel_code_list
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:284-305
+
+  284:         def _calculate_split_blocks(
+  285:                 cls, kernel: "ComboKernel", code: IndentedBuffer
+  286:         ) -> None:
+  287:             split_numels_list = []
+  288:             for i, sub_kernel in enumerate(kernel.sub_kernels):
+  289:                 if len(sub_kernel.split_axis) == 0:
+  290:                     split_numels_list.append(None)
+  291:                     continue
+  292:                 tree = sub_kernel.split_axis[0]
+  293:                 simplified_tree_numel = V.graph.sizevars.simplify(tree.length)
+  294:                 if isinstance(simplified_tree_numel, (Integer, int)):
+  295:                     split_numel = int(simplified_tree_numel)
+  296:                 else:
+  297:                     split_numel = f"{tree.name}_numel_{i}"
+  298:                 split_numels_list.append(split_numel)
+  299:
+  300:             for i in range(len(split_numels_list)):
+  301:                 if split_numels_list[i] is None:
+  302:                     block_str = "1"
+  303:                 else:
+  304:                     block_str = (
+  305:                         f"tl.cdiv({split_numels_list[i]}, {kernel.block_args[0]})"
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:367-382
+
+  367:         for sub_kernel in self.sub_kernels:
+  368:             # TODO: we assume all sub_kernels have the same block size
+  369:             for tree in sub_kernel.split_axis:
+  370:                 if tree.is_reduction and (
+  371:                     not sub_kernel.inside_reduction or sub_kernel.persistent_reduction
+  372:                 ):
+  373:                     continue
+  374:                 if tree.prefix == "x" and sub_kernel.no_x_dim:
+  375:                     continue
+  376:                 block_names[f"{tree.name.upper()}BLOCK"] = tree.length
+  377:         self.block_args = list(block_names.keys())
+  378:
+  379:         return [SizeArg(name, length) for name, length in block_names.items()]
+  380:
+  381:     def codegen_kernel(self, name: Optional[str] = None) -> str:
+  382:         heuristics_list, size_hints_list = [], []
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/simd.py:3504-3548
+
+ 3504:     def _stitch_no_bench_combo_config(
+ 3505:         chosen_configs: list[Any], chosen_nodes: list[Any]
+ 3506:     ) -> Any:
+ 3507:         import triton
+ 3508:
+ 3509:         def block_keys(cfg: Any) -> list[str]:
+ 3510:             return [k for k in cfg.kwargs if k.endswith("BLOCK")]
+ 3511:
+ 3512:         def node_total_bytes(snode: Any) -> int:
+ 3513:             return sum(
+ 3514:                 V.graph.get_dep_size_hint(d, count_bytes=True)
+ 3515:                 for d in itertools.chain(
+ 3516:                     snode.read_writes.reads, snode.read_writes.writes
+ 3517:                 )
+ 3518:             )
+ 3519:
+ 3520:         # Heaviest subkernel by total memory traffic dominates runtime; its
+ 3521:         # config is authoritative for the combo. Its num_warps, num_stages,
+ 3522:         # and non-BLOCK kwargs (HIP backend options like waves_per_eu) apply
+ 3523:         # combo-wide. Per-subkernel BLOCK kwargs are suffixed (XBLOCK_0, ...).
+ 3524:         winner_idx = max(
+ 3525:             range(len(chosen_configs)),
+ 3526:             key=lambda i: node_total_bytes(chosen_nodes[i]),
+ 3527:         )
+ 3528:         winner_cfg = chosen_configs[winner_idx]
+ 3529:
+ 3530:         stitched_kwargs: dict[str, Any] = {
+ 3531:             f"{key}_{i}": int(cfg.kwargs[key])
+ 3532:             for i, cfg in enumerate(chosen_configs)
+ 3533:             for key in block_keys(cfg)
+ 3534:         }
+ 3535:         stitched_kwargs.update(
+ 3536:             {
+ 3537:                 key: value
+ 3538:                 for key, value in winner_cfg.kwargs.items()
+ 3539:                 if not key.endswith("BLOCK")
+ 3540:             }
+ 3541:         )
+ 3542:
+ 3543:         return triton.Config(
+ 3544:             stitched_kwargs,
+ 3545:             num_warps=int(winner_cfg.num_warps),
+ 3546:             num_stages=int(winner_cfg.num_stages),
+ 3547:         )
+ 3548:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/simd.py:3644-3731
+
+ 3644:                 no_bench_mode = (
+ 3645:                     per_subkernel_blocks
+ 3646:                     and not enable_autotune
+ 3647:                     and not only_gen_src_code
+ 3648:                 )
+ 3649:                 fusion_pns: list[Any] = []
+ 3650:                 fusion_configs: list[Any] = []
+ 3651:                 carve_out_pns: list[Any] = []
+ 3652:                 if no_bench_mode:
+ 3653:                     for pn in node_group:
+ 3654:                         configs, probe_kernel = self._probe_subkernel_heuristic(
+ 3655:                             node_schedule_map[pn]
+ 3656:                         )
+ 3657:                         if torch.version.hip:
+ 3658:                             fuse_ok = configs and not probe_kernel.autotune_hints
+ 3659:                         else:
+ 3660:                             fuse_ok = configs and len(configs) <= 2
+ 3661:                         if fuse_ok:
+ 3662:                             fusion_pns.append(pn)
+ 3663:                             fusion_configs.append(configs[0])
+ 3664:                         else:
+ 3665:                             carve_out_pns.append(pn)
+ 3666:                     if len(fusion_pns) < 2:
+ 3667:                         fusion_pns = []
+ 3668:                         fusion_configs = []
+ 3669:                         carve_out_pns = list(node_group)
+ 3670:                 else:
+ 3671:                     fusion_pns = list(node_group)
+ 3672:
+ 3673:                 if len(fusion_pns) >= 2:
+ 3674:                     kernel = ComboKernel(
+ 3675:                         triton_kernel_cls=self.kernel_type,
+ 3676:                         enable_autotune=enable_autotune,
+ 3677:                         mixed_sizes=mixed_sizes,
+ 3678:                         per_subkernel_blocks=per_subkernel_blocks,
+ 3679:                     )
+ 3680:                     for pn in fusion_pns:
+ 3681:                         node_info = node_schedule_map[pn]
+ 3682:                         subkernel = ComboKernel.create_triton_kernel(
+ 3683:                             node_info.tiling,
+ 3684:                             features=node_info.features,
+ 3685:                             optimize_mask=not mixed_sizes,
+ 3686:                             triton_kernel_cls=self.kernel_type,
+ 3687:                             tiling_scores=node_info.tiling_scores,
+ 3688:                             per_subkernel_blocks=per_subkernel_blocks,
+ 3689:                         )
+ 3690:                         self.process_kernel(
+ 3691:                             kernel.create_sub_kernel(subkernel),
+ 3692:                             node_info.node_schedule,
+ 3693:                             only_gen_src_code,
+ 3694:                         )
+ 3695:
+ 3696:                     if no_bench_mode and fusion_configs:
+ 3697:                         kernel.no_bench_stitched_config = (
+ 3698:                             self._stitch_no_bench_combo_config(
+ 3699:                                 fusion_configs, fusion_pns
+ 3700:                             )
+ 3701:                         )
+ 3702:
+ 3703:                     src_code = kernel.codegen_kernel()
+ 3704:                     # pyrefly: ignore [bad-argument-type]
+ 3705:                     kernel_code_list.append((src_code, kernel, fusion_pns))
+ 3706:
+ 3707:                 for pn in carve_out_pns:
+ 3708:                     co_src_code, co_kernel = self._codegen_standalone_kernel(
+ 3709:                         node_schedule_map[pn], only_gen_src_code
+ 3710:                     )
+ 3711:                     # pyrefly: ignore [bad-argument-type]
+ 3712:                     kernel_code_list.append((co_src_code, co_kernel, [pn]))
+ 3713:         # pyrefly: ignore [bad-return]
+ 3714:         return kernel_code_list
+ 3715:
+ 3716:     def codegen_combo_kernel(self, combo_kernel_node):
+ 3717:         subkernel_nodes = combo_kernel_node.get_subkernel_nodes()
+ 3718:         custom_part_algorithm = combo_kernel_node.use_custom_partition_algo
+ 3719:         enable_autotune = combo_kernel_node.enable_autotune
+ 3720:         mixed_sizes = config.combo_kernel_allow_mixed_sizes > 1 or (
+ 3721:             config.combo_kernel_allow_mixed_sizes == 1 and custom_part_algorithm
+ 3722:         )
+ 3723:
+ 3724:         per_subkernel_blocks = combo_kernel_node.per_subkernel_blocks
+ 3725:
+ 3726:         kernel_code_list = self.generate_combo_kernel_code(
+ 3727:             subkernel_nodes,
+ 3728:             custom_part_algorithm,
+ 3729:             enable_autotune,
+ 3730:             mixed_sizes,
+ 3731:             per_subkernel_blocks=per_subkernel_blocks,

@@ -1,0 +1,545 @@
+{
+  "node": "test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels",
+  "diagnostic_only": true,
+  "changes_original_results": false,
+  "opened_software_gate": false,
+  "torch": "2.13.0+cpu",
+  "torch_git": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "torch_npu": "2.13.0.dev20261113",
+  "torch_npu_git": "44555141711c0c825c5a201e303dcadad1f5fcb4",
+  "triton": "3.6.0",
+  "events": [
+    {
+      "kind": "schedule-before-combo",
+      "nodes": [
+        {
+          "name": "op0_op1",
+          "type": "FusedSchedulerNode",
+          "group": "(device(type='npu', index=0), ((8192,), (1024,)))",
+          "min_order": 0,
+          "max_order": 1,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            }
+          ]
+        },
+        {
+          "name": "op2",
+          "type": "SchedulerNode",
+          "group": "(device(type='npu', index=0), (1, (8192,)))",
+          "min_order": 2,
+          "max_order": 2,
+          "origins": [
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            }
+          ]
+        },
+        {
+          "name": "op3",
+          "type": "SchedulerNode",
+          "group": "(device(type='npu', index=0), ((1024,), (8192,)))",
+          "min_order": 3,
+          "max_order": 3,
+          "origins": [
+            {
+              "name": "sum_2",
+              "target": "aten.sum.dim_IntList"
+            }
+          ]
+        },
+        {
+          "name": "op4_op5",
+          "type": "FusedSchedulerNode",
+          "group": "(device(type='npu', index=0), (1, (2048,)))",
+          "min_order": 4,
+          "max_order": 5,
+          "origins": [
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            }
+          ]
+        },
+        {
+          "name": "op6_op7",
+          "type": "FusedSchedulerNode",
+          "group": "(device(type='npu', index=0), (1, (2048,)))",
+          "min_order": 6,
+          "max_order": 7,
+          "origins": [
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "schedule-after-combo",
+      "nodes": [
+        {
+          "name": "op0_op1_op3_op4_op5_op6_op7",
+          "type": "ForeachKernelSchedulerNode",
+          "group": "(device(type='npu', index=0), ((Expr(combo_kernel),),))",
+          "min_order": 0,
+          "max_order": 7,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            }
+          ]
+        },
+        {
+          "name": "op2",
+          "type": "SchedulerNode",
+          "group": "(device(type='npu', index=0), (1, (8192,)))",
+          "min_order": 2,
+          "max_order": 2,
+          "origins": [
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "partition-input",
+      "members": [
+        {
+          "node": {
+            "name": "op0_op1",
+            "type": "FusedSchedulerNode",
+            "group": "(device(type='npu', index=0), (8192, 1024))",
+            "min_order": 0,
+            "max_order": 1,
+            "origins": [
+              {
+                "name": "sum_1",
+                "target": "aten.sum.dim_IntList"
+              },
+              {
+                "name": "sum_3",
+                "target": "aten.sum.default"
+              }
+            ]
+          },
+          "kernel": {
+            "type": "NPUIndexTritonKernel",
+            "npu_kernel_type": "simt_template",
+            "inside_reduction": true,
+            "persistent_reduction": true,
+            "axes": [
+              {
+                "name": "x0",
+                "length": "8192",
+                "split": true,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": false
+              },
+              {
+                "name": "r1",
+                "length": "1024",
+                "split": false,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": true
+              }
+            ]
+          }
+        },
+        {
+          "node": {
+            "name": "op3",
+            "type": "SchedulerNode",
+            "group": "(device(type='npu', index=0), (1024, 8192))",
+            "min_order": 3,
+            "max_order": 3,
+            "origins": [
+              {
+                "name": "sum_2",
+                "target": "aten.sum.dim_IntList"
+              }
+            ]
+          },
+          "kernel": {
+            "type": "NPUIndexTritonKernel",
+            "npu_kernel_type": "simt_template",
+            "inside_reduction": true,
+            "persistent_reduction": false,
+            "axes": [
+              {
+                "name": "x0",
+                "length": "1024",
+                "split": true,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": false
+              },
+              {
+                "name": "r1",
+                "length": "8192",
+                "split": false,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": true
+              }
+            ]
+          }
+        },
+        {
+          "node": {
+            "name": "op4_op5",
+            "type": "FusedSchedulerNode",
+            "group": "(device(type='npu', index=0), (1, 2048))",
+            "min_order": 4,
+            "max_order": 5,
+            "origins": [
+              {
+                "name": "sum_4",
+                "target": "aten.sum.default"
+              },
+              {
+                "name": "sum_4",
+                "target": "aten.sum.default"
+              }
+            ]
+          },
+          "kernel": {
+            "type": "NPUIndexTritonKernel",
+            "npu_kernel_type": "simt_template",
+            "inside_reduction": true,
+            "persistent_reduction": true,
+            "axes": [
+              {
+                "name": "r0",
+                "length": "2048",
+                "split": false,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": true
+              }
+            ]
+          }
+        },
+        {
+          "node": {
+            "name": "op6_op7",
+            "type": "FusedSchedulerNode",
+            "group": "(device(type='npu', index=0), (1, 2048))",
+            "min_order": 6,
+            "max_order": 7,
+            "origins": [
+              {
+                "name": "sum_5",
+                "target": "aten.sum.default"
+              },
+              {
+                "name": "sum_5",
+                "target": "aten.sum.default"
+              }
+            ]
+          },
+          "kernel": {
+            "type": "NPUIndexTritonKernel",
+            "npu_kernel_type": "simt_template",
+            "inside_reduction": true,
+            "persistent_reduction": true,
+            "axes": [
+              {
+                "name": "r0",
+                "length": "2048",
+                "split": false,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "partition-output",
+      "groups": [
+        [
+          "op0_op1"
+        ],
+        [
+          "op4_op5",
+          "op6_op7"
+        ],
+        [
+          "op3"
+        ]
+      ]
+    },
+    {
+      "kind": "defined-kernel",
+      "name": "triton_per_fused_0",
+      "source": "defined-0.py",
+      "nodes": [
+        {
+          "name": "op0_op1_op3_op4_op5_op6_op7",
+          "type": "ForeachKernelSchedulerNode",
+          "group": "(device(type='npu', index=0), ((Expr(combo_kernel),),))",
+          "min_order": 0,
+          "max_order": 7,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            }
+          ]
+        }
+      ],
+      "kernel": {
+        "type": "NPUIndexTritonKernel",
+        "npu_kernel_type": "simt_template",
+        "inside_reduction": true,
+        "persistent_reduction": true,
+        "axes": [
+          {
+            "name": "x0",
+            "length": "8192",
+            "split": true,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": false
+          },
+          {
+            "name": "r1",
+            "length": "1024",
+            "split": false,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": true
+          }
+        ]
+      }
+    },
+    {
+      "kind": "defined-kernel",
+      "name": "triton_per_fused_1",
+      "source": "defined-1.py",
+      "nodes": [
+        {
+          "name": "op0_op1_op3_op4_op5_op6_op7",
+          "type": "ForeachKernelSchedulerNode",
+          "group": "(device(type='npu', index=0), ((Expr(combo_kernel),),))",
+          "min_order": 0,
+          "max_order": 7,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            }
+          ]
+        }
+      ],
+      "kernel": "NPUComboKernel"
+    },
+    {
+      "kind": "defined-kernel",
+      "name": "triton_red_fused_2",
+      "source": "defined-2.py",
+      "nodes": [
+        {
+          "name": "op0_op1_op3_op4_op5_op6_op7",
+          "type": "ForeachKernelSchedulerNode",
+          "group": "(device(type='npu', index=0), ((Expr(combo_kernel),),))",
+          "min_order": 0,
+          "max_order": 7,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_4",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "sum_5",
+              "target": "aten.sum.default"
+            }
+          ]
+        }
+      ],
+      "kernel": {
+        "type": "NPUIndexTritonKernel",
+        "npu_kernel_type": "simt_template",
+        "inside_reduction": true,
+        "persistent_reduction": false,
+        "axes": [
+          {
+            "name": "x0",
+            "length": "1024",
+            "split": true,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": false
+          },
+          {
+            "name": "r1",
+            "length": "8192",
+            "split": false,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": true
+          }
+        ]
+      }
+    },
+    {
+      "kind": "defined-kernel",
+      "name": "triton_red_fused_sum_3",
+      "source": "defined-3.py",
+      "nodes": [
+        {
+          "name": "op2",
+          "type": "SchedulerNode",
+          "group": "(device(type='npu', index=0), (1, (8192,)))",
+          "min_order": 2,
+          "max_order": 2,
+          "origins": [
+            {
+              "name": "sum_3",
+              "target": "aten.sum.default"
+            }
+          ]
+        }
+      ],
+      "kernel": {
+        "type": "NPUIndexTritonKernel",
+        "npu_kernel_type": "simt_template",
+        "inside_reduction": true,
+        "persistent_reduction": false,
+        "axes": [
+          {
+            "name": "r0",
+            "length": "8192",
+            "split": true,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": true
+          }
+        ]
+      }
+    }
+  ],
+  "outcome": "exception",
+  "error_type": "AssertionError",
+  "error": "Scalars are not equal!\n\nExpected 3 but got 4.\nAbsolute difference: 1\nRelative difference: 0.3333333333333333\n\nTo execute this test, run the following from the base repo dir:\n    python test_combo_kernels.py ComboKernelTests.test_fuse_mix_order_reductions_combo_kernels\n\nThis message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0",
+  "traceback": "Traceback (most recent call last):\n  File \"<diagnostic-workspace>/diagnose_roots_v2.py\", line 223, in main\n    method()\n  File \"<site-packages>/torch/testing/_internal/common_utils.py\", line 3553, in wrapper\n    method(*args, **kwargs)\n  File \"<test-root>/test_combo_kernels.py\", line 356, in test_fuse_mix_order_reductions_combo_kernels\n    self.assertEqual(torch._inductor.metrics.generated_kernel_count, 3)\n  File \"<site-packages>/torch/testing/_internal/common_utils.py\", line 4571, in assertEqual\n    raise error_metas.pop()[0].to_error(  # type: ignore[index]\nAssertionError: Scalars are not equal!\n\nExpected 3 but got 4.\nAbsolute difference: 1\nRelative difference: 0.3333333333333333\n\nTo execute this test, run the following from the base repo dir:\n    python test_combo_kernels.py ComboKernelTests.test_fuse_mix_order_reductions_combo_kernels\n\nThis message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n",
+  "generated_kernel_count": 4,
+  "seconds": 20.51
+}

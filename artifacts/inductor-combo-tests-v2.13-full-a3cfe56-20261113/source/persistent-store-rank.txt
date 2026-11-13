@@ -1,0 +1,129 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:3115-3154
+
+ 3115:     # for creat constant tensor, if have two axis, constant=tl.full([1,1]) else  tl.full([1])
+ 3116:     def triton_tensor_ndim(self):
+ 3117:         if self._use_contiguous_sum_layout():
+ 3118:             return len(self.golden_var_list) - self.numof_reduction_axis() + 1
+ 3119:         if self.numof_reduction_axis() > 1:
+ 3120:             if self.is_contiguous_reduction():
+ 3121:                 return len(self.tiling_axis) - self.numof_reduction_axis() + 1
+ 3122:             return 1
+ 3123:
+ 3124:         return len(self.tiling_axis)
+ 3125:
+ 3126:     #  indexing.mask_str is None , see varmean_test.py
+ 3127:     def store_reduction(self, name: str, index: sympy.Expr, value: CSEVariable):
+ 3128:         if not self.inside_reduction:
+ 3129:             raise RuntimeError("assert self.inside_reduction")
+ 3130:
+ 3131:         self.inside_reduction = False
+ 3132:         indexing = self.indexing(index, block_ptr=True)
+ 3133:         self.inside_reduction = True
+ 3134:         var = self.args.output(name)
+ 3135:         if isinstance(indexing, BlockPtrOptions):
+ 3136:             self.post_loop_store.writeline(
+ 3137:                 DeferredLine(
+ 3138:                     name,
+ 3139:                     self.codegen_block_ptr_store_line(
+ 3140:                         name,
+ 3141:                         indexing,
+ 3142:                         indexing.format(var),
+ 3143:                         value,
+ 3144:                         f", boundary_check={indexing.boundary_check()!r}",
+ 3145:                     ),
+ 3146:                 )
+ 3147:             )
+ 3148:         else:
+ 3149:             if not isinstance(indexing, IndexingOptions):
+ 3150:                 raise RuntimeError("assert isinstance(indexing, IndexingOptions)")
+ 3151:             line = f"tl.store({var} + ({indexing.index_str} ), {value}, {indexing.mask_str})"
+ 3152:             if self.numof_reduction_axis() > 1 and not self.persistent_reduction:
+ 3153:                 line = f"tl.store({var} + ({indexing.index_str} + tl.arange(0,1) ), {value}, {indexing.mask_str})"
+ 3154:             self.post_loop_store.writeline(DeferredLine(name, line))
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:4020-4048
+
+ 4020:     # and add to shape to value
+ 4021:     def reduction_resize(self, value, dim):
+ 4022:         if self.vectorized_welford_axis is not None:
+ 4023:             block_sub = f"{self.vectorized_welford_axis.name.upper()}BLOCK_SUB"
+ 4024:             broadcast_dims = [block_sub] + ["1"] * max(
+ 4025:                 self.vectorized_welford_rank() - 1, 0
+ 4026:             )
+ 4027:             return f"{value}.reshape([{', '.join(broadcast_dims)}])"
+ 4028:
+ 4029:         ndims = self.triton_tensor_ndim()
+ 4030:         if ndims == 1:
+ 4031:             return f"triton_helpers.promote_to_tensor({value})"
+ 4032:
+ 4033:         if self.numof_reduction_axis() > 1 and self.is_contiguous_reduction():
+ 4034:             if not self.golden_var_list:
+ 4035:                 self.select_golden_varlist()
+ 4036:
+ 4037:             dense_list = self.reduce_analysis.dense_size_list()
+ 4038:             for i, axis in enumerate(reversed(self.golden_var_list)):
+ 4039:                 if axis.name[0] == "r":
+ 4040:                     dense_list[i] = "1"
+ 4041:
+ 4042:             expand_str = ", ".join(dense_list)
+ 4043:             return f"{value}.reshape({expand_str})"
+ 4044:
+ 4045:         dense_list = self.dense_size_list()
+ 4046:         dense_list[dim] = "1"
+ 4047:         contiguous_reduction = self.is_contiguous_reduction()
+ 4048:         if contiguous_reduction:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_helpers.py:84-88
+
+   84:
+   85: @triton.jit
+   86: def promote_to_tensor(x):
+   87:     # Addition promotes to tensor for us
+   88:     return x + tl.zeros((1,), tl.int1)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/npu_combined_scheduling.py:240-279
+
+  240:     def codegen_combo_kernel(self, node) -> None:
+  241:         subkernel_nodes = node.get_subkernel_nodes()
+  242:         # The 2.13 scheduler always attempts index codegen first; the legacy
+  243:         # linear-mode configuration and its predicate no longer exist.
+  244:         kernel_count = metrics.generated_kernel_count
+  245:         original_groups = [
+  246:             (snode, snode.group)
+  247:             for subkernel_node in subkernel_nodes
+  248:             for snode in subkernel_node.get_nodes()
+  249:         ]
+  250:         original_groups.extend(
+  251:             (subkernel_node, subkernel_node.group)
+  252:             for subkernel_node in subkernel_nodes
+  253:         )
+  254:         try:
+  255:             group_fn = self._nolinear_triton_scheduling.group_fn
+  256:             for subkernel_node in subkernel_nodes:
+  257:                 # get_nodes() is flattened, whereas get_subkernel_nodes()
+  258:                 # contains fused groups. Zipping them assigns later groups
+  259:                 # the dimensions of an unrelated node as soon as one
+  260:                 # subkernel has multiple nodes.
+  261:                 subnodes = subkernel_node.get_nodes()
+  262:                 for snode in subnodes:
+  263:                     snode.group = (snode.group[0], group_fn(snode._sizes))
+  264:                 subkernel_node.group = max(
+  265:                     subnodes, key=lambda snode: int(snode.is_reduction())
+  266:                 ).group
+  267:             return self._triton_scheduling.codegen_combo_kernel(node)
+  268:         except Exception:
+  269:             metrics.generated_kernel_count = kernel_count
+  270:             for snode, group in original_groups:
+  271:                 snode.group = group
+  272:             log.debug(
+  273:                 "linear combo codegen for node %s raise error, "
+  274:                 "fallback to individual kernels",
+  275:                 node,
+  276:                 exc_info=True,
+  277:             )
+  278:
+  279:         # Recompute lifetimes at the ordinary kernel boundaries, just as the

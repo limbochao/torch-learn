@@ -1,0 +1,75 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:909-946
+
+  909:                 "Installed triton version too old, please upgrade")
+  910:
+  911:         src_attrs = compile_meta["configs"][0] if compile_meta.get(
+  912:             "configs", None) else None
+  913:         src = ASTSource(self.fn, compile_meta["signature"],
+  914:                         compile_meta["constants"], src_attrs)
+  915:         cc_warp_size = 32
+  916:         target = GPUTarget(
+  917:             compile_meta["device_type"],
+  918:             compile_meta["cc"],
+  919:             cc_warp_size,
+  920:         )
+  921:         options = {
+  922:             "num_warps": compile_meta["num_warps"],
+  923:             "num_stages": compile_meta["num_stages"],
+  924:             "debug": compile_meta["debug"],
+  925:             "multibuffer": cfg_kwargs.get('multibuffer', False),
+  926:             "compile_mode": compile_meta['compile_mode'],
+  927:             "enable_vf_fusion": cfg_kwargs.get('enable_vf_fusion', False),
+  928:         }
+  929:         options = self.parse_triton_ascend_options(
+  930:             self.triton_meta.get("npu_compile_options", {}),
+  931:             options,
+  932:         )
+  933:         options = self.parse_triton_ascend_options(cfg_kwargs, options)
+  934:
+  935:         from triton.compiler.code_generator import ast_to_ttir
+  936:         from triton.compiler.compiler import make_backend
+  937:         from triton._C.libtriton import ir
+  938:         from triton._C.libtriton.ascend import ir as ascend_ir
+  939:
+  940:         backend = make_backend(target)
+  941:         extra_options = src.parse_options()
+  942:         options = backend.parse_options(dict(options or dict(), **extra_options))
+  943:         context = ir.context()
+  944:         ir.load_dialects(context)
+  945:         ascend_ir.load_dialects(context)
+  946:         return ast_to_ttir(self.fn, src, context, options, {}, {})
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1216-1245
+
+ 1216:             compile_meta["device_type"],
+ 1217:             compile_meta["cc"],
+ 1218:             cc_warp_size,
+ 1219:         )
+ 1220:
+ 1221:         options = {
+ 1222:             "num_warps": compile_meta["num_warps"],
+ 1223:             "num_stages": compile_meta["num_stages"],
+ 1224:             "debug": compile_meta["debug"],
+ 1225:             "compile_mode": compile_meta['compile_mode'],
+ 1226:         }
+ 1227:
+ 1228:         options = self.parse_triton_ascend_options(
+ 1229:             self.triton_meta.get("npu_compile_options", {}),
+ 1230:             options,
+ 1231:         )
+ 1232:         options = self.parse_triton_ascend_options(cfg_kwargs, options)
+ 1233:         if (
+ 1234:             bool(self.inductor_meta.get("enable_auto_blockify", False))
+ 1235:             or self.inductor_meta.get("requires_no_linear_block_remap") is True
+ 1236:         ):
+ 1237:             # Older Triton-Ascend versions expose this option. Newer versions
+ 1238:             # manage block mapping internally, so the option is filtered out.
+ 1239:             options = self.parse_triton_ascend_options(
+ 1240:                 {"enable_auto_blockify": True}, options
+ 1241:             )
+ 1242:
+ 1243:         compile_kwargs = {
+ 1244:             "target": target,
+ 1245:             "options": options,

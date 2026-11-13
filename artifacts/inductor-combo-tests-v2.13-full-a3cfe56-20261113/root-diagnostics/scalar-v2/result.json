@@ -1,0 +1,326 @@
+{
+  "node": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast",
+  "diagnostic_only": true,
+  "changes_original_results": false,
+  "opened_software_gate": false,
+  "torch": "2.13.0+cpu",
+  "torch_git": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "torch_npu": "2.13.0.dev20261113",
+  "torch_npu_git": "44555141711c0c825c5a201e303dcadad1f5fcb4",
+  "triton": "3.6.0",
+  "events": [
+    {
+      "kind": "schedule-before-combo",
+      "nodes": [
+        {
+          "name": "op0",
+          "type": "SchedulerNode",
+          "group": "(device(type='npu', index=0), ((2048,), (2048,)))",
+          "min_order": 0,
+          "max_order": 0,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            }
+          ]
+        },
+        {
+          "name": "op1_op3_op4",
+          "type": "FusedSchedulerNode",
+          "group": "(device(type='npu', index=0), (1, (2048,)))",
+          "min_order": 1,
+          "max_order": 3,
+          "origins": [
+            {
+              "name": "add",
+              "target": "aten.add.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "schedule-after-combo",
+      "nodes": [
+        {
+          "name": "op0_op1_op3_op4",
+          "type": "ForeachKernelSchedulerNode",
+          "group": "(device(type='npu', index=0), ((Expr(combo_kernel),),))",
+          "min_order": 0,
+          "max_order": 3,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "add",
+              "target": "aten.add.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "partition-input",
+      "members": [
+        {
+          "node": {
+            "name": "op0",
+            "type": "SchedulerNode",
+            "group": "(device(type='npu', index=0), (2048, 2048))",
+            "min_order": 0,
+            "max_order": 0,
+            "origins": [
+              {
+                "name": "sum_1",
+                "target": "aten.sum.dim_IntList"
+              }
+            ]
+          },
+          "kernel": {
+            "type": "NPUIndexTritonKernel",
+            "npu_kernel_type": "simt_template",
+            "inside_reduction": true,
+            "persistent_reduction": true,
+            "axes": [
+              {
+                "name": "x0",
+                "length": "2048",
+                "split": true,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": false
+              },
+              {
+                "name": "r1",
+                "length": "2048",
+                "split": false,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": true
+              }
+            ]
+          }
+        },
+        {
+          "node": {
+            "name": "op1_op3_op4",
+            "type": "FusedSchedulerNode",
+            "group": "(device(type='npu', index=0), (1, 2048))",
+            "min_order": 1,
+            "max_order": 3,
+            "origins": [
+              {
+                "name": "add",
+                "target": "aten.add.Tensor"
+              },
+              {
+                "name": "sum_2",
+                "target": "aten.sum.default"
+              },
+              {
+                "name": "mul",
+                "target": "aten.mul.Tensor"
+              },
+              {
+                "name": "sum_2",
+                "target": "aten.sum.default"
+              },
+              {
+                "name": "mul",
+                "target": "aten.mul.Tensor"
+              }
+            ]
+          },
+          "kernel": {
+            "type": "NPUIndexTritonKernel",
+            "npu_kernel_type": "simt_template",
+            "inside_reduction": true,
+            "persistent_reduction": true,
+            "axes": [
+              {
+                "name": "r0",
+                "length": "2048",
+                "split": false,
+                "tiling": true,
+                "no_loop": false,
+                "reduction": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "partition-output",
+      "groups": [
+        [
+          "op0"
+        ],
+        [
+          "op1_op3_op4"
+        ]
+      ]
+    },
+    {
+      "kind": "defined-kernel",
+      "name": "triton_per_fused_0",
+      "source": "defined-0.py",
+      "nodes": [
+        {
+          "name": "op0_op1_op3_op4",
+          "type": "ForeachKernelSchedulerNode",
+          "group": "(device(type='npu', index=0), ((Expr(combo_kernel),),))",
+          "min_order": 0,
+          "max_order": 3,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "add",
+              "target": "aten.add.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            }
+          ]
+        }
+      ],
+      "kernel": {
+        "type": "NPUIndexTritonKernel",
+        "npu_kernel_type": "simt_template",
+        "inside_reduction": true,
+        "persistent_reduction": true,
+        "axes": [
+          {
+            "name": "x0",
+            "length": "2048",
+            "split": true,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": false
+          },
+          {
+            "name": "r1",
+            "length": "2048",
+            "split": false,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": true
+          }
+        ]
+      }
+    },
+    {
+      "kind": "defined-kernel",
+      "name": "triton_per_fused_1",
+      "source": "defined-1.py",
+      "nodes": [
+        {
+          "name": "op0_op1_op3_op4",
+          "type": "ForeachKernelSchedulerNode",
+          "group": "(device(type='npu', index=0), ((Expr(combo_kernel),),))",
+          "min_order": 0,
+          "max_order": 3,
+          "origins": [
+            {
+              "name": "sum_1",
+              "target": "aten.sum.dim_IntList"
+            },
+            {
+              "name": "add",
+              "target": "aten.add.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            },
+            {
+              "name": "sum_2",
+              "target": "aten.sum.default"
+            },
+            {
+              "name": "mul",
+              "target": "aten.mul.Tensor"
+            }
+          ]
+        }
+      ],
+      "kernel": {
+        "type": "NPUIndexTritonKernel",
+        "npu_kernel_type": "simt_template",
+        "inside_reduction": true,
+        "persistent_reduction": true,
+        "axes": [
+          {
+            "name": "r0",
+            "length": "2048",
+            "split": true,
+            "tiling": true,
+            "no_loop": false,
+            "reduction": true
+          }
+        ]
+      }
+    }
+  ],
+  "outcome": "exception",
+  "error_type": "AssertionError",
+  "error": "Scalars are not equal!\n\nExpected 1 but got 2.\nAbsolute difference: 1\nRelative difference: 1.0\n\nTo execute this test, run the following from the base repo dir:\n    python test_combo_kernels.py ComboKernelTests.test_combo_kernel_scalar_store_broadcast\n\nThis message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0",
+  "traceback": "Traceback (most recent call last):\n  File \"<diagnostic-workspace>/diagnose_roots_v2.py\", line 223, in main\n    method()\n  File \"<site-packages>/torch/testing/_internal/common_utils.py\", line 3553, in wrapper\n    method(*args, **kwargs)\n  File \"<test-root>/test_combo_kernels.py\", line 376, in test_combo_kernel_scalar_store_broadcast\n    self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)\n  File \"<site-packages>/torch/testing/_internal/common_utils.py\", line 4571, in assertEqual\n    raise error_metas.pop()[0].to_error(  # type: ignore[index]\nAssertionError: Scalars are not equal!\n\nExpected 1 but got 2.\nAbsolute difference: 1\nRelative difference: 1.0\n\nTo execute this test, run the following from the base repo dir:\n    python test_combo_kernels.py ComboKernelTests.test_combo_kernel_scalar_store_broadcast\n\nThis message can be suppressed by setting PYTORCH_PRINT_REPRO_ON_FAILURE=0\n",
+  "generated_kernel_count": 2,
+  "seconds": 8.87
+}

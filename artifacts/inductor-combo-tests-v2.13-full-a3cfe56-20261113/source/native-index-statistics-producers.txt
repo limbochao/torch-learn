@@ -1,0 +1,318 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:5498-5551
+
+ 5498:             def load(name: str, index: sympy.Expr) -> CSEVariable:
+ 5499:                 if name in self.cse.invalidated_stores:
+ 5500:                     # A load from an invalidated store requires us to
+ 5501:                     # keep the actual buffer around
+ 5502:                     V.kernel.must_keep_buffers.add(name)
+ 5503:                 if free_symbol_is_type(index, NPUSymT.TMP):
+ 5504:                     return self.indirect_load(name, index)
+ 5505:                 store_cache = self.cse.store_cache
+ 5506:                 if name in store_cache:
+ 5507:                     return self.load(name, index)
+ 5508:                 out = self.load(name, index)
+ 5509:                 # count load that is not in the store_cache, and also not in the
+ 5510:                 # cse cache.
+ 5511:                 if out.use_count == 1:
+ 5512:                     self.num_load += 1
+ 5513:                 return out
+ 5514:
+ 5515:             @staticmethod
+ 5516:             def _update_store_cache(name: str, value: CSEVariable):
+ 5517:                 self.cse.store_cache[name] = value
+ 5518:                 if self.current_node and name in V.graph.name_to_buffer:
+ 5519:                     buf = self.current_node.get_output(name)
+ 5520:                     for other_name in buf.get_mutations():
+ 5521:                         self.cse.store_cache[other_name] = value
+ 5522:
+ 5523:             @staticmethod
+ 5524:             def store(
+ 5525:                 name: str, index: sympy.Expr, value: CSEVariable, mode: StoreMode = None
+ 5526:             ) -> None:
+ 5527:                 self.store_buffer_names.add(name)
+ 5528:                 if mode is None:
+ 5529:                     CSEProxy._update_store_cache(name, value)
+ 5530:                 if name not in V.graph.removed_buffers:
+ 5531:                     return self.store(name, index, value, mode=mode)
+ 5532:                 return None  # type: ignore[return-value]
+ 5533:
+ 5534:             @staticmethod
+ 5535:             def store_reduction(name: str, index: sympy.Expr, value: CSEVariable):
+ 5536:                 self.store_buffer_names.add(name)
+ 5537:                 CSEProxy._update_store_cache(name, value)
+ 5538:
+ 5539:                 if name not in V.graph.removed_buffers:
+ 5540:                     return self.store_reduction(name, index, value)
+ 5541:                 raise RuntimeError("store_reduction")
+ 5542:
+ 5543:             @staticmethod
+ 5544:             def reduction(
+ 5545:                 dtype: torch.dtype,
+ 5546:                 src_dtype: torch.dtype,
+ 5547:                 reduction_type: ReductionType,
+ 5548:                 value: CSEVariable | tuple[CSEVariable, ...],
+ 5549:             ) -> CSEVariable | tuple[CSEVariable, ...]:
+ 5550:                 self.num_reduction += 1
+ 5551:                 return self.reduction(dtype, src_dtype, reduction_type, value)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:3205-3222
+
+ 3205:         advance_block_ptr = None
+ 3206:         if isinstance(selected_indexing, BlockPtrOptions):
+ 3207:             block_ptr, advance_block_ptr, other = self.codegen_block_ptr(
+ 3208:                 name, var, selected_indexing
+ 3209:             )
+ 3210:             # block_ptr stores don't do implicit casting
+ 3211:             line = self.codegen_block_ptr_store_line(
+ 3212:                 name, selected_indexing, block_ptr, value, other
+ 3213:             )
+ 3214:         elif mode is None:
+ 3215:             line = f"tl.store({var} + ({index_str}), {value_str}, {mask_str})"
+ 3216:             if self.numof_reduction_axis() > 1 and not self.persistent_reduction:
+ 3217:                 line = f"tl.store({var} + ({index_str} + tl.arange(0,1) ), {value_str}, {selected_indexing.mask_str})"
+ 3218:
+ 3219:         elif mode == "atomic_add":
+ 3220:             line = f"tl.atomic_add({var} + ({index_str}), {value_str}, {selected_indexing.mask_str})"
+ 3221:         else:
+ 3222:             raise NotImplementedError(f"store mode={mode}")
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:4688-4767
+
+ 4688:     def load(self, name: str, index: sympy.Expr):
+ 4689:         """
+ 4690:         NPU implement of load ops, add nddma feature
+ 4691:         """
+ 4692:
+ 4693:         var = self.args.input(name)
+ 4694:         original_index = index
+ 4695:         store_cache = self.cse.store_cache
+ 4696:         if name in store_cache:
+ 4697:             result_var = store_cache[name]
+ 4698:             return result_var
+ 4699:
+ 4700:         index_analyze = IndexAnalysis(self, index)
+ 4701:         nddma_switch = npu_config.nddma_switch
+ 4702:         indirect_indexing = self.is_indirect_indexing(index)
+ 4703:         indexing = self.indexing(
+ 4704:             index,
+ 4705:             nddma=nddma_switch,
+ 4706:             block_ptr=True,
+ 4707:             index_analyze=index_analyze,
+ 4708:         )
+ 4709:         has_rindex = indexing.has_rindex()
+ 4710:         has_tmpmask = indexing.has_tmpmask()
+ 4711:         ep = ""
+ 4712:         if (
+ 4713:             V.graph.get_dtype(name) != torch.bool
+ 4714:             and indexing.has_mask()
+ 4715:             and (
+ 4716:                 self._load_other is not None
+ 4717:                 or has_tmpmask
+ 4718:                 or has_rindex
+ 4719:                 or isinstance(original_index, sympy.Integer)
+ 4720:             )
+ 4721:         ):
+ 4722:             # Honor ops.masked's fill value, including signed zero. Retain the
+ 4723:             # NPU bool-load exclusion; its explicit fill is selected below.
+ 4724:             if self._load_other is not None:
+ 4725:                 other = f", other={constant_repr(self._load_other)}"
+ 4726:             else:
+ 4727:                 other = ", other=0.0"
+ 4728:         else:
+ 4729:             other = ""
+ 4730:
+ 4731:         advance_block_ptr = None
+ 4732:         append_broadcast = None
+ 4733:         dtype = V.graph.get_dtype(name)
+ 4734:         shape: BlockShapeType = None
+ 4735:
+ 4736:         if V.graph.is_unspec_arg(name):
+ 4737:             line = var
+ 4738:             shape = ()
+ 4739:         else:
+ 4740:             if isinstance(indexing, BlockPtrOptions):
+ 4741:                 block_ptr, advance_block_ptr, other = self.codegen_block_ptr(
+ 4742:                     name, var, indexing, other
+ 4743:                 )
+ 4744:                 line = f"tl.load({block_ptr}{other}{ep})"
+ 4745:                 # add needed size=1 dimensions
+ 4746:                 line = triton_reshape(
+ 4747:                     line, indexing.block_shape, indexing.reshape_suffix
+ 4748:                 )
+ 4749:                 shape = indexing.final_shape
+ 4750:             elif isinstance(original_index, sympy.Integer):
+ 4751:                 # Retain NPU's size-1 tensor pointer rather than importing
+ 4752:                 # upstream's scalar load/broadcast path. A masked read must
+ 4753:                 # guard the access itself: NPU indexing can retain negative
+ 4754:                 # boundary offsets. The mask can expand the result shape, so
+ 4755:                 # only unmasked reads use the original size-1 reshape below.
+ 4756:                 if indexing.has_mask():
+ 4757:                     line = (
+ 4758:                         f"tl.load({var} + tl.arange(0,1) + ({original_index}), "
+ 4759:                         f"{indexing.mask_str}{ep}{other})"
+ 4760:                     )
+ 4761:                     shape = indexing.expand_shape or NPUTritonSymbols.get_block_shape(indexing.index)
+ 4762:                 else:
+ 4763:                     line = f"tl.load({var} + tl.arange(0,1) +  ({original_index}))"
+ 4764:                     full_list = ["1"] * (len(self.tiling_axis) if self.tiling_axis else 1)
+ 4765:                     append_broadcast = f"[{', '.join(full_list)} ]"
+ 4766:                     shape = ()
+ 4767:             else:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:4150-4169
+
+ 4150:         uses_uint8_storage = use_uint8_triton_storage_for_cuda_float8_e4m3fn(dtype, var)
+ 4151:         indexing = self.indexing(
+ 4152:             index,
+ 4153:             block_ptr=True,
+ 4154:             tma_compatibility_checker=self.tma_compatibility_checker_cls(
+ 4155:                 self,
+ 4156:                 dtype,
+ 4157:                 for_store=False,
+ 4158:                 force=getattr(self, "tma_load_for_template_epilogue", False),
+ 4159:                 buffer_name=name,
+ 4160:             ),
+ 4161:         )
+ 4162:
+ 4163:         if isinstance(indexing, IndexingOptions) and self._has_stride1_on_rdim(
+ 4164:             indexing.index
+ 4165:         ):
+ 4166:             self.has_load_with_contiguous_rdim = True
+ 4167:
+ 4168:         has_rindex = indexing.has_rindex()
+ 4169:         has_tmpmask = indexing.has_tmpmask()
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:4368-4377
+
+ 4368:             block_ptr=mode is None,
+ 4369:             tma_compatibility_checker=tma_compatibility_checker,
+ 4370:             mask_constant_index=mode == "atomic_add",
+ 4371:         )
+ 4372:
+ 4373:         if isinstance(indexing, IndexingOptions) and self._has_stride1_on_rdim(
+ 4374:             indexing.index
+ 4375:         ):
+ 4376:             self.stores_with_contiguous_rdim.append(name)
+ 4377:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:4400-4416
+
+ 4400:             #
+ 4401:             # With broadcast:
+ 4402:             # tl.store(out_ptr0 + (tl.full([1, 1], 0, tl.int32).broadcast_to((XBLOCK,1)), tmp4, xmask)
+ 4403:             indexing_str = indexing.index_str
+ 4404:             if is_sympy_integer_like(index):
+ 4405:                 if self.is_combo_kernel:
+ 4406:                     # In combo kernels, broadcast pointer to match mask shape
+ 4407:                     indexing_str += f".broadcast_to({self.dense_size_str()})"
+ 4408:                 elif value.shape is not None and not all(
+ 4409:                     str(x) == "1" for x in value.shape
+ 4410:                 ):
+ 4411:                     value_shape = ", ".join(map(str, value.shape))
+ 4412:                     indexing_str += f".broadcast_to({value_shape})"
+ 4413:             line = f"tl.store({var} + ({indexing_str}), {value}, {indexing.mask_str})"
+ 4414:         elif mode == "atomic_add":
+ 4415:             self.atomic_add_found = True
+ 4416:             indexing_str = indexing.index_str
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6234-6263
+
+ 6234:
+ 6235:     def inductor_meta_per_kernel(self) -> dict[str, Any]:
+ 6236:         """
+ 6237:         Used by both standalone codegen_kernel() and ComboKernel.combo_grid_meta()
+ 6238:         (which calls this on each sub_kernel).
+ 6239:         """
+ 6240:         out: dict[str, Any] = {
+ 6241:             "no_x_dim": self.no_x_dim,
+ 6242:             "atomic_add_found": self.atomic_add_found,
+ 6243:             "num_load": self.num_load,
+ 6244:             "num_store": self.num_store,
+ 6245:             "num_reduction": self.num_reduction,
+ 6246:             # Triton will not accept an OrderedSet for autotune_hints
+ 6247:             "autotune_hints": set(self.autotune_hints),  # noqa: set_linter
+ 6248:         }
+ 6249:         if self.mix_order_reduction:
+ 6250:             out["RSPLIT_SIZE"] = self.rsplit_size
+ 6251:         if config.deterministic or config.test_configs.force_filter_reduction_configs:
+ 6252:             out["has_loadstore_with_contiguous_rdim"] = (
+ 6253:                 self.has_load_with_contiguous_rdim
+ 6254:                 or self.has_store_with_contiguous_rdim
+ 6255:             )
+ 6256:         if self.tma_min_block_sizes:
+ 6257:             out["tma_min_block_sizes"] = self.tma_min_block_sizes
+ 6258:         if self.tiling_scores:
+ 6259:             out["tiling_scores"] = self.tiling_scores
+ 6260:         if self.min_xblock is not None:
+ 6261:             out["min_xblock"] = self.min_xblock
+ 6262:         if self.min_rblock is not None:
+ 6263:             out["min_rblock"] = self.min_rblock
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:3924-3981
+
+ 3924:     def codegen_block_ptr_store_line(self, name, indexing, block_ptr, value, other=""):
+ 3925:         # Stores require an explicit broadcast. We do this in two phases:
+ 3926:         #  1. Broadcast the operand to the final shape of the range trees, e.g. [ZBLOCK,
+ 3927:         #     YBLOCK, XBLOCK]. This protects against implicit broadcasting from loads.
+ 3928:         #  2. In case the block pointer / tma descriptor has different dimensionality, broadcast/reshape the
+ 3929:         #     result to the shape of the pointer.
+ 3930:         value = f"tl.broadcast_to({value}, {indexing.final_shape})"
+ 3931:
+ 3932:         # If the strides have a non-trivial sort, then the broadcasting dims
+ 3933:         # need to be reverted for the store
+ 3934:         # Also see indexing.codegen_broadcast_and_reshape
+ 3935:         broadcast_shape = indexing.broadcast_shape
+ 3936:         broadcasting_dims = indexing.broadcasting_dims
+ 3937:         if not indexing.stride_sorter.is_identity:
+ 3938:             broadcast_shape = indexing.stride_sorter.revert(broadcast_shape)
+ 3939:             broadcasting_dims = indexing.stride_sorter.revert(broadcasting_dims)
+ 3940:
+ 3941:         # These dims no longer need broadcasting.
+ 3942:         for idx, (dim, broadcast_dim) in enumerate(
+ 3943:             zip(indexing.final_shape, broadcast_shape)
+ 3944:         ):
+ 3945:             if V.graph.sizevars.statically_known_equals(dim, broadcast_dim):
+ 3946:                 broadcasting_dims[idx] = False
+ 3947:
+ 3948:         if not indexing.stride_sorter.is_identity:
+ 3949:             indexing.broadcasting_dims = indexing.stride_sorter.sort(broadcasting_dims)
+ 3950:         else:
+ 3951:             indexing.broadcasting_dims = broadcasting_dims
+ 3952:
+ 3953:         value, _ = indexing.codegen_broadcast_and_reshape(
+ 3954:             value,
+ 3955:             indexing.final_shape,
+ 3956:             indexing.block_shape,
+ 3957:             allow_implicit=False,
+ 3958:             for_store=True,
+ 3959:         )
+ 3960:
+ 3961:         # workaround https://github.com/triton-lang/triton/issues/2814
+ 3962:         # For inplace-mutated buffers, the block pointer element type comes from
+ 3963:         # the actual tensor (input buffer), which may differ from the graph dtype
+ 3964:         # (e.g., _to_copy produces fp32 values stored into a bf16 gradient buffer).
+ 3965:         store_dtype = V.graph.get_dtype(name)
+ 3966:         if name in self.args.inplace_buffers:
+ 3967:             buf = self.args.inplace_buffers[name]
+ 3968:             if not isinstance(buf, RemovedArg):
+ 3969:                 store_dtype = V.graph.get_dtype(buf.other_names[0])
+ 3970:         value = f"{value}.to({triton_store_type(store_dtype)})"
+ 3971:         if isinstance(indexing, BlockPtrOptions):
+ 3972:             return f"tl.store({block_ptr}, {value}{other})"
+ 3973:         return self.codegen_descriptor_store_line(block_ptr, indexing, value)
+ 3974:
+ 3975:     def codegen_descriptor_load_line(self, block_descriptor, indexing):
+ 3976:         """Generate the descriptor load line. Override for backend customization."""
+ 3977:         return f"{block_descriptor}.load({V.kernel.index_to_str(indexing.offsets)})"
+ 3978:
+ 3979:     def codegen_descriptor_store_line(self, block_ptr, indexing, value):
+ 3980:         """Generate the descriptor store line. Override for backend customization."""
+ 3981:         return f"{block_ptr}.store({V.kernel.index_to_str(indexing.offsets)}, {value})"

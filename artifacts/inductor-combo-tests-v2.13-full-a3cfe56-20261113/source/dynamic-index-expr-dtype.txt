@@ -1,0 +1,106 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:344-394
+
+  344:     @classmethod
+  345:     def index_expr(cls, expr, dtype):
+  346:         indexing = V.kernel.indexing(expr, block_ptr=False, is_index_expr=True)
+  347:         if not isinstance(indexing, IndexingOptions):
+  348:             raise TypeError(f"not a IndexingOptions : {indexing}")
+  349:
+  350:         shape: BlockShapeType
+  351:         if indexing.expand_shape:
+  352:             shape = indexing.expand_shape
+  353:         else:
+  354:             shape = NPUTritonSymbols.get_block_shape(indexing.index)
+  355:         # Our sympy expr printing casts to the current kernel index dtype.
+  356:         # we only respect non int32-int64 dtypes and otherwise use current kernel indexing dtype
+  357:         index_dtype = torch.int32 if V.kernel.index_dtype == "tl.int32" else torch.int64
+  358:         dtype = dtype if dtype not in (torch.int32, torch.int64) else index_dtype
+  359:         var = V.kernel.cse.generate(
+  360:             V.kernel.compute,
+  361:             indexing.index_str,
+  362:             bounds=get_bounds_index_expr(expr),
+  363:             dtype=dtype,
+  364:             shape=shape,
+  365:         )
+  366:
+  367:         if dtype not in (torch.int32, torch.int64):
+  368:             var = V.kernel.cse.generate(
+  369:                 V.kernel.compute,
+  370:                 cls.to_dtype(var, dtype),
+  371:                 dtype=upcast_compute_type(dtype),
+  372:                 shape=shape,
+  373:             )
+  374:         else:
+  375:             # We are not always consistent in enforcing that the output of the index expr printing
+  376:             # results in the indexing dtype. So if we detect that we have an input which might type promote
+  377:             # to a dtype other than indexing dtype, add a cast.
+  378:             # Trying to avoid
+  379:             dtype = index_dtype
+  380:             for index_var in expr.free_symbols:
+  381:                 if symbol_is_type(index_var, NPUSymT.TMP):
+  382:                     dtype = torch.promote_types(
+  383:                         dtype, V.kernel.cse.varname_map[index_var.name].dtype
+  384:                     )
+  385:
+  386:             if dtype != index_dtype:
+  387:                 var = V.kernel.cse.generate(
+  388:                     V.kernel.compute,
+  389:                     cls.to_dtype(var, index_dtype),
+  390:                     dtype=index_dtype,
+  391:                     shape=var.shape,
+  392:                 )
+  393:
+  394:         var.mask_vars = indexing.mask_vars
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:2389-2426
+
+ 2389:     @classmethod
+ 2390:     def index_expr(cls, expr, dtype):
+ 2391:         expr = _materialize_trunc_to_float_expr(expr, dtype)
+ 2392:         indexing = V.kernel.indexing(
+ 2393:             expr, block_ptr=False, tma_compatibility_checker=None
+ 2394:         )
+ 2395:         assert isinstance(indexing, IndexingOptions)
+ 2396:
+ 2397:         shape: BlockShapeType
+ 2398:         if indexing.expand_shape:
+ 2399:             shape = indexing.expand_shape
+ 2400:         else:
+ 2401:             shape = TritonSymbols.get_block_shape(indexing.index)
+ 2402:
+ 2403:         # Our sympy expr printing casts to the current kernel index dtype.
+ 2404:         # We only respect non-int32/int64 dtypes and otherwise use the current
+ 2405:         # kernel indexing dtype. Value-producing uses that need to preserve an
+ 2406:         # explicit int dtype are rewritten to value_expr.
+ 2407:         index_dtype = V.kernel.get_index_dtype_as_torch_dtype()
+ 2408:         if dtype in (torch.int32, torch.int64):
+ 2409:             cast_dtype = index_dtype
+ 2410:         else:
+ 2411:             cast_dtype = dtype
+ 2412:         # to_dtype(..., use_compute_types=True) emits the Triton compute type
+ 2413:         # for cast_dtype, so the CSE metadata must be derived from that same
+ 2414:         # dtype.  For example, float16 requests emit tl.float32 when compute
+ 2415:         # upcasting is enabled, and should be recorded as torch.float32.
+ 2416:         output_dtype = upcast_compute_type(cast_dtype)
+ 2417:         var = V.kernel.cse.generate(
+ 2418:             V.kernel.compute,
+ 2419:             cls.to_dtype(f"({indexing.index_str})", cast_dtype),
+ 2420:             dtype=output_dtype,
+ 2421:             bounds=get_bounds_index_expr(expr),
+ 2422:             shape=shape,
+ 2423:         )
+ 2424:
+ 2425:         var.mask_vars = indexing.mask_vars
+ 2426:         return var
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/dtype_propagation.py:240-245
+
+  240:
+  241:     @staticmethod
+  242:     def index_expr(expr: sympy.Expr, dtype: torch.dtype) -> torch.dtype:
+  243:         # `index_expr` is for indexing-style uses: the kernel's chosen
+  244:         # indexing dtype wins over the requested int dtype. For uses that
+  245:         # must honor `dtype` (e.g. user-typed `arange(int64)` whose result

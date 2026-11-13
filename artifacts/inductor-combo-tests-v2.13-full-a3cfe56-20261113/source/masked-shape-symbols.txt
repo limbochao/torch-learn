@@ -1,0 +1,107 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/ir.py:1849-1898
+
+ 1849:
+ 1850:     return NPUKernelType(inductor_indirect_memory_mode)
+ 1851:
+ 1852:
+ 1853: def get_masked_index(loop_body, find_node, node_map):
+ 1854:     all_load_indexs = set()  # noqa: set_linter
+ 1855:     for node in find_node.args:
+ 1856:         if not isinstance(node, torch.fx.node.Node):
+ 1857:             continue
+ 1858:         if node.name not in node_map:
+ 1859:             continue
+ 1860:         node = node_map[node.name]
+ 1861:         if "get_index" in node.name:
+ 1862:             return {node.args[0]}  # noqa: set_linter
+ 1863:         if "masked_subblock" in node.name:
+ 1864:             continue
+ 1865:         else:
+ 1866:             load_index = get_masked_index(loop_body, node, node_map)
+ 1867:         if load_index:
+ 1868:             all_load_indexs = all_load_indexs.union(load_index)
+ 1869:
+ 1870:     return all_load_indexs
+ 1871:
+ 1872:
+ 1873: def generate_masked_indexing(self):
+ 1874:     masked_index_ids = {}  # noqa: set_linter
+ 1875:
+ 1876:     def add_masked_indexing_from_graph(graph):
+ 1877:         node_map = {}  # noqa: set_linter
+ 1878:         for node in graph.nodes:
+ 1879:             node_map[node.name] = node
+ 1880:             if "masked_subblock" in node.name:
+ 1881:                 masked_indexs = get_masked_index(self, node.args[0], node_map)
+ 1882:                 masked_index_ids[node.name] = masked_indexs
+ 1883:
+ 1884:     add_masked_indexing_from_graph(self.root_block.graph)
+ 1885:     for subblock in self.subblocks.values():
+ 1886:         add_masked_indexing_from_graph(subblock.graph)
+ 1887:
+ 1888:     for subblock_name in self.subblocks:
+ 1889:         if subblock_name in masked_index_ids:
+ 1890:             # change indexid to real index
+ 1891:             index_vars = set()  # noqa: set_linter
+ 1892:             for index_id in masked_index_ids[subblock_name]:
+ 1893:                 coefficients_dict = self.indexing[index_id].as_coefficients_dict()
+ 1894:                 for key in coefficients_dict:
+ 1895:                     if not key.free_symbols:
+ 1896:                         continue
+ 1897:                     index_vars = index_vars.union(key.free_symbols)
+ 1898:             self.masked_indexing[subblock_name] = {str(var) for var in index_vars}  # noqa: set_linter
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:309-323
+
+  309:         current_subblock = None
+  310:         for block_name, body_var in body.body.subblocks.items():
+  311:             if body_var == body:
+  312:                 current_subblock = block_name
+  313:                 break
+  314:
+  315:         before_subblock_axis = V.kernel.current_subblock_axis
+  316:         current_subblock_axis = body.body.masked_indexing.get(current_subblock, {})
+  317:         V.kernel.current_subblock_axis = before_subblock_axis | current_subblock_axis
+  318:         if mask is not None:
+  319:             for sub_axis in current_subblock_axis:
+  320:                 mask = ops.logical_and(mask, sympy_index_symbol(sub_axis + "_mask"))
+  321:         with V.kernel.mask_loads(mask, value=value) as new_mask:
+  322:             result = body()
+  323:         V.kernel.current_subblock_axis = before_subblock_axis
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:4963-4979
+
+ 4963:         mask_vars = OrderedSet()  # noqa: set_linter
+ 4964:         for var in index_vars:
+ 4965:             if not (isinstance(var, sympy.Symbol)):
+ 4966:                 raise RuntimeError("assert isinstance(var, sympy.Symbol)")
+ 4967:
+ 4968:             has_rindex = has_rindex or var.name.startswith("r")
+ 4969:             if override_mask:
+ 4970:                 pass
+ 4971:             elif var.name.startswith("tmp"):
+ 4972:                 # indirect indexing
+ 4973:                 cse_var = self.cse.varname_map[var.name]
+ 4974:                 mask_vars.update(cse_var.mask_vars)
+ 4975:             elif var.name.startswith(("s", "ps", "i")):
+ 4976:                 pass
+ 4977:             else:
+ 4978:                 # var is one of xN, yN or rN
+ 4979:                 mask_vars.add(f"{var.name}_mask")
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/utils.py:1249-1258
+
+ 1249: def sympy_index_symbol(name: str) -> sympy.Symbol:
+ 1250:     """
+ 1251:     Used to generate an integer-nonnegative symbol.
+ 1252:     """
+ 1253:     # This should never be used for creating shape/stride symbols, as those
+ 1254:     # should all be allocated before Inductor.
+ 1255:     assert name[0] != "s"
+ 1256:     # NOTE: shape symbols are positive (> 0), but index variables are only
+ 1257:     # non-negative (>= 0).
+ 1258:     return sympy.Symbol(name, integer=True, nonnegative=True)
