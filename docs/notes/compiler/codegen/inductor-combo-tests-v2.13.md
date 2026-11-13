@@ -72,21 +72,102 @@ foreach 继续沿用 NPU 功能适配：保留数值、mutation 和梯度检查�
 实际使用物理卡 1、3；安装文件 574 项哈希仍与参考报告一致，未修改生产代码或正式测试。
 正式统计保持 **74 PASS、14 FAIL、17 SKIP**；诊断 PASS 不直接改写合并 jobs/CSV 的状态。
 
-| 结论类别 | 方法数 | 需要适配的能力与设计判断 |
-| --- | ---: | --- |
-| 生成/观测缺口 | 10 FAIL | 图阶段 metadata 2、统计 7、provenance 1；符合共享块设计，搬移 helper 尚未接主 bench |
-| 逐成员归约 hint | 1 FAIL | 行/列 Combo 已存在；补真实成员分类，优化消费需接 native 搜索 |
-| 社区大 RBLOCK 标志 | 1 FAIL | 本 NPU 输入已整行 persistent；改验 native 候选和资源 |
-| FTZ 数值能力 | 1 FAIL / 2 实例 | 基本算术保留非正规数，指数数学入口需跨层适配，不能只补字段 |
-| WRN 严格降峰前提 | 1 FAIL | 实际无 Combo 候选，首次峰值含 192 MiB autotune 缓存；需换可控测试图与测量范围 |
-| 独立分块/配置/coordesc | 8 SKIP | 当前未实现；需扩展成员参数、候选与 dispatch，不能以共享块替代 |
-| 平台或模板范围 | 7 SKIP / 8 实例 | TMA 1、PDL 3、HIP 1、XPU 1、CPU-filter 1；原协议或范围无需照搬 |
-| 旧 foreach 禁用 | 2 SKIP | 保留原断言、非空节点与数值的定向诊断已通过；仅需取消旧禁用 |
+下表按具体字段或功能列出作用、当前缺口和适配内容，编号链接到后文的源码与验证证据。
+一行对应一项字段或功能；同一方法可涉及多行，同一字段也可由多个方法检查。
+方法数仍为 **14 FAIL、17 SKIP**，不按表格行数重复计数。
+
+**FAIL：图阶段策略、逐成员归约分类与算子来源映射**
+
+| 具体字段或功能 | 作用 | 当前缺口与适配内容 | 方法 |
+| --- | --- | --- | --- |
+| `optimize_mem=True` | 推理图向 autotuner 传递内存优化策略 | 未显式导出，缺省 True 与本例期望一致；需补图阶段字段 | [F03](#f03) |
+| `optimize_mem=False` | 训练前向图禁用该内存优化策略 | 字段缺失后属性默认 True；需按训练前向阶段显式传 False | [F04](#f04) |
+| `reduction_hint_i` | 各成员 INNER/OUTER 归约分类，供候选选择 | 双成员 Combo 已有，仅传首成员 hint；需补真实分类，消费需接 native 搜索 | [F01](#f01) |
+| `disable_ftz` | 控制 FP32 非正规数是否冲零 | Combo 未导出字段，Triton-Ascend 无对应选项消费；exp/exp2 数学入口还需跨层适配 | [F05](#f05) |
+| kernel → FX 映射 | 将生成 kernel 追溯到 post-grad 算子 | hook 收到 `node=None` 外壳，跳过 origins；需按实际 partition 传成员叶子 | [F14](#f14) |
+
+F03、F04 检查的是**同一个 `optimize_mem` 字段的两种图阶段取值**，不是两种 metadata。
+统一取值为 `V.graph.is_inference or V.graph.is_backward`：推理/反向为 True，训练前向为 False。
+该策略用于 autotune 重试时保护会被原地修改的输入，并在 clone 可能增加设备峰值时选择 CPU 备份/恢复。
+当前 NPU 主 bench 直接 clone，CPU-copy/restore helper 尚未接入；补字段和接入真实搬移路径分别需要处理，
+现有证据未显示错误 CPU 搬移或训练输入污染。字段出口见 [E2][E2]，策略与实际调用见 [E5][E5]。
+F05 的基本算术已保留可表示的非正规数，指数数学路径的边界冲零需单独处理，不能仅补字段后判定数值能力已实现。
+
+**FAIL：逐成员操作统计、成本估算与报告**
+
+F06–F12 是 **7 个测试方法**，检查的字段和消费路径有重叠，不代表缺少 7 种独立统计。
+`inductor_meta_i` 是第 i 个成员的统计字典；当前 NPU 的 grid/split 信息和成员轴约束不能提供这些统计。
+下表把每个字段及不同消费出口分别列出。
+
+| 具体字段或出口 | 作用 | 当前缺口与适配内容 | 方法 |
+| --- | --- | --- | --- |
+| `inductor_meta_i` | 将统计与具体成员一一对应 | 缺逐成员字典；需统一普通 kernel/Combo 出口 | [F06](#f06)–[F09](#f09) |
+| `num_load` | 去掉缓存复用后的有效读取操作数 | NPU CSE 已计数，但普通/逐成员统计出口未导出真实值 | [F06](#f06)、[F07](#f07)、[F09](#f09) |
+| `num_store` | 有效写回操作数，含归约结果 | 普通/归约 store 漏计；需修计数与移除 store 的扣减 | [F06](#f06)、[F07](#f07)、[F09](#f09) |
+| `num_reduction` | 归约操作数，pointwise 成员应为 0 | NPU CSE 已计数，但未分别输出 sum/mean 等成员的实际值 | [F06](#f06)、[F07](#f07)、[F09](#f09) |
+| `autotune_hints` | 提示调优器补充特定候选配置 | 普通出口已有，Combo 顶层复用首成员；缺各成员自己的提示集合 | [F06](#f06)、[F09](#f09) |
+| `atomic_add_found` | 标记是否有原子加写回，供调优约束判断 | 未输出各成员的真实标记；需按实际 store 模式导出 | [F06](#f06)、[F09](#f09) |
+| `has_loadstore_with_contiguous_rdim` | 归约轴 stride=1 访问标志 | load 未更新，默认 False 不可信；需按实际地址推导 | [F08](#f08) |
+| `no_x_dim` | 是否没有社区 X 迭代维，影响 grid/分块 | NPU 已有 `no_x_dim_i`，含义却是无 split axis；需定义与普通 kernel 可比的 NPU 口径 | [F09](#f09) |
+| `tiling_scores` | 描述各轴访存合并评分，供 tile 候选评价 | 缺与普通 kernel 一致的 NPU 评分出口；需按 native 轴定义，有实际评分时导出 | [F09](#f09) |
+| benchmark 的 `kernel_num_gb` | 访问字节估算/1e9，供带宽计算 | 普通 kernel 已有值；Combo 缺成员聚合与 standalone 求和对照 | [F10](#f10) |
+| benchmark 的 `kernel_flop` | 浮点操作量估算，用于算力报告与成员成本对照 | 普通 NPU 未导出，Combo 也未聚合；standalone 字段缺失时求和为 0 不是有效基准 | [F10](#f10) |
+| profile 的 `kernel_num_gb` | 给带宽 profiler 提供 Combo 总访问量估算 | 缺按 profile 条件的聚合出口；仅 profile 时不输出 FLOP | [F11](#f11) |
+| benchmark 代码中的 `num_gb` | 与实测耗时相除，生成 GB/s 报告 | 模板收到整数 0，报告带宽为零；需传真实总估算，改成 0.0 不能修复报告 | [F12](#f12) |
+
+F06 检查三个 pointwise 成员，F07 检查 sum/mean 两个归约成员；两者都要输出各自的 load/store/reduction 计数。
+CSE（公共子表达式消除）会复用已计算或已读取的值，`num_load` 只计未复用的有效读取。
+主机重放一次有效 store 时，NPU 的 `num_store` 为 0，社区为 1；此处需要修计数，不能只补字段。
+F08 的连续归约访问标志用于确定性相关候选筛选；若要消费该标志，需接到 NPU 自身的筛选规则。
+F09 另检查同一成员在 standalone/Combo 下的字段一致性，不能用两个空字典相等来证明统计完整。
+F11 仅开启 `profile_bandwidth=True`，要求总 GB 估算且不输出 FLOP；F12 则检查生成 benchmark 代码中的估算值。
+上述计数是生成操作的计数，GB/FLOP 是编译期成本估算，不是设备实测流量。
+例如 F10 原无 alias 的两个 1024 元素 FP32 pointwise 成员，按输入+输出估算共 **16384 bytes，即 1.6384e-5 GB**；
+该真实总估算应进入 Combo metadata 和 benchmark，而不是默认填 0。
+计数证据见 [E4][E4]，字段契约见 [E11][E11]，估算与报告出口见 [E12][E12]。
+
+**FAIL：需要调整测试检查口径的两项**
+
+| 方法 | 检查的功能及作用 | 当前证据与适配内容 |
+| --- | --- | --- |
+| [F02](#f02) | `add_persistent_rblock`：为 looped 归约追加大 R 候选 | 本输入已整行 persistent，R1 tile=4096；需查 native 候选与资源 |
+| [F13](#f13) | WRN 内存 gate：限制融合带来的峰值增加量 | gate 已存在，原图无 Combo 候选，首次峰值含 192 MiB autotune 缓存；需选有正 delta 的可控图并 warm 测量 |
+
+**SKIP：成员独立分块、默认配置与搜索，以及相关测试入口**
 
 “共享块”指一次 launch 的所有成员复用同名 runtime/constexpr tiling 参数；
 “独立分块”要求各成员有真实独立参数、候选与 dispatch 边界。
+以下 8 个方法的独立分块目标尚未实现；S05 还涉及独立的 ATen 布局转换与测试观测入口。
+
+| 具体功能 | 作用 | 当前缺口与适配内容 | 方法 |
+| --- | --- | --- | --- |
+| pointwise 成员独立 X 分块 | 不等长成员分别选择工作块大小 | 当前共用 X 参数；缺逐成员参数、候选和累计 dispatch 边界 | [S01](#s01) |
+| persistent 成员独立 X 分块 | 固定各自归约长度，独立选择行方向工作块 | 不同静态 R 已存在，X 仍共享；需增加独立 X 配置及 launch 映射 | [S02](#s02) |
+| persistent/regular 混合成员配置 | 在一次 launch 中协调不同归约模式的配置与执行 | 缺独立配置，当前又按模式分区；需设计合法的混合协调与资源校验 | [S03](#s03) |
+| 多轴/非连续归约成员独立 block | 各成员按真实归约轴划分 loop 与尾块 | 缺独立归约参数、候选及对应累积/mask；需沿用 NPU 轴语义实现 | [S04](#s04) |
+| 成员独立二维 tile | 八个布局转换成员分别选择二维工作块 | 当前 block ABI 共享；缺二维成员配置与地址/dispatch 对齐 | [S05](#s05) |
+| `channels_last` 转换 | 把 NCHW 转为所需布局 | 未符合目标格式时仅支持转 Contiguous；需 ATen 适配，已有目标格式可返回 | [S05](#s05) |
+| 实际 launch grid 对照 | 验证成员 tile/dispatch 与启动范围一致 | 需用 NPU launcher/profiler 真实记录替换 GPU 固定 grid | [S05](#s05) |
+| 无 benchmark 的 pointwise 默认配置 | 不计时时也能拼接各成员默认 X 分块 | 当前仅有共享默认值；缺逐成员 default_config 与 body/grid 的同源定义 | [S06](#s06) |
+| 无 benchmark 的 persistent 默认配置 | 保持 R 静态，分别选择各成员默认 X | 静态 R 已有；缺独立 X 默认值及累计 program 边界 | [S07](#s07) |
+| 逐成员 coordesc 搜索 | 每步只改变一个成员配置，并优先调最大成员 | 缺成员独立搜索坐标、调优顺序与完整配置评价；需先实现独立 block | [S08](#s08) |
+
+**SKIP：平台范围与旧测试禁用**
+
+| 具体检查目标 | 作用 | 当前排除原因与处理 | 方法 |
+| --- | --- | --- | --- |
+| CUDA TMA descriptor/block 协议 | 使用 SM90+ 的张量异步搬运及 descriptor 约束 | CUDA 专属协议实例，保留平台排除；NPU 搬运能力需按自身协议定义 | [S09](#s09) |
+| CUDA PDL 代码生成 | 生成 `launch_pdl` 与 GDC wait/launch-dependents 顺序 | CUDA SM90+ 的依赖启动协议，保留平台排除 | [S10](#s10) |
+| CUDA PDL pointwise 执行 | 检查不同尺寸激活成员的依赖启动与数值 | CUDA PDL 协议实例，保留平台排除 | [S11](#s11) |
+| CUDA PDL reduction 执行 | 在 PDL launch 下执行 sum/mean | 类级配置要求 CUDA PDL，保留平台排除；普通归约数值不覆盖该协议 | [S12](#s12) |
+| HIP 编译选项与 constexpr 分离 | 避免 `waves_per_eu` 等后端选项混入成员参数 | 两个实例都是 HIP 专属配置，保留平台排除；NPU 应检查自己的选项 | [S13](#s13) |
+| XPU 动态 persistent 归约实例 | 检查动态行数与 compile-time autotune | 来自 XPU 门控；对应 NPU 兼容计算已 PASS，无需新增动态归约功能 | [S14](#s14) |
+| CPU 节点的 Combo 过滤 | 保证 CPU 节点不参与 Combo 融合 | 当前 NPU 实例没有 CPU 节点，无法验证；由 CPU 实例保留过滤断言 | [S15](#s15) |
+| foreach 直接输入的依赖距离 | 检查非空节点的输入距离 min/max 为 0/0 | 旧无条件禁用；保留原断言和数值的诊断已通过，只需测试适配 | [S16](#s16) |
+| extern 后 foreach 的依赖距离 | 检查 mm 到消费者的依赖层数，整体 min=0、max≥1 | 旧无条件禁用；非空 schedule 和原断言诊断已通过，只需测试适配 | [S17](#s17) |
+
 “输入距离”是融合前从图输入开始的依赖边层数，group 的 min/max 汇总成员深度。
-GB/FLOP 是编译期成本估算；非正规数与 FTZ 的数值范围见 F05。
+S16/S17 的诊断不改变正式 SKIP 状态。非正规数与 FTZ 的数值范围见 F05。
 
 ### 代码与执行证据
 
@@ -351,7 +432,9 @@ axis_names 和 tiling_axis 是资源约束，不是操作统计。
 
 源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
 
-**测试目标：** 相同 relu/sigmoid 输入分别关闭/开启 Combo，逐成员统计与各 standalone kernel 一致。
+**测试目标：** 相同 relu/sigmoid 输入分别关闭/开启 Combo，逐成员字段与各 standalone kernel 一致。
+原比较范围是 `num_load`、`num_store`、`num_reduction`、`atomic_add_found`、`no_x_dim`、
+`autotune_hints`、`tiling_scores` 七个字段；其中 `tiling_scores` 仅在有实际评分时导出。
 
 **实际结果：** standalone 匹配到 2 组，Combo 的 inductor_meta_i 匹配到 0 组，列表长度 2 != 0。
 
