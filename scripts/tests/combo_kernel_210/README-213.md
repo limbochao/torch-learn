@@ -21,12 +21,12 @@
 
 ```bash
 conda activate pta_213_case
-ASCEND_RT_VISIBLE_DEVICES=3 python /path/to/torch-learn/scripts/tests/combo_kernel_210/run_plain_pytest.py \
+python /path/to/torch-learn/scripts/tests/combo_kernel_210/run_plain_pytest.py \
   --test-root /path/to/cases/v2.13.0/inductor_npu \
   --manifest /path/to/failed-only-manifest.json \
   --output /path/to/new-results --cache-root /path/to/new-cache \
   --test-commit <actual-test-commit> --npu-fix-commit <actual-overlay-commit> \
-  --devices 1,2,3,6 --foreach-functional
+  --devices 1,2,3 --foreach-functional
 ```
 
 不使用 overlay 时省略 `--npu-fix-commit`。选卡必须遵循本轮授权，示例不授予卡使用权限。
@@ -36,6 +36,33 @@ ASCEND_RT_VISIBLE_DEVICES=3 python /path/to/torch-learn/scripts/tests/combo_kern
 `--collect-only` 只收集；`--max-instances-per-method 2` 每个方法最多选两个代表参数。
 抽样 PASS 不代表完整泛化范围通过。输出目录必须不存在；默认每方法超时 3600 秒。
 设备异常可以换到获授权的卡重试，功能失败保留真实断言和原报告。
+
+## 2.10 PASS 重合范围的全量复测
+
+当前范围为既定 2.10 适配基线 PASS 的 60 个重合方法，
+不是 2.10 原生 54 方法清单。完整方法 manifest 和 pytest collection 保存在当前结果的证据目录。
+不使用 `--max-instances-per-method` 或 `--reuse`，重新收集并执行所有参数。
+多个进程共用获授权卡时，各进程使用独立的 `TORCHINDUCTOR_CACHE_DIR`、`TRITON_CACHE_DIR` 和输出目录。
+
+分片清单的 `only_nodes` 可以拆分同一方法，但合并时必须覆盖完整 collection，且实例不能重复。
+下载的证据目录包含 `full-collection/`、`results/<shard>/`、`shards.json`
+和记录执行前后测试文件哈希的 `test-source-validation.json` 后，执行：
+
+```bash
+python scripts/tests/combo_kernel_210/merge_full_shards.py --artifact artifacts/<full-run>
+```
+
+合并器拒绝未完成报告、源码变更、不同安装版本、缺失实例或重复实例。
+合并后的 `passed-nodeids.txt` 只包含实际 PASS，SKIP 单独记录。
+[2.13 PASS 清单](combo_native_213_passed_nodeids.txt) 用于 **2.13 NPU 测试目录**。
+2.10 原生清单保留原内容，执行方式见 [2.10 说明](README-native-210.md)。
+
+在 `Community-Use-Case-Testing/v2.13.0/inductor_npu` 中按 PASS 清单执行：
+
+```bash
+mapfile -t cases < /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt
+ASCEND_RT_VISIBLE_DEVICES=1 pytest -vs "${cases[@]}"
+```
 
 单例可在测试目录直接运行：
 

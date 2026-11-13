@@ -9,50 +9,75 @@ published: false
 <!-- combo-section:validation213:start -->
 ## 最新执行结果
 
-2026-11-12 完成 15 个修改源方法的定向验证，包含动态 grid、store mask 和各类 SKIP 条件。
+2026-11-13 在 NPU_A5 的 `pta_213_case` 环境全量复测 2.10 适配基线 PASS 的 60 个重合方法。
+重新收集并执行 **413 个参数实例**，结果为 **408 PASS、0 FAIL、5 SKIP**；
+方法结果为 **55 PASS、0 FAIL、5 SKIP**。本次没有抽样，也没有复用旧执行结果。
 
 | 范围 | PASS | FAIL | SKIP |
 | --- | ---: | ---: | ---: |
-| 本轮 15 个修改源方法及 15 个参数实例（最终结果） | 2 | 0 | 13 |
-| 合并历史结果的 105 个源方法 | 74 | 14 | 17 |
-| 合并历史结果的 314 个已选实例 | 281 | 15 | 18 |
-| 2.10 基线 PASS 的 60 个重合方法 | 55 | 0 | 5 |
+| 本次日构建全量复测的 60 个重合方法 | 55 | 0 | 5 |
+| 本次日构建全量复测的 413 个实例 | 408 | 0 | 5 |
+| 范围外的 45 个方法，沿用各自原报告 | 19 | 14 | 12 |
+| 范围外的 51 个实例，沿用各自原报告 | 23 | 15 | 13 |
+| 当前合并清单的 105 个方法 | 74 | 14 | 17 |
+| 当前合并清单的 464 个实例 | 431 | 15 | 18 |
 
-**11 月 12 日的正式定向验证仅覆盖 15 个修改方法，其余正式状态沿用参考报告。**
-11 月 13 日另完成 WRN、FTZ 及两个 foreach 方法的诊断，详见当前问题分析；诊断不改正式统计。
-14 个 FAIL 方法、15 个失败实例的正式状态沿用参考报告；本轮诊断不等同于原方法的正式复测。
-74 个 PASS 中有 14 个抽样 PASS；原清单 464 个泛化实例的 150 个未选择实例不计为 SKIP 或 PASS。
-2.10 重合对照仍是既定的 60 方法适配基线，与 54 方法原生清单口径不同。
-当前重合范围的 5 个 SKIP 为 4 个独立分块方法和 1 个 NPU CPU-filter 实例，不是计算错误。
+**最新日构建的设备复测范围是 60 个重合方法，不是整个 105 方法清单。**
+范围外的 45 个方法保留原验证来源，不能据此认定日构建仍有对应的 14 个失败方法。
+合并清单当前已覆盖全部 464 个实例，旧清单中的抽样缺口已在本次重合范围补齐。
+2.10 重合范围来自既定 60 方法适配基线，与 2.10 原生 54 方法清单不同。
 
-[用例 CSV](inductor-combo-tests-native-v2.13-sync-64dc85c.csv) 保持 116 行原顺序和五列。
-11 行嵌套函数随外层方法验证，不另计源方法数。PASS 的当前分析统一为“—”。
-本轮 13 个 SKIP 分别是独立分块待实现 8 个、CPU 过滤测试范围不适用 1 个、CUDA TMA/PDL 专属 4 个。
-另外 4 个 SKIP 沿用参考报告。SKIP 不计为功能实现或功能修复。
+### 实际验证版本
 
-动态 grid 从真实 launcher 观测启动范围，排除 autotune 的计时启动，
-检查两组尺寸的 X grid 不同、Y/Z 为 1，并保留数值检查。
-store mask 保留原输入数值检查，新增实际双成员 NPU Combo，检查两个分支的尾块边界及全部 store mask。
-**新增 store-mask 场景在用例内关闭 dtype 调试断言；相关 codegen 诊断问题仍未修复。**
-原标量输入仍被拆成三个普通 kernel，因此尚未覆盖社区原标量 Combo 写竞争路径，详见下文验证前提。
+- torch_npu：`2.13.0.dev20261113`，包提交 `44555141711c0c825c5a201e303dcadad1f5fcb4`。
+- PyTorch：`2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton `3.6.0`。
+- 设备：Ascend950PR；物理卡 1、2、3，每卡两个进程，缓存与日志分别隔离。
+- 测试快照：`e71a557c8748f4ff703462bc59bc18dac1cc0173`，目录 `v2.13.0/inductor_npu`。
+- 执行时间：北京时间 2026-11-13 12:15:02 至 14:21:26，原生 `python -m pytest -vs`。
 
-环境：NPU_A5/Ascend950PR，`pta_213_case`，PyTorch `2.13.0+cpu`、Triton `3.6.0`。
-基础 wheel 为 `torch_npu 2.13.0+git64dc85c`，实际 NPU Python 为既有 `d12230b556` 覆盖版本。
-本轮未修改生产代码或安装包；两阶段执行前后源码哈希一致，并与参考报告的 574 个安装文件哈希逐项一致。
-物理卡 1、3，使用独立缓存，执行原生 `python -m pytest -vs`，无自定义插件。
+本次未叠加 Python overlay，未修改生产代码或测试断言。
+与包提交对应的 194 个 NPU Inductor Python 文件逐项一致；安装的 Torch/NPU Inductor
+共 588 个 Python 文件在全部分片执行前后哈希一致，测试文件哈希也一致。
+卡 2 执行前显示 UB/RAS Alarm，但三卡基础计算检查及卡 2 全部正式测试均完成，没有执行错误。
+逐分片 JUnit 重新解析后与报告逐项一致，413 个实例无重复、无遗漏。
 
-测试分支 `fix/combo-213-npu-case-adaptation` 已推送本轮提交 `e71a557`。
-14 个方法的正式报告来自 `4acf77e`，store mask 最终报告来自 `64015d3`；
-这 14 个方法在最终提交中未改变。`e71a557` 相对最终验证版本仅修正诊断注释，执行 AST 一致。
-逐实例实际提交保存在合并证据 `jobs.json` 的 `validation` 中，源码核对见 `source-validation.json`。
+### 全量 PASS 和 SKIP 的具体范围
 
-foreach 继续沿用 NPU 功能适配：保留数值、mutation 和梯度检查。
-其抽样 PASS 不证明全部参数通过，也不证明 FOREACH 分组融合。
+| 文件 | 源方法 | PASS 实例 | SKIP 实例 |
+| --- | ---: | ---: | ---: |
+| `test_combo_kernels.py` | 28 | 26 | 4 |
+| `test_foreach.py` | 27 | 376 | 0 |
+| `test_torchinductor.py` | 4 | 5 | 1 |
+| `test_unbacked_symints.py` | 1 | 1 | 0 |
 
-[执行方式](../../../../scripts/tests/combo_kernel_210/README-213.md)；
-[本轮 JUnit、日志、精确 node ID、源码哈希和生成代码](../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/)；
-[2.10 重合方法对照](../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/baseline-pass-comparison.json)。
-未复验方法的实际验证版本保留在合并报告中，来源为对应参考证据。
+5 个 SKIP 保留既有测试口径，没有作为功能通过：
+
+| 方法 | 具体原因 |
+| --- | --- |
+| `test_combo_kernel_per_config_subkernel_poi` | 成员独立 pointwise 分块尚未实现，共享分块不能验证本特性 |
+| `test_combo_kernel_per_config_subkernel_per` | 成员独立 persistent reduction 分块尚未实现 |
+| `test_combo_kernel_per_config_subkernel_red` | 成员独立 reduction 分块尚未实现 |
+| `test_combo_kernel_per_config_subkernel_red_per` | reduction 与 persistent reduction 成员独立分块尚未实现 |
+| `test_combo_kernel_filter_cpu_npu` | NPU 实例不验证 CPU 节点过滤策略，CPU 实例负责该策略 |
+
+foreach 27 个方法的 376 个参数全部功能 PASS，保留数值、布局、mutation 和梯度检查；
+既有 NPU 适配仍不要求 CUDA 的单 kernel 数量和 foreach 专用生成文本。
+**功能 PASS 不证明 FOREACH 分组融合已实现**，也不能由该入口缺失推断普通纵向融合缺失。
+
+[408 个 2.13 PASS 的精确 node ID](../../../../scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt)
+为独立的新清单，在 **2.13 NPU 测试目录**执行。
+2.10 原生 PASS 清单保留原内容，397 个执行名与[基线快照][daily213-baseline210]一致。
+
+Community 测试分支 `fix/combo-213-npu-case-adaptation` 已在全量验证后执行推送，
+远端与实际验证的 `e71a557` 完全一致；本次未发现需要新增的测试修改。
+
+[完整 60 方法结果][daily213-results]；[5 个 SKIP 的精确 node ID][daily213-skips]；
+[版本、分片 JUnit、命令、日志和哈希证据][daily213-evidence]；[JUnit 逐实例交叉核对][daily213-junit]。
+[原 116 行 CSV](inductor-combo-tests-native-v2.13-sync-64dc85c.csv) 保持文件名、行顺序及五列，
+本次更新重合方法对应的 71 行，含 11 个随外层验证的嵌套函数。
+[合并来源清单][daily213-inventory] 和 [逐实例来源][daily213-jobs]
+标明哪些结果来自本次日构建，哪些仍来自范围外原报告。
+[执行方式](../../../../scripts/tests/combo_kernel_210/README-213.md)。
 
 <!-- combo-section:validation213:end -->
 
@@ -69,10 +94,12 @@ foreach 继续沿用 NPU 功能适配：保留数值、mutation 和梯度检查�
 测试源码为已推送的 `e71a557`；Triton-Ascend `origin/main` 的参考源码快照为
 `62f6b54e0f2420d6b718e0d4f89fa7a464d2e78f`。
 
-**最新 master 的源码分析与设备诊断分别记录，未把 master 装包复测。**
-11 月 13 日在原 `64dc85c` wheel + `d12230b556` Python 覆盖环境定向诊断 WRN、FTZ 和两个 foreach 方法，
-实际使用物理卡 1、3；安装文件 574 项哈希仍与参考报告一致，未修改生产代码或正式测试。
-正式统计保持 **74 PASS、14 FAIL、17 SKIP**；诊断 PASS 不直接改写合并 jobs/CSV 的状态。
+**本次日构建 `4455514171` 已完成 60 个重合方法的全量设备复测。**
+本节涉及的 14 个失败方法及范围外的 12 个 SKIP 方法未在本次范围内，保留其实际验证版本和源码证据；
+不能把这些原报告状态认定为新日构建的设备复测结论。
+5 个重合 SKIP 已在新包重新执行，仍为 4 个独立分块方法和 1 个 NPU CPU-filter 实例。
+当前合并方法统计为 **74 PASS、14 FAIL、17 SKIP**；版本范围见 [合并来源清单][daily213-inventory]。
+WRN、FTZ 等诊断证据来自原 `64dc85c` wheel + `d12230b556` 覆盖环境，仍仅解释范围外对应报告。
 
 下表按具体字段或功能列出作用、当前缺口和适配内容，编号链接到后文的源码与验证证据。
 一行对应一项字段或功能；同一方法可涉及多行，同一字段也可由多个方法检查。
@@ -172,8 +199,9 @@ NPU 适配检查 2 个 `GridNpu`、两种实际轴布局及不存在 `combo_grid
 验收真实的单 Combo 结构、标量输出和广播计算数值。
 这项应记录为水平组合能力待扩展，而不是只用“融合策略不同”结束分析。
 
-这些能力目标单独跟踪，正式 CSV 的 PASS 仍保留“—”，正式方法和实例统计不变。
-本次证据是固定版本源码、适配断言及已有执行报告，没有新增 master 装包或设备复测。
+这些能力目标单独跟踪，正式 CSV 的 PASS 仍保留“—”。
+本节功能目标依据固定版本源码、适配断言及生成代码证据；
+本次日构建重合范围功能 PASS 不替代未恢复的单 Combo/FOREACH 融合验收。
 
 **FAIL：图阶段策略、逐成员归约分类与算子来源映射**
 
@@ -1199,3 +1227,18 @@ TMA/PDL 的硬件协议来源保存在
 [jobs]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/jobs.json
 
 <!-- combo-section:analysis213:end -->
+
+[daily213-baseline210]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/baseline210-passed-nodeids.txt
+[daily213-results]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/results.csv
+[daily213-skips]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/skipped-nodeids.txt
+[daily213-evidence]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/
+[daily213-junit]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/junit-validation.json
+[daily213-inventory]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/full-report-status.json
+[daily213-jobs]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/full-report-jobs.json
