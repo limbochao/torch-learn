@@ -1,0 +1,64 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:4930-4961
+
+ 4930:         """
+ 4931:         Populate each node's min/max_input_distance with the depth from graph
+ 4932:         inputs, measured as dependency hops before fusion. Nodes whose
+ 4933:         dependencies are all satisfied by graph inputs/constants have depth 0.
+ 4934:         """
+ 4935:         name_to_min_distance: dict[str, int] = {}
+ 4936:         name_to_max_distance: dict[str, int] = {}
+ 4937:         for node in self.nodes:
+ 4938:             if not node.unmet_dependencies:
+ 4939:                 min_dist = 0
+ 4940:                 max_dist = 0
+ 4941:             else:
+ 4942:                 dep_min_dists = [
+ 4943:                     name_to_min_distance[self.name_to_buf[dep.name].defining_op_name()]
+ 4944:                     + 1
+ 4945:                     for dep in node.unmet_dependencies
+ 4946:                 ]
+ 4947:                 dep_max_dists = [
+ 4948:                     name_to_max_distance[self.name_to_buf[dep.name].defining_op_name()]
+ 4949:                     + 1
+ 4950:                     for dep in node.unmet_dependencies
+ 4951:                 ]
+ 4952:                 min_dist = min(dep_min_dists)
+ 4953:                 max_dist = max(dep_max_dists)
+ 4954:             name_to_min_distance[node.get_name()] = min_dist
+ 4955:             name_to_max_distance[node.get_name()] = max_dist
+ 4956:             node.min_input_distance = min_dist
+ 4957:             node.max_input_distance = max_dist
+ 4958: 
+ 4959:     def merge_loops(self) -> None:
+ 4960:         if not config.loop_ordering_after_fusion:
+ 4961:             return
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:2604-2614
+
+ 2604:     group_snode.max_order = max(x.max_order for x in group_snode.snodes)
+ 2605:     group_snode.min_input_distance = min(
+ 2606:         x.min_input_distance for x in group_snode.snodes
+ 2607:     )
+ 2608:     group_snode.max_input_distance = max(
+ 2609:         x.max_input_distance for x in group_snode.snodes
+ 2610:     )
+ 2611:     group_snode.outputs_by_name = {
+ 2612:         buf.get_name(): buf for buf in group_snode.get_outputs()
+ 2613:     }
+ 2614: 
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/scheduling.py:189-198
+
+  189: 
+  190: class NPUTritonScheduling(TritonScheduling):
+  191:     kernel_type = NPUIndexTritonKernel
+  192:     backend_features = OrderedSet(
+  193:         [
+  194:             BackendFeature.BUCKETIZE,
+  195:             BackendFeature.INPLACE_BUFFERS,
+  196:             BackendFeature.MASKED_SCATTER_WITH_INDEX,
+  197:             BackendFeature.SCAN,
+  198:             BackendFeature.SORT,

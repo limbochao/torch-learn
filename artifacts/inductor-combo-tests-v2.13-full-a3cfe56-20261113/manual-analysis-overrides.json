@@ -1,0 +1,175 @@
+{
+  "test_combo_kernel_per_config_subkernel_r0_r1": {
+    "priority": "P0",
+    "order": 0,
+    "kind": "多轴归约精度",
+    "observed_human": "原数值比较失败：报错的 16 元素向量中 1 个输出超差，最大绝对误差 1.1920928955078125e-5，atol=1e-5。执行的是同一定义的两次普通归约 launch；后续数量断言未执行。",
+    "purpose": "保留 permute 后的非连续 (16,32,64) 输入，sum(dim=(1,2)) 的 compiled 结果满足原精度。",
+    "source_assessment": "本轮实际是 no-linear 普通多轴归约，一个 kernel 定义对两个输入调用两次，未形成 Combo。DSL 保留两条 R 轴、stride 地址与 FP32 累加；数值误差已观测，累积次序／tile／下层编译职责尚未定界。 本轮仅保存生成 wrapper 与布局 metadata，真实 tensor 值和 selected tile 未单独留存。",
+    "fix_entry": "先捕获并固定可复现的真实输入，用同一组输入对照 NPU eager 与该 no-linear 普通 kernel；定位 NPUNoLinearTritonScheduling/NPUTritonKernel、社区多轴 reduction DSL、NPU 候选 remap 和 Triton 数学路径。核对两条归约轴、partial loop、累加 dtype 和实际 selected tile，不能把修复归到 Combo 分区。",
+    "acceptance": "原非连续输入与原容差通过，保留原归约元素集合和 dtype；不以放宽容差或跳过精度检查通过。数值通过后再验原分区目标。",
+    "evidence": [
+      "E16"
+    ],
+    "current_analysis": "P0：FP32 非连续 (16,32,64)、stride (64,1024,1) 的 sum(1,2) 原精度验收失败；1/16 输出超差，最大绝对误差 1.1920928955078125e-5，atol=1e-5。实际为 no-linear 普通 kernel，同一定义调用两次，没有 Combo；数量断言未执行。先用同一真实输入对照 eager 与此 kernel，定位多轴归约树／partial loop／实际 tile／下层数学路径；保留原 FAIL 和容差，根因待定位。 当前未另存真实输入值和 selected tile，后续先固定可复现输入。",
+    "summary": "非连续多轴 sum 的 FP32 结果超出原容差"
+  },
+  "test_combo_kernel_yz_overflow": {
+    "observed_human": "编译执行已完成；读取 NPU profiler 的 trace_json[\"traceEvents\"] 时报 TypeError，实际 JSON 是列表，后续 grid 及最终数值断言未执行。",
+    "summary": "适配 NPU profiler 格式，验收大尺寸真实 launch grid"
+  },
+  "test_combo_kernel_no_bench_stitched_config": {
+    "observed_human": "数值、单个真实 kernel 定义及 default/body 一致性检查已通过；最后缺 XBLOCK_0、XBLOCK_1、XBLOCK_2，空匹配不满足三成员独立配置。",
+    "summary": "接通三成员独立默认 X 分块及 body/grid/launcher"
+  },
+  "test_combo_kernel_peak_memory_wide_resnet": {
+    "observed_human": "tight 与 disabled 的首次执行峰值同为 616101888B，未满足下降断言；本轮没有额外捕获 gate 候选，不能据此判定 gate 未实现。",
+    "summary": "补真实 gate 候选及隔离编译后的运行峰值验收"
+  },
+  "test_combo_kernel_num_gb_and_flop_match_standalone_sum": {
+    "observed_human": "原数值比较完成后，Combo kernel_num_gb 匹配为空；FLOP 聚合检查尚未执行，空 standalone 求和不是有效基准。",
+    "summary": "补 Combo 访存 GB/FLOP 聚合及有效 standalone 基准"
+  },
+  "test_persistent_reduction_size_hint": {
+    "observed_human": "native persistent heuristic 已匹配，但原固定 CUDA size_hints 检查失败。实际为 x0=1536、r1=32，共享 split extent 求和；最终数值比较尚未执行。",
+    "summary": "按 NPU 真实成员轴核对 persistent size_hints"
+  },
+  "test_combo_kernel_max_autotune_with_reduction": {
+    "observed_human": "assertLogs 捕获了日志，但 Combo sequential autotune 匹配为 0；后面的数值与 kernel 数量断言尚未执行。",
+    "summary": "实现归约成员独立候选与完整 Combo 顺序调优"
+  },
+  "test_combo_kernel_coordesc_tunes_largest_subkernel_first": {
+    "observed_human": "在 assertLogs 退出时失败，未捕获 coordinate_descent_tuner 的 DEBUG 日志；后续数值、多个成员配置及最大成员优先断言均未执行。",
+    "summary": "独立成员坐标下降先调工作量最大的成员"
+  },
+  "test_combo_reduction_combo_grid_meta_has_per_subkernel_fields": {
+    "observed_human": "sum/mean 数值比较通过，随后缺 inductor_meta_0；成员 load/store/reduction 统计断言尚未执行。",
+    "summary": "导出 sum/mean 成员真实 load/store/reduction 计数"
+  },
+  "test_foreach_basic": {
+    "summary": "取消旧 skip，验收图输入 foreach 节点的距离为 0"
+  },
+  "test_foreach_after_extern": {
+    "summary": "取消旧 skip，验收 mm 后 foreach 消费者的依赖距离"
+  },
+  "test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu": {
+    "summary": "开放 NPU 动态归约入口，保留编译期 autotune 目标"
+  },
+  "test_sort_in_combo_kernel_forces_persistent_reduction": {
+    "summary": "验证 sort 所需完整 R 和真实成员模式"
+  },
+  "test_single_combo_kernels": {
+    "summary": "用原生 grid 验收两个 standalone，覆盖 benchmark 开关",
+    "observed_human": "两种 benchmark 开关均在固定 Grid1D FileCheck 失败，实际普通 kernel 为 GridNpu；先前数值和原 kernel 计数检查已通过。"
+  },
+  "test_combo_kernel_per_config_subkernel_poi_3d": {
+    "summary": "核对三维非连续 pointwise 的真实轴与分区边界"
+  },
+  "test_combo_inductor_meta_has_optimize_mem": {
+    "summary": "补推理 optimize_mem=True 及输入保护消费契约",
+    "observed_human": "推理图 relu/sigmoid 数值比较通过，随后缺 optimize_mem=True；输入备份／恢复的真实消费契约尚需另验。"
+  },
+  "test_combo_inductor_meta_optimize_mem_false_in_training_forward": {
+    "summary": "补训练前向 optimize_mem=False 及输入保护契约",
+    "observed_human": "训练前向数值比较通过，随后缺 optimize_mem=False；本方法未进行反向梯度和 autotune 输入恢复验收。"
+  },
+  "test_combo_kernel_per_subkernel_reduction_hint": {
+    "summary": "导出成员归约方向：行 INNER、列 OUTER",
+    "observed_human": "行／列归约数值比较通过，随后缺 reduction_hint_0；INNER/OUTER 的成员分类检查未完成。"
+  },
+  "test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields": {
+    "summary": "导出三成员真实计数、autotune 提示及 atomic 标志",
+    "observed_human": "relu/sigmoid/tanh 数值比较通过，随后缺 inductor_meta_0；成员真实计数、提示和 atomic 标志的检查未完成。"
+  },
+  "test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel": {
+    "summary": "导出每成员连续归约维布局标志",
+    "observed_human": "确定性配置下 sum/mean 数值比较通过，随后缺 inductor_meta_0；未完成成员连续归约维标志检查。"
+  },
+  "test_combo_per_kernel_inductor_meta_matches_standalone": {
+    "summary": "对齐 standalone/Combo 计数、布局和 tiling_scores",
+    "observed_human": "Combo 数值比较通过；standalone 解析为两个字典，Combo 成员字典解析为空，长度 2 对 0 而失败。必需统计字段仍需非空有效基准，不能用空字典对齐。"
+  },
+  "test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth": {
+    "summary": "profile 模式输出真实 Combo kernel_num_gb",
+    "observed_human": "数值比较通过，随后缺 kernel_num_gb；后续不应输出 kernel_flop 的检查未执行。"
+  },
+  "test_benchmark_combo_kernel_emits_real_num_gb": {
+    "summary": "benchmark num_gb 当前为 0，需真实访存 GB",
+    "observed_human": "数值比较通过，随后未匹配到浮点 num_gb；NPU Combo benchmark 生成入口传入硬编码 0，后续 device 参数检查未执行。"
+  },
+  "test_triton_kernel_to_post_grad_tracing_combo_kernel": {
+    "summary": "补真实 Combo 到 post-grad FX origins 的映射",
+    "observed_human": "Inductor 编译执行与 debug trace 收集已完成；Combo 到 post-grad 的映射实际为空，期望一项。第二个 AOTInductor 子场景尚未开始。"
+  },
+  "test_combo_kernel_store_mask": {
+    "summary": "取消旧 skip，验收动态 mean Combo 的最终 store mask"
+  },
+  "test_fuse_mix_order_reductions_combo_kernels": {
+    "summary": "支持共享输入的行／列归约联合执行目标",
+    "observed_human": "数值比较通过，随后 generated_kernel_count 期望 3、实际 4；尚需按实际生成链核对共享输入联合归约的缺口。"
+  },
+  "test_combo_kernel_scalar_store_broadcast": {
+    "summary": "支持标量写回、广播消费者与向量归约的合法组合",
+    "observed_human": "标量结果、向量归约和广播消费者的数值比较通过；随后 generated_kernel_count 期望 1、实际 2，单个 Combo 的组合目标未通过。"
+  },
+  "test_combo_kernel_per_config_subkernel_block_size": {
+    "summary": "先修 eager channels_last contiguous，再验独立分块",
+    "observed_human": "先在 eager 的 contiguous(memory_format=channels_last) 报 NPU 仅支持 contiguous 格式；compiled、独立成员分块和 grid 检查均未开始。"
+  },
+  "test_combo_kernel_no_bench_persistent_reduction": {
+    "summary": "保留完整 R，接通 persistent 成员独立默认 X 分块",
+    "observed_human": "三个 sum 的数值与单定义检查通过，default_config 不含 R0_BLOCK 的检查也通过；随后缺 XBLOCK_0/1/2 的独立默认 X 配置，原方法未直接验证实际 winner/launch。"
+  },
+  "test_combo_kernel_no_bench_carve_out": {
+    "summary": "验收 bucketize 从不合适的默认 Combo 配置中分离",
+    "observed_human": "数值比较通过，随后 async_compile.triton 定义数期望 2、实际 1；此计数不等于实际 launch 数，原 carve-out 分区目标未验收。"
+  },
+  "test_combo_kernel_max_autotune": {
+    "summary": "实现激活成员独立候选与完整 Combo 顺序调优",
+    "observed_human": "编译执行已返回，但 Combo sequential autotune 日志匹配为 0；后续数值比较和单 kernel 断言未执行。"
+  },
+  "test_combo_autotune_many_subkernels": {
+    "summary": "实现六成员独立候选与顺序调优",
+    "observed_human": "六成员编译执行已返回，但 Combo sequential autotune 的日志匹配为 0；后续数值比较和单 kernel 检查未执行。"
+  },
+  "test_combo_autotune_grouping": {
+    "summary": "按真实成员尺寸和 heuristic 输入划分调优组",
+    "observed_human": "编译执行已返回，期望两个调优组而实际日志解析为空；后续数值比较和单 kernel 断言未执行。"
+  },
+  "test_combo_autotune_grouping_by_metadata_fingerprint": {
+    "summary": "验收 metadata fingerprint 的合组与拆组规则"
+  },
+  "test_combo_max_persistent_rblock_gated_on_per_subkernel": {
+    "summary": "区分共享／独立 X 分块的真实 R 资源门控",
+    "observed_human": "per_subkernel=False 数值通过但缺 max_persistent_rblock=1024；True 数值与字段不存在的断言通过，该负向字段检查未证明独立 X 分块生效。"
+  },
+  "test_combo_rms_norm_forwards_add_persistent_rblock": {
+    "summary": "接通 RMSNorm 成员大 R 候选资格及消费者",
+    "observed_human": "两个 RMSNorm 的数值比较通过，随后缺 inductor_meta_0；未执行到成员 add_persistent_rblock 检查。"
+  },
+  "test_combo_triton_meta_has_disable_ftz": {
+    "summary": "接通 FTZ 字段、编译选项与非正规数数学路径",
+    "observed_human": "False/True 两个实例数值均通过，随后各缺对应 disable_ftz 字段；当前正值输入未覆盖非正规数，数学功能还需另行验收。"
+  },
+  "test_combo_kernel_fusion_within_same_stream": {
+    "summary": "验收同一用户 stream 的合法 Combo 和同步"
+  },
+  "test_combo_kernels_pointwise_only": {
+    "summary": "按开关验收真实 pointwise／reduction 成员分区"
+  },
+  "test_combo_fp_self_sub_rewrite": {
+    "summary": "验证浮点 c-c 重写语义及真实 Combo"
+  },
+  "test_combo_kernel_per_config_subkernel_per": {
+    "current_analysis": "数值比较和 generated_kernel_count=1 通过，随后固定 CUDA XBLOCK : tl.constexpr 检查失败。本轮走共享 block 分支；需按 NPU 实际 split block ABI 适配观测，并保留两个 sum 成员 R=64/512 的完整归约要求。缺该字符串不代表 persistent 归约未实现。",
+    "observed_human": "数值和单 kernel 计数通过，随后共享 XBLOCK 的固定 CUDA 字符串未匹配。"
+  },
+  "test_combo_kernel_per_config_subkernel_red": {
+    "current_analysis": "两组 (32,64,128) 的 sum(dim=(0,2)) 原数值比较通过；随后 generated_kernel_count 期望 1、实际 2，尚未执行 X/R block 检查。原目标是将两条非连续多轴归约组合为单个 Combo，需核对成员轴、候选合法性和分区接受条件；保留 FAIL，不能仅取消数量目标或改期望为 2。",
+    "observed_human": "两组非连续多轴 sum 的数值比较通过，单 kernel 计数期望 1、实际 2。"
+  },
+  "test_combo_kernel_filter_cpu": {
+    "current_analysis": "a*4、b+8、c.min(-1)、d.max(-1) 的数值比较通过；NPU 原分组目标为 pointwise 与 min/max 两个 Combo，generated_kernel_count 期望 2、实际 4。需核对 20x20/30x30 的不同尺寸 pointwise 和 min/max 成员的轴、tiling 与分区接受条件，完成实际分组目标；保留 FAIL，不能直接改为 4 或用 skip 规避。",
+    "observed_human": "四个输出数值比较通过，NPU 两组 Combo 的计数目标期望 2、实际 4。"
+  }
+}

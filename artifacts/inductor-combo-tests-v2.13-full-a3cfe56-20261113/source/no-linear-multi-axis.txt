@@ -1,0 +1,316 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/npu_combined_scheduling.py:181-203
+
+  181:     def codegen_node(self, node: FusedSchedulerNode | SchedulerNode):
+  182:         removed_buffers = V.graph.removed_buffers.copy()
+  183:         inplaced_to_remove = V.graph.inplaced_to_remove.copy()
+  184:         kernel_count = metrics.generated_kernel_count
+  185:         try:
+  186:             return self._triton_scheduling.codegen_node(node)
+  187:         except Exception:
+  188:             metrics.generated_kernel_count = kernel_count
+  189:             log.debug(
+  190:                 "index codegen for node %s failed, falling back to no-linear codegen",
+  191:                 node,
+  192:                 exc_info=True,
+  193:             )
+  194:         # A failed fused kernel may have marked intermediates as kernel-local.
+  195:         # Split fallback kernels need those buffers to be materialized again.
+  196:         V.graph.removed_buffers.clear()
+  197:         V.graph.removed_buffers.update(removed_buffers)
+  198:         V.graph.inplaced_to_remove.clear()
+  199:         V.graph.inplaced_to_remove.update(inplaced_to_remove)
+  200:         snodes = self._regroup_for_nolinear([node])
+  201:         groups = self._split_nolinear_nodes(snodes)
+  202:         return self._codegen_nolinear_groups(node, groups)
+  203: 
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/npu_combined_scheduling.py:240-279
+
+  240:     def codegen_combo_kernel(self, node) -> None:
+  241:         subkernel_nodes = node.get_subkernel_nodes()
+  242:         # The 2.13 scheduler always attempts index codegen first; the legacy
+  243:         # linear-mode configuration and its predicate no longer exist.
+  244:         kernel_count = metrics.generated_kernel_count
+  245:         original_groups = [
+  246:             (snode, snode.group)
+  247:             for subkernel_node in subkernel_nodes
+  248:             for snode in subkernel_node.get_nodes()
+  249:         ]
+  250:         original_groups.extend(
+  251:             (subkernel_node, subkernel_node.group)
+  252:             for subkernel_node in subkernel_nodes
+  253:         )
+  254:         try:
+  255:             group_fn = self._nolinear_triton_scheduling.group_fn
+  256:             for subkernel_node in subkernel_nodes:
+  257:                 # get_nodes() is flattened, whereas get_subkernel_nodes()
+  258:                 # contains fused groups. Zipping them assigns later groups
+  259:                 # the dimensions of an unrelated node as soon as one
+  260:                 # subkernel has multiple nodes.
+  261:                 subnodes = subkernel_node.get_nodes()
+  262:                 for snode in subnodes:
+  263:                     snode.group = (snode.group[0], group_fn(snode._sizes))
+  264:                 subkernel_node.group = max(
+  265:                     subnodes, key=lambda snode: int(snode.is_reduction())
+  266:                 ).group
+  267:             return self._triton_scheduling.codegen_combo_kernel(node)
+  268:         except Exception:
+  269:             metrics.generated_kernel_count = kernel_count
+  270:             for snode, group in original_groups:
+  271:                 snode.group = group
+  272:             log.debug(
+  273:                 "linear combo codegen for node %s raise error, "
+  274:                 "fallback to individual kernels",
+  275:                 node,
+  276:                 exc_info=True,
+  277:             )
+  278: 
+  279:         # Recompute lifetimes at the ordinary kernel boundaries, just as the
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/scheduling.py:173-188
+
+  173: class NPUNoLinearTritonScheduling(TritonScheduling):
+  174:     kernel_type = NPUTritonKernel
+  175: 
+  176:     def generate_node_schedule(self, nodes, numel, rnumel):
+  177:         if not npu_config.enable_welford:
+  178:             return super().generate_node_schedule(nodes, numel, rnumel)
+  179:         from ..choices import contains_welford_group
+  180:         if not contains_welford_group(nodes):
+  181:             # Kernels without Welford reductions keep the baseline (upstream)
+  182:             # scheduling so unrelated fusion decisions stay unchanged.  The
+  183:             # caller may have canonicalized numel/rnumel; recompute the raw
+  184:             # group extents so the default scheduler's equality checks match
+  185:             # the (uncanonicalized) node groups exactly as in the baseline.
+  186:             _, (numel, rnumel) = max(nodes, key=lambda x: int(x.is_reduction())).group
+  187:             return super().generate_node_schedule(nodes, numel, rnumel)
+  188:         return _generate_npu_node_schedule(self, nodes, numel, rnumel)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:894-995
+
+  894: class NPUTritonKernel(TritonKernel):
+  895:     """
+  896:     NPU triton kernel without linear and loop
+  897:     """
+  898: 
+  899:     kexpr = npu_texpr
+  900: 
+  901:     @classmethod
+  902:     @functools.lru_cache(None)
+  903:     def gen_common_triton_imports(cls) -> str:
+  904:         imports = IndentedBuffer()
+  905:         imports.splice(super().gen_common_triton_imports())
+  906:         imports.splice(
+  907:             """
+  908:             import torch
+  909:             import torch_npu
+  910:             if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+  911:                 torch_npu.npu._initialized = True
+  912:             from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+  913:             from torch_npu._inductor.runtime import triton_helpers
+  914:             from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+  915:             """
+  916:         )
+  917:         return imports.getvalue()
+  918: 
+  919:     def __init__(
+  920:         self,
+  921:         tiling: dict[str, sympy.Expr],
+  922:         min_elem_per_thread=0,
+  923:         optimize_mask=True,
+  924:         fixed_config: FixedTritonConfig | None = None,
+  925:         **kwargs,
+  926:     ):
+  927:         super().__init__(
+  928:             tiling=tiling,
+  929:             min_elem_per_thread=min_elem_per_thread,
+  930:             optimize_mask=optimize_mask,
+  931:             fixed_config=fixed_config,
+  932:             **kwargs,
+  933:         )
+  934: 
+  935:     def _has_constant_mask(self, tree: IterationRangesRoot) -> bool:
+  936:         # NPU autotuning can select non-power-of-two block sizes after codegen,
+  937:         # so divisibility by the heuristic max block does not prove that every
+  938:         # candidate has no tail. Fixed configs use the actual block size and
+  939:         # can safely retain the upstream optimization.
+  940:         if self.fixed_config is None:
+  941:             return False
+  942:         return super()._has_constant_mask(tree)
+  943: 
+  944:     def add_npu_inductor_meta(self, inductor_meta):
+  945:         normal_range_trees = [
+  946:             tree
+  947:             for tree in self.range_trees
+  948:             if not tree.is_reduction and tree.tensor_dim is not None
+  949:         ]
+  950:         reduction_range_trees = [tree for tree in self.range_trees if tree.is_reduction]
+  951: 
+  952:         split_axis = [tree.tensor_dim for tree in normal_range_trees]
+  953:         tiling_axis = [tree.tensor_dim for tree in normal_range_trees]
+  954:         axis_names = [tree.prefix for tree in normal_range_trees]
+  955:         if self.inside_reduction:
+  956:             tiling_axis += [tree.tensor_dim for tree in reduction_range_trees]
+  957:             axis_names += [tree.prefix for tree in reduction_range_trees]
+  958: 
+  959:         inductor_meta["requires_no_linear_block_remap"] = True
+  960:         inductor_meta["npu_kernel_type"] = str(NPUKernelType.SIMD_SIMT_MIX)
+  961:         inductor_meta["split_axis"] = split_axis
+  962:         inductor_meta["tiling_axis"] = tiling_axis
+  963:         inductor_meta["low_dims"] = [tiling_axis[-1]]
+  964:         inductor_meta["split_axis_dtype"] = torch.float32
+  965:         inductor_meta["dual_reduction"] = False
+  966:         inductor_meta["axis_names"] = axis_names
+  967:         return inductor_meta
+  968: 
+  969:     def codegen_kernel(self, name=None):
+  970:         """
+  971:         codegen triton kernel without linear and loop
+  972:         """
+  973: 
+  974:         kernel_src = super().codegen_kernel()
+  975:         # 2. find inductor_meta str
+  976:         inductor_meta_str = next(
+  977:             (line for line in kernel_src.splitlines() if "inductor_meta" in line),
+  978:             None,
+  979:         )
+  980:         inductor_meta = eval(inductor_meta_str.strip().split("=", 1)[1].rstrip(","))
+  981:         new_inductor_meta = self.add_npu_inductor_meta(inductor_meta)
+  982:         patched_kernel = kernel_src.replace(
+  983:             inductor_meta_str, f"    inductor_meta={new_inductor_meta},"
+  984:         )
+  985:         return patched_kernel
+  986: 
+  987: 
+  988: class NPUIndexTritonKernel(TritonKernel):
+  989:     """
+  990:     NPU triton kernel with linear and block_sub loop
+  991:     """
+  992: 
+  993:     kexpr = npu_texpr
+  994:     overrides = NPUTritonKernelOverrides
+  995: 
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1220-1245
+
+ 1220: 
+ 1221:         options = {
+ 1222:             "num_warps": compile_meta["num_warps"],
+ 1223:             "num_stages": compile_meta["num_stages"],
+ 1224:             "debug": compile_meta["debug"],
+ 1225:             "compile_mode": compile_meta['compile_mode'],
+ 1226:         }
+ 1227: 
+ 1228:         options = self.parse_triton_ascend_options(
+ 1229:             self.triton_meta.get("npu_compile_options", {}),
+ 1230:             options,
+ 1231:         )
+ 1232:         options = self.parse_triton_ascend_options(cfg_kwargs, options)
+ 1233:         if (
+ 1234:             bool(self.inductor_meta.get("enable_auto_blockify", False))
+ 1235:             or self.inductor_meta.get("requires_no_linear_block_remap") is True
+ 1236:         ):
+ 1237:             # Older Triton-Ascend versions expose this option. Newer versions
+ 1238:             # manage block mapping internally, so the option is filtered out.
+ 1239:             options = self.parse_triton_ascend_options(
+ 1240:                 {"enable_auto_blockify": True}, options
+ 1241:             )
+ 1242: 
+ 1243:         compile_kwargs = {
+ 1244:             "target": target,
+ 1245:             "options": options,
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:4049-4063
+
+ 4049: def _remap_fallback_block_subs(configs, inductor_meta):
+ 4050:     if inductor_meta.get("requires_no_linear_block_remap") is not True:
+ 4051:         return
+ 4052:     for tiling_cfg in configs:
+ 4053:         for name, value in list(tiling_cfg.kwargs.items()):
+ 4054:             if isinstance(name, str) and name.endswith("_SUB"):
+ 4055:                 tiling_cfg.kwargs[name.removesuffix("_SUB")] = value
+ 4056:                 tiling_cfg.kwargs.pop(name)
+ 4057: 
+ 4058: 
+ 4059: def strip_runtime_blocks_from_cfg(
+ 4060:     cfg: Config,
+ 4061:     runtime_block_arg_names: tuple[str, ...],
+ 4062: ) -> Config:
+ 4063:     cfg_dict = config_to_dict(cfg)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:4544-4610
+
+ 4544:     def reduction_collapse_dims(
+ 4545:         self, buffer, value: CSEVariable, dtype: torch.dtype
+ 4546:     ) -> CSEVariable:
+ 4547:         """
+ 4548:         Reshape to RBLOCK, collapsing all reduction dims.
+ 4549:         """
+ 4550:         # This is not needed for 1D reductions.
+ 4551:         if self.num_reduction_dims == 1:
+ 4552:             return value
+ 4553: 
+ 4554:         target_ndim = self.triton_tensor_ndim() - self.num_reduction_dims
+ 4555:         initial_shape = self.dense_size_list()
+ 4556:         target_shape = initial_shape[:target_ndim] + ["RBLOCK"]
+ 4557:         return self.cse.generate(
+ 4558:             buffer,
+ 4559:             triton_reshape(str(value), initial_shape, target_shape),
+ 4560:             dtype=dtype,
+ 4561:             shape=tuple(target_shape),
+ 4562:         )
+ 4563: 
+ 4564:     def reduction(
+ 4565:         self,
+ 4566:         dtype: torch.dtype,
+ 4567:         src_dtype: torch.dtype,
+ 4568:         reduction_type: ReductionType,
+ 4569:         value: CSEVariable | tuple[CSEVariable, ...],
+ 4570:     ) -> CSEVariable | tuple[CSEVariable, ...]:
+ 4571:         """
+ 4572:         codegen reduction of value to Triton according the reduction_type
+ 4573:         """
+ 4574: 
+ 4575:         def should_upcast(d: torch.dtype | None) -> bool:
+ 4576:             return d is not None and d.is_floating_point and d.itemsize < 4
+ 4577: 
+ 4578:         def maybe_upcast(value: CSEVariable) -> CSEVariable:
+ 4579:             # Math reductions in small floats are less accurate because the Triton
+ 4580:             # compiler does not automatically promote to FP32 for accumulation.
+ 4581:             # Additionally, max/min reductions do not support FP16/BF16.  Manually
+ 4582:             # promote to FP32 here.
+ 4583:             return (
+ 4584:                 ops.to_dtype(value, torch.float32)
+ 4585:                 if should_upcast(value.dtype)
+ 4586:                 else value
+ 4587:             )
+ 4588: 
+ 4589:         do_upcast = pytree.tree_any(lambda v: should_upcast(v.dtype), value)
+ 4590:         original_dtype = dtype
+ 4591:         original_src_dtype = src_dtype
+ 4592:         if do_upcast:
+ 4593:             # Only promote FB16/BF16; do not promote other integer/boolean dtypes
+ 4594:             value = pytree.tree_map(maybe_upcast, value)
+ 4595:             src_dtype = torch.float32 if should_upcast(src_dtype) else src_dtype
+ 4596:             dtype = torch.float32 if should_upcast(dtype) else dtype
+ 4597: 
+ 4598:         assert self.inside_reduction
+ 4599:         masks = OrderedSet(tree.mask_name() for tree in self.range_trees)
+ 4600:         self.filter_masks(masks)
+ 4601:         masks = sorted(masks)
+ 4602:         if self._load_mask:
+ 4603:             masks.append(self._load_mask)
+ 4604:         reduction_range_prefix = self.range_trees[-1].prefix[0]
+ 4605: 
+ 4606:         # When we do native matmtul codegen,
+ 4607:         # we don't want to keep the R0_BLOCK/R1_BLOCK in the accumulator.
+ 4608:         # so instead of naively calling dense_size_str(), we filter out
+ 4609:         # reduction block from accumulator and only keep (Y,X).
+ 4610:         # In bmm (Z,Y,R)x(Z,R,X) case, we also remove z dimension from accumulator

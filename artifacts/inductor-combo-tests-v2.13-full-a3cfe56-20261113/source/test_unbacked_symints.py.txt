@@ -1,0 +1,115 @@
+Module entry
+    1: import torch
+    2: import torch_npu
+    3: from torch_npu.contrib import transfer_to_npu
+    4: from torch_npu.utils import _dynamo
+    5: _dynamo.use_jit_script = True
+    6: _dynamo.patch_has_triton()
+    7: torch.cuda.get_device_capability = lambda :(10, 0)
+    8: import torch_npu.testing
+    9: 
+   10: # Owner(s): ["module: inductor"]
+   11: import functools
+   12: import unittest
+   13: from unittest import mock
+   14: 
+   15: import sympy
+   16: 
+   17: import torch
+   18: from torch._dynamo import config as dynamo_config
+   19: from torch._dynamo.exc import InternalTorchDynamoError
+   20: from torch._inductor import config as inductor_config, ir
+   21: from torch._inductor.sizevars import SizeVarAllocator
+   22: from torch._inductor.test_case import TestCase as InductorTestCase
+   23: from torch._inductor.virtualized import V
+   24: from torch.testing import make_tensor
+   25: from torch.testing._internal.common_cuda import SM80OrLater
+   26: from torch.testing._internal.common_device_type import (
+   27:     instantiate_device_type_tests,
+   28:     skipCPUIf,
+   29:     skipCUDAIf,
+   30:     skipGPUIf,
+   31: )
+   32: from torch.testing._internal.common_utils import parametrize, skipIfXpu
+   33: from torch.testing._internal.inductor_utils import HAS_GPU
+   34: import torch_npu._inductor
+   35: 
+   36: def _retarget_dynamo_for_patched_torch_tensor() -> None:
+   37:     original = getattr(torch.tensor, "__wrapped__", None)
+   38:     if original is None:
+   39:         return
+   40: 
+   41:     from torch._dynamo.variables.torch import TorchInGraphFunctionVariable
+   42: 
+   43:     handlers = TorchInGraphFunctionVariable._get_handlers()
+   44:     if original in handlers and torch.tensor not in handlers:
+   45:         handlers[torch.tensor] = handlers[original]
+   46: 
+   47:     torch._dynamo.trace_rules.clear_lru_cache()
+   48:     rule_map = torch._dynamo.trace_rules.get_torch_obj_rule_map()
+   49:     if original in rule_map and torch.tensor not in rule_map:
+   50:         rule_map[torch.tensor] = rule_map[original]
+   51: 
+   52: 
+   53: class TestUnbackedSymints(InductorTestCase):
+   54:     @skipGPUIf(not HAS_GPU, "requires gpu and triton")
+   55:     @dynamo_config.patch({"capture_dynamic_output_shape_ops": True})
+   56:     def test_expand(self, device):
+   57:         def fn(x, y):
+   58:             nz = torch.nonzero(x)
+   59:             # unbacked symint in nz.size
+   60:             x_exp = nz.expand([-1, 128])
+   61:             # unbacked symint in target sizes
+   62:             y_exp = y.expand([-1, nz.size(0)])
+   63:             return x_exp, y_exp
+   64: 
+   65:         example_inputs = (
+   66:             torch.randn((32), device=device),
+   67:             torch.randn((32, 1), device=device),
+   68:         )
+   69: 
+   70:         actual = torch.compile(fn, fullgraph=True)(*example_inputs)
+   71:         expected = fn(*example_inputs)
+   72: 
+   73:         torch.testing.assert_close(actual, expected)
+   74: 
+   75:     @skipGPUIf(not HAS_GPU, "requires gpu and triton")
+   76:     @dynamo_config.patch({"capture_dynamic_output_shape_ops": True})
+   77:     def test_expand_ok_with_runtime_assert(self, device):
+   78:         def fn(x):
+   79:             nz = x.nonzero()
+   80:             torch._check(nz.size(0) == 128)
+   81:             return nz.expand([128, -1, 2])
+   82: 
+   83:         x = make_tensor(32, 4, device=device, dtype=torch.float32, exclude_zero=True)
+   84:         torch.compile(fn, fullgraph=True)(x)
+   85: 
+
+
+test_unbacked_symints.py::TestUnbackedSymints::test_combo_kernel_size_hint_failure
+  657:     @skipGPUIf(not HAS_GPU, "requires gpu and triton")
+  658:     @dynamo_config.patch({"capture_dynamic_output_shape_ops": True})
+  659:     @inductor_config.patch({"combo_kernels": True, "benchmark_combo_kernel": True})
+  660:     def test_combo_kernel_size_hint_failure(self, device):
+  661:         # A size hint failure is "TypeError: Cannot convert symbols to int"
+  662:         if device == "cpu":
+  663:             raise unittest.SkipTest("Combo kernels must be for GPU.")
+  664: 
+  665:         def fn(x):
+  666:             nz = torch.nonzero(x)
+  667:             u0 = nz.size(0)
+  668:             t1 = torch.ones(u0, device=device)
+  669:             t2 = torch.zeros(u0 + 1, device=device)
+  670:             t3 = torch.zeros(u0 * 2, device=device)
+  671:             t4 = torch.zeros(u0 - x.size(0), device=device)
+  672:             out1 = t1 - 1
+  673:             out2 = t2 + 2
+  674:             out3 = t3 * 3
+  675:             out4 = t4 / 4
+  676:             return out1, out2, out3, out4
+  677: 
+  678:         example_inputs = (torch.randn(32, device=device, dtype=torch.float16),)
+  679:         torch._dynamo.mark_dynamic(example_inputs[0], 0)
+  680:         actual = torch.compile(fn, fullgraph=True)(*example_inputs)
+  681:         expected = fn(*example_inputs)
+  682:         torch.testing.assert_close(actual, expected)

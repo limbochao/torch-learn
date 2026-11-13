@@ -1,0 +1,36 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/utils.py:44-50
+
+   44: def patch_device_supports_tma():
+   45:     @functools.lru_cache(None)
+   46:     def _device_supports_tma():
+   47:         return torch.npu.is_available() and not torch.version.hip
+   48: 
+   49:     torch.utils._triton._device_supports_tma = _device_supports_tma
+   50: 
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1014-1035
+
+ 1014:         cfg_kwargs = {**cfg.kwargs}
+ 1015:         if self.device_props.type == "hip":
+ 1016:             # `compile_meta["signature"]` contains the actual Triton kernel argument
+ 1017:             # names, including constexprs such as XBLOCK_0/XBLOCK_1 for combo kernels.
+ 1018:             # Any HIP config kwarg that is *not* in that signature is not a kernel
+ 1019:             # argument at all; it is a backend compile option that should be forwarded
+ 1020:             # to triton.compile via `options`, not materialized as a constexpr.
+ 1021:             signature_arg_names = OrderedSet(compile_meta["signature"])
+ 1022:             backend_options = {
+ 1023:                 key: value
+ 1024:                 for key, value in cfg_kwargs.items()
+ 1025:                 if key not in signature_arg_names
+ 1026:             }
+ 1027:             cfg_kwargs = {
+ 1028:                 key: value
+ 1029:                 for key, value in cfg_kwargs.items()
+ 1030:                 if key in signature_arg_names
+ 1031:             }
+ 1032:             if backend_options:
+ 1033:                 # Stash backend-only options separately so they do not get mixed into
+ 1034:                 # `constants`, which are interpreted as signature-bound constexpr args.
+ 1035:                 compile_meta["backend_options"] = backend_options

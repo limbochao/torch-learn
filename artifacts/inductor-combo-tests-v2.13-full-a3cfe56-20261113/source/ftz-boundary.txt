@@ -1,0 +1,91 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6173-6188
+
+ 6173: 
+ 6174:         return imports.getvalue()
+ 6175: 
+ 6176:     @classmethod
+ 6177:     def triton_meta_common(cls):
+ 6178:         return {
+ 6179:             "enable_fp_fusion": not config.emulate_precision_casts,
+ 6180:             "launch_pdl": cls._enable_pdl_codegen(),
+ 6181:             "disable_ftz": config.eager_numerics.disable_ftz,
+ 6182:         }
+ 6183: 
+ 6184:     @classmethod
+ 6185:     def inductor_meta_common(cls):
+ 6186:         inductor_meta = {
+ 6187:             "backend_hash": torch.utils._triton.triton_hash_with_backend(),
+ 6188:             "assert_indirect_indexing": config.assert_indirect_indexing,
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1067-1110
+
+ 1067:         """
+ 1068:         Create options to pass to triton.compile based on the compile metadata
+ 1069:         and the given config.
+ 1070:         """
+ 1071:         options = {
+ 1072:             "num_warps": compile_meta["num_warps"],
+ 1073:             "num_stages": compile_meta["num_stages"],
+ 1074:             "debug": compile_meta["debug"],
+ 1075:             "sanitize_overflow": False,  # turn off additional asserts added for overflow checks
+ 1076:         }
+ 1077:         if "enable_fp_fusion" in compile_meta:
+ 1078:             options["enable_fp_fusion"] = compile_meta["enable_fp_fusion"]
+ 1079:         if HAS_WARP_SPEC:
+ 1080:             options.update(
+ 1081:                 {
+ 1082:                     "num_consumer_groups": compile_meta.get("num_consumer_groups", 0),
+ 1083:                     "num_buffers_warp_spec": compile_meta.get(
+ 1084:                         "num_buffers_warp_spec", 0
+ 1085:                     ),
+ 1086:                 }
+ 1087:             )
+ 1088:         if self.device_props.type == "cuda":
+ 1089:             options.update(
+ 1090:                 {
+ 1091:                     "launch_cooperative_grid": compile_meta.get(
+ 1092:                         "launch_cooperative_grid", False
+ 1093:                     ),
+ 1094:                     "launch_pdl": compile_meta.get("launch_pdl", False),  # True
+ 1095:                 }
+ 1096:             )
+ 1097:             if compile_meta.get("disable_ftz", False):
+ 1098:                 options["enable_reflect_ftz"] = False
+ 1099:             for k in tlx_only_cuda_options():
+ 1100:                 if v := getattr(cfg, k, None):
+ 1101:                     options[k] = v
+ 1102:         if self.device_props.type == "hip":
+ 1103:             # HIP backend options are consumed by Triton out-of-band from the kernel
+ 1104:             # signature. They are intentionally *not* present in `constants`.
+ 1105:             options.update(compile_meta.get("backend_options", {}))
+ 1106: 
+ 1107:         if self.device_props.type == "xpu" and XPU_KERNEL_FORMAT == "zebin":
+ 1108:             options["generate_native_code"] = True
+ 1109: 
+ 1110:         return options
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:194-213
+
+  194:         triton_meta = {
+  195:             "signature": signature_to_meta(
+  196:                 signature, size_dtype=size_dtype, argdefs=argdefs
+  197:             ),
+  198:             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+  199:             "constants": {
+  200:                 signature[index].name: 1 for index in equal_1_arg_indices(signature)
+  201:             },
+  202:             "mix_mode": "aiv"
+  203:         }
+  204: 
+  205:         triton_meta["configs"] = [config_of(signature)]
+  206:         mutated_args = self.get_mutated_args_sub_kernels()
+  207:         inductor_meta = self.sub_kernels[0].create_inductor_meta()
+  208:         self.sub_kernels[0]._disable_grouped_autotune(
+  209:             inductor_meta, "Combo kernels do not support grouped autotune"
+  210:         )
+  211:         # Keep runtime BLOCK arguments, but use the actual Combo signature
+  212:         # rather than a member's cached grouped plan.
+  213:         inductor_meta["runtime_block_arg_names"] = tuple(self.block_args)

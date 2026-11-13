@@ -1,0 +1,234 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:139-157
+
+  139:         return heuristics_list[0], size_hints, self.sub_kernels[0]
+  140: 
+  141:     def autotune_subkernel_meta(self) -> list[dict[str, Any]]:
+  142:         """Carry actual per-subkernel constraints into the shared tile search."""
+  143:         metadata = []
+  144:         fields = (
+  145:             "axis_names", "tiling_axis", "no_loop_axis", "split_axis",
+  146:             "low_dims", "split_axis_dtype", "dual_reduction", "npu_kernel_type",
+  147:         )
+  148:         for subkernel in self.sub_kernels:
+  149:             subkernel_meta = subkernel.create_inductor_meta()
+  150:             item = {field: subkernel_meta[field] for field in fields}
+  151:             _, item["size_hints"] = self.select_heuristics(subkernel)
+  152:             item["persistent_reduction"] = subkernel.persistent_reduction
+  153:             metadata.append(item)
+  154:         return metadata
+  155: 
+  156:     def codegen_static_numels_sub_kernel(
+  157:         self, code: IndentedBuffer, sub_kernel: TritonKernel, num: int
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:179-258
+
+  179:     def jit_line(
+  180:         self,
+  181:         heuristics: str,
+  182:         size_hints: dict[str, int],
+  183:         selected_kernel: TritonKernel,
+  184:         signature: list[Any],
+  185:         argdefs: list[ArgName],
+  186:         pointwise_with_reduce: bool = False,
+  187:     ) -> str:
+  188:         assert selected_kernel is not NPUIndexTritonKernel
+  189:         can_use_32bit = all(k.index_dtype == "tl.int32" for k in self.sub_kernels)
+  190:         size_dtype = "tl.int32" if can_use_32bit else "tl.int64"
+  191:         for i, sub in enumerate(self.sub_kernels):
+  192:             self.min_x_blocks_sub_kernel(sub, i)
+  193:         self.select_dispatch_strategy()
+  194:         triton_meta = {
+  195:             "signature": signature_to_meta(
+  196:                 signature, size_dtype=size_dtype, argdefs=argdefs
+  197:             ),
+  198:             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+  199:             "constants": {
+  200:                 signature[index].name: 1 for index in equal_1_arg_indices(signature)
+  201:             },
+  202:             "mix_mode": "aiv"
+  203:         }
+  204: 
+  205:         triton_meta["configs"] = [config_of(signature)]
+  206:         mutated_args = self.get_mutated_args_sub_kernels()
+  207:         inductor_meta = self.sub_kernels[0].create_inductor_meta()
+  208:         self.sub_kernels[0]._disable_grouped_autotune(
+  209:             inductor_meta, "Combo kernels do not support grouped autotune"
+  210:         )
+  211:         # Keep runtime BLOCK arguments, but use the actual Combo signature
+  212:         # rather than a member's cached grouped plan.
+  213:         inductor_meta["runtime_block_arg_names"] = tuple(self.block_args)
+  214:         inductor_meta["mutated_arg_names"] = mutated_args
+  215:         dispatch = self.dispatch_class
+  216:         assert dispatch is not None
+  217:         inductor_meta["grid_type"] = dispatch.grid_expr.__name__
+  218:         inductor_meta["combo_grid_meta"] = self.combo_grid_meta()
+  219:         inductor_meta["combo_subkernel_meta"] = self.autotune_subkernel_meta()
+  220: 
+  221:         sub_kernel = selected_kernel
+  222:         if heuristics == "foreach":
+  223:             heuristics_line = f"""
+  224:                 @triton_heuristics.foreach(
+  225:                     size_hints={size_hints!r},
+  226:                     num_warps={self.num_warps},
+  227:                     filename=__file__,
+  228:                     triton_meta={triton_meta!r},
+  229:                     inductor_meta={inductor_meta!r},
+  230:                 )
+  231:                 @triton.jit
+  232:             """
+  233:         elif sub_kernel.inside_reduction:
+  234:             reduction_hint = sub_kernel.features.get_reduction_hint()
+  235:             heuristics_line = f"""
+  236:                 @triton_heuristics.{heuristics}(
+  237:                     size_hints={size_hints!r},
+  238:                     reduction_hint={reduction_hint},
+  239:                     filename=__file__,
+  240:                     triton_meta={triton_meta!r},
+  241:                     inductor_meta={inductor_meta!r}
+  242:                 )
+  243:                 @triton.jit
+  244:             """
+  245:         else:
+  246:             tile_hint = ""
+  247:             if len(size_hints) == 2:
+  248:                 tile_hint = "tile_hint=TileHint.SQUARE,"
+  249:             else:
+  250:                 tile_hint = "tile_hint=TileHint.DEFAULT,"
+  251:             heuristics_line = f"""
+  252:                 @triton_heuristics.{heuristics}(
+  253:                     size_hints={size_hints!r}, {tile_hint}
+  254:                     filename=__file__,
+  255:                     triton_meta={triton_meta!r},
+  256:                     inductor_meta={inductor_meta!r}
+  257:                 )
+  258:                 @triton.jit
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:464-500
+
+  464: 
+  465:     def combo_grid_meta(self) -> dict[str, Any]:
+  466:         dynamic_shape = bool(self.dynamic_shape_args)
+  467:         num_kernels = len(self.sub_kernels)
+  468:         min_blocks = (
+  469:             max(self.min_x_blocks_list) * num_kernels if not dynamic_shape else None
+  470:         )
+  471: 
+  472:         # NPU dispatch flattens the selected split axis onto program_id(0),
+  473:         # even when that axis is named Y0 or X1. Match that exact 1-D grid.
+  474:         default_config = {"XBLOCK": self.block_args[0]} if self.block_args else None
+  475: 
+  476:         meta = {
+  477:             "num_kernels": num_kernels,
+  478:             "min_blocks": min_blocks,
+  479:             "default_config": default_config,
+  480:             "split_numels": [],
+  481:             "no_split": [],
+  482:             "split_block": self.block_args[0] if self.block_args else None,
+  483:         }
+  484: 
+  485:         for num, sub_kernel in enumerate(self.sub_kernels):
+  486:             meta[f"no_x_dim_{num}"] = not sub_kernel.split_axis
+  487:             if sub_kernel.split_axis:
+  488:                 extent = V.graph.sizevars.simplify(sub_kernel.split_axis[0].length)
+  489:                 static = isinstance(extent, (Integer, int))
+  490:                 meta[f"xnumel_{num}"] = int(extent) if static else None
+  491:                 meta["split_numels"].append(
+  492:                     int(extent) if static
+  493:                     else f"{sub_kernel.split_axis[0].name}_numel_{num}"
+  494:                 )
+  495:             else:
+  496:                 meta[f"xnumel_{num}"] = 1
+  497:                 meta["split_numels"].append(1)
+  498:             meta["no_split"].append(not sub_kernel.split_axis)
+  499: 
+  500:         return meta
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:1926-2008
+
+ 1926:     def create_inductor_meta(self):
+ 1927:         mutated_args = set()  # noqa: set_linter
+ 1928:         for mutation in self.mutations:
+ 1929:             if mutation in self.args.input_buffers:
+ 1930:                 mutated_args.add(self.args.input_buffers[mutation])
+ 1931:             if (
+ 1932:                 mutation in self.args.inplace_buffers
+ 1933:                 and mutation not in V.graph.removed_buffers
+ 1934:                 and mutation not in self.removed_buffers
+ 1935:             ):
+ 1936:                 mutated_args.add(self.args.inplace_buffers[mutation].inner_name)
+ 1937:             if mutation in self.args.output_buffers:
+ 1938:                 mutated_args.add(self.args.output_buffers[mutation])
+ 1939:         mutated_args = sorted(mutated_args)
+ 1940:         tiling_axis = [x.sorted_order for x in self.tiling_axis]
+ 1941:         if (
+ 1942:             self.vectorized_welford_axis is not None
+ 1943:             and self.vectorized_welford_axis.sorted_order not in tiling_axis
+ 1944:         ):
+ 1945:             tiling_axis.append(self.vectorized_welford_axis.sorted_order)
+ 1946:         no_loop_axis = [x.sorted_order for x in self.tiling_axis if x.is_no_loop_axis]
+ 1947:         split_axis = [x.sorted_order for x in self.split_axis]
+ 1948:         axis_names = [x.name for x in self.sorted_axis]
+ 1949:         axis_static_values = []
+ 1950:         for axis in self.sorted_axis:
+ 1951:             length = axis.length
+ 1952:             if isinstance(length, (int, sympy.Integer)):
+ 1953:                 axis_static_values.append((axis.name, int(length)))
+ 1954:         split_axis_dtype = (
+ 1955:             self.get_axis_dtype(self.split_axis[0]) if self.split_axis else None
+ 1956:         )
+ 1957:         runtime_block_arg_names = tuple(
+ 1958:             f"{axis.name.upper()}BLOCK" for axis in self.split_axis
+ 1959:         )
+ 1960: 
+ 1961:         inductor_meta = {
+ 1962:             "grid_type": self._get_grid_type().__name__,
+ 1963:             "autotune_hints": set(self.autotune_hints),  # noqa: set_linter
+ 1964:             "kernel_name": str(Placeholder.DESCRIPTIVE_NAME),
+ 1965:             "mutated_arg_names": mutated_args,
+ 1966:             # Due to breaking change of triton 3.0, the original invocation is broken
+ 1967:             "backend_hash": torch.utils._triton.triton_hash_with_backend(),
+ 1968:             "split_axis": split_axis,
+ 1969:             "tiling_axis": tiling_axis,
+ 1970:             "no_loop_axis": no_loop_axis,
+ 1971:             "axis_names": axis_names,
+ 1972:             "axis_static_values": tuple(axis_static_values),
+ 1973:             "low_dims": self.low_dims,
+ 1974:             "numof_reduction_axis": self.numof_reduction_axis(),
+ 1975:             "split_axis_dtype": split_axis_dtype,
+ 1976:             "dual_reduction": self.numof_reduction_axis() > 1,
+ 1977:             "npu_kernel_type": str(self.npu_kernel_type),
+ 1978:             "traced_graph_hash": "TRACED_GRAPH_HASH",
+ 1979:             "traced_graph_dir": "TRACED_GRAPH_DIR",
+ 1980:             "are_deterministic_algorithms_enabled": torch.are_deterministic_algorithms_enabled(),
+ 1981:             "runtime_block_arg_names": runtime_block_arg_names,
+ 1982:             **TritonKernel.inductor_meta_common(),
+ 1983:         }
+ 1984:         vector_axis_length = (
+ 1985:             self.vectorized_welford_axis.length
+ 1986:             if self.vectorized_welford_axis is not None
+ 1987:             else None
+ 1988:         )
+ 1989:         if (
+ 1990:             self.full_static_welford_reduction
+ 1991:             and isinstance(vector_axis_length, (int, sympy.Integer))
+ 1992:         ):
+ 1993:             inductor_meta["vectorized_welford_axis"] = (
+ 1994:                 self.vectorized_welford_axis.sorted_order
+ 1995:             )
+ 1996:         grouped_meta = getattr(self, "grouped_autotune_meta", None)
+ 1997:         if grouped_meta is not None:
+ 1998:             inductor_meta.update(
+ 1999:                 {
+ 2000:                     "group_enabled": bool(grouped_meta.enabled),
+ 2001:                     "group_template": grouped_meta.template,
+ 2002:                     "group_workload": grouped_meta.workload,
+ 2003:                     "primary_group_axis": grouped_meta.primary_group_axis,
+ 2004:                     "static_split_axes": grouped_meta.static_split_axes,
+ 2005:                     "secondary_runtime_symbolic_axes": grouped_meta.secondary_runtime_symbolic_axes,
+ 2006:                     "group_features": tuple(
+ 2007:                         dataclasses.asdict(spec) for spec in grouped_meta.group_features
+ 2008:                     ),

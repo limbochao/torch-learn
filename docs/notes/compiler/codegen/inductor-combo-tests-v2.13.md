@@ -9,1236 +9,825 @@ published: false
 <!-- combo-section:validation213:start -->
 ## 最新执行结果
 
-2026-11-13 在 NPU_A5 的 `pta_213_case` 环境全量复测 2.10 适配基线 PASS 的 60 个重合方法。
-重新收集并执行 **413 个参数实例**，结果为 **408 PASS、0 FAIL、5 SKIP**；
-方法结果为 **55 PASS、0 FAIL、5 SKIP**。本次没有抽样，也没有复用旧执行结果。
+2026-11-13 在 NPU_A5 Docker 的 `pta_213_case` 环境，按固定 CSV 全量重新收集和执行 105 个源方法、464 个参数实例。CSV 的 116 行包含 11
+个随外层方法验证的嵌套函数。实例结果为 **419 PASS、35 FAIL、10 SKIP**；没有抽样或复用旧执行结果。
 
 | 范围 | PASS | FAIL | SKIP |
 | --- | ---: | ---: | ---: |
-| 本次日构建全量复测的 60 个重合方法 | 55 | 0 | 5 |
-| 本次日构建全量复测的 413 个实例 | 408 | 0 | 5 |
-| 范围外的 45 个方法，沿用各自原报告 | 19 | 14 | 12 |
-| 范围外的 51 个实例，沿用各自原报告 | 23 | 15 | 13 |
-| 当前合并清单的 105 个方法 | 74 | 14 | 17 |
-| 当前合并清单的 464 个实例 | 431 | 15 | 18 |
+| 2.10 重合范围 60 个方法 | 57 | 3 | 0 |
+| 2.10 重合范围 413 个实例 | 410 | 3 | 0 |
+| 重合范围外 45 个方法 | 6 | 30 | 9 |
+| 重合范围外 51 个实例 | 9 | 32 | 10 |
+| 全量 105 个方法 | 63 | 33 | 9 |
+| 全量 464 个实例 | 419 | 35 | 10 |
 
-**最新日构建的设备复测范围是 60 个重合方法，不是整个 105 方法清单。**
-范围外的 45 个方法保留原验证来源，不能据此认定日构建仍有对应的 14 个失败方法。
-合并清单当前已覆盖全部 464 个实例，旧清单中的抽样缺口已在本次重合范围补齐。
-2.10 重合范围来自既定 60 方法适配基线，与 2.10 原生 54 方法清单不同。
+### 验证版本与范围
 
-### 实际验证版本
+torch_npu `2.13.0.dev20261113`，提交 `44555141711c0c825c5a201e303dcadad1f5fcb4`。
 
-- torch_npu：`2.13.0.dev20261113`，包提交 `44555141711c0c825c5a201e303dcadad1f5fcb4`。
-- PyTorch：`2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton `3.6.0`。
-- 设备：Ascend950PR；物理卡 1、2、3，每卡两个进程，缓存与日志分别隔离。
-- 测试快照：`e71a557c8748f4ff703462bc59bc18dac1cc0173`，目录 `v2.13.0/inductor_npu`。
-- 执行时间：北京时间 2026-11-13 12:15:02 至 14:21:26，原生 `python -m pytest -vs`。
+PyTorch `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton `3.6.0`。
 
-本次未叠加 Python overlay，未修改生产代码或测试断言。
-与包提交对应的 194 个 NPU Inductor Python 文件逐项一致；安装的 Torch/NPU Inductor
-共 588 个 Python 文件在全部分片执行前后哈希一致，测试文件哈希也一致。
-卡 2 执行前显示 UB/RAS Alarm，但三卡基础计算检查及卡 2 全部正式测试均完成，没有执行错误。
-逐分片 JUnit 重新解析后与报告逐项一致，413 个实例无重复、无遗漏。
+物理卡 1、2、3，每卡两个进程，Inductor/Triton 缓存和日志独立；没有生产代码 overlay。
 
-### 全量 PASS 和 SKIP 的具体范围
+测试分支 `fix/combo-213-210-overlap`，提交 `a3cfe564cd60cb83f4c81bab5dcd388305992ff2`，main 基线
+`91435bdf732e772c3240329797a9a29166ce533a`。
 
-| 文件 | 源方法 | PASS 实例 | SKIP 实例 |
-| --- | ---: | ---: | ---: |
-| `test_combo_kernels.py` | 28 | 26 | 4 |
-| `test_foreach.py` | 27 | 376 | 0 |
-| `test_torchinductor.py` | 4 | 5 | 1 |
-| `test_unbacked_symints.py` | 1 | 1 | 0 |
+执行时间：北京时间 2026-11-13 18:58:49 至 2026-11-13 20:11:18。
 
-5 个 SKIP 保留既有测试口径，没有作为功能通过：
+Community 分支只包含与既定 60 个重合方法相关的适配，修改 3 个文件、30 个方法；范围外测试修改未迁入该分支。仅本轮验证副本加上 TMA 和三个 PDL 方法的硬件 SKIP，方法
+body 和断言保持原内容。foreach 按已确认口径保留数值、mutation、布局和梯度检查，NPU 不要求 CUDA 单 kernel／FOREACH 专属结构。
 
-| 方法 | 具体原因 |
-| --- | --- |
-| `test_combo_kernel_per_config_subkernel_poi` | 成员独立 pointwise 分块尚未实现，共享分块不能验证本特性 |
-| `test_combo_kernel_per_config_subkernel_per` | 成员独立 persistent reduction 分块尚未实现 |
-| `test_combo_kernel_per_config_subkernel_red` | 成员独立 reduction 分块尚未实现 |
-| `test_combo_kernel_per_config_subkernel_red_per` | reduction 与 persistent reduction 成员独立分块尚未实现 |
-| `test_combo_kernel_filter_cpu_npu` | NPU 实例不验证 CPU 节点过滤策略，CPU 实例负责该策略 |
+执行前后 301 个测试文件、588 个 Torch/NPU Inductor Python 文件哈希一致；其中 194 个 NPU Inductor Python
+文件与实际包提交逐项一致。三卡基础计算均通过。全部分片 JUnit 已独立重新解析，464 个实例无遗漏或跨分片重复。
 
-foreach 27 个方法的 376 个参数全部功能 PASS，保留数值、布局、mutation 和梯度检查；
-既有 NPU 适配仍不要求 CUDA 的单 kernel 数量和 foreach 专用生成文本。
-**功能 PASS 不证明 FOREACH 分组融合已实现**，也不能由该入口缺失推断普通纵向融合缺失。
+[2.13 PASS 清单][pass213]保留 2.10 重合范围口径，当前为 410 个实际 PASS 实例，在 2.13 NPU 测试目录执行；[全范围
+PASS][all-pass]另存在本轮证据目录。2.10 原生 397 条清单保持不变。既定 60 方法适配范围与 2.10 原生 54 方法清单的口径不同，本轮用 [60
+方法范围清单][overlap]精确划分。
 
-[408 个 2.13 PASS 的精确 node ID](../../../../scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt)
-为独立的新清单，在 **2.13 NPU 测试目录**执行。
-2.10 原生 PASS 清单保留原内容，397 个执行名与[基线快照][daily213-baseline210]一致。
+`test_combo_autotune_grouping_by_metadata_fingerprint` 直接调用社区 helper 和模拟 metadata；其 PASS 证明该 helper
+的分组规则，本轮未验收真实 NPU 成员 metadata 到该分组的连接。
 
-Community 测试分支 `fix/combo-213-npu-case-adaptation` 已在全量验证后执行推送，
-远端与实际验证的 `e71a557` 完全一致；本次未发现需要新增的测试修改。
-
-[完整 60 方法结果][daily213-results]；[5 个 SKIP 的精确 node ID][daily213-skips]；
-[版本、分片 JUnit、命令、日志和哈希证据][daily213-evidence]；[JUnit 逐实例交叉核对][daily213-junit]。
-[原 116 行 CSV](inductor-combo-tests-native-v2.13-sync-64dc85c.csv) 保持文件名、行顺序及五列，
-本次更新重合方法对应的 71 行，含 11 个随外层验证的嵌套函数。
-[合并来源清单][daily213-inventory] 和 [逐实例来源][daily213-jobs]
-标明哪些结果来自本次日构建，哪些仍来自范围外原报告。
-[执行方式](../../../../scripts/tests/combo_kernel_210/README-213.md)。
+[当前 CSV][csv]保持原文件名、116 行顺序及五列，所有行均来自本轮结果。[方法与逐实例报告][jobs]、[完整环境和分片证据][evidence]、[JUnit
+交叉核对][junit]及[Community 范围审计][scope]可追溯当前结论。
 
 <!-- combo-section:validation213:end -->
 
 <a id="analysis213"></a>
 
 <!-- combo-section:analysis213:start -->
-## 当前问题与优先级
+## 当前问题与修复顺序
 
-2026-11-13 确认 Ascend 远端 master 为 **`acfc0910ab6184c50faa009b452894f65820e7f8`**。
-全部 **14 FAIL + 17 SKIP，共 31 个源方法**（15 个失败实例、18 个跳过实例）的逐项分析，
-使用 `44555141711c0c825c5a201e303dcadad1f5fcb4` 快照；其引用的 35 段 NPU 源码在新 master 仍逐字匹配。
-本节新增的融合能力核查直接使用新 master，版本对照与逐段核对收据见 [E15][E15]、[完整源码索引][source-index]。
-配套社区 Torch 源码为实际 2.13 环境提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`，
-测试源码为已推送的 `e71a557`；Triton-Ascend `origin/main` 的参考源码快照为
-`62f6b54e0f2420d6b718e0d4f89fa7a464d2e78f`。
+重合范围外共有 39 个非 PASS 方法：34 个非硬件 FAIL／SKIP 全部进入下表，5 个硬件／平台协议方法保留 SKIP。P0 1 项先定位本轮多轴归约精度失败；P1 18
+项恢复有效测试入口、eager 布局、metadata、统计和追踪；P2 14 项处理独立分块、成员调优、融合目标和 FTZ 数学路径；P3 1 项补齐峰值门控的有效验收。
 
-**本次日构建 `4455514171` 已完成 60 个重合方法的全量设备复测。**
-本节涉及的 14 个失败方法及范围外的 12 个 SKIP 方法未在本次范围内，保留其实际验证版本和源码证据；
-不能把这些原报告状态认定为新日构建的设备复测结论。
-5 个重合 SKIP 已在新包重新执行，仍为 4 个独立分块方法和 1 个 NPU CPU-filter 实例。
-当前合并方法统计为 **74 PASS、14 FAIL、17 SKIP**；版本范围见 [合并来源清单][daily213-inventory]。
-WRN、FTZ 等诊断证据来自原 `64dc85c` wheel + `d12230b556` 覆盖环境，仍仅解释范围外对应报告。
+以下是修复顺序与验收要求，本轮未实现生产修复。原测试提前 SKIP 是实际执行状态，不代表功能通过，也不作为后续规避目标的理由；非硬件旧 skip 应移除，未完成的目标保持 FAIL。当前 PASS
+不保留旧失败分析。源码分析固定在实际安装的 NPU/PyTorch 提交，不把其他开发分支或最新 master 当作本轮运行代码。
 
-下表按具体字段或功能列出作用、当前缺口和适配内容，编号链接到后文的源码与验证证据。
-一行对应一项字段或功能；同一方法可涉及多行，同一字段也可由多个方法检查。
-方法数仍为 **14 FAIL、17 SKIP**，不按表格行数重复计数。
+### metadata 和统计分别缺什么
 
-<a id="fusion-capabilities"></a>
+`optimize_mem` 两个方法检查同一个字段的两个图阶段；七个统计方法检查多种计数、布局信息和成本出口，不能写成“缺七种统计”。`combo_subkernel_meta`
+已有真实成员轴、尺寸和模式，它不等于社区承载下表统计的 `inductor_meta_i` 字典。
 
-### 上游水平、垂直融合与 NPU 待适配能力
-
-**社区 2.13 的 Combo/foreach 体系支持水平融合与垂直融合的组合，但这套基础机制在 2.10 已存在。**
-对照社区 `v2.10.0`（`449b1768410104d3ed79d3bcfe4ba1d65c7f22c0`），
-两版都有 `ForeachKernelSchedulerNode.can_fuse/fuse` 和下表四个 foreach 用例。
-因此应写“2.13 支持的上游能力，NPU 待适配”，不能把这些基础机制全部称为“2.13 首次新增”。
-版本、测试原断言和 NPU 入口的固定源码摘录见 [E15][E15]。
-
-在这里，**水平融合**是把彼此没有 producer/consumer 依赖的成员放进一个 Combo；
-**垂直融合**是沿数据依赖把生产算子与消费算子融入同一个成员的计算链。
-例如先在成员内融合 `add → foreach op → mul`，再把两个独立成员合为一个 kernel。
-普通调度先执行 `fuse_nodes`，自动 Combo 分组随后执行 `create_combo_kernel_nodes`；
-后者明确分组 parallel nodes。成员间需要独立，依赖融合发生在成员内部并受 `can_fuse` 条件约束。
-foreach 的外部 producer/consumer 仍有归约等限制，跨多个成员读取的 consumer 也不能随意吸收。
-
-<a id="fusion-cases"></a>
-
-**哪些现有用例能体现：** 下表方法均在当前正式结果中为 PASS，
-最后一列说明适配后的 PASS 实际覆盖范围。前一列是社区原融合目标，不是本次新增设备结果。
-第一个方法来自 `test_combo_kernels.py::ComboKernelTests`，其余来自 `test_foreach.py::ForeachTests`。
-
-| 上游用例 | 体现的功能 | 社区原目标 | NPU 适配后的验证 |
-| --- | --- | --- | --- |
-| `test_activation_functions` | 独立 relu/sigmoid/tanh 水平打包 | 1 kernel | 关闭数量断言，验证数值 |
-| `test_single_list` | foreach 列表成员水平打包 | 1 kernel | 关闭数量断言，验证计算 |
-| `test_scheduler_fusion_list` | foreach→foreach 垂直融合，再水平打包成员 | 1 kernel | 关闭数量断言，验证计算 |
-| `test_non_foreach_producer_list` | 普通 producer→foreach 的成员融合 | 1 kernel | 关闭数量断言，验证计算 |
-| `test_non_foreach_consumer_producer_list` | 普通 producer→foreach→普通 consumer，叠加水平融合 | 1 kernel | 关闭数量断言 |
-
-最完整的例子是 `test_non_foreach_consumer_producer_list` 的 unary 分支：
-
-```python
-def fn(a0, a1):
-    c0 = torch.add(a0, a0)
-    c1 = torch.mul(a1, a1)
-    d = op([c0, c1])
-    e0 = torch.mul(d[0], a0)
-    e1 = torch.mul(d[1], a1)
-    return [e0, e1]
-```
-
-第一条链是 `add(a0,a0) → op 的第 0 个成员 → mul(d[0],a0)`，
-第二条链是 `mul(a1,a1) → op 的第 1 个成员 → mul(d[1],a1)`。
-每条链体现垂直融合，两条独立链打包体现水平融合；社区要求整个图生成 1 个 kernel。
-只比较 eager/compiled 数值，无法证明这个融合目标。
-
-**NPU 缺口定位：** 默认 NPU Inductor Triton 路径注册 `NPUCombinedScheduling`，
-其 backend features 来自 `NPUTritonScheduling`，列表中没有 `BackendFeature.FOREACH`。
-社区 lowering 在该 feature 为真时才 realize 成员并 `register_operation_list`，
-因此当前没有启用原 FOREACH 分组入口。
-NPU 的 `can_fuse_vertical` 及 foreach `can_fuse` 委托仍存在，普通垂直融合能力不能据此判为缺失。
-当前 foreach 用例通过 `check_kernel_count = GPU_TYPE != "npu"` 绕过单 kernel 验收，
-所以需接通、验证的是完整的 FOREACH 分组与依赖链组合路径。
-
-<a id="fusion-capability-tracking"></a>
-
-**需要作为 NPU 功能适配讨论的具体目标：** C01–C04 共用 FOREACH 入口缺失这一原因，
-分行是为了分别说明验收目标；以下 6 行不代表新增 6 个正式 FAIL。
-
-| 功能目标 | 作用 | 当前缺口或覆盖限制 |
-| --- | --- | --- |
-| <a id="c01"></a>C01 列表成员水平打包 | 减少独立 tensor 分支的 kernel 启动 | FOREACH 成员列表未注册，原单 kernel 目标未验收 |
-| <a id="c02"></a>C02 两个 foreach 阶段的成员配对融合 | 沿各成员的依赖融合前后操作 | 分组入口未启用，需接通 foreach→foreach 组合路径 |
-| <a id="c03"></a>C03 普通 producer 接入 foreach 成员 | 把前置 add/mul 融入成员 | 普通融合入口已有，FOREACH 内 producer 吸收目标未验收 |
-| <a id="c04"></a>C04 foreach 成员接入普通 consumer | 把后置 mul 接入成员链 | 缺完整分组链路验收，当前 PASS 不能证明融合完成 |
-| <a id="c05"></a>C05 共享输入的 mixed-order 联合归约 | 联合处理 x 的行归约与列归约 | `mix_order_reduction=False`；社区 3 kernel，NPU 4 kernel |
-| <a id="c06"></a>C06 不同轴布局成员的水平组合 | 在一个 Combo 中容纳不同分块接口 | 当前 `(x0,r1)` 与 `(r0)` 分成 2 个普通 kernel |
-
-C01 对应 `test_single_list`；C02 对应 `test_scheduler_fusion_list`；
-C03 对应 `test_non_foreach_producer_list`；C04 连同前置链由
-`test_non_foreach_consumer_producer_list` 体现。接通后应保留数值检查，
-并恢复原单 kernel 目标、检查成员实际计算链，防止普通拆分计算的 PASS 被误当作功能完成。
-普通激活用例的数量断言也被关闭，当前报告不能单独证明其三成员水平组合；
-NPU 已有真实双成员 Combo 的证据见 [F01](#f01) 和 store-mask 场景，水平组合能力已有部分覆盖。
-
-C05 对应 `test_fuse_mix_order_reductions_combo_kernels`：
-`x.sum(1)` 与 `x.sum(0)` 共享输入，但彼此没有 producer/consumer 依赖，属于两个方向的联合归约。
-社区将二者融合为 1 个 `FusedMixOrderReductions` kernel，
-依赖行归约结果的 `row_sum.sum()` 单独执行，独立的 y/z 归约组成 Combo，总计 3 个 kernel。
-NPU 当前行归约、列归约、消费者分别执行，仅 y/z 组成 Combo，总计 4 个 kernel。
-**这一差异应记录为 mixed-order 联合归约待适配；“纵向合并”不是该用例的准确功能名称。**
-`FusedMixOrderReductions` 与对应配置在 2.10 已存在，2.13 清单增加的是这个 Combo 共存场景的测试覆盖。
-[F01](#f01) 使用两个不同输入，已生成双成员 Combo；其逐成员 hint 缺失与 C05 是两项问题。
-
-C06 对应 `test_combo_kernel_scalar_store_broadcast`：社区要求 1 个 kernel，
-其中 `scalar_sum → d * scalar_sum → sum` 是依赖链，`c.sum(1)` 是独立分支；
-社区单 kernel 目标同时体现链内融合与分支间水平组合。
-NPU 适配检查 2 个 `GridNpu`、两种实际轴布局及不存在 `combo_grid_meta`。
-当前按模式和轴接口分区是实现限制的来源；若对齐上游目标，需要扩展跨接口的分块、dispatch 与资源适配，
-验收真实的单 Combo 结构、标量输出和广播计算数值。
-这项应记录为水平组合能力待扩展，而不是只用“融合策略不同”结束分析。
-
-这些能力目标单独跟踪，正式 CSV 的 PASS 仍保留“—”。
-本节功能目标依据固定版本源码、适配断言及生成代码证据；
-本次日构建重合范围功能 PASS 不替代未恢复的单 Combo/FOREACH 融合验收。
-
-**FAIL：图阶段策略、逐成员归约分类与算子来源映射**
-
-| 具体字段或功能 | 作用 | 当前缺口与适配内容 | 方法 |
-| --- | --- | --- | --- |
-| `optimize_mem=True` | 推理图向 autotuner 传递内存优化策略 | 未显式导出，缺省 True 与本例期望一致；需补图阶段字段 | [F03](#f03) |
-| `optimize_mem=False` | 训练前向图禁用该内存优化策略 | 字段缺失后属性默认 True；需按训练前向阶段显式传 False | [F04](#f04) |
-| `reduction_hint_i` | 各成员 INNER/OUTER 归约分类，供候选选择 | 双成员 Combo 已有，仅传首成员 hint；需补真实分类，消费需接 native 搜索 | [F01](#f01) |
-| `disable_ftz` | 控制 FP32 非正规数是否冲零 | Combo 未导出字段，Triton-Ascend 无对应选项消费；exp/exp2 数学入口还需跨层适配 | [F05](#f05) |
-| kernel → FX 映射 | 将生成 kernel 追溯到 post-grad 算子 | hook 收到 `node=None` 外壳，跳过 origins；需按实际 partition 传成员叶子 | [F14](#f14) |
-
-F03、F04 检查的是**同一个 `optimize_mem` 字段的两种图阶段取值**，不是两种 metadata。
-统一取值为 `V.graph.is_inference or V.graph.is_backward`：推理/反向为 True，训练前向为 False。
-该策略用于 autotune 重试时保护会被原地修改的输入，并在 clone 可能增加设备峰值时选择 CPU 备份/恢复。
-当前 NPU 主 bench 直接 clone，CPU-copy/restore helper 尚未接入；补字段和接入真实搬移路径分别需要处理，
-现有证据未显示错误 CPU 搬移或训练输入污染。字段出口见 [E2][E2]，策略与实际调用见 [E5][E5]。
-F05 的基本算术已保留可表示的非正规数，指数数学路径的边界冲零需单独处理，不能仅补字段后判定数值能力已实现。
-
-**FAIL：逐成员操作统计、成本估算与报告**
-
-F06–F12 是 **7 个测试方法**，检查的字段和消费路径有重叠，不代表缺少 7 种独立统计。
-`inductor_meta_i` 是第 i 个成员的统计字典；当前 NPU 的 grid/split 信息和成员轴约束不能提供这些统计。
-下表把每个字段及不同消费出口分别列出。
-
-| 具体字段或出口 | 作用 | 当前缺口与适配内容 | 方法 |
-| --- | --- | --- | --- |
-| `inductor_meta_i` | 将统计与具体成员一一对应 | 缺逐成员字典；需统一普通 kernel/Combo 出口 | [F06](#f06)–[F09](#f09) |
-| `num_load` | 去掉缓存复用后的有效读取操作数 | NPU CSE 已计数，但普通/逐成员统计出口未导出真实值 | [F06](#f06)、[F07](#f07)、[F09](#f09) |
-| `num_store` | 有效写回操作数，含归约结果 | 普通/归约 store 漏计；需修计数与移除 store 的扣减 | [F06](#f06)、[F07](#f07)、[F09](#f09) |
-| `num_reduction` | 归约操作数，pointwise 成员应为 0 | NPU CSE 已计数，但未分别输出 sum/mean 等成员的实际值 | [F06](#f06)、[F07](#f07)、[F09](#f09) |
-| `autotune_hints` | 提示调优器补充特定候选配置 | 普通出口已有，Combo 顶层复用首成员；缺各成员自己的提示集合 | [F06](#f06)、[F09](#f09) |
-| `atomic_add_found` | 标记是否有原子加写回，供调优约束判断 | 未输出各成员的真实标记；需按实际 store 模式导出 | [F06](#f06)、[F09](#f09) |
-| `has_loadstore_with_contiguous_rdim` | 归约轴 stride=1 访问标志 | load 未更新，默认 False 不可信；需按实际地址推导 | [F08](#f08) |
-| `no_x_dim` | 是否没有社区 X 迭代维，影响 grid/分块 | NPU 已有 `no_x_dim_i`，含义却是无 split axis；需定义与普通 kernel 可比的 NPU 口径 | [F09](#f09) |
-| `tiling_scores` | 描述各轴访存合并评分，供 tile 候选评价 | 缺与普通 kernel 一致的 NPU 评分出口；需按 native 轴定义，有实际评分时导出 | [F09](#f09) |
-| benchmark 的 `kernel_num_gb` | 访问字节估算/1e9，供带宽计算 | 普通 kernel 已有值；Combo 缺成员聚合与 standalone 求和对照 | [F10](#f10) |
-| benchmark 的 `kernel_flop` | 浮点操作量估算，用于算力报告与成员成本对照 | 普通 NPU 未导出，Combo 也未聚合；standalone 字段缺失时求和为 0 不是有效基准 | [F10](#f10) |
-| profile 的 `kernel_num_gb` | 给带宽 profiler 提供 Combo 总访问量估算 | 缺按 profile 条件的聚合出口；仅 profile 时不输出 FLOP | [F11](#f11) |
-| benchmark 代码中的 `num_gb` | 与实测耗时相除，生成 GB/s 报告 | 模板收到整数 0，报告带宽为零；需传真实总估算，改成 0.0 不能修复报告 | [F12](#f12) |
-
-F06 检查三个 pointwise 成员，F07 检查 sum/mean 两个归约成员；两者都要输出各自的 load/store/reduction 计数。
-CSE（公共子表达式消除）会复用已计算或已读取的值，`num_load` 只计未复用的有效读取。
-主机重放一次有效 store 时，NPU 的 `num_store` 为 0，社区为 1；此处需要修计数，不能只补字段。
-F08 的连续归约访问标志用于确定性相关候选筛选；若要消费该标志，需接到 NPU 自身的筛选规则。
-F09 另检查同一成员在 standalone/Combo 下的字段一致性，不能用两个空字典相等来证明统计完整。
-F11 仅开启 `profile_bandwidth=True`，要求总 GB 估算且不输出 FLOP；F12 则检查生成 benchmark 代码中的估算值。
-上述计数是生成操作的计数，GB/FLOP 是编译期成本估算，不是设备实测流量。
-例如 F10 原无 alias 的两个 1024 元素 FP32 pointwise 成员，按输入+输出估算共 **16384 bytes，即 1.6384e-5 GB**；
-该真实总估算应进入 Combo metadata 和 benchmark，而不是默认填 0。
-计数证据见 [E4][E4]，字段契约见 [E11][E11]，估算与报告出口见 [E12][E12]。
-
-**FAIL：需要调整测试检查口径的两项**
-
-| 方法 | 检查的功能及作用 | 当前证据与适配内容 |
-| --- | --- | --- |
-| [F02](#f02) | `add_persistent_rblock`：为 looped 归约追加大 R 候选 | 本输入已整行 persistent，R1 tile=4096；需查 native 候选与资源 |
-| [F13](#f13) | WRN 内存 gate：限制融合带来的峰值增加量 | gate 已存在，原图无 Combo 候选，首次峰值含 192 MiB autotune 缓存；需选有正 delta 的可控图并 warm 测量 |
-
-**SKIP：成员独立分块、默认配置与搜索，以及相关测试入口**
-
-“共享块”指一次 launch 的所有成员复用同名 runtime/constexpr tiling 参数；
-“独立分块”要求各成员有真实独立参数、候选与 dispatch 边界。
-以下 8 个方法的独立分块目标尚未实现；S05 还涉及独立的 ATen 布局转换与测试观测入口。
-
-| 具体功能 | 作用 | 当前缺口与适配内容 | 方法 |
-| --- | --- | --- | --- |
-| pointwise 成员独立 X 分块 | 不等长成员分别选择工作块大小 | 当前共用 X 参数；缺逐成员参数、候选和累计 dispatch 边界 | [S01](#s01) |
-| persistent 成员独立 X 分块 | 固定各自归约长度，独立选择行方向工作块 | 不同静态 R 已存在，X 仍共享；需增加独立 X 配置及 launch 映射 | [S02](#s02) |
-| persistent/regular 混合成员配置 | 在一次 launch 中协调不同归约模式的配置与执行 | 缺独立配置，当前又按模式分区；需设计合法的混合协调与资源校验 | [S03](#s03) |
-| 多轴/非连续归约成员独立 block | 各成员按真实归约轴划分 loop 与尾块 | 缺独立归约参数、候选及对应累积/mask；需沿用 NPU 轴语义实现 | [S04](#s04) |
-| 成员独立二维 tile | 八个布局转换成员分别选择二维工作块 | 当前 block ABI 共享；缺二维成员配置与地址/dispatch 对齐 | [S05](#s05) |
-| `channels_last` 转换 | 把 NCHW 转为所需布局 | 未符合目标格式时仅支持转 Contiguous；需 ATen 适配，已有目标格式可返回 | [S05](#s05) |
-| 实际 launch grid 对照 | 验证成员 tile/dispatch 与启动范围一致 | 需用 NPU launcher/profiler 真实记录替换 GPU 固定 grid | [S05](#s05) |
-| 无 benchmark 的 pointwise 默认配置 | 不计时时也能拼接各成员默认 X 分块 | 当前仅有共享默认值；缺逐成员 default_config 与 body/grid 的同源定义 | [S06](#s06) |
-| 无 benchmark 的 persistent 默认配置 | 保持 R 静态，分别选择各成员默认 X | 静态 R 已有；缺独立 X 默认值及累计 program 边界 | [S07](#s07) |
-| 逐成员 coordesc 搜索 | 每步只改变一个成员配置，并优先调最大成员 | 缺成员独立搜索坐标、调优顺序与完整配置评价；需先实现独立 block | [S08](#s08) |
-
-**SKIP：平台范围与旧测试禁用**
-
-| 具体检查目标 | 作用 | 当前排除原因与处理 | 方法 |
-| --- | --- | --- | --- |
-| CUDA TMA descriptor/block 协议 | 使用 SM90+ 的张量异步搬运及 descriptor 约束 | CUDA 专属协议实例，保留平台排除；NPU 搬运能力需按自身协议定义 | [S09](#s09) |
-| CUDA PDL 代码生成 | 生成 `launch_pdl` 与 GDC wait/launch-dependents 顺序 | CUDA SM90+ 的依赖启动协议，保留平台排除 | [S10](#s10) |
-| CUDA PDL pointwise 执行 | 检查不同尺寸激活成员的依赖启动与数值 | CUDA PDL 协议实例，保留平台排除 | [S11](#s11) |
-| CUDA PDL reduction 执行 | 在 PDL launch 下执行 sum/mean | 类级配置要求 CUDA PDL，保留平台排除；普通归约数值不覆盖该协议 | [S12](#s12) |
-| HIP 编译选项与 constexpr 分离 | 避免 `waves_per_eu` 等后端选项混入成员参数 | 两个实例都是 HIP 专属配置，保留平台排除；NPU 应检查自己的选项 | [S13](#s13) |
-| XPU 动态 persistent 归约实例 | 检查动态行数与 compile-time autotune | 来自 XPU 门控；对应 NPU 兼容计算已 PASS，无需新增动态归约功能 | [S14](#s14) |
-| CPU 节点的 Combo 过滤 | 保证 CPU 节点不参与 Combo 融合 | 当前 NPU 实例没有 CPU 节点，无法验证；由 CPU 实例保留过滤断言 | [S15](#s15) |
-| foreach 直接输入的依赖距离 | 检查非空节点的输入距离 min/max 为 0/0 | 旧无条件禁用；保留原断言和数值的诊断已通过，只需测试适配 | [S16](#s16) |
-| extern 后 foreach 的依赖距离 | 检查 mm 到消费者的依赖层数，整体 min=0、max≥1 | 旧无条件禁用；非空 schedule 和原断言诊断已通过，只需测试适配 | [S17](#s17) |
-
-“输入距离”是融合前从图输入开始的依赖边层数，group 的 min/max 汇总成员深度。
-S16/S17 的诊断不改变正式 SKIP 状态。非正规数与 FTZ 的数值范围见 F05。
-
-### 代码与执行证据
-
-源码摘录包含仓库、完整提交、原行号与 SHA256；
-[完整源码索引][source-index]、[31 项结构化分析][case-analysis]、[设备诊断与计数纠正][device-findings]。
-原精确实例、FAIL/SKIP 消息及实际验证版本见 [合并 jobs.json][jobs]；
-[设备原始报告、脚本/DSL 哈希和脱敏收据][device-manifest] 保留诊断的版本与来源限制。
-allocator 的 raw pickle 留在原任务目录，仅归档不含地址的峰值分配与推导，见 F13。
-
-| 证据 | 关键源码与职责 |
+| 字段／出口 | 具体作用 |
 | --- | --- |
-| [E1][E1] | NPU Combo 创建、轴/模式分区、共享 block、dispatch 与调用 |
-| [E2][E2] | NPU 普通/Combo metadata 与 grid/成员 tiling |
-| [E3][E3] | native ComboTileGenerator、资源模型、候选与社区大 RBLOCK 条件 |
-| [E4][E4] | NPU/社区 CSE load/store/reduction 计数与连续归约访问 |
-| [E5][E5] | optimize_mem 图阶段协议、CPU helper 与实际 clone 主 bench |
-| [E6][E6] | provenance hook、node=None 外壳与分区叶子展开 |
-| [E7][E7] | 内存增加量 gate、NPU 分区与 WRN 原测量范围 |
-| [E8][E8] | FTZ metadata 与 CUDA/实际安装编译选项边界 |
-| [E9][E9] | TMA/PDL/HIP/XPU/CPU-template 门控与 NPU 兼容层 |
-| [E10][E10] | 输入距离算法、group 聚合与旧 foreach skip |
-| [E11][E11] | 社区成员 metadata 契约与 NPU contiguous-format 限制 |
-| [E12][E12] | 字节/FLOP 估算、Combo 聚合与 benchmark 消费 |
-| [E13][E13] | WRN 组合节点过滤、native bench、192 MiB 清缓存分配 |
-| [E14][E14] | 安装/最新 Triton Options 与 HMF exp/exp2 数学入口 |
-| [E15][E15] | 2.10/2.13 水平与垂直融合、FOREACH 入口、mixed-order 与跨轴组合目标 |
+| `optimize_mem` | 推理／反向 True，训练前向 False，约束 autotune 输入备份和恢复。 |
+| `reduction_hint_i` | 逐成员 INNER/OUTER 访问方向，用于候选分类和观察。 |
+| `num_load` | 去除 CSE 缓存复用后实际 load 数，描述访存工作量。 |
+| `num_store` | 保留的实际写回数；NPU store 路径目前未统一递增此计数。 |
+| `num_reduction` | 归约 primitive 数，用于候选与工作量统计。 |
+| `autotune_hints` | 如 ONE_ELEMENT_PER_THREAD 的候选提示，须来自真实成员。 |
+| `atomic_add_found` | 是否存在原子加，约束候选及写回行为。 |
+| `has_loadstore_with_contiguous_rdim` | 实际归约维是否连续，参与归约候选过滤；不是确定性支持开关。 |
+| `no_x_dim` | 成员是否缺独立 X 维；需按 NPU 真实 split 轴和成员布局转译。 |
+| `tiling_scores` | 各轴 tiling 的评价信息；需与 native 候选语义对应。 |
+| `kernel_num_gb` | 实际访存字节的 GB 估算，供成本和带宽报告使用。 |
+| `kernel_flop` | 按统一规则估算计算量，Combo 聚合成员值。 |
+| benchmark `num_gb` | 独立 benchmark 带宽分子；当前 NPU Combo 模板收到硬编码 0。 |
+| `add_persistent_rblock` | 成员增加大 R 候选的资格；字段缺失不证明 NPU 没有 persistent 归约。 |
+| `disable_ftz` | 控制非正规数保留，需要编译器与数学路径消费，不能只导出文字。 |
+
+计数与布局字段先由真实 load/store/reduction 生成，再由 standalone 与 Combo 统一导出；访存／FLOP 先形成有效的 standalone 估算基准，再聚合
+Combo；成员 fingerprint 分组依赖完整 metadata。成员独立 block ABI／dispatch 接通后，才有独立默认候选、顺序调优和最大成员优先的 coordesc。NPU
+已有消费真实成员轴约束的共享搜索，缺这些导出字段不证明整个归约／调优能力缺失。共享候选不能替代独立成员目标，补 0、空字典或日志字符串也不算完成。
+
+有效 store 计数的缺口位于 Native Index 的 `CSEProxy.store/store_reduction`；no-linear 普通 kernel 继承社区
+CSE，已有的计数逻辑与 NPU metadata 出口需分别核对。`kernel_num_gb` 是逻辑读写量的 GB 估算，不是硬件 profiler 测得的传输量。
+
+当前安装的 Triton Ascend 使用 `NPUOptions`，其 [真实字段列表][triton-options] 未声明
+`disable_ftz`；[原始编译器源码][triton-compiler] 已保存。这项验收还需核对通用编译选项及下层数学路径的实际消费，不能从 Python 字段缺失直接推定硬件能力。
 
-[主机重放][host-results] 确认一次有效 store 的 NPU num_store=0、社区为 1；
-provenance 外壳有 handle 而无 mapping，按实际 partition 展开叶子后 mapping 完整。
-现有 gate 的 +2 MB 候选被 1 MB 拒绝，delta=0 被 0 阈值接受。
-NPU 主 bench 两种 optimize_mem 值均只 clone，没有调用 CPU-copy/restore helper；
-补字段与实现真实内存优化是两项能力。
+本轮多轴归约的 P0 精度失败走 no-linear 普通 kernel；其 [原始生成
+wrapper][accuracy-wrapper]和[按执行时间／输入布局匹配的来源][accuracy-source]已保存。该路径继承社区多轴 reduction DSL，再由 NPU
+heuristic／编译器执行；不能按 Native Combo 的统计出口缺失来定界这项精度问题。
 
-### 14 个 FAIL 的逐项分析
+### 范围外逐用例修复顺序
 
-<a id="f01"></a>
+| 顺序 | 优先级 | 用例 | 当前结果 | 具体待修内容 |
+| ---: | --- | --- | --- | --- |
+| 01 | P0 | [test_combo_kernel_per_config_subkernel_r0_r1](#repair-01) | FAIL | 非连续多轴 sum 的 FP32 结果超出原容差 |
+| 02 | P1 | [test_foreach_basic](#repair-02) | SKIP | 取消旧 skip，验收图输入 foreach 节点的距离为 0 |
+| 03 | P1 | [test_foreach_after_extern](#repair-03) | SKIP | 取消旧 skip，验收 mm 后 foreach 消费者的依赖距离 |
+| 04 | P1 | [test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu](#repair-04) | SKIP | 开放 NPU 动态归约入口，保留编译期 autotune 目标 |
+| 05 | P1 | [test_persistent_reduction_size_hint](#repair-05) | FAIL | 按 NPU 真实成员轴核对 persistent size_hints |
+| 06 | P1 | [test_single_combo_kernels](#repair-06) | FAIL | 用原生 grid 验收两个 standalone，覆盖 benchmark 开关 |
+| 07 | P1 | [test_combo_kernel_yz_overflow](#repair-07) | FAIL | 适配 NPU profiler 格式，验收大尺寸真实 launch grid |
+| 08 | P1 | [test_combo_kernel_per_config_subkernel_block_size](#repair-08) | FAIL | 先修 eager channels_last contiguous，再验独立分块 |
+| 09 | P1 | [test_combo_inductor_meta_has_optimize_mem](#repair-09) | FAIL | 补推理 optimize_mem=True 及输入保护消费契约 |
+| 10 | P1 | [test_combo_inductor_meta_optimize_mem_false_in_training_forward](#repair-10) | FAIL | 补训练前向 optimize_mem=False 及输入保护契约 |
+| 11 | P1 | [test_combo_kernel_per_subkernel_reduction_hint](#repair-11) | FAIL | 导出成员归约方向：行 INNER、列 OUTER |
+| 12 | P1 | [test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields](#repair-12) | FAIL | 导出三成员真实计数、autotune 提示及 atomic 标志 |
+| 13 | P1 | [test_combo_reduction_combo_grid_meta_has_per_subkernel_fields](#repair-13) | FAIL | 导出 sum/mean 成员真实 load/store/reduction 计数 |
+| 14 | P1 | [test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel](#repair-14) | FAIL | 导出每成员连续归约维布局标志 |
+| 15 | P1 | [test_combo_per_kernel_inductor_meta_matches_standalone](#repair-15) | FAIL | 对齐 standalone/Combo 计数、布局和 tiling_scores |
+| 16 | P1 | [test_combo_kernel_num_gb_and_flop_match_standalone_sum](#repair-16) | FAIL | 补 Combo 访存 GB/FLOP 聚合及有效 standalone 基准 |
+| 17 | P1 | [test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth](#repair-17) | FAIL | profile 模式输出真实 Combo kernel_num_gb |
+| 18 | P1 | [test_benchmark_combo_kernel_emits_real_num_gb](#repair-18) | FAIL | benchmark num_gb 当前为 0，需真实访存 GB |
+| 19 | P1 | [test_triton_kernel_to_post_grad_tracing_combo_kernel](#repair-19) | FAIL | 补真实 Combo 到 post-grad FX origins 的映射 |
+| 20 | P2 | [test_combo_kernel_store_mask](#repair-20) | SKIP | 取消旧 skip，验收动态 mean Combo 的最终 store mask |
+| 21 | P2 | [test_fuse_mix_order_reductions_combo_kernels](#repair-21) | FAIL | 支持共享输入的行／列归约联合执行目标 |
+| 22 | P2 | [test_combo_kernel_scalar_store_broadcast](#repair-22) | FAIL | 支持标量写回、广播消费者与向量归约的合法组合 |
+| 23 | P2 | [test_combo_kernel_no_bench_stitched_config](#repair-23) | FAIL | 接通三成员独立默认 X 分块及 body/grid/launcher |
+| 24 | P2 | [test_combo_kernel_no_bench_persistent_reduction](#repair-24) | FAIL | 保留完整 R，接通 persistent 成员独立默认 X 分块 |
+| 25 | P2 | [test_combo_kernel_no_bench_carve_out](#repair-25) | FAIL | 验收 bucketize 从不合适的默认 Combo 配置中分离 |
+| 26 | P2 | [test_combo_kernel_max_autotune](#repair-26) | FAIL | 实现激活成员独立候选与完整 Combo 顺序调优 |
+| 27 | P2 | [test_combo_kernel_max_autotune_with_reduction](#repair-27) | FAIL | 实现归约成员独立候选与完整 Combo 顺序调优 |
+| 28 | P2 | [test_combo_autotune_many_subkernels](#repair-28) | FAIL | 实现六成员独立候选与顺序调优 |
+| 29 | P2 | [test_combo_autotune_grouping](#repair-29) | FAIL | 按真实成员尺寸和 heuristic 输入划分调优组 |
+| 30 | P2 | [test_combo_max_persistent_rblock_gated_on_per_subkernel](#repair-30) | FAIL | 区分共享／独立 X 分块的真实 R 资源门控 |
+| 31 | P2 | [test_combo_kernel_coordesc_tunes_largest_subkernel_first](#repair-31) | FAIL | 独立成员坐标下降先调工作量最大的成员 |
+| 32 | P2 | [test_combo_rms_norm_forwards_add_persistent_rblock](#repair-32) | FAIL | 接通 RMSNorm 成员大 R 候选资格及消费者 |
+| 33 | P2 | [test_combo_triton_meta_has_disable_ftz](#repair-33) | FAIL | 接通 FTZ 字段、编译选项与非正规数数学路径 |
+| 34 | P3 | [test_combo_kernel_peak_memory_wide_resnet](#repair-34) | FAIL | 补真实 gate 候选及隔离编译后的运行峰值验收 |
 
-#### F01 `test_combo_kernel_per_subkernel_reduction_hint`
+<a id="repair-01"></a>
 
-源方法：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；正式状态 **FAIL**，1 个实例。
+#### 01 P0 `test_combo_kernel_per_config_subkernel_r0_r1`
 
-**测试目标：** 对两个 contiguous 的 128×256 输入分别做 sum(-1) 与 sum(0)，在同一 Combo 内保留 INNER/OUTER 归约分类。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-**实际结果：** 数值比较完成后，found_hints 为空，缺 reduction_hint_0，随后对 reduction_hint_1 和 INNER/OUTER 的检查未到达。
+功能目标：保留 permute 后的非连续 (16,32,64) 输入，sum(dim=(1,2)) 的 compiled 结果满足原精度。
 
-**master 因果链：** 失败执行的代码确实只有一个双成员 persistent Combo：行归约加载 r1+256*x0，列归约加载 x0+256*r1，两个成员的 low_dims 分别为 {1}/{0}，不能解释成“混合行列被
-拆成普通 kernel”。
-master 的 jit_line 只传首成员的 reduction_hint，combo_grid_meta 未导出 reduction_hint_i。
-native runtime 使用 combo_subkernel_meta 的轴、尺寸和资源约束生成共享 tile，没有逐成员 hint 消费者；字段缺失不证明没有归约调优，也不等同于 mix_order_reduction 功能。
+当前失败／跳过：原数值比较失败：报错的 16 元素向量中 1 个输出超差，最大绝对误差 1.1920928955078125e-5，atol=1e-5。执行的是同一定义的两次普通归约
+launch；后续数量断言未执行。
 
-**需要适配什么：** 需要补齐真实的逐成员归约分类观测，或把用例接到 NPU 的实际成员布局；若要求 hint 影响优化，还需接入 native 候选生成/评价。
-共享候选必须同时满足所有分支；不能只打印 INNER/OUTER，也不能把 GPU 的 XBLOCK_i 搜索直接移植。
+具体缺口／适配：本轮实际是 no-linear 普通多轴归约，一个 kernel 定义对两个输入调用两次，未形成 Combo。DSL 保留两条 R 轴、stride 地址与 FP32
+累加；数值误差已观测，累积次序／tile／下层编译职责尚未定界。 本轮仅保存生成 wrapper 与布局 metadata，真实 tensor 值和 selected tile 未单独留存。
 
-**是否符合 NPU 设计：** 保留逐成员访问分类符合 NPU 设计；逐成员独立调优属于额外能力。
-现有共享块已承载这两个不同 stride 的归约；本例检查逐成员分类。
-共享输入的 mixed-order 联合归约是独立的待适配能力，见 [C05](#c05)。
+先修入口：先捕获并固定可复现的真实输入，用同一组输入对照 NPU eager 与该 no-linear 普通 kernel；定位
+NPUNoLinearTritonScheduling/NPUTritonKernel、社区多轴 reduction DSL、NPU 候选 remap 和 Triton
+数学路径。核对两条归约轴、partial loop、累加 dtype 和实际 selected tile，不能把修复归到 Combo 分区。 验收：原非连续输入与原容差通过，保留原归约元素集合和
+dtype；不以放宽容差或跳过精度检查通过。数值通过后再验原分区目标。
 
-**验证与结论边界：** 以原输入对照成员 FX 和地址公式，确认分类与两个方向一致；观测真实候选和 winner 对两种布局的处理，再保留数值比较。
-已归档的 generated code 来自 d12230b556，不是 master 设备复测。
+证据：[E16][E16]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-代码依据：[E1][E1]、[E2][E2]、[E3][E3]、[E11][E11]、[本例实际 DSL][hint-output]。
+<a id="repair-02"></a>
 
-<a id="f02"></a>
+#### 02 P1 `test_foreach_basic`
 
-#### F02 `test_combo_rms_norm_forwards_add_persistent_rblock`
+位置：`test_snode_runtime.py::InputDistanceTests`；本轮 SKIP 1。
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+功能目标：图输入上的 foreach_add 节点输入距离为 0。
 
-**测试目标：** 两个 2048×4096 RMSNorm 构成 Combo，要求社区大 RBLOCK 优化的 add_persistent_rblock 标志逐成员传给候选生成。
+当前失败／跳过：NPU does not support
 
-**实际结果：** 数值比较完成后，首先缺 inductor_meta_0；并没有执行到两个 add_persistent_rblock 的逐项断言。
+具体缺口／适配：旧的无条件 NPU skip 挡住输入距离检查；这不是 FOREACH 分组融合验收。
 
-**master 因果链：** 社区 add_persistent_rblock 主要针对尚未选择 persistent 的二维 looped reduction，在有显著访存节省且满足资源条件时增添大 RBLOCK 候选。
-NPU 此输入已经走 persistent_reduction，失败执行的两个分支都固定 R1BLOCK_SUB=4096，覆盖完整归约行。
-master 继续使用 ComboTileGenerator，按最大成员 resident tile、UB/SIMT 资源和每分支 program 数筛选共享候选，未消费社区标志。
+先修入口：test_snode_runtime.py 的 decorator 和 _get_snodes 观测。 验收：取消旧 skip，确认 snodes 非空，再检查每个真实节点的
+min/max_input_distance 为 0。
 
-**需要适配什么：** 本例应改为验证 NPU standalone/Combo 的完整归约 tile 和合法共享候选可达；不需要为了此输入复制 GPU 的 add_persistent_rblock。
-如果原目标扩大为“looped reduction 可选择更大归约块”，需另选当前 NPU 尚未 persistent 的输入证明候选确实被漏掉，再扩展 native 搜索。
+证据：[E10][E10]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**是否符合 NPU 设计：** 完整归约行已进入实际 DSL，符合 native persistent 设计。
-当前失败是 GPU 优化标志的观察口径不适配，不能据此宣称 NPU 缺大归约 tile 或该性能优化已经等价验证。
-逐成员统计缺口另见 F06–F09。
+<a id="repair-03"></a>
 
-**验证与结论边界：** 以相同输入比较 standalone/Combo 的归约元素集合、完整 R1 tile、合法 X 子块及 winner；确认 UB 约束和数值。
-源码和现存 DSL 能确认整行可达，当前未做 master 的设备候选/性能对照。
+#### 03 P1 `test_foreach_after_extern`
 
-代码依据：[E2][E2]、[E3][E3]、[E11][E11]、[本例实际 DSL][rms-output]。
+位置：`test_snode_runtime.py::InputDistanceTests`；本轮 SKIP 1。
 
-<a id="f03"></a>
+功能目标：mm extern 深度 0，后续 foreach_add 的真实依赖深度至少为 1。
 
-#### F03 `test_combo_inductor_meta_has_optimize_mem`
+当前失败／跳过：NPU does not support
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+具体缺口／适配：旧的无条件 NPU skip 挡住依赖距离检查。
 
-**测试目标：** 无梯度的 relu/sigmoid 推理 Combo 显式传 optimize_mem=True，与图阶段和 standalone 协议一致。
+先修入口：test_snode_runtime.py 的 decorator 和 _get_snodes 观测。 验收：保留原矩阵乘输入、非空节点、最小距离 0 和最大距离至少 1 的检查。
 
-**实际结果：** 编译、执行和数值比较完成，生成代码没有 optimize_mem=True。
+证据：[E10][E10]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**master 因果链：** master 的 Combo jit_line 复用首成员 create_inductor_meta；后者合并 inductor_meta_common，但没有图阶段字段。
-cached_autotune 弹出字段时默认 True，因此本推理例当前属性值与期望相同，失败是生成协议缺口。
-CPU-copy helper 在 True 时允许按预算搬移 mutated args、False 时直接返回；但 NPU 主 bench 与 batch 路径直接调用 clone_args，未调用此 helper/restore。
-源码重放两种属性值均 clone 一次、CPU-copy/restore 为0，不能称该优化已在主路径生效。
+<a id="repair-04"></a>
 
-**需要适配什么：** 在 NPU 普通 kernel 与 Combo 的统一元数据出口传 V.graph.is_inference or V.graph.is_backward。
-共享 autotuner 可共用此图阶段值，不依赖独立分块。
-若要让内存优化实际生效，还需在 native bench 的 runtime launch args 路径接入CPU-copy、排除相应 clone 与逐次恢复，不把补字段当作优化已实现。
+#### 04 P1 `test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu`
 
-**是否符合 NPU 设计：** 图阶段契约适用于 NPU，显式 metadata 可直接补齐；现有主路径通过 clone 保护输入。
-CPU 搬移是尚未接入此主路径的可评估内存优化，不能解释成当前推理数值错误。
+位置：`test_combo_kernels.py::ComboKernelDynamicShapesTests`；本轮 SKIP 1。
 
-**验证与结论边界：** 同时覆盖 inference=True、training-forward=False、backward=True，并观测主 bench 的真实 clone/搬移调用。
-若接入搬移，需用 mutated args 验证预算、runtime block 位置和恢复；原非 mutation 例只证明字段与数值。
+功能目标：不同 X 长度的 sum/mean/max 动态归约及编译期 autotune。
 
-代码依据：[E2][E2]、[E5][E5]、[E11][E11]。
+当前失败／跳过：requires xpu and triton
 
-<a id="f04"></a>
+具体缺口／适配：requires_xpu 门控；主体没有 XPU 硬件 intrinsic，不能认作 NPU 功能不支持。
 
-#### F04 `test_combo_inductor_meta_optimize_mem_false_in_training_forward`
+先修入口：测试设备门控及真实 NPU autotune/launch 观测。 验收：用 NPU 通用入口执行原动态形状约束及数值比较；保留编译期 autotune 目标。
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+证据：[E9][E9]、[E3][E3]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**测试目标：** 两个 requires_grad=True 的输入生成训练前向图，要求 optimize_mem=False。
+<a id="repair-05"></a>
 
-**实际结果：** 数值比较完成，生成代码没有 optimize_mem=False；本例没有检查 backward 或 mutated args 的恢复。
+#### 05 P1 `test_persistent_reduction_size_hint`
 
-**master 因果链：** 与 F03 是同一个出口遗漏：训练前向的约定值是 False，缺省属性却为 True。
-但当前 native 主 bench/batch 调用 clone_args，未进入 CPU-copy helper，不因 True 而启用搬移。
-社区 bench 的 copy/maybe_clone/restore 与 NPU 主路径需要分别判断。
-原非 mutation 例没有数值污染或梯度错误证据。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-**需要适配什么：** 统一图阶段取值，训练前向显式 False；保持现有 clone 输入保护。
-不要简单把全部图默认值改成 False。
-若以后接入 CPU-copy 内存优化，应以该值控制真实路径，并验证整个 native runtime 参数和恢复协议。
+功能目标：两个 max/min persistent 成员的候选尺寸覆盖真实归约长度。
 
-**是否符合 NPU 设计：** 这是生成协议遗漏，修复符合 NPU 图阶段设计；当前主路径的 clone 保护不受这个缺字段影响。
-不能将它归为已发生的训练输入污染或已生效的错误 CPU 搬移策略。
+当前失败／跳过：native persistent heuristic 已匹配，但原固定 CUDA size_hints 检查失败。实际为 x0=1536、r1=32，共享 split extent
+求和；最终数值比较尚未执行。
 
-**验证与结论边界：** 除原字段和数值断言，还需记录训练主路径实际 clone/搬移调用；涉及新增搬移时验证 mutation/alias、梯度和候选重试后的输入。
+具体缺口／适配：原 FileCheck 固定 CUDA x/r0_ 字典；NPU 采用多轴 metadata 和 native heuristic。
 
-代码依据：[E2][E2]、[E5][E5]、[E11][E11]。
+先修入口：测试生成代码检查；NPUComboKernel.select_heuristics。 验收：核对 NPU persistent 模式、两个成员 16/32 的完整 R
+及共享候选包络，保留数值比较。
 
-<a id="f05"></a>
+证据：[E1][E1]、[E2][E2]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-#### F05 `test_combo_triton_meta_has_disable_ftz`
+<a id="repair-06"></a>
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，2 个实例。
+#### 06 P1 `test_single_combo_kernels`
 
-**测试目标：** False/True 两个实例要求 Combo triton_meta 继承 eager_numerics.disable_ftz。
-FP32 非正规数是绝对值小于 2**-126 的非零可表示值，最小为 2**-149；FTZ 将非正规数冲刷为零。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 2。
 
-**实际结果：** 正式两实例均在普通随机值数值比较后缺 disable_ftz 字段，原输入没有验证非正规数。
-11 月 13 日的定向诊断分别执行两种 flag、基本算术、归约、指数函数以及真实双成员 Combo。
+功能目标：尺寸差异过大的两个 pointwise 保持 standalone，覆盖 benchmark 开关。
 
-**master 因果链：** NPU 自定义 jit_line 未合并社区 triton_meta_common，两个 flag 都没有传出。
-社区只在 CUDA 分支把 True 映射为 enable_reflect_ftz=False。
-实际安装的 Triton parse_options 对默认、disable_ftz=True、enable_reflect_ftz=False 生成相同 hash；最新 Triton-Ascend main 62f6b54 的 112 个
- NPUOptions 字段也无 FTZ 注册项。
-设备上 FP32 拷贝、加法、乘 0.5/2 保留可表示的非正规数；归约的 eager/compiled 结果一致。
-exp2(-127) 等指数结果却为 0，两种 flag 输出一致；exp2(-126) 的最小正常值边界也为 0，不能把所有边界零都解释为纯 FTZ。
-绕过 Inductor 的直接 Triton 在 SIMD、template 模式（实际 parallel_mode=simd）和 pure SIMT 都出现相同行为；TTIR 调用
-__hmf_exp2_fp32/__hmf_exp_fp32，SIMD adapter 落到对应 HIVM math intrinsic。
-实际安装与最新 main 的 libdevice 文件逐字节一致，A5/A3 FP32 都走这些 HMF 函数。
+当前失败／跳过：两种 benchmark 开关均在固定 Grid1D FileCheck 失败，实际普通 kernel 为 GridNpu；先前数值和原 kernel 计数检查已通过。
 
-代表性的 FP32 bit 结果如下；指数列是直接 Triton 的三个模式共同结果：
+具体缺口／适配：Grid1D 是 CUDA 生成 ABI；实际定义数、benchmark probe 和执行次数必须分别核对。
 
-| 运算 | CPU bits | NPU bits | 结论 |
-| --- | --- | --- | --- |
-| 最小非正规数相加 | 0x00000002 | 0x00000002 | 保留非正规数 |
-| 最小正常数乘 0.5 | 0x00400000 | 0x00400000 | 保留非正规数 |
-| exp2(-127) | 0x00400000 | 0x00000000 | 指数输出冲零 |
-| exp2(-126) | 0x00800000 | 0x00000000 | 正常值边界也冲零，不能只归为 FTZ |
+先修入口：test_single_combo_kernels 的原生 NPU grid 和生成／launch 计数检查。 验收：两种开关都保留数值、两个独立计算和无 Combo 的目标，按真实
+wrapper 与 launcher 验收。
 
-**需要适配什么：** 统一 NPU 普通/Combo 的数值配置生成与真实编译选项传递。
-基本算术已具备非正规数保留能力；指数路径需要 Triton/math library/CANN 定义并实现可验证的保留策略，再让 Inductor 的 True 配置消费该能力。
-False 可表示后端默认策略。
-只补 metadata 或传入未注册选项无法改变当前指数行为；若存在算子/模式边界，需明确能力范围。
+证据：[E1][E1]、[E2][E2]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**是否符合 NPU 设计：** 数值语义目标适用于 NPU，并非 CUDA 专属协议。
-已证实 Inductor 配置出口遗漏，同时将指数路径的数值能力定界到下层数学入口；不应归因为 NPU 硬件完全无法表示非正规数。
-最新源码检查不替代最新编译器/CANN 的设备执行。
+<a id="repair-07"></a>
 
-**验证与结论边界：** 原始报告、逐 bit 输出、直接 Triton IR 与两份真实双成员 Combo DSL 均已归档。
-两种 flag 的独立 exp2/exp Combo 各有 1 个真实 Combo、2 个分支；原诊断脚本误数社区 decorator 得到 0，raw 记录保留，另在 device-findings 中明确按 NPU grid
-metadata 纠正。
-正常值的 ULP 差异及归约的 CPU 1 ULP 差异不归为 FTZ，也不扩大为本轮生产修复。
-设备执行仍使用 d12230b556 覆盖包与已安装 Triton 3.6/CANN，正式两实例仍为 FAIL。
+#### 07 P1 `test_combo_kernel_yz_overflow`
 
-代码依据：[E2][E2]、[E8][E8]、[E11][E11]、[E14][E14]、[逐 bit 数值诊断][ftz-report]、[直接 Triton/真实 Combo][ftz-direct]、
-[设备诊断][device-findings]、[原始证据收据][device-manifest]。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-<a id="f06"></a>
+功能目标：大尺寸 permute/clone 的 launch grid 不溢出。
 
-#### F06 `test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields`
+当前失败／跳过：编译执行已完成；读取 NPU profiler 的 trace_json["traceEvents"] 时报 TypeError，实际 JSON 是列表，后续 grid
+及最终数值断言未执行。
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+具体缺口／适配：测试使用 CUDA traceEvents 字典和固定三维 grid；NPU 采用一维 dispatch。
 
-**测试目标：** 三个 1024 元素的 relu/sigmoid/tanh 成员逐项携带 num_load/store/reduction、autotune_hints、atomic_add_found。
+先修入口：测试真实 NPU launcher/grid 观测。 验收：保留大尺寸与数值检查，确认真实 NPU grid 的 X 合法、Y/Z 为 1，排除 autotune launch。
 
-**实际结果：** 数值比较完成后，FileCheck 首先找不到 inductor_meta_0；后续字段的值尚未被检查。
+证据：[E1][E1]、[E9][E9]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**master 因果链：** NPU combo_grid_meta 只记录 grid 和 split 信息，combo_subkernel_meta 记录轴/tiling 约束，没有统计出口。
-普通 NPU create_inductor_meta 也没有导出完整统计。
-自定义 CSEProxy 会递增 load 和 reduction，但 store/store_reduction 未递增 num_store；源码重放实际发出一次 store 时 NPU 计数为 0，社区为 1，直接复用基类统计将给出错误
-值。
+<a id="repair-08"></a>
 
-**需要适配什么：** 先同步 CSE 的有效 store 计数及移除 store 的扣减语义，再统一普通 kernel/Combo 的真实统计出口。
-按当前 NPU 实际成员导出三组数据，可与轴约束并存，不需要改变共享分块架构。
+#### 08 P1 `test_combo_kernel_per_config_subkernel_block_size`
 
-**是否符合 NPU 设计：** 统计与调试观测是通用编译器能力，符合 NPU 设计；这不是独立分块实现，也不是 relu/sigmoid/tanh 数值错误。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-**验证与结论边界：** 检查三组成员和非零有效 load/store，pointwise 的 reduction=0；对 dead-store、mutation/atomic 和复用场景验证计数。
-原 FileCheck 只检查字段名，不足以证明数值准确。
+功能目标：八种 channels_last 转换的逐成员独立分块与实际 grid。
 
-代码依据：[E2][E2]、[E4][E4]、[E11][E11]。
+当前失败／跳过：先在 eager 的 contiguous(memory_format=channels_last) 报 NPU 仅支持 contiguous 格式；compiled、独立成员分块和
+grid 检查均未开始。
 
-<a id="f07"></a>
+具体缺口／适配：原 eager contiguous(memory_format=channels_last) 是前置阶段；独立成员 tile 和 CUDA profiler ABI 另有目标。
 
-#### F07 `test_combo_reduction_combo_grid_meta_has_per_subkernel_fields`
+先修入口：先处理 NPU eager memory-format 路径，再接成员 block ABI 与原生 grid 观测。 验收：原 NCHW 转 channels_last 的
+eager／compiled 都正确，再验独立分块与 launch；替代 stride 不代表布局已支持。
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+证据：[E1][E1]、[E9][E9]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**测试目标：** 两个 32×1024 输入的 sum/mean 成员各自携带 load/store/reduction 统计。
+<a id="repair-09"></a>
 
-**实际结果：** 数值比较完成，首先缺 inductor_meta_0；没有证明归约本身执行错误。
+#### 09 P1 `test_combo_inductor_meta_has_optimize_mem`
 
-**master 因果链：** 同 F06 的逐成员出口缺失。
-NPU CSEProxy.reduction 会加 num_reduction，store_reduction 不加 num_store；归约后写回不能因为位于 post-loop 就漏计。
-axis_names 和 tiling_axis 是资源约束，不是操作统计。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**需要适配什么：** 修普通 store 和 reduction store 的计数，再按真实成员分别导出统计；mean 的后处理算术与归约写回应按共同口径计量。
+功能目标：推理图显式传 optimize_mem=True，声明 autotune 输入备份／恢复的内存优化资格。
 
-**是否符合 NPU 设计：** 符合共享候选与 native 归约的现有设计，属于统计协议适配；无需为了导出统计开放 mixed persistent/looped 成员融合。
+当前失败／跳过：推理图 relu/sigmoid 数值比较通过，随后缺 optimize_mem=True；输入备份／恢复的真实消费契约尚需另验。
 
-**验证与结论边界：** 检查两组有效 load/store 和正的 reduction 计数，与 standalone 对齐；覆盖归约结果写回、被消除的中间 store 和广播输出。
+具体缺口／适配：NPU Combo 未显式导出 optimize_mem；native benchmark 直接 clone，helper 尚非其消费路径。
 
-代码依据：[E2][E2]、[E4][E4]、[E11][E11]。
+先修入口：NPUComboKernel.jit_line、NPUCachingAutotuner 的输入备份／恢复调用链。 验收：显式推理字段正确；如果接通内存优化消费者，同时验证
+mutation、alias 和恢复。
 
-<a id="f08"></a>
+证据：[E2][E2]、[E5][E5]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-#### F08 `test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel`
+<a id="repair-10"></a>
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+#### 10 P1 `test_combo_inductor_meta_optimize_mem_false_in_training_forward`
 
-**测试目标：** deterministic=True 的 sum/mean 成员携带 has_loadstore_with_contiguous_rdim，用来描述 reduction 方向上是否存在 stride=1 访问。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**实际结果：** 首先缺 inductor_meta_0；未到达连续归约标志检查，原例也没有重复运行验证确定性。
+功能目标：训练前向显式传 optimize_mem=False，防止输入保存／恢复破坏训练状态。
 
-**master 因果链：** NPU 未导出逐成员统计；其自定义 load/indexing 绕过社区更新 has_load_with_contiguous_rdim 的路径。
-基类默认 False 不能当作真实 NPU 访问结果。
-社区根据地址表达式与 reduction 变量 stride 推导此标志，native runtime 当前未消费同名 GPU 配置过滤字段。
+当前失败／跳过：训练前向数值比较通过，随后缺 optimize_mem=False；本方法未进行反向梯度和 autotune 输入恢复验收。
 
-**需要适配什么：** 在 NPU 实际 load/store 地址与归约轴上推导访问标志，在 deterministic/force-filter 范围导出并统一 standalone/Combo。
-若用于筛选候选，需接到 NPU 自身规则，不直接拷贝 GPU RBLOCK 过滤。
+具体缺口／适配：训练前向字段未导出，runtime 缺省为 True；当前 native clone 路径不能据此认定输入已污染。
 
-**是否符合 NPU 设计：** 访问分类与确定性目标符合 NPU 设计，统计可以补齐；字段缺失并不证明 NPU 不支持确定性归约。
+先修入口：NPUComboKernel.jit_line 的图阶段值及 NPUCachingAutotuner 输入保护。 验收：训练前向 False，推理／反向另行核对；保留数值、mutation
+和梯度保护。
 
-**验证与结论边界：** 对原 contiguous 输入与 transpose/stride>1 对照标志，覆盖实际输出 store，并重复运行相同输入核对结果；确认 native 候选选择没有违反既定确定性约束。
+证据：[E2][E2]、[E5][E5]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-代码依据：[E2][E2]、[E4][E4]、[E11][E11]。
+<a id="repair-11"></a>
 
-<a id="f09"></a>
+#### 11 P1 `test_combo_kernel_per_subkernel_reduction_hint`
 
-#### F09 `test_combo_per_kernel_inductor_meta_matches_standalone`
+位置：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；本轮 FAIL 1。
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+功能目标：分别记录行归约 INNER 与列归约 OUTER 的成员访问分类。
 
-**测试目标：** 相同 relu/sigmoid 输入分别关闭/开启 Combo，逐成员字段与各 standalone kernel 一致。
-原比较范围是 `num_load`、`num_store`、`num_reduction`、`atomic_add_found`、`no_x_dim`、
-`autotune_hints`、`tiling_scores` 七个字段；其中 `tiling_scores` 仅在有实际评分时导出。
+当前失败／跳过：行／列归约数值比较通过，随后缺 reduction_hint_0；INNER/OUTER 的成员分类检查未完成。
 
-**实际结果：** standalone 匹配到 2 组，Combo 的 inductor_meta_i 匹配到 0 组，列表长度 2 != 0。
+具体缺口／适配：jit_line 仅传首成员 hint，combo_grid_meta 未输出 reduction_hint_i；native 已有成员轴约束。
 
-**master 因果链：** Combo 未输出逐成员字典；普通 NPU 元数据也未输出全部字段，因此 standalone 的两组不代表已有完整 load/store 统计。
-当前 regex 允许字段缺失，空字典或只含 hints 的字典也可能通过相等检查。
-NPU grid 的 no_x_dim_i 表示是否没有 split axis，不能不加核对地替代社区以 x iteration tree 为中心的 no_x_dim。
+先修入口：NPUComboKernel.combo_grid_meta／autotune_subkernel_meta 及候选评价入口。 验收：按实际
+stride/归约轴输出两个真实分类，保留数值；分类影响优化时还需验证真实候选与 winner。
 
-**需要适配什么：** 用一个 native per-kernel 出口服务普通和 Combo；先修真实计数。
-no_x_dim 和 tiling_scores 应定义 NPU 对应含义，不支持的 GPU 专用项用明确的适用条件处理，不以空统计满足列表相等。
+证据：[E1][E1]、[E2][E2]、[E3][E3]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**是否符合 NPU 设计：** 同一成员在 standalone/Combo 中保留可比观测符合 NPU 设计；共享 launch 允许优化统计变化时，应解释变化的实际语义。
+<a id="repair-12"></a>
 
-**验证与结论边界：** 保持 2 组数量检查，额外检查必需字段与实际非零计数，再逐成员与同一 FX/布局对齐；不能只让两个列表长度相等。
+#### 12 P1 `test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields`
 
-代码依据：[E2][E2]、[E4][E4]、[E11][E11]。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-<a id="f10"></a>
+功能目标：三个 pointwise 成员分别带有效 load/store/reduction 计数、autotune_hints 和 atomic_add_found。
 
-#### F10 `test_combo_kernel_num_gb_and_flop_match_standalone_sum`
+当前失败／跳过：relu/sigmoid/tanh 数值比较通过，随后缺 inductor_meta_0；成员真实计数、提示和 atomic 标志的检查未完成。
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+具体缺口／适配：缺 inductor_meta_i；NPU CSEProxy 的有效 store 路径也未递增 num_store。
 
-**测试目标：** benchmark_kernel=True 时，两个 relu/sigmoid 成员的 Combo 字节/FLOP 估算等于相同 standalone 估算之和。
+先修入口：NPU CSEProxy.store／store_reduction、统一 standalone 与 Combo 的统计出口。 验收：逐成员核对真实
+load/store、reduction=0、优化提示及 atomic 标志，不能填 0 或空字典。
 
-**实际结果：** 首先没有 Combo kernel_num_gb；随后 kernel_flop 存在性和两种求和检查未执行。
+证据：[E2][E2]、[E4][E4]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**master 因果链：** 普通 NPU codegen_kernel 在 benchmark/profile 时调用继承的 estimate_kernel_num_bytes，但 Combo jit_line 没有聚合出口。
-NPU 普通出口也未导出 kernel_flop，原测试对未匹配到的 standalone FLOP 求和会得到 0；这不是已验证的有效 FLOP 基准。
-基类有基于真实 node_schedule 的 FLOP 估算入口，但仍须核对 native node/numel 的口径。
+<a id="repair-13"></a>
 
-**需要适配什么：** 统一两种出口的有效字节/FLOP 估算，并在 Combo 顶层求和。
-处理 slice、broadcast、alias/in-place，未知估算须有清晰含义，不能把“缺失/未知”默默当成真实 0 来满足测试。
+#### 13 P1 `test_combo_reduction_combo_grid_meta_has_per_subkernel_fields`
 
-**是否符合 NPU 设计：** 成本估算是 NPU 可共享的 compiler/profiler 能力，与共享 tile 架构相容。
-GB 是编译期访存估算，不是设备实测带宽。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**验证与结论边界：** 原 2×1024 FP32 pointwise 以输入+输出、无 alias 的常规估算为 16384 bytes，即 1.6384e-5 GB；再对真实 standalone 值求和，验证有效 FLOP。
-覆盖非连续输入、slice、广播和 mutation 的计量。
+功能目标：sum 和 mean 成员分别携带真实 load、最终 store 与 reduction 数量。
 
-代码依据：[E2][E2]、[E4][E4]、[E11][E11]、[E12][E12]。
+当前失败／跳过：sum/mean 数值比较通过，随后缺 inductor_meta_0；成员 load/store/reduction 统计断言尚未执行。
 
-<a id="f11"></a>
+具体缺口／适配：缺 inductor_meta_i；归约计数入口已有，但最终归约写回统计未统一。
 
-#### F11 `test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth`
+先修入口：NPU CSEProxy.store_reduction 与成员统计出口。 验收：与 standalone 的真实 load/store/reduction
+对照，覆盖最终写回、广播及被消除的写回。
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+证据：[E2][E2]、[E4][E4]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**测试目标：** 仅 profile_bandwidth=True 时，Combo 输出 kernel_num_gb，且不输出 kernel_flop。
+<a id="repair-14"></a>
 
-**实际结果：** 编译、执行和数值比较完成后缺 kernel_num_gb；不是此前 debug autotuner 构造/run 接口异常。
+#### 14 P1 `test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel`
 
-**master 因果链：** 最新 master 的普通 NPU codegen_kernel 有 profile 字节估算，Combo jit_line 没有聚合。
-native runtime 已按 profile_bandwidth 选择 debug autotuner；共享 tile 调优存在并不能自动补齐 profiler 的成本元数据。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**需要适配什么：** 按 profile 条件聚合有效成员字节估算并传给 native profiler；FLOP 只在要求的 benchmark 条件输出，保持无 profile/benchmark 的普通编译不额外携带成本字段。
+功能目标：确定性归约携带逐成员 has_loadstore_with_contiguous_rdim。
 
-**是否符合 NPU 设计：** 符合现有 NPU profiler 和共享 autotuner 设计，属于可补齐的统计接入。
+当前失败／跳过：确定性配置下 sum/mean 数值比较通过，随后缺 inductor_meta_0；未完成成员连续归约维标志检查。
 
-**验证与结论边界：** 保留原 profile 数值/字段断言，联验无 profile 的既有 PASS 方法；检查打印或统计消费的是 Combo 总估算而非首成员值。
+具体缺口／适配：缺成员字典；native load 未同步社区连续归约标志，不能将默认 False 当真实统计。
 
-代码依据：[E2][E2]、[E11][E11]、[E12][E12]。
+先修入口：NPU load 地址／stride 分析、成员 metadata 出口与 native 确定性候选选择。 验收：按真实连续归约维判断标志，保留数值；不能把缺字段解释成没有确定性归约。
 
-<a id="f12"></a>
+证据：[E2][E2]、[E4][E4]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-#### F12 `test_benchmark_combo_kernel_emits_real_num_gb`
+<a id="repair-15"></a>
 
-源方法：`test_combo_kernels.py::ComboKernelMetadataTests`；正式状态 **FAIL**，1 个实例。
+#### 15 P1 `test_combo_per_kernel_inductor_meta_matches_standalone`
 
-**测试目标：** benchmark_combo_kernel=True 的代码包含真实浮点 num_gb 估算和带引号的 NPU device 字符串。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**实际结果：** 数值比较完成后，没有匹配到 num_gb 的非零浮点估算；后续 device 字符串检查未到达。
+功能目标：Combo 成员与 standalone 的 load/store/reduction、atomic、no_x_dim、提示及 tiling_scores 一致。
 
-**master 因果链：** NPU codegen_kernel 调用继承的 codegen_kernel_benchmark(num_gb=0)。
-社区模板直接生成 num_gb = 0，而测试要求浮点估算，regex 因此失败；这也使带宽报告为零。
-模板自身已经按实际 device.type 生成带引号的设备参数，不能据首个失败推断 device 字符串也有错误。
+当前失败／跳过：Combo 数值比较通过；standalone 解析为两个字典，Combo 成员字典解析为空，长度 2 对 0 而失败。必需统计字段仍需非空有效基准，不能用空字典对齐。
 
-**需要适配什么：** 复用有效成员字节估算之和，传给 benchmark 模板；保留真实 device.type 和原计时路径。
-本例不能用 0.0 仅绕过 regex，须检查估算值与 F10 的口径一致。
+具体缺口／适配：成员统计出口缺失；standalone 也需补完整必需字段，空正则匹配不能充当基准。
 
-**是否符合 NPU 设计：** 符合 native 调优/benchmark 设计，修复的是报告成本，不会因此实现逐成员独立 autotune。
+先修入口：统一 native per-kernel metadata，并修测试字段解析与非空校验。 验收：两侧必需字段均非空，真实值按 NPU split 轴和布局对应，修计数后再比较。
 
-**验证与结论边界：** 核对生成的 num_gb=1.6384e-5（原无 alias pointwise 常规口径）、quoted NPU device，并实际调用 benchmark 入口确认报告使用该值。
-共用环境中的本轮记录不构成性能优劣结论。
+证据：[E2][E2]、[E4][E4]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-代码依据：[E2][E2]、[E12][E12]。
+<a id="repair-16"></a>
 
-<a id="f13"></a>
+#### 16 P1 `test_combo_kernel_num_gb_and_flop_match_standalone_sum`
 
-#### F13 `test_combo_kernel_peak_memory_wide_resnet`
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-源方法：`test_combo_kernels.py::ComboKernelPeakMemoryTests`；正式状态 **FAIL**，1 个实例。
+功能目标：Combo 总访存字节／FLOP 与其 standalone 成员之和相等。
 
-**测试目标：** 同一 WideResNet-like 模型在禁用门控与 1 MB 增加量阈值下编译执行，要求后者实际峰值严格降低。
+当前失败／跳过：原数值比较完成后，Combo kernel_num_gb 匹配为空；FLOP 聚合检查尚未执行，空 standalone 求和不是有效基准。
 
-**实际结果：** 正式两次 max_memory_allocated 都为 616101888 bytes，严格小于断言失败。
-11 月 13 日按原模型、原配置并分别使用 fresh_cache 重放，两次首次峰值仍为 616101888，warm 执行均为 428341248；无 Combo 候选或 codegen 调用。
+具体缺口／适配：Combo 未聚合 kernel_num_gb，普通 NPU 也未统一导出 kernel_flop。
 
-**master 因果链：** master 沿用社区增加量 gate：delta=max(running_peak, region_peak)-baseline_peak <= limit，约束相对原图的增加量，不承诺峰值严格下降。
-实际安装环境两种配置的 schedule 前后均为 259 节点。
-额外分组诊断得到 253 个拓扑 group，其中 247 个单节点、6 个双节点；六组双节点都由 ExternKernelSchedulerNode 组成，被 combinable_nodes 过滤。
-过滤后 168 组为 0 成员、85 组为 1 成员，没有满足 >=2 的候选，因此不会进入 memory gate；tight 仍正常初始化 baseline_peak=19267584。
-相同峰值不是该模型漏接 gate 或 TTIR 后拆分造成。
-原测量在 torch.compile 前重置峰值，包含首次 autotune；两份 allocator trace 精确重建：探测前 395507200 + Triton 清缓存张量 201326592 + wrapper 活跃分配
-12845056 + mutated args clone 6423040 = 616101888。
-192 MiB 来源为 driver.get_empty_cache_for_benchmark，实际安装和最新 Triton driver 都固定此大小。
+先修入口：NPU 字节／FLOP 估算、standalone 出口与 Combo 聚合。 验收：先得到非空有效基准再聚合；本输入常规读写为 16384B，不能以空匹配求和 0 通过。
 
-两种配置各自使用 fresh_cache；峰值包含探测前已分配量，单位为 bytes：
+证据：[E2][E2]、[E12][E12]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-| 配置 | 首次峰值 | warm 峰值 | gate 候选调用 | Combo codegen |
-| --- | ---: | ---: | ---: | ---: |
-| disabled | 616101888 | 428341248 | 0 | 0 |
-| 1 MB 增加量阈值 | 616101888 | 428341248 | 0 | 0 |
+<a id="repair-17"></a>
 
-首次峰值的四项活跃分配逐份与 allocator 统计相等：
+#### 17 P1 `test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth`
 
-| 分配来源 | bytes |
-| --- | ---: |
-| 探测前已分配 | 395507200 |
-| Triton autotune 清缓存张量 | 201326592 |
-| wrapper 活跃张量 | 12845056 |
-| mutated args clone | 6423040 |
-| 合计 | 616101888 |
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**需要适配什么：** 此模型在实际 NPU lowering 下不具备“门控后必须严格降峰”的前提，需适配测试图与测量范围。
-选择确有多个可组合成员、正内存 delta 的可控 NPU 图，记录候选接受/拒绝及最终 emitted Combo，warmup 后比较稳定执行峰值，并保留对增加量 gate 的断言。
-现有源码和设备证据不要求增加第二套 gate；仅放宽原严格断言无法验证门控。
-若新可控图证明正 delta 超阈值仍接受，才修对应内存估算/接口。
+功能目标：profile_bandwidth 只携带真实 kernel_num_gb，避免额外 FLOP 估算。
 
-**是否符合 NPU 设计：** 现有相对增加量门控符合 NPU 设计；extern 节点过滤后无候选时，相同峰值合法且已经设备确认。
-主机测试也确认 +2 MB 候选被 1 MB 拒绝、delta=0 候选可被 0 阈值接受。
-首次 autotune 的 192 MiB 缓存主导探测期间新增分配，不能用它判断运行期 Combo 内存优化。
+当前失败／跳过：数值比较通过，随后缺 kernel_num_gb；后续不应输出 kernel_flop 的检查未执行。
 
-**验证与结论边界：** 两次 fresh-cache 重放的 first/warm 四份 snapshot 均按 512 bytes 分配对齐逆向重建，峰值逐份等于 max_memory_allocated；仅保存脱敏分配大小、栈、推导脚
-本及 raw SHA256 收据。
-首次两块 wrapper 活跃张量各 6422528 bytes，分别对应 buf25/34；clone 来自实际 native bench。
-warm 增量为 32834048，其中 16777728 来自 ATen convolution 调用的额外分配，依据大小和栈推断为工作区，其余为活跃张量。
-两种配置均有 85 个生成 kernel，未生成 Combo。
-此证据解释 d12230b556 安装环境的正式失败；未将最新 master 装包复测，也未在本轮实现新的门控测试图。
+具体缺口／适配：普通 NPU 已按 profile 条件估算字节，Combo 未聚合并传出。
 
-代码依据：[E1][E1]、[E7][E7]、[E13][E13]、[主机重放][host-results]、[独立缓存重放][wrn-fresh]、[真实节点分组][wrn-groups]、
-[峰值分配与栈][wrn-allocations]、[设备诊断][device-findings]。
+先修入口：NPUComboKernel.jit_line 的 profile 条件和成员字节数聚合。 验收：profile 模式有真实总字节、无 kernel_flop，并联验未开 profile
+时不输出该字段。
 
-<a id="f14"></a>
+证据：[E2][E2]、[E12][E12]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-#### F14 `test_triton_kernel_to_post_grad_tracing_combo_kernel`
+<a id="repair-18"></a>
 
-源方法：`test_provenance_tracing.py::TestProvenanceTracingArtifact`；正式状态 **FAIL**，1 个实例。
+#### 18 P1 `test_benchmark_combo_kernel_emits_real_num_gb`
 
-**测试目标：** 把 Combo 的真实 relu/sigmoid/tanh 成员映射到 post-grad FX nodes，覆盖 Inductor 和 AOTInductor。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**实际结果：** Inductor 子检查的 cppCodeToPost 映射为 0 项，预期 1 项；后面的 AOTInductor 子检查未到达。
+功能目标：独立 benchmark 模板得到真实 GB 数，带宽报告才能使用有效分子。
 
-**master 因果链：** master 已调用 codegen_comment([combo_kernel_node], kernel_name)，后者调用社区 provenance setter 和 wrapper handle。
-根因不是缺 hook：Foreach/Fused 外壳的 node=None，setter 只对 snode.node 非空的条目登记 origins。
-主机重放外壳仍产生 handle=1 但 mapping={}；传实际三叶子才得到三个算子。
-当前每个分区也把整组外壳传给 define_kernel。
+当前失败／跳过：数值比较通过，随后未匹配到浮点 num_gb；NPU Combo benchmark 生成入口传入硬编码 0，后续 device 参数检查未执行。
 
-**需要适配什么：** 对当前 node_group 展开每个成员的 get_nodes，把该分区真实叶子列表同时传给 define_kernel 和 codegen_comment；按实际生成/复用的 kernel_name 写
-handle。
-不要把全 Combo 的所有 origins 登记到每一个被拆分 kernel。
+具体缺口／适配：NPU Combo 调用 codegen_kernel_benchmark(num_gb=0)，当前模板收到硬编码零。
 
-**是否符合 NPU 设计：** 通用追踪能力完全符合 NPU 设计，修复不影响设备 launch 或数值。
-hook 已存在，应修传入节点，不是再添加一个重复 hook。
-最新命名路径还需按实际名称验证，不能永久硬编码 GPU 名称后缀。
+先修入口：NPUComboKernel.codegen_kernel 传真实成员字节估算之和。 验收：正的真实浮点 num_gb、正确的 NPU device 参数及模板实际消费，不能仅把 0 改成
+0.0。
 
-**验证与结论边界：** 覆盖单 Combo、拆分多 partition、源代码缓存复用及三个真实 origins；再分别执行 Inductor/AOTInductor 子检查，验证 wrapper handle 与映射对应。
-当前主机重放只确认 setter 协议，没有声称 AOTInductor 设备通过。
+证据：[E2][E2]、[E12][E12]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-代码依据：[E1][E1]、[E6][E6]、[主机重放][host-results]。
+<a id="repair-19"></a>
 
-### 17 个 SKIP 的逐项分析
+#### 19 P1 `test_triton_kernel_to_post_grad_tracing_combo_kernel`
 
-<a id="s01"></a>
+位置：`test_provenance_tracing.py::TestProvenanceTracingArtifact`；本轮 FAIL 1。
 
-#### S01 `test_combo_kernel_per_config_subkernel_poi`
+功能目标：每个真实 Combo kernel 能回溯到其 post-grad FX 节点和成员 origins。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+当前失败／跳过：Inductor 编译执行与 debug trace 收集已完成；Combo 到 post-grad 的映射实际为空，期望一项。第二个 AOTInductor 子场景尚未开始。
 
-**测试目标：** 512 与 524288 元素的 pointwise 成员拥有各自 block 参数与选择空间，并在一个 Combo 内正确 dispatch。
+具体缺口／适配：define_kernel／codegen_comment 接收 Combo 外壳，而其 node=None，origins 未按真实分区展开。
 
-**实际结果：** 显式 NPU 独立分块 SKIP，未执行原输入。
-所选共享类的条件分支不检查 XBLOCK_i，不能将共享数值通过当成独立分块通过。
+先修入口：NPUTritonScheduling.codegen_combo_kernel 按 node_group 展开 get_nodes。
+验收：核对实际分区、实际命名和缓存命中；Inductor 与 AOT 两入口都需映射到真实 FX origins。
 
-**master 因果链：** master codegen_combo_kernel 没有把 scheduler node 的 per_subkernel_blocks 传给生成函数，默认 False；get_block_args 按轴名
-称去重，共用 X0BLOCK/X0BLOCK_SUB，dispatch 使用同一 block 计算每成员 program 数。
-因此开关在 NPU 不产生两个独立 block ABI。
+证据：[E6][E6]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**需要适配什么：** 增加逐成员 runtime/constexpr block 名、配置序列、累计 program 边界和 launcher 参数映射，并让候选评价实际使用每个成员的选择；保持共享路径作为另一种受支持模式。
+<a id="repair-20"></a>
 
-**是否符合 NPU 设计：** 属于通用编译器优化，可在 NPU 设计上扩展，但不是当前共享 ABI 已实现的能力，也不是硬件专属限制。
+#### 20 P2 `test_combo_kernel_store_mask`
 
-**验证与结论边界：** 原不等长输入同时验证数值、两个真实独立 tile、dispatch 边界与 winner；切换配置应改变相应成员工作划分。
+位置：`test_torchinductor.py::CommonTemplate`；本轮 SKIP 1。
 
-代码依据：[E1][E1]、[E3][E3]。
+功能目标：动态两个 mean 在一个 Combo 中执行，store 使用合法尾部 mask。
 
-<a id="s02"></a>
+当前失败／跳过：NPU does not support
 
-#### S02 `test_combo_kernel_per_config_subkernel_per`
+具体缺口／适配：旧 NPU skip 阻断验收；解除后须先证明原图形成 Combo，再检查 store mask。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+先修入口：test_torchinductor 的旧 skip、NPU 动态归约轴兼容性及 store mask 生成。 验收：原输入与数值保留，真实一个 Combo，最后写回 mask
+覆盖有效输出；不能跳过数量检查直接称 mask 已实现。
 
-**测试目标：** 1024×64 与 1024×512 两个 persistent reduction 的 X 分块可独立选择，归约长度在各自 body 中固定。
+证据：[E1][E1]、[E4][E4]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**实际结果：** 显式 NPU 独立分块 SKIP；原两个归约没有在此方法内重新执行。
+<a id="repair-21"></a>
 
-**master 因果链：** NPU 已可按成员静态尺寸生成不同的 R*_BLOCK_SUB，但共用 X runtime/tiling block。
-不同归约长度的静态常量并不代表每成员都拥有独立 X 分块配置。
+#### 21 P2 `test_fuse_mix_order_reductions_combo_kernels`
 
-**需要适配什么：** 在保留各自完整 R 长度和资源约束的基础上增加 X 子块独立 ABI、候选、默认配置和 program 边界。
-无需强迫 NPU 轴名变成 GPU R0_BLOCK_i。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-**是否符合 NPU 设计：** persistent 整行归约与成员独立 X 选择可以相容；后者是待实现的优化，不应继续用共享块 PASS 覆盖。
+功能目标：共享输入的行／列归约联合执行，消费者单独执行，其他独立归约形成 Combo。
 
-**验证与结论边界：** 验证两个归约集合和 mask，各成员固定 R、独立 X 实际进入 launcher/DSL，并核对最大 resident tile 限制。
+当前失败／跳过：数值比较通过，随后 generated_kernel_count 期望 3、实际 4；尚需按实际生成链核对共享输入联合归约的缺口。
 
-代码依据：[E1][E1]、[E3][E3]。
+具体缺口／适配：NPU mix_order_reduction=False；这是共享输入 mixed-order 联合归约能力目标。
 
-<a id="s03"></a>
+先修入口：NPU mixed-order 调度、lowering／成员资源分析，避免与独立成员 hint 混淆。 验收：原共享 x 图数值正确，证明行列联合归约、消费者隔离及独立 y/z
+Combo，保留原 3-kernel 目标。
 
-#### S03 `test_combo_kernel_per_config_subkernel_red_per`
+证据：[E1][E1]、[E15][E15]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+<a id="repair-22"></a>
 
-**测试目标：** 512×128 与 256×2048 输入的 persistent/regular reduction 成员在一个 Combo 内各自配置与执行。
+#### 22 P2 `test_combo_kernel_scalar_store_broadcast`
 
-**实际结果：** 显式 NPU 独立分块 SKIP；注释中 GPU 的 persistent/regular 分类没有被当作 NPU 实测分类。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-**master 因果链：** 除缺独立 block ABI，NPU horizontal_partition 明确按 persistent_reduction、inside_reduction、kernel type 和轴标记分组，不把不
-同模式成员装进同一个共享 autotuner。
-是否此输入在 NPU 真产生两个模式还需 native 实际分类。
+功能目标：标量加法、向量归约、读取该标量的归约在一次合法计算中组合。
 
-**需要适配什么：** 实现逐成员 block/heuristic/候选描述后，才能设计不同归约模式的同-launch 协调；同一编译目标和资源上限仍须成立，不能直接删除 mode 分区。
+当前失败／跳过：标量结果、向量归约和广播消费者的数值比较通过；随后 generated_kernel_count 期望 1、实际 2，单个 Combo 的组合目标未通过。
 
-**是否符合 NPU 设计：** 通用优化目标可评估为 NPU 扩展，但直接照搬 GPU 的混合模式违反当前共享 launch 契约。
-应先证明 native 模式和收益，再确定允许的组合。
+具体缺口／适配：需要协调标量 producer/consumer 依赖和不同成员轴 ABI；不能笼统写成融合策略差异。
 
-**验证与结论边界：** 记录每成员实际 persistent/looped 分类，验证独立候选、完整归约/loop 累积、尾块和最大资源；要求一个 Combo 时必须确认没有 TTIR 回退成两个普通 kernel。
+先修入口：NPU scalar write／broadcast、垂直融合边界和 Combo 成员轴兼容性。 验收：原随机输入数值正确，真实一次 launch，标量只作合法写回且消费者读取正确值。
 
-代码依据：[E1][E1]、[E3][E3]。
+证据：[E1][E1]、[E15][E15]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-<a id="s04"></a>
+<a id="repair-23"></a>
 
-#### S04 `test_combo_kernel_per_config_subkernel_red`
+#### 23 P2 `test_combo_kernel_no_bench_stitched_config`
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-**测试目标：** 两个 32×64×128 输入做 sum((0,2))，非单一 contiguous reduction 的成员分别拥有 reduction block。
+功能目标：无 autotune 时三个成员各自的默认 X 分块与 body/grid 一致。
 
-**实际结果：** 显式 NPU 独立分块 SKIP，没有验证原输入的独立 reduction 参数。
+当前失败／跳过：数值、单个真实 kernel 定义及 default/body 一致性检查已通过；最后缺 XBLOCK_0、XBLOCK_1、XBLOCK_2，空匹配不满足三成员独立配置。
 
-**master 因果链：** 两个成员都落在共享 get_block_args/同 mode 的 launch 设计；多轴/非连续归约在 NPU 使用实际轴分析和原生 tiling，GPU 的 XBLOCK_i/R0_BLOCK_i 不能
-仅改名就成为对应成员参数。
+具体缺口／适配：NPU default_config 使用共享 split block，未实现三个独立 XBLOCK_i 拼接。
 
-**需要适配什么：** 为实际 NPU 归约轴分别表示 runtime/constexpr 子块、loop 累积和 masks，并把独立成员候选接到共享设备资源校验。
+先修入口：成员 block ABI、默认候选生成、dispatch 边界与 launcher 参数映射。 验收：数值通过且无 benchmark，三个真实独立默认配置与 body/grid
+同源，不以共享块或空匹配通过。
 
-**是否符合 NPU 设计：** 符合编译器优化扩展方向；需要沿用 NPU reduction 轴语义和 UB 模型，不能用 GPU 扁平 reduction 变量代替。
+证据：[E1][E1]、[E3][E3]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**验证与结论边界：** 保持原 stride/归约维度和 eager 结果，验证成员独立 block 真的改变 loop/工作划分且最终 store 位于完整归约之后。
+<a id="repair-24"></a>
 
-代码依据：[E1][E1]、[E3][E3]。
+#### 24 P2 `test_combo_kernel_no_bench_persistent_reduction`
 
-<a id="s05"></a>
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-#### S05 `test_combo_kernel_per_config_subkernel_block_size`
+功能目标：无 autotune 的三个 persistent 成员保留完整 R，X 默认分块独立。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+当前失败／跳过：三个 sum 的数值与单定义检查通过，default_config 不含 R0_BLOCK 的检查也通过；随后缺 XBLOCK_0/1/2 的独立默认 X 配置，原方法未直接验证实际
+winner/launch。
 
-**测试目标：** 八个 channels-last 转换成员使用独立二维 tile，profiler 启动 grid 与各自 block/dispatch 一致。
+具体缺口／适配：静态完整 R 生成已有；成员独立 X 默认配置和 dispatch 尚未接通。
 
-**实际结果：** 当前因独立分块未实现提前 SKIP；没有执行到 channels_last eager 或 profiler。
+先修入口：成员 X block ABI／默认配置及 persistent R 常量生成。 验收：完整 R 在 body 固定，三个独立 X 默认值与实际 grid/launcher 一致，保留数值和无
+benchmark。
 
-**master 因果链：** 同时存在三个边界：共享 block ABI；master NPUNativeFunctions::contiguous 对尚未满足请求格式的输入只允许转换为 Contiguous，原 NCHW 到
-channels_last 转换有独立 eager 阻塞，已有该格式的输入可先返回；测试固定 GPU profiler grid=[3795,1,1] 或 [791,4096,1]，与 NPU 一维
-SequentialComboKernelGrid 不同。
+证据：[E1][E1]、[E3][E3]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**需要适配什么：** 独立分块扩展之外，需要分别确定 ATen channels-last 的 NPU支持策略和 profiler/真实 launch 观测。
-若测试目标仅为 tile/grid 对齐，可用具有等价 transpose/stride 意义的 NPU支持输入单独覆盖，不能将其冒充原 channels-last 支持。
+<a id="repair-25"></a>
 
-**是否符合 NPU 设计：** 独立 tiling 与 grid 一致性适用于 NPU；channels-last eager 属于 ATen tensor/layout 责任，固定 GPU grid 不属于 NPU 必须满足的设计。
-此项不能只交给 Inductor 修一个开关。
+#### 25 P2 `test_combo_kernel_no_bench_carve_out`
 
-**验证与结论边界：** 先分别验证 eager layout、真实 NPU launch 记录，再验证八成员独立配置、二维地址/一维 dispatch 对齐；保留数值，原 eager 不支持时明确区分改用输入的覆盖范围。
+位置：`test_combo_kernels.py::ComboKernelTests`；本轮 FAIL 1。
 
-代码依据：[E1][E1]、[E3][E3]、[E11][E11]。
+功能目标：无 autotune 默认配置不适合 bucketize 时将其分离，另两个 pointwise 形成 Combo。
 
-<a id="s06"></a>
+当前失败／跳过：数值比较通过，随后 async_compile.triton 定义数期望 2、实际 1；此计数不等于实际 launch 数，原 carve-out 分区目标未验收。
 
-#### S06 `test_combo_kernel_no_bench_stitched_config`
+具体缺口／适配：需核对 native 默认配置接受／拒绝边界，不能直接照搬 CUDA 的候选数量门槛。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+先修入口：NPU 默认候选／资源检查和 Combo partition 的 carve-out 决策。 验收：保留 bucketize 与其他输入，真实一个 standalone 加一个 Combo
+且数值正确，说明拒绝理由。
 
-**测试目标：** 关闭 Combo benchmark 时，三个 256 元素 pointwise 成员的 default_config 与 body 中各自 XBLOCK_i 常量一致。
+证据：[E1][E1]、[E3][E3]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**实际结果：** 显式独立分块 SKIP；不以共享 default_config 的数值执行代替逐成员配置拼接。
+<a id="repair-26"></a>
 
-**master 因果链：** NPU 有合法共享默认配置，combo_grid_meta 用 default_config={XBLOCK:实际共享 block 参数}，codegen_blocks 写共享常量；没有三份成员默认 tile
- 或逐成员 XBLOCK_i 体内常量。
+#### 26 P2 `test_combo_kernel_max_autotune`
 
-**需要适配什么：** 新增逐成员默认 tile 的生成、拼接、合法性筛选及 body/grid/launcher 同源定义，无 benchmark 时也应完整支持独立配置，而不是让开关退回共享配置。
+位置：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；本轮 FAIL 1。
 
-**是否符合 NPU 设计：** 无计时默认路径与 NPU 设计相容，缺的是独立配置契约；不能解释为 NPU 没有无 benchmark 执行能力。
+功能目标：三个激活成员各自生成候选并在完整 Combo 中顺序评价。
 
-**验证与结论边界：** 同一来源的三份 block 必须同时匹配生成 body、metadata 和实际 grid，保留三输出数值检查。
+当前失败／跳过：编译执行已返回，但 Combo sequential autotune 日志匹配为 0；后续数值比较和单 kernel 断言未执行。
 
-代码依据：[E1][E1]、[E2][E2]、[E3][E3]。
+具体缺口／适配：native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。
 
-<a id="s07"></a>
+先修入口：先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。 验收：保留数值和实际单 Combo，验证真实候选、组成员及
+winner；不能只替换日志字符串通过。
 
-#### S07 `test_combo_kernel_no_bench_persistent_reduction`
+证据：[E1][E1]、[E2][E2]、[E3][E3]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+<a id="repair-27"></a>
 
-**测试目标：** 关闭 benchmark 的三个 64×1024 persistent sum：default_config 只含各自 XBLOCK_i，归约 block 固定在各自 body。
+#### 27 P2 `test_combo_kernel_max_autotune_with_reduction`
 
-**实际结果：** 显式独立分块 SKIP，未验证三份成员 X 默认值。
+位置：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；本轮 FAIL 1。
 
-**master 因果链：** NPU 可按成员写静态完整 R*_BLOCK_SUB，但默认 X 配置/dispatch 仍共享。
-body 中固定 R 与 metadata 中独立 X 是两个不同契约，已有前者不能推定后者。
+功能目标：sum/mean 成员各自的归约候选及顺序评价。
 
-**需要适配什么：** 增加三份独立 X default_config 和累计边界；保持 R 为体内常量，不把静态 R 错误加入需要 runtime materialize 的参数。
+当前失败／跳过：assertLogs 捕获了日志，但 Combo sequential autotune 匹配为 0；后面的数值与 kernel 数量断言尚未执行。
 
-**是否符合 NPU 设计：** 与 NPU persistent/static reduction 设计相容，属于独立默认配置扩展。
+具体缺口／适配：native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。
 
-**验证与结论边界：** 验证三成员 default_config 的 X 值与 body/launch 一致，不含不需要的 runtime R，检查完整归约及尾块数值。
+先修入口：先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。 验收：保留数值和实际单 Combo，验证真实候选、组成员及
+winner；不能只替换日志字符串通过。
 
-代码依据：[E1][E1]、[E2][E2]、[E3][E3]。
+证据：[E1][E1]、[E2][E2]、[E3][E3]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-<a id="s08"></a>
+<a id="repair-28"></a>
 
-#### S08 `test_combo_kernel_coordesc_tunes_largest_subkernel_first`
+#### 28 P2 `test_combo_autotune_many_subkernels`
 
-源方法：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；正式状态 **SKIP**，1 个实例。
+位置：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；本轮 FAIL 1。
 
-**测试目标：** 32×1024、256×256、16×128 三成员中，coordesc 首先只改变最大成员的独立 XBLOCK_1，且探索多份不同配置。
+功能目标：六个不同工作量／算子的独立成员候选和顺序评价。
 
-**实际结果：** 独立分块 SKIP，没有逐成员 coordesc 顺序执行证据。
+当前失败／跳过：六成员编译执行已返回，但 Combo sequential autotune 的日志匹配为 0；后续数值比较和单 kernel 检查未执行。
 
-**master 因果链：** 没有 XBLOCK_i 的独立状态空间，就没有“只改最大成员”的搜索坐标。
-native 的共享候选搜索和全 Combo 计时仍存在，但它们不提供该成员坐标与顺序契约。
+具体缺口／适配：native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。
 
-**需要适配什么：** 先实现成员独立 block，再接逐成员 coordesc 维度、完整配置评估与按工作量/计时定义的成员优先级。
-不能用共享 tile 的多个候选日志冒充逐成员坐标下降。
+先修入口：先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。 验收：保留数值和实际单 Combo，验证真实候选、组成员及
+winner；不能只替换日志字符串通过。
 
-**是否符合 NPU 设计：** 可作为 NPU 编译器优化扩展；当前共享搜索符合自身设计，尚不覆盖该独立优化。
+证据：[E1][E1]、[E2][E2]、[E3][E3]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**验证与结论边界：** 记录真实 baseline/尝试配置，第一次只改变最大成员参数，后续确实探索不同配置；每次完整 launch 满足资源与数值要求。
+<a id="repair-29"></a>
 
-代码依据：[E1][E1]、[E3][E3]。
+#### 29 P2 `test_combo_autotune_grouping`
 
-<a id="s09"></a>
+位置：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；本轮 FAIL 1。
 
-#### S09 `test_combo_kernel_tma_descriptor_block_name`
+功能目标：相同 heuristic 输入的成员共享一次调优，不同尺寸分组。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，1 个实例。
+当前失败／跳过：编译执行已返回，期望两个调优组而实际日志解析为空；后续数值比较和单 kernel 断言未执行。
 
-**测试目标：** 对两个行归约成员检查 NVIDIA TMA tensor descriptor 的生成，受 CUDA SM90+ 条件约束。
+具体缺口／适配：native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。
 
-**实际结果：** 明确 CUDA-only TMA SKIP，未执行原输入或 descriptor 检查。
+先修入口：先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。 验收：保留数值和实际单 Combo，验证真实候选、组成员及
+winner；不能只替换日志字符串通过。
 
-**master 因果链：** 测试开启 triton.use_tensor_descriptor、assume_aligned_inputs，要求 make_tensor_descriptor。
-NPU utils 的 patch_device_supports_tma 会把通用探测改为 NPU 可用性，因此该探测不能代表 NVIDIA TMA 硬件存在，也不能代表 NPU Combo 的 descriptor 路径已验证。
-NPU 有自己的 indexing/搬运协议。
+证据：[E1][E1]、[E2][E2]、[E3][E3]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**需要适配什么：** 此 NVIDIA 协议实例无需移植。
-若要验证 NPU tensor-descriptor/搬运能力，应按实际后端 descriptor 支持、轴名和 block 约束另外定义目标，不能只放宽 SM90 或利用兼容探测宣称 TMA 通过。
+<a id="repair-30"></a>
 
-**是否符合 NPU 设计：** 保留平台 SKIP 合理。
-它不表示 NPU 不支持 sum，也不直接否定通用 tensor descriptor 的可扩展性。
+#### 30 P2 `test_combo_max_persistent_rblock_gated_on_per_subkernel`
 
-**验证与结论边界：** NVIDIA 原实例由 CUDA 环境验证；NPU descriptor 目标需独立核对实际 compiler/launch 协议，本轮未新增该能力验证。
+位置：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；本轮 FAIL 1; PASS 1。
 
-代码依据：[E9][E9]、[E1][E1]。
+功能目标：共享 X 分块时应用联合 R 资源约束，真正独立 X 分块时取消该共享约束。
 
-<a id="s10"></a>
+当前失败／跳过：per_subkernel=False 数值通过但缺 max_persistent_rblock=1024；True 数值与字段不存在的断言通过，该负向字段检查未证明独立 X
+分块生效。
 
-#### S10 `test_pdl_codegen_in_combo_kernel`
+具体缺口／适配：原 max_persistent_rblock 是社区共享-X/HIP 约束字段；NPU 需验证其真实 UB／成员资源规则。
 
-源方法：`test_combo_kernels.py::ComboKernelPDLTests`；正式状态 **SKIP**，1 个实例。
+先修入口：NPU 共享／独立 block ABI 与每成员资源约束，不移植裸 4096 阈值。 验收：区分实际共享与独立模式，验证合法完整 R、资源受限候选及字段语义；开关 True 不等于独立 X
+已实现。
 
-**测试目标：** pointwise Combo 生成 launch_pdl=True 和每分支恰当顺序的 CUDA gdc_wait/gdc_launch_dependents。
+证据：[E1][E1]、[E3][E3]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**实际结果：** 明确 CUDA-only PDL SKIP。
+<a id="repair-31"></a>
 
-**master 因果链：** 测试断言直接引用 tl.extra.cuda.gdc_*，并要求 SM90+ 的 grid dependency control 和对应启动协议；NPU Combo 使用自己的 Sequential grid
- 与 runtime launcher，没有此 CUDA 协议契约。
+#### 31 P2 `test_combo_kernel_coordesc_tunes_largest_subkernel_first`
 
-**需要适配什么：** 无需为 NPU 实现同名 CUDA intrinsic。
-若提出 NPU 异步依赖启动需求，应按实际同步/内存可见性设计单独能力。
+位置：`test_combo_kernels.py::ComboKernelTestsMaxAutotune`；本轮 FAIL 1。
 
-**是否符合 NPU 设计：** 平台 SKIP 符合 NPU 当前 launch 设计，不能以打印 launch_pdl=True 替代依赖与同步协议。
+功能目标：逐成员坐标下降先修改工作量最大的第 1 个成员 X 分块。
 
-**验证与结论边界：** 该实例留在 CUDA 平台验证；NPU 数值和普通 Combo launch 的通过不是 PDL 证据。
+当前失败／跳过：在 assertLogs 退出时失败，未捕获 coordinate_descent_tuner 的 DEBUG 日志；后续数值、多个成员配置及最大成员优先断言均未执行。
 
-代码依据：[E9][E9]。
+具体缺口／适配：共享 block 无独立成员坐标，不能验证仅先改变 XBLOCK_1 的目标。
 
-<a id="s11"></a>
+先修入口：成员独立 ABI、coordesc 字段与工作量排序、完整配置评价。 验收：真实尝试多个不同成员配置，首步只改最大成员，并保持数值；日志缺失不代表数值错误。
 
-#### S11 `test_pdl_combo_kernel_pointwise`
+证据：[E1][E1]、[E3][E3]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-源方法：`test_combo_kernels.py::ComboKernelPDLTests`；正式状态 **SKIP**，1 个实例。
+<a id="repair-32"></a>
 
-**测试目标：** 三个不同尺寸 activation 成员在 CUDA PDL launch 下数值正确，每分支有对应 wait/launch_dependents。
+#### 32 P2 `test_combo_rms_norm_forwards_add_persistent_rblock`
 
-**实际结果：** 明确 CUDA-only PDL SKIP，没有以仅数值通过宣称 PDL 实现。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 1。
 
-**master 因果链：** 除了数值，还检查 launch_pdl=True、CUDA gdc 调用以及指定分支 dispatch；这些是 CUDA PDL 协议，当前 NPU 共享 dispatch 和设备 launch 接口不同。
+功能目标：两个 RMSNorm 成员的候选保留 standalone 的完整 R／大 R 优化资格。
 
-**需要适配什么：** 无需将此 PDL 实例移植到 NPU；通用 pointwise Combo 数值与分支 mask 由适用用例覆盖。
+当前失败／跳过：两个 RMSNorm 的数值比较通过，随后缺 inductor_meta_0；未执行到成员 add_persistent_rblock 检查。
 
-**是否符合 NPU 设计：** 平台排除合理，目标中的激活计算适用于 NPU，但不构成 PDL 支持证据。
+具体缺口／适配：缺逐成员 add_persistent_rblock 出口；NPU 原图可已是完整-R persistent，不能据字段认定缺 persistent。
 
-**验证与结论边界：** CUDA 实例验证协议及数值；NPU 保留适用 Combo 的真实分支/数值验证，本轮不额外改变正式状态。
+先修入口：native standalone／Combo 的实际 R 候选和资源约束，再定义该优化标志的等价消费。 验收：原 (2048,4096) 图数值正确，真实候选与 winner
+对照；不能补无消费者标志冒充优化。
 
-代码依据：[E9][E9]、[E1][E1]。
+证据：[E1][E1]、[E2][E2]、[E3][E3]、[E11][E11]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-<a id="s12"></a>
+<a id="repair-33"></a>
 
-#### S12 `test_pdl_combo_kernel_reduction`
+#### 33 P2 `test_combo_triton_meta_has_disable_ftz`
 
-源方法：`test_combo_kernels.py::ComboKernelPDLTests`；正式状态 **SKIP**，1 个实例。
+位置：`test_combo_kernels.py::ComboKernelMetadataTests`；本轮 FAIL 2。
 
-**测试目标：** 在类级 triton.enable_pdl=True 条件下执行 sum/mean 的 CUDA PDL reduction Combo。
+功能目标：disable_ftz 开关从 Inductor 传到编译器和实际数学路径，控制非正规数保留。
 
-**实际结果：** 明确 CUDA-only PDL SKIP；原方法只比较输出，不能把普通 NPU reduction 数值 PASS 当成 PDL 支持。
+当前失败／跳过：False/True 两个实例数值均通过，随后各缺对应 disable_ftz 字段；当前正值输入未覆盖非正规数，数学功能还需另行验收。
 
-**master 因果链：** 协议通过类 setup 和 SM90/CUDA gate 生效，但方法本身没有检查 gdc/launch_pdl。
-兼容层把 GPU 入口重定向到 NPU 时，单纯数值检查可能走普通 launch，丢失 PDL 测试目标。
+具体缺口／适配：NPU triton_meta 未导出该字段，当前安装 Triton 的 NPUOptions 未声明它；通用编译选项及数学路径消费仍需定界。
 
-**需要适配什么：** 保留平台 SKIP；不需要移植 CUDA PDL。
-若通用 reduction 已有覆盖，不再用此方法重复计为设备依赖启动能力。
+先修入口：NPU jit_line、Triton Ascend compiler NPUOptions、指数数学 lowering／下层消费。 验收：False/True 字段正确并有真实消费者；验证
+exp/exp2 边界，不用只打印开关替代数值能力。
 
-**是否符合 NPU 设计：** 符合 NPU 当前普通 reduction launch 设计；数值算子和平台启动协议需要分别判断。
+证据：[E2][E2]、[E8][E8]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**验证与结论边界：** CUDA 实例应结合 protocol artifact 验证 PDL 真生效；NPU 普通 sum/mean 由适用用例验证。
+<a id="repair-34"></a>
 
-代码依据：[E9][E9]。
+#### 34 P3 `test_combo_kernel_peak_memory_wide_resnet`
 
-<a id="s13"></a>
+位置：`test_combo_kernels.py::ComboKernelPeakMemoryTests`；本轮 FAIL 1。
 
-#### S13 `test_combo_kernel_amd_special_config_args`
+功能目标：峰值门控拒绝增加内存的合法 Combo 候选并降低运行峰值。
 
-源方法：`test_combo_kernels.py::ComboKernelTests`；正式状态 **SKIP**，2 个实例。
+当前失败／跳过：tight 与 disabled 的首次执行峰值同为 616101888B，未满足下降断言；本轮没有额外捕获 gate 候选，不能据此判定 gate 未实现。
 
-**测试目标：** max_autotune=False/True 两个实例验证 HIP waves_per_eu、matrix_instr_nonkdim、kpack 等选项不被误写成成员 constexpr。
+具体缺口／适配：源码已有 gate；原首次执行同时计入编译／autotune 内存，峰值不降不能直接证明 gate 缺失。
 
-**实际结果：** 两个实例均在 not torch.version.hip 时 SKIP，原方法还要求独立分块开关。
+先修入口：用例候选有效性、正 memory delta 与 warm 运行峰值观测；再核对实际拒绝决策。 验收：证明存在会被门控拒绝的真实 NPU
+Combo，并用相同原生内存统计隔离运行峰值；不只放宽阈值。
 
-**master 因果链：** 社区 runtime 在 HIP 分支把 signature 外的 cfg kwargs 分离到 backend_options，再作为 compiler options 传入。
-这些是 HIP 专用参数，NPU native 有自己的 compile_mode/搬运等选项，不应接收 HIP 配置名。
+证据：[E7][E7]、[E13][E13]；[原方法与断言][test-index]；[本轮报告][jobs]。
 
-**需要适配什么：** 本 HIP 实例无需 NPU移植；NPU“编译选项与 kernel/runtime 参数分离”是适用的通用协议，但应使用 NPU真实选项另行验证。
+### 保留 SKIP 的硬件／平台协议
 
-**是否符合 NPU 设计：** 平台 SKIP 合理，不表示 NPU 不支持 max-autotune，也不把两实例计为独立分块实现。
+`test_combo_kernel_tma_descriptor_block_name`：NVIDIA SM90+ TMA descriptor 搬运协议。 本轮 SKIP，未计为
+PASS，也不进入 NPU 同协议实现队列。
 
-**验证与结论边界：** HIP 验证原选项；NPU 对实际 compile option/runtime block 进行参数归属检查，保持合法 native launcher。
+`test_combo_kernel_amd_special_config_args`：ROCm/HIP 专属 compile options 与 constexpr 分离。 本轮 SKIP，未计为
+PASS，也不进入 NPU 同协议实现队列。
 
-代码依据：[E9][E9]、[E1][E1]。
+`test_pdl_codegen_in_combo_kernel`：NVIDIA SM90+ CUDA grid dependency control 和 launch_pdl。 本轮
+SKIP，未计为 PASS，也不进入 NPU 同协议实现队列。
 
-<a id="s14"></a>
+`test_pdl_combo_kernel_pointwise`：NVIDIA PDL 每成员 wait／launch_dependents 顺序。 本轮 SKIP，未计为 PASS，也不进入
+NPU 同协议实现队列。
 
-#### S14 `test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu`
+`test_pdl_combo_kernel_reduction`：类级开启的 NVIDIA PDL 归约 launch 协议。 本轮 SKIP，未计为 PASS，也不进入 NPU 同协议实现队列。
 
-源方法：`test_combo_kernels.py::ComboKernelDynamicShapesTests`；正式状态 **SKIP**，1 个实例。
+XPU-only 的动态归约方法没有 XPU 专属 intrinsic，故已进入修复顺序；它的设备门控不能与 TMA／PDL／HIP 协议一并归为硬件差异。
 
-**测试目标：** XPU 平台下三个动态行数的 sum/mean/max 成员，并打开 compile-time autotune。
+### 2.10 重合范围的当前非 PASS
 
-**实际结果：** 沿用 requires xpu and triton SKIP，没有执行此 XPU实例。
+这些方法不进入上面的“范围外”排序，但仍保留本轮实际结果；非硬件 SKIP 不作为已完成支持。
 
-**master 因果链：** 排除来自 requires_xpu_and_triton，不是 sum/mean/max lowering 错误。
-同文件 CUDA 命名的对应方法经 NPU兼容入口执行相同计算与动态范围，已在合并报告 PASS，实际版本见 jobs。
+`test_combo_kernels.py::test_combo_kernel_per_config_subkernel_per`（FAIL）：数值比较和
+generated_kernel_count=1 通过，随后固定 CUDA XBLOCK : tl.constexpr 检查失败。本轮走共享 block 分支；需按 NPU 实际 split
+block ABI 适配观测，并保留两个 sum 成员 R=64/512 的完整归约要求。缺该字符串不代表 persistent 归约未实现。
 
-**需要适配什么：** 无需为这个 XPU门控实例新增 NPU算子能力；可把通用动态归约目标抽为设备适用检查，继续验证真实动态 launch 与 compile-time autotune。
+`test_combo_kernels.py::test_combo_kernel_per_config_subkernel_red`（FAIL）：两组 (32,64,128) 的
+sum(dim=(0,2)) 原数值比较通过；随后 generated_kernel_count 期望 1、实际 2，尚未执行 X/R block 检查。原目标是将两条非连续多轴归约组合为单个
+Combo，需核对成员轴、候选合法性和分区接受条件；保留 FAIL，不能仅取消数量目标或改期望为 2。
 
-**是否符合 NPU 设计：** 平台 SKIP 合理，不能写成 NPU 不支持动态 persistent reduction 或 max。
-对应 PASS 的设备/版本和融合模式仍要按实际报告解释，不能外推为 master 全量复测。
+`test_torchinductor.py::test_combo_kernel_filter_cpu`（FAIL）：a*4、b+8、c.min(-1)、d.max(-1) 的数值比较通过；NPU
+原分组目标为 pointwise 与 min/max 两个 Combo，generated_kernel_count 期望 2、实际 4。需核对 20x20/30x30 的不同尺寸 pointwise
+和 min/max 成员的轴、tiling 与分区接受条件，完成实际分组目标；保留 FAIL，不能直接改为 4 或用 skip 规避。
 
-**验证与结论边界：** 若统一设备测试，保留动态行维 min/max 标记、不同尺寸和 eager/compiled 输出，对照 NPU实际候选/launch；无需重复统计两个平台别名。
+以上原方法与断言见 [测试源码索引][test-index]，实际失败阶段见 [逐实例报告][jobs]，NPU 成员分区和共享 block ABI 见 [E1][E1]。
 
-代码依据：[E9][E9]。
+### 水平融合、垂直融合与 foreach 的关系
 
-<a id="s15"></a>
+水平融合把没有 producer/consumer 依赖的独立成员打包进一个 Combo；垂直融合沿依赖链把生产与消费算子融进同一成员。`torch._foreach_*` 是对 tensor
+列表逐项计算的前端 API；编译器的 FOREACH 分组融合路径把各项形成成员、吸收生产者／消费者链，再将独立成员水平打包。当前 NPU 未注册该 FOREACH
+后端能力，普通算子的垂直融合入口仍可使用。
 
-#### S15 `test_combo_kernel_filter_cpu`
-
-源方法：`test_torchinductor.py::CommonTemplate`；正式状态 **SKIP**，1 个实例。
-
-**测试目标：** CPU/GPU 共用模板：CPU 不做 Combo 融合、GPU 按指定数量融合，验证 CPU 节点过滤。
-
-**实际结果：** 当前 NPU模板实例明确测试范围不适用 SKIP。
-
-**master 因果链：** 所有输入都在 self.device；原 CPU分支检查 4 kernels，CUDA分支检查 2 kernels，NPU分支只有数值比较。
-NPU实例并没有 CPU 节点，无法观察 CPU过滤策略。
-
-**需要适配什么：** 此 NPU实例无需生产适配；CPU实例保留过滤断言。
-若要验证 NPU/CPU混合图，应实际构造混合设备节点并定义对应过滤目标。
-
-**是否符合 NPU 设计：** 测试范围排除合理。
-不是 NPU 不支持 mul/add/min/max，也不是混合设备过滤已验证。
-
-**验证与结论边界：** 由 CPU实例验证此策略；后续混合图测试必须检查实际节点设备与 emitted kernels，不能仅比较输出。
-
-代码依据：[E9][E9]。
-
-<a id="s16"></a>
-
-#### S16 `test_foreach_basic`
-
-源方法：`test_snode_runtime.py::InputDistanceTests`；正式状态 **SKIP**，1 个实例。
-
-**测试目标：** 直接消费图输入的 foreach_add，其 scheduler 节点输入距离 min/max 都为 0。
-距离指融合前依赖边的层数。
-
-**实际结果：** 正式方法仍因旧 NPU does not support 无条件 SKIP。
-11 月 13 日仅在诊断中 unwrap skip，原距离断言全部保留；非空节点和 FX eager 输出检查均通过。
-
-**master 因果链：** 原方法用 Inductor 收集 metrics.nodes_num_elem，再返回 FX gm 做 eager 执行，并不要求 FOREACH 分组融合。
-master 的 compute_input_distances 对无 unmet dependency 节点给 0，并聚合 group 成员的 min/max。
-实际 NPU lowering 产生两个 ComputedBuffer SchedulerNode，均无 unmet dependency，min/max 都为 0/0；不是空节点循环造成假 PASS。
-
-**需要适配什么：** 测试适配即可：移除旧无条件 skip，加上非空 scheduler 观测检查，保留原 0/0 距离断言与数值。
-不需要为本目标新增 FOREACH 分组融合或硬件能力。
-
-**是否符合 NPU 设计：** 输入距离是现有通用 scheduler 能力，真实 NPU 节点已满足原目标；旧禁用不符合当前事实。
-foreach 分解为普通节点仍保持依赖语义，符合现有 NPU lowering 设计。
-
-**验证与结论边界：** 原两组 10/20 元素输入定向执行为 PASS_DIAGNOSTIC，已保存节点类型、非空观测、0/0 距离和FX eager 输出一致证据。
-诊断未修改正式方法，CSV/jobs 仍 SKIP；执行为 d12230b556 安装环境。
-早期 foreach 运行时未捕获完整脚本哈希，保留报告哈希和恢复脚本的这一限制。
-
-代码依据：[E10][E10]、[主机重放][host-results]、[非空节点与原断言][foreach-report]、[设备诊断][device-findings]。
-
-<a id="s17"></a>
-
-#### S17 `test_foreach_after_extern`
-
-源方法：`test_snode_runtime.py::InputDistanceTests`；正式状态 **SKIP**，1 个实例。
-
-**测试目标：** mm 产生数据后 foreach_add 消费它，检查整个 schedule 的 min distance=0、max distance≥1。
-
-**实际结果：** 正式仍为旧无条件 SKIP。
-11 月 13 日 unwrap skip 的定向诊断保留原距离断言，非空 schedule 与 FX eager 输出检查均通过。
-
-**master 因果链：** master 沿用跨 extern 的通用依赖距离算法；原断言取整个 schedule 的 min/max，不要求每个 foreach 成员自身的 min=0。
-实际 NPU schedule 中 mm 是 ExternKernelSchedulerNode，距离 0/0；两个 foreach_add 消费者构成 FusedSchedulerNode，读取 buf0，group 和两叶子均为 1/1
-。
-整体 min=0、max=1 正好满足原目标，未触发算子或 scheduler 不支持。
-
-**需要适配什么：** 移除旧 skip，保留 mm、两个消费者及原整体 0/>=1 断言，补非空观测。
-当前图无需新增 NPU 依赖能力，也无需改变 lowering 来制造 FOREACH 节点。
-
-**是否符合 NPU 设计：** extern barrier 后消费者深度加 1 与现有 NPU scheduler 设计一致；设备证据已确认适用。
-正式 SKIP 来自测试禁用，不能解释成 mm/foreach 不支持。
-
-**验证与结论边界：** 原 mm 与两个 10x10 消费者输入定向执行为 PASS_DIAGNOSTIC，记录 mm=0/0、消费者=1/1、实际 buf0 依赖及 FX eager 数值一致。
-正式测试文件未改，结果仍 SKIP；最新 master 未设备复测。
-与 S16 同样不宣称完整脚本在早期 foreach 启动时已记录哈希。
-
-代码依据：[E10][E10]、[主机重放][host-results]、[非空节点与原断言][foreach-report]、[设备诊断][device-findings]。
-
-### 当前 PASS 的验证口径与前提
-
-| 检查内容 | NPU 当前设计与验证要求 | 源码依据 |
-| --- | --- | --- |
-| persistent reduction size hint | split-axis 尺寸求和，其余轴取最大；不照搬 GPU 的二次幂 hint | `NPUComboKernel.select_combo_heuristics` |
-| 普通 kernel 与 Combo grid | 普通 kernel 使用 `GridNpu`；Combo 使用一维 `SequentialComboKernelGrid`。动态尺寸用例从真实 launcher 读取 grid，排除 autotune 启动，检查两组尺寸的 X grid 不同及 Y/Z 为 1，并保留数值检查 | `CompiledKernel.launch_metadata`、`SIMDDispatch`、`SequentialComboKernelGrid` |
-| foreach 水平与垂直组合 | 计算 PASS；原单 kernel 目标未验收，见 [C01–C04](#fusion-capability-tracking) | [E15][E15] |
-| mixed-order 数量 | 共享输入联合归约关闭；当前 4 个 kernel，待适配见 [C05](#c05) | [E15][E15] |
-| scalar broadcast 数量 | 不同轴接口分成 2 个普通 kernel；水平组合待扩展见 [C06](#c06) | [E1][E1]、[E15][E15] |
-| bucketize 数量 | bucketize 调用 ATen fallback；其余两个逐点成员合为 1 个 Triton Combo。检查 fallback 调用及双成员结构，不能把 Triton 定义数当作全部设备 launch 数 | `lowering_fallback_list.py` 注册 `aten.bucketize.Tensor`；实际 wrapper 保留对应调用 |
-| max-autotune 与 grouping | 检查完整共享配置有多个实际候选、执行计时、选出赢家并保留一个 launcher；检查成员数量及输出数值。NPU 不要求 GPU 逐成员分组日志 | `_triton_config_npu_index_combo`、`ComboTileGenerator`、`NPUCachingAutotuner.autotune_to_one_config` |
-| persistent RBLOCK 上限 | 不带 HIP 专用的 `max_persistent_rblock=1024`，NPU 按自身资源模型筛选共享候选 | NPU `jit_line` 与共享 tiling 候选生成 |
-| store mask | 保留原输入数值检查；额外构造行数为 257/513 的兼容动态 mean，检查一个双成员 Combo、各分支边界和两个 store 的 `x0_mask` | 正式用例 FileCheck/JUnit；`compatible-combo-output.py` 为兼容输入独立探测证据 |
-
-调优检查只在用例内临时包装 `AsyncCompile.wait` 取得真实对象，并调用原函数；
-不替换候选、计时或赢家。关闭缓存并将编译线程设为 1 是为了确保本次确实执行待检查路径，退出即恢复。
-NPU 的共享 tiling 通过不代表 GPU 的独立逐成员分块或逐成员 coordesc 已实现。
-普通 GPU 分支的原断言保留。
-动态 grid 的 hook 只记录实际参数并调用原函数，不改 grid 或调优结果。
-
-### store mask 的现存诊断问题
-
-共用模板默认启用 `test_configs.runtime_triton_dtype_assert`。
-独立探测日志显示，NPU 对动态整数 `ks0`（Triton signature 为 `i64`）生成了以下断言：
-
-```python
-tmp4 = ks0
-tl.static_assert(tmp4.dtype == tl.float32)
+```text
+成员 0：add(a0, a0) → foreach 第 0 项 → mul(d0, a0)
+成员 1：mul(a1, a1) → foreach 第 1 项 → mul(d1, a1)
 ```
 
-整数在转换为 float32 之前即被要求具有 float32 dtype，
-TTIR 检查失败后回退为两个普通 kernel，无法满足本例的真实 Combo 数量断言。
-直接证据见 [TTIR
-失败片段](../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/dtype-debug-ttir-failure.txt)。
-这是仍存在的独立诊断代码生成问题，未作为生产代码修复，也不额外计入本轮源方法 FAIL 数量。
+`test_non_foreach_consumer_producer_list` 体现这两条链；`test_scheduler_fusion_list` 体现 foreach→foreach
+的成员配对融合，`test_single_list` 体现列表成员水平打包。社区原目标是单 kernel；本轮 foreach 按既定功能口径执行，所以数值 PASS 不证明完整 FOREACH
+分组融合完成。
 
-新增 mask 场景仅在用例作用域内关闭该调试项，退出恢复。
-随后实际验证一个双成员 Combo、两个分支各自的边界 mask、全部 store mask 和 eager/compiled 数值。
-因此该 PASS 有明确的调试配置前提，不代表 dtype 诊断能力已修复。
-TMA/PDL 的硬件协议来源保存在
-[官方资料记录](../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/cuda-protocol-references.json)。
-
-[E1]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/shared-block-abi.txt
-
-[E2]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/combo-metadata.txt
-
-[E3]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/native-tile-search.txt
-
-[E4]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/cse-statistics.txt
-
-[E5]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/graph-optimize-mem.txt
-
-[E6]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/provenance-chain.txt
-
-[E7]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/peak-memory-gate.txt
-
-[E8]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/ftz-boundary.txt
-
-[E9]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/platform-test-gates.txt
-
-[E10]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/scheduler-input-distance.txt
-
-[E11]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/community-combo-contract.txt
-
-[E12]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/bandwidth-and-flop.txt
-
-[E13]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/wrn-grouping-and-autotune-memory.txt
-
-[E14]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/ftz-compiler-and-math-library.txt
-
-[E15]:
-  ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/fusion-capabilities.txt
-
-[host-results]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/host-probe-results.json
-
-[hint-output]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/reduction-hint-output.py
-
-[rms-output]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/rms-norm-output.py
-
-[benchmark-output]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/benchmark-output.py
-
-[ftz-report]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/ftz-result.json
-
-[ftz-direct]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/ftz-direct-result.json
-
-[wrn-fresh]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/wrn-fresh-result.json
-
-[wrn-groups]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/wrn-groups-result.json
-
-[wrn-allocations]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/wrn-peak-allocations.json
-
-[foreach-report]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/foreach-result.json
-
-[device-findings]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/device-findings.json
-
-[device-manifest]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/device-evidence-manifest.json
-
-[source-index]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/source-index.json
-
-[case-analysis]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/master-analysis/case-analysis.json
-
-[jobs]: ../../../../artifacts/inductor-combo-tests-native-v2.13-npu-contracts-20261112/jobs.json
+社区 2.13 支持上述水平／垂直组合，基础机制在 2.10 已存在，见版本源码 [E15][E15]。NPU 的普通 can_fuse_vertical 入口已有，backend features
+当前未注册 FOREACH；应将完整列表分组与依赖链吸收作为 NPU 待适配功能，不能从 FOREACH 入口未启用推断普通垂直融合缺失，也不能把缺 mixed-order
+联合归约或成员独立调优笼统写成融合策略差异。
 
 <!-- combo-section:analysis213:end -->
 
-[daily213-baseline210]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/baseline210-passed-nodeids.txt
-[daily213-results]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/results.csv
-[daily213-skips]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/skipped-nodeids.txt
-[daily213-evidence]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/
-[daily213-junit]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/junit-validation.json
-[daily213-inventory]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/full-report-status.json
-[daily213-jobs]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-baseline-pass-daily-20261113/full-report-jobs.json
+[pass213]:
+  ../../../../scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt
+[csv]:
+  inductor-combo-tests-native-v2.13-sync-64dc85c.csv
+[jobs]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/jobs.json
+[evidence]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/status.json
+[junit]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/junit-cross-check.json
+[scope]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/community-branch-scope.json
+[overlap]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/overlap60-jobs.json
+[all-pass]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/passed-nodeids.txt
+[test-index]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/test-method-index.json
+[accuracy-wrapper]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/generated/r0-r1-accuracy-1.py
+[accuracy-source]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/generated/r0-r1-accuracy-source.json
+[triton-options]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/installed-triton-source/options-ast-check.json
+[triton-compiler]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/installed-triton-source/compiler.py
+[E1]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/shared-block-abi.txt
+[E2]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/combo-metadata.txt
+[E3]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/native-tile-search.txt
+[E4]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/cse-statistics.txt
+[E5]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/graph-optimize-mem.txt
+[E6]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/provenance-chain.txt
+[E7]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/peak-memory-gate.txt
+[E8]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/ftz-boundary.txt
+[E9]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/platform-test-gates.txt
+[E10]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/scheduler-input-distance.txt
+[E11]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/community-combo-contract.txt
+[E12]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/bandwidth-and-flop.txt
+[E13]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/wrn-grouping-and-autotune-memory.txt
+[E15]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/fusion-capabilities.txt
+[E16]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/no-linear-multi-axis.txt

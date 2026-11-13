@@ -1,0 +1,305 @@
+Module entry
+    1: import torch
+    2: import torch_npu
+    3: from torch_npu.contrib import transfer_to_npu
+    4: from torch_npu.utils import _dynamo
+    5: _dynamo.patch_has_triton()
+    6: _dynamo.use_jit_script = True
+    7: torch.cuda.get_device_capability = lambda :(10, 0)
+    8: import torch_npu.testing
+    9: import torch_npu._inductor
+   10: 
+   11: # Owner(s): ["module: inductor"]
+   12: 
+   13: import contextlib
+   14: import io
+   15: import json
+   16: import logging
+   17: import os
+   18: import re
+   19: import shutil
+   20: import sys
+   21: import tempfile
+   22: import unittest
+   23: import zipfile
+   24: from pathlib import Path
+   25: 
+   26: import torch
+   27: from torch._C import FileCheck
+   28: from torch._dynamo.utils import detect_fake_mode
+   29: from torch._inductor import config
+   30: from torch._inductor.debug import (
+   31:     create_kernel_information_json,
+   32:     create_mapping_pre_post_grad_nodes,
+   33:     create_node_mapping_kernel_to_post_grad,
+   34:     reset_inductor_kernel_provenance_debug_handle,
+   35: )
+   36: from torch._inductor.fx_passes.post_grad import post_grad_passes
+   37: from torch._inductor.test_case import run_tests, TestCase
+   38: from torch._inductor.utils import run_and_get_code, run_and_get_cpp_code
+   39: from torch._inductor.virtualized import V
+   40: from torch.testing._internal.common_utils import IS_MACOS
+   41: from torch.testing._internal.inductor_utils import GPU_TYPE
+   42: from torch.testing._internal.triton_utils import requires_gpu_and_triton
+   43: 
+   44: 
+   45: try:
+   46:     from .test_aot_inductor_utils import AOTIRunnerUtil
+   47:     from .test_torchinductor import copy_tests
+   48: except ImportError:
+   49:     from test_aot_inductor_utils import AOTIRunnerUtil
+   50:     from test_torchinductor import (
+   51:         copy_tests,  # @manual=fbcode//caffe2/test/inductor:test_inductor-library
+   52:     )
+   53: 
+   54: 
+   55: trace_log = logging.getLogger("torch.__trace")
+   56: 
+   57: 
+   58: class Model(torch.nn.Module):
+   59:     def __init__(self):
+   60:         super().__init__()
+   61: 
+   62:     def forward(self, a, b, c):
+   63:         x = a * 3.14
+   64:         y = torch.addmm(c, x, b)
+   65:         z = torch.nn.functional.gelu(y)
+   66:         return z
+   67: 
+   68: 
+   69: class Model2(torch.nn.Module):
+   70:     # this test model is used for combo kernel provenance tracing info
+   71:     def __init__(self):
+   72:         super().__init__()
+   73: 
+   74:     def forward(self, a, b, c):
+   75:         a1 = torch.nn.functional.relu(a)
+   76:         b1 = torch.nn.functional.sigmoid(b)
+   77:         c1 = torch.nn.functional.tanh(c)
+   78:         return a1, b1, c1
+   79: 
+   80: 
+   81: class Model3(torch.nn.Module):
+   82:     def __init__(self, n, k):
+   83:         super().__init__()
+   84:         self.weight = torch.randn(n, k, device=GPU_TYPE)
+   85:         self.bias = torch.randn(n, device=GPU_TYPE)
+
+
+test_provenance_tracing.py::TestProvenanceTracingArtifact::_check_provenance_tracing_kernel_to_post_grad
+  116:     def _check_provenance_tracing_kernel_to_post_grad(self, filepath, expected_data):
+  117:         self.assertTrue(filepath.is_dir())
+  118:         filename = Path(filepath) / "inductor_provenance_tracking_node_mappings.json"
+  119:         with open(filename) as f:
+  120:             actual_data = json.load(f)
+  121:         actual_data = actual_data["cppCodeToPost"]
+  122:         # check that the generated provenance tracing artifact is expected
+  123:         self.assertEqual(sorted(actual_data.items()), sorted(expected_data.items()))
+
+test_provenance_tracing.py::TestProvenanceTracingArtifact::_check_provenance_tracking_node_mappings
+  125:     def _check_provenance_tracking_node_mappings(self, filepath, expected_mapping):
+  126:         self.assertTrue(filepath.is_dir())
+  127:         filename = Path(filepath) / "inductor_provenance_tracking_node_mappings.json"
+  128:         with open(filename) as f:
+  129:             actual_data = json.load(f)
+  130:         # check that the generated provenance tracing node mapping is expected
+  131:         self.assertEqual(sorted(actual_data.items()), sorted(expected_mapping))
+
+test_provenance_tracing.py::TestProvenanceTracingArtifact::_test_triton_kernel_to_post_grad_tracing
+  133:     def _test_triton_kernel_to_post_grad_tracing(self, device):
+  134:         a = torch.randn(10, 20, device=device)
+  135:         b = torch.randn(20, 30, device=device)
+  136:         c = torch.randn(10, 30, device=device)
+  137:         example_inputs = (a, b, c)
+  138: 
+  139:         model = Model().to(device)
+  140:         filepath = None
+  141: 
+  142:         for backend in ["aot_inductor", "inductor"]:
+  143:             reset_inductor_kernel_provenance_debug_handle()
+  144:             try:
+  145:                 with config.patch(
+  146:                     {
+  147:                         "trace.debug_dir": tempfile.mkdtemp(),
+  148:                         "force_disable_caches": True,
+  149:                     }
+  150:                 ):
+  151:                     with self.assertLogs(
+  152:                         logging.getLogger("torch._inductor.debug"),
+  153:                         level=logging.WARNING,
+  154:                     ) as cm:
+  155:                         if backend == "aot_inductor":
+  156:                             AOTIRunnerUtil.run(model, example_inputs)
+  157:                         else:
+  158:                             ep = torch.export._trace._export(model, example_inputs)
+  159:                             compiled = torch.compile(ep.module(), backend=backend)
+  160:                             compiled(*example_inputs)
+  161:                     self.assertEqual(len(cm.output), 1)
+  162:                     m = re.match(r"WARNING.* debug trace: (.*)", cm.output[0])
+  163:                     self.assertTrue(m)
+  164:                     filepath = Path(m.group(1))
+  165:                     if device == "npu":
+  166:                         # On NPU, aten.gelu has no c-shim and stays an extern
+  167:                         # kernel, and `torch.addmm(c, d, b)` is lowered to an
+  168:                         # extern mm plus a standalone pointwise add for `+ c`.
+  169:                         if backend == "aot_inductor":
+  170:                             expected_mapping = [
+  171:                                 (
+  172:                                     "cppCodeToPost",
+  173:                                     {
+  174:                                         "triton_poi_fused_mul_0:1": ["mul"],
+  175:                                         "aoti_torch_npu_mm_out:2": ["mm_default"],
+  176:                                         "triton_poi_fused_addmm_1:3": ["add_tensor"],
+  177:                                         "aoti_torch_npu_gelu:4": ["gelu"],
+  178:                                     },
+  179:                                 ),
+  180:                                 (
+  181:                                     "postToCppCode",
+  182:                                     {
+  183:                                         "mul": ["triton_poi_fused_mul_0:1"],
+  184:                                         "mm_default": ["aoti_torch_npu_mm_out:2"],
+  185:                                         "add_tensor": ["triton_poi_fused_addmm_1:3"],
+  186:                                         "gelu": ["aoti_torch_npu_gelu:4"],
+  187:                                     },
+  188:                                 ),
+  189:                                 (
+  190:                                     "postToPre",
+  191:                                     {
+  192:                                         "mul": ["mul"],
+  193:                                         "mm_default": ["addmm"],
+  194:                                         "add_tensor": ["addmm"],
+  195:                                         "gelu": ["gelu"],
+  196:                                     },
+  197:                                 ),
+  198:                                 (
+  199:                                     "preToPost",
+  200:                                     {
+  201:                                         "mul": ["mul"],
+  202:                                         "addmm": ["mm_default", "add_tensor"],
+  203:                                         "gelu": ["gelu"],
+  204:                                     },
+  205:                                 ),
+  206:                             ]
+  207:                         else:
+  208:                             # backend = inductor; addmm is lowered to an
+  209:                             # extern mm plus a standalone pointwise add, and
+  210:                             # gelu stays an aten fallback (no c-shim on NPU).
+  211:                             expected_mapping = [
+  212:                                 (
+  213:                                     "cppCodeToPost",
+  214:                                     {
+  215:                                         "triton_poi_fused_mul_0:1": ["mul"],
+  216:                                         "extern_kernels.mm:2": ["mm_default"],
+  217:                                         "triton_poi_fused_addmm_1:3": ["add_tensor"],
+  218:                                         "torch.ops.aten.gelu.default:4": ["gelu"],
+  219:                                     },
+  220:                                 ),
+  221:                                 (
+  222:                                     "postToCppCode",
+  223:                                     {
+  224:                                         "mul": ["triton_poi_fused_mul_0:1"],
+  225:                                         "mm_default": ["extern_kernels.mm:2"],
+  226:                                         "add_tensor": ["triton_poi_fused_addmm_1:3"],
+  227:                                         "gelu": ["torch.ops.aten.gelu.default:4"],
+  228:                                     },
+  229:                                 ),
+  230:                                 (
+  231:                                     "postToPre",
+  232:                                     {
+  233:                                         "mul": ["mul"],
+  234:                                         "mm_default": ["addmm"],
+  235:                                         "add_tensor": ["addmm"],
+  236:                                         "gelu": ["gelu"],
+  237:                                     },
+  238:                                 ),
+  239:                                 (
+  240:                                     "preToPost",
+  241:                                     {
+  242:                                         "mul": ["mul"],
+  243:                                         "addmm": ["mm_default", "add_tensor"],
+  244:                                         "gelu": ["gelu"],
+  245:                                     },
+  246:                                 ),
+  247:                             ]
+  248:                         self._check_provenance_tracking_node_mappings(
+  249:                             filepath, expected_mapping
+  250:                         )
+  251:                     else:
+  252:                         if device != "cpu":
+  253:                             raise AssertionError
+  254:                         # check the inductor kernel to post grad nodes mapping is expected for cpu
+  255:                         if backend == "aot_inductor":
+  256:                             expected_data = {
+  257:                                 "cpp_fused_mul_0:1": ["mul"],
+  258:                                 "aoti_torch_cpu_addmm_out:2": ["addmm"],
+  259:                                 "cpp_fused_gelu_1:3": [
+  260:                                     "mul_3",
+  261:                                     "mul_1",
+  262:                                     "add",
+  263:                                     "erf",
+  264:                                     "mul_2",
+  265:                                 ],
+  266:                             }
+  267:                         else:
+  268:                             # backend == "inductor"
+  269:                             expected_data = {
+  270:                                 "cpp_fused_mul_0:1": ["mul"],
+  271:                                 "cpp_fused_gelu_1:3": [
+  272:                                     "mul_3",
+  273:                                     "mul_1",
+  274:                                     "add",
+  275:                                     "erf",
+  276:                                     "mul_2",
+  277:                                 ],
+  278:                                 "extern_kernels.addmm:2": ["addmm"],
+  279:                             }
+  280:                         self._check_provenance_tracing_kernel_to_post_grad(
+  281:                             filepath, expected_data
+  282:                         )
+  283: 
+  284:             finally:
+  285:                 if filepath:
+  286:                     shutil.rmtree(filepath)
+
+test_provenance_tracing.py::TestProvenanceTracingArtifact::_test_pt_tracing_combo_kernel
+  347:     @requires_gpu_and_triton
+  348:     def _test_pt_tracing_combo_kernel(self, backend):
+  349:         """This test checks that generated provenance tracing artifact from triton combo kernel to post grad nodes"""
+  350:         a = torch.randn(10, 10, device=GPU_TYPE)
+  351:         b = torch.randn(20, 20, device=GPU_TYPE)
+  352:         c = torch.randn(10, 10, device=GPU_TYPE)
+  353:         example_inputs = (a, b, c)
+  354: 
+  355:         model = Model2()
+  356:         reset_inductor_kernel_provenance_debug_handle()
+  357: 
+  358:         with config.patch(
+  359:             {
+  360:                 "trace.debug_dir": tempfile.mkdtemp(),
+  361:                 "force_disable_caches": True,
+  362:                 "combo_kernels": True,
+  363:                 "benchmark_combo_kernel": False,
+  364:             }
+  365:         ):
+  366:             with self.assertLogs(
+  367:                 logging.getLogger("torch._inductor.debug"),
+  368:                 level=logging.WARNING,
+  369:             ) as cm:
+  370:                 if backend == "aot_inductor":
+  371:                     AOTIRunnerUtil.run(model, example_inputs)
+  372:                 else:
+  373:                     ep = torch.export._trace._export(model, example_inputs)
+  374:                     compiled = torch.compile(ep.module(), backend=backend)
+  375:                     compiled(*example_inputs)
+  376:             self.assertEqual(len(cm.output), 1)
+  377:             m = re.match(r"WARNING.* debug trace: (.*)", cm.output[0])
+  378:             self.assertTrue(m)
+  379:             filepath = Path(m.group(1)).resolve()
+  380:             expected_data = {"triton_poi_fused_0:1": ["relu", "sigmoid", "tanh"]}
+  381:             self._check_provenance_tracing_kernel_to_post_grad(filepath, expected_data)
+
+test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel
+  383:     @requires_gpu_and_triton
+  384:     def test_triton_kernel_to_post_grad_tracing_combo_kernel(self):
+  385:         self._test_pt_tracing_combo_kernel(backend="inductor")
+  386:         self._test_pt_tracing_combo_kernel(backend="aot_inductor")

@@ -1,0 +1,121 @@
+Module entry
+    1: import torch
+    2: import torch_npu
+    3: from torch_npu.contrib import transfer_to_npu
+    4: from torch_npu.utils import _dynamo
+    5: _dynamo.use_jit_script = True
+    6: torch.cuda.get_device_capability = lambda :(10, 0)
+    7: import torch_npu.testing
+    8: import torch_npu._inductor
+    9: # Restore the device-aware torch.utils._triton.has_triton (transfer_to_npu
+   10: # forces it to False), so Dynamo's triton kernel wrapping and HAS_GPU work
+   11: # on NPU.
+   12: _dynamo.patch_has_triton()
+   13: # Owner(s): ["module: inductor"]
+   14: # ruff: noqa: F841
+   15: # flake8: noqa: E731
+   16: # Skip do not assign a lambda expression, use a def
+   17: import contextlib
+   18: import functools
+   19: import logging
+   20: import os
+   21: import subprocess
+   22: import sys
+   23: import unittest
+   24: from unittest import mock
+   25: 
+   26: import torch
+   27: import torch._dynamo.testing
+   28: import torch._inductor.test_case
+   29: import torch.nn.functional as F
+   30: import torch.utils._pytree as pytree
+   31: from torch._dynamo import config as dynamo_config
+   32: from torch._higher_order_ops.triton_kernel_wrap import (
+   33:     generate_ttir,
+   34:     triton_kernel_wrapper_functional,
+   35:     triton_kernel_wrapper_mutation,
+   36: )
+   37: from torch._inductor import config as inductor_config, metrics
+   38: from torch._inductor.pattern_matcher import (
+   39:     CallFunctionVarArgs,
+   40:     PatternMatcherPass,
+   41:     register_graph_pattern,
+   42: )
+   43: from torch._inductor.utils import (
+   44:     fresh_cache,
+   45:     run_and_get_code,
+   46:     triton_version_uses_attrs_dict,
+   47: )
+   48: from torch._library import capture_triton
+   49: from torch.testing import FileCheck
+   50: from torch.testing._internal import common_utils
+   51: from torch.testing._internal.common_utils import (
+   52:     parametrize,
+   53:     skipIfRocm,
+   54:     skipIfWindows,
+   55:     skipIfXpu,
+   56: )
+   57: from torch.testing._internal.inductor_utils import (
+   58:     get_func_call,
+   59:     GPU_TYPE,
+   60:     HAS_CUDA_AND_TRITON,
+   61:     HAS_GPU,
+   62:     HAS_XPU_AND_TRITON,
+   63: )
+   64: from torch.testing._internal.logging_utils import log_settings, logs_to_string
+   65: 
+   66: # Defines all the kernels for tests
+   67: from torch.testing._internal.triton_utils import *  # noqa: F403
+   68: from torch.utils._triton import (
+   69:     has_triton_experimental_host_tma,
+   70:     has_triton_package,
+   71:     has_triton_tensor_descriptor_host_tma,
+   72: )
+   73: 
+   74: 
+   75: @contextlib.contextmanager
+   76: def _dump_launch_params(value: str):
+   77:     launch_params_file = f"{os.path.abspath(sys.argv[0])}.launch_params"
+   78:     if value == "1" and os.path.exists(launch_params_file):
+   79:         os.remove(launch_params_file)
+   80:     with mock.patch.dict(os.environ, {"TORCHINDUCTOR_DUMP_LAUNCH_PARAMS": value}):
+   81:         try:
+   82:             yield
+   83:         finally:
+   84:             if value == "1" and os.path.exists(launch_params_file):
+   85:                 os.remove(launch_params_file)
+
+
+test_triton_kernels.py::KernelTests::_kernel_launched_in_code
+  171:     def _kernel_launched_in_code(self, kernel_name: str, code: str) -> bool:
+  172:         if inductor_config.cpp_wrapper:
+  173:             return f"launchKernel({kernel_name}" in code
+  174:         return f"{kernel_name}.run(" in code
+
+test_triton_kernels.py::KernelTests::test_combo_fp_self_sub_rewrite
+  733:     @requires_cuda_and_triton
+  734:     @common_utils.parametrize("per_subkernel", [False, True])
+  735:     def test_combo_fp_self_sub_rewrite(self, per_subkernel):
+  736:         def fn(a, b):
+  737:             c = a * a
+  738:             return c - c, b + 1
+  739: 
+  740:         a, b = (torch.rand(1024, device=GPU_TYPE) for _ in range(2))
+  741:         with inductor_config.patch(
+  742:             {
+  743:                 "combo_kernels": True,
+  744:                 "benchmark_combo_kernel": False,
+  745:                 "combo_kernel_per_subkernel_blocks": per_subkernel,
+  746:                 "combo_kernel_max_distance": -1,
+  747:                 "combo_kernel_peak_memory_increase_gb": None,
+  748:                 "combo_kernel_peak_memory_pct_threshold": None,
+  749:             }
+  750:         ):
+  751:             metrics.reset()
+  752:             actual, (code,) = run_and_get_code(torch.compile(fn), a, b)
+  753: 
+  754:         self.assertEqual(actual, fn(a, b), atol=0, rtol=0)
+  755:         self.assertEqual(metrics.generated_kernel_count, 1)
+  756:         self.assertIn("'combo_grid_meta':", code)
+  757:         self.assertIn("tl.where", code)
+  758:         self.assertNotIn("'enable_fp_fusion': False", code)

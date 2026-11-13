@@ -1,0 +1,1219 @@
+{
+  "test_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2",
+  "torch_npu_git": "44555141711c0c825c5a201e303dcadad1f5fcb4",
+  "cohort": "outside the established 60-method 2.10 overlap",
+  "nonpass_outside_methods": 39,
+  "ranked_methods": 34,
+  "hardware_skip_methods": 5,
+  "priority_counts": {
+    "P0": 1,
+    "P1": 18,
+    "P2": 14,
+    "P3": 1
+  },
+  "complete_coverage": true,
+  "records": [
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_per_config_subkernel_r0_r1",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1"
+      ],
+      "observed": "AssertionError: Tensor-likes are not close!",
+      "priority": "P0",
+      "order": 0,
+      "purpose": "保留 permute 后的非连续 (16,32,64) 输入，sum(dim=(1,2)) 的 compiled 结果满足原精度。",
+      "source_assessment": "本轮实际是 no-linear 普通多轴归约，一个 kernel 定义对两个输入调用两次，未形成 Combo。DSL 保留两条 R 轴、stride 地址与 FP32 累加；数值误差已观测，累积次序／tile／下层编译职责尚未定界。 本轮仅保存生成 wrapper 与布局 metadata，真实 tensor 值和 selected tile 未单独留存。",
+      "fix_entry": "先捕获并固定可复现的真实输入，用同一组输入对照 NPU eager 与该 no-linear 普通 kernel；定位 NPUNoLinearTritonScheduling/NPUTritonKernel、社区多轴 reduction DSL、NPU 候选 remap 和 Triton 数学路径。核对两条归约轴、partial loop、累加 dtype 和实际 selected tile，不能把修复归到 Combo 分区。",
+      "acceptance": "原非连续输入与原容差通过，保留原归约元素集合和 dtype；不以放宽容差或跳过精度检查通过。数值通过后再验原分区目标。",
+      "evidence": [
+        "E16"
+      ],
+      "kind": "多轴归约精度",
+      "observed_human": "原数值比较失败：报错的 16 元素向量中 1 个输出超差，最大绝对误差 1.1920928955078125e-5，atol=1e-5。执行的是同一定义的两次普通归约 launch；后续数量断言未执行。",
+      "current_analysis": "P0：FP32 非连续 (16,32,64)、stride (64,1024,1) 的 sum(1,2) 原精度验收失败；1/16 输出超差，最大绝对误差 1.1920928955078125e-5，atol=1e-5。实际为 no-linear 普通 kernel，同一定义调用两次，没有 Combo；数量断言未执行。先用同一真实输入对照 eager 与此 kernel，定位多轴归约树／partial loop／实际 tile／下层数学路径；保留原 FAIL 和容差，根因待定位。 当前未另存真实输入值和 selected tile，后续先固定可复现输入。",
+      "summary": "非连续多轴 sum 的 FP32 结果超出原容差",
+      "sequence": 1,
+      "anchor": "repair-01"
+    },
+    {
+      "method": "test_snode_runtime.py::InputDistanceTests::test_foreach_basic",
+      "file": "test_snode_runtime.py",
+      "class": "InputDistanceTests",
+      "name": "test_foreach_basic",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_snode_runtime.py::InputDistanceTests::test_foreach_basic"
+      ],
+      "nonpass_nodes": [
+        "test_snode_runtime.py::InputDistanceTests::test_foreach_basic"
+      ],
+      "observed": "NPU does not support",
+      "priority": "P1",
+      "order": 10,
+      "purpose": "图输入上的 foreach_add 节点输入距离为 0。",
+      "source_assessment": "旧的无条件 NPU skip 挡住输入距离检查；这不是 FOREACH 分组融合验收。",
+      "fix_entry": "test_snode_runtime.py 的 decorator 和 _get_snodes 观测。",
+      "acceptance": "取消旧 skip，确认 snodes 非空，再检查每个真实节点的 min/max_input_distance 为 0。",
+      "evidence": [
+        "E10"
+      ],
+      "kind": "测试入口",
+      "summary": "取消旧 skip，验收图输入 foreach 节点的距离为 0",
+      "sequence": 2,
+      "anchor": "repair-02"
+    },
+    {
+      "method": "test_snode_runtime.py::InputDistanceTests::test_foreach_after_extern",
+      "file": "test_snode_runtime.py",
+      "class": "InputDistanceTests",
+      "name": "test_foreach_after_extern",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_snode_runtime.py::InputDistanceTests::test_foreach_after_extern"
+      ],
+      "nonpass_nodes": [
+        "test_snode_runtime.py::InputDistanceTests::test_foreach_after_extern"
+      ],
+      "observed": "NPU does not support",
+      "priority": "P1",
+      "order": 11,
+      "purpose": "mm extern 深度 0，后续 foreach_add 的真实依赖深度至少为 1。",
+      "source_assessment": "旧的无条件 NPU skip 挡住依赖距离检查。",
+      "fix_entry": "test_snode_runtime.py 的 decorator 和 _get_snodes 观测。",
+      "acceptance": "保留原矩阵乘输入、非空节点、最小距离 0 和最大距离至少 1 的检查。",
+      "evidence": [
+        "E10"
+      ],
+      "kind": "测试入口",
+      "summary": "取消旧 skip，验收 mm 后 foreach 消费者的依赖距离",
+      "sequence": 3,
+      "anchor": "repair-03"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelDynamicShapesTests::test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelDynamicShapesTests",
+      "name": "test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelDynamicShapesTests::test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelDynamicShapesTests::test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu"
+      ],
+      "observed": "requires xpu and triton",
+      "priority": "P1",
+      "order": 12,
+      "purpose": "不同 X 长度的 sum/mean/max 动态归约及编译期 autotune。",
+      "source_assessment": "requires_xpu 门控；主体没有 XPU 硬件 intrinsic，不能认作 NPU 功能不支持。",
+      "fix_entry": "测试设备门控及真实 NPU autotune/launch 观测。",
+      "acceptance": "用 NPU 通用入口执行原动态形状约束及数值比较；保留编译期 autotune 目标。",
+      "evidence": [
+        "E9",
+        "E3"
+      ],
+      "kind": "测试入口",
+      "summary": "开放 NPU 动态归约入口，保留编译期 autotune 目标",
+      "sequence": 4,
+      "anchor": "repair-04"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_persistent_reduction_size_hint",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_persistent_reduction_size_hint",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_persistent_reduction_size_hint"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_persistent_reduction_size_hint"
+      ],
+      "observed": "RuntimeError: Expected to find \"size_hints={\\'x\\': 1024, \\'r0_\\': 32}\" but did not find it",
+      "priority": "P1",
+      "order": 20,
+      "purpose": "两个 max/min persistent 成员的候选尺寸覆盖真实归约长度。",
+      "source_assessment": "原 FileCheck 固定 CUDA x/r0_ 字典；NPU 采用多轴 metadata 和 native heuristic。",
+      "fix_entry": "测试生成代码检查；NPUComboKernel.select_heuristics。",
+      "acceptance": "核对 NPU persistent 模式、两个成员 16/32 的完整 R 及共享候选包络，保留数值比较。",
+      "evidence": [
+        "E1",
+        "E2"
+      ],
+      "kind": "测试观测适配",
+      "observed_human": "native persistent heuristic 已匹配，但原固定 CUDA size_hints 检查失败。实际为 x0=1536、r1=32，共享 split extent 求和；最终数值比较尚未执行。",
+      "summary": "按 NPU 真实成员轴核对 persistent size_hints",
+      "sequence": 5,
+      "anchor": "repair-05"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_single_combo_kernels",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 2
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels_benchmark_combo_kernel_False",
+        "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels_benchmark_combo_kernel_True"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels_benchmark_combo_kernel_False",
+        "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels_benchmark_combo_kernel_True"
+      ],
+      "observed": "RuntimeError: Expected to find \"\\'grid_type\\': \\'Grid1D\\'\" but did not find it",
+      "priority": "P1",
+      "order": 22,
+      "purpose": "尺寸差异过大的两个 pointwise 保持 standalone，覆盖 benchmark 开关。",
+      "source_assessment": "Grid1D 是 CUDA 生成 ABI；实际定义数、benchmark probe 和执行次数必须分别核对。",
+      "fix_entry": "test_single_combo_kernels 的原生 NPU grid 和生成／launch 计数检查。",
+      "acceptance": "两种开关都保留数值、两个独立计算和无 Combo 的目标，按真实 wrapper 与 launcher 验收。",
+      "evidence": [
+        "E1",
+        "E2"
+      ],
+      "kind": "测试观测适配",
+      "summary": "用原生 grid 验收两个 standalone，覆盖 benchmark 开关",
+      "observed_human": "两种 benchmark 开关均在固定 Grid1D FileCheck 失败，实际普通 kernel 为 GridNpu；先前数值和原 kernel 计数检查已通过。",
+      "sequence": 6,
+      "anchor": "repair-06"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_yz_overflow",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_yz_overflow",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_yz_overflow"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_yz_overflow"
+      ],
+      "observed": "TypeError: list indices must be integers or slices, not str",
+      "priority": "P1",
+      "order": 23,
+      "purpose": "大尺寸 permute/clone 的 launch grid 不溢出。",
+      "source_assessment": "测试使用 CUDA traceEvents 字典和固定三维 grid；NPU 采用一维 dispatch。",
+      "fix_entry": "测试真实 NPU launcher/grid 观测。",
+      "acceptance": "保留大尺寸与数值检查，确认真实 NPU grid 的 X 合法、Y/Z 为 1，排除 autotune launch。",
+      "evidence": [
+        "E1",
+        "E9"
+      ],
+      "kind": "测试观测适配",
+      "observed_human": "编译执行已完成；读取 NPU profiler 的 trace_json[\"traceEvents\"] 时报 TypeError，实际 JSON 是列表，后续 grid 及最终数值断言未执行。",
+      "summary": "适配 NPU profiler 格式，验收大尺寸真实 launch grid",
+      "sequence": 7,
+      "anchor": "repair-07"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_per_config_subkernel_block_size",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size"
+      ],
+      "observed": "RuntimeError: NPU contiguous operator only supported contiguous memory format.",
+      "priority": "P1",
+      "order": 26,
+      "purpose": "八种 channels_last 转换的逐成员独立分块与实际 grid。",
+      "source_assessment": "原 eager contiguous(memory_format=channels_last) 是前置阶段；独立成员 tile 和 CUDA profiler ABI 另有目标。",
+      "fix_entry": "先处理 NPU eager memory-format 路径，再接成员 block ABI 与原生 grid 观测。",
+      "acceptance": "原 NCHW 转 channels_last 的 eager／compiled 都正确，再验独立分块与 launch；替代 stride 不代表布局已支持。",
+      "evidence": [
+        "E1",
+        "E9"
+      ],
+      "kind": "eager 布局与独立分块",
+      "summary": "先修 eager channels_last contiguous，再验独立分块",
+      "observed_human": "先在 eager 的 contiguous(memory_format=channels_last) 报 NPU 仅支持 contiguous 格式；compiled、独立成员分块和 grid 检查均未开始。",
+      "sequence": 8,
+      "anchor": "repair-08"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_optimize_mem",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_inductor_meta_has_optimize_mem",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_optimize_mem"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_optimize_mem"
+      ],
+      "observed": "AssertionError: \"'optimize_mem': True\" not found in '# AOT ID: [\\'1_inference\\']\\nfrom ctypes import c_void_p, c_long, c_int\\nimport torch\\nimport math\\nimport random\\nimport os\\nimport tempfile\\nfrom math import inf, nan\\nfrom cmath import",
+      "priority": "P1",
+      "order": 30,
+      "purpose": "推理图显式传 optimize_mem=True，声明 autotune 输入备份／恢复的内存优化资格。",
+      "source_assessment": "NPU Combo 未显式导出 optimize_mem；native benchmark 直接 clone，helper 尚非其消费路径。",
+      "fix_entry": "NPUComboKernel.jit_line、NPUCachingAutotuner 的输入备份／恢复调用链。",
+      "acceptance": "显式推理字段正确；如果接通内存优化消费者，同时验证 mutation、alias 和恢复。",
+      "evidence": [
+        "E2",
+        "E5"
+      ],
+      "kind": "图阶段 metadata",
+      "summary": "补推理 optimize_mem=True 及输入保护消费契约",
+      "observed_human": "推理图 relu/sigmoid 数值比较通过，随后缺 optimize_mem=True；输入备份／恢复的真实消费契约尚需另验。",
+      "sequence": 9,
+      "anchor": "repair-09"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_inductor_meta_optimize_mem_false_in_training_forward",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward"
+      ],
+      "observed": "AssertionError: \"'optimize_mem': False\" not found in '# AOT ID: [\\'0_forward\\']\\nfrom ctypes import c_void_p, c_long, c_int\\nimport torch\\nimport math\\nimport random\\nimport os\\nimport tempfile\\nfrom math import inf, nan\\nfrom cmath import ",
+      "priority": "P1",
+      "order": 31,
+      "purpose": "训练前向显式传 optimize_mem=False，防止输入保存／恢复破坏训练状态。",
+      "source_assessment": "训练前向字段未导出，runtime 缺省为 True；当前 native clone 路径不能据此认定输入已污染。",
+      "fix_entry": "NPUComboKernel.jit_line 的图阶段值及 NPUCachingAutotuner 输入保护。",
+      "acceptance": "训练前向 False，推理／反向另行核对；保留数值、mutation 和梯度保护。",
+      "evidence": [
+        "E2",
+        "E5"
+      ],
+      "kind": "图阶段 metadata",
+      "summary": "补训练前向 optimize_mem=False 及输入保护契约",
+      "observed_human": "训练前向数值比较通过，随后缺 optimize_mem=False；本方法未进行反向梯度和 autotune 输入恢复验收。",
+      "sequence": 10,
+      "anchor": "repair-10"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_per_subkernel_reduction_hint",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTestsMaxAutotune",
+      "name": "test_combo_kernel_per_subkernel_reduction_hint",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_per_subkernel_reduction_hint"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_per_subkernel_reduction_hint"
+      ],
+      "observed": "AssertionError: 'reduction_hint_0' not found in {} : Missing per-subkernel reduction_hint_0",
+      "priority": "P1",
+      "order": 32,
+      "purpose": "分别记录行归约 INNER 与列归约 OUTER 的成员访问分类。",
+      "source_assessment": "jit_line 仅传首成员 hint，combo_grid_meta 未输出 reduction_hint_i；native 已有成员轴约束。",
+      "fix_entry": "NPUComboKernel.combo_grid_meta／autotune_subkernel_meta 及候选评价入口。",
+      "acceptance": "按实际 stride/归约轴输出两个真实分类，保留数值；分类影响优化时还需验证真实候选与 winner。",
+      "evidence": [
+        "E1",
+        "E2",
+        "E3"
+      ],
+      "kind": "成员 metadata",
+      "summary": "导出成员归约方向：行 INNER、列 OUTER",
+      "observed_human": "行／列归约数值比较通过，随后缺 reduction_hint_0；INNER/OUTER 的成员分类检查未完成。",
+      "sequence": 11,
+      "anchor": "repair-11"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields"
+      ],
+      "observed": "RuntimeError: Expected to find \"\\'inductor_meta_0\\'\" but did not find it",
+      "priority": "P1",
+      "order": 40,
+      "purpose": "三个 pointwise 成员分别带有效 load/store/reduction 计数、autotune_hints 和 atomic_add_found。",
+      "source_assessment": "缺 inductor_meta_i；NPU CSEProxy 的有效 store 路径也未递增 num_store。",
+      "fix_entry": "NPU CSEProxy.store／store_reduction、统一 standalone 与 Combo 的统计出口。",
+      "acceptance": "逐成员核对真实 load/store、reduction=0、优化提示及 atomic 标志，不能填 0 或空字典。",
+      "evidence": [
+        "E2",
+        "E4",
+        "E11"
+      ],
+      "kind": "成员统计",
+      "summary": "导出三成员真实计数、autotune 提示及 atomic 标志",
+      "observed_human": "relu/sigmoid/tanh 数值比较通过，随后缺 inductor_meta_0；成员真实计数、提示和 atomic 标志的检查未完成。",
+      "sequence": 12,
+      "anchor": "repair-12"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_combo_grid_meta_has_per_subkernel_fields",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_reduction_combo_grid_meta_has_per_subkernel_fields",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_combo_grid_meta_has_per_subkernel_fields"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_combo_grid_meta_has_per_subkernel_fields"
+      ],
+      "observed": "RuntimeError: Expected to find \"\\'inductor_meta_0\\'\" but did not find it",
+      "priority": "P1",
+      "order": 41,
+      "purpose": "sum 和 mean 成员分别携带真实 load、最终 store 与 reduction 数量。",
+      "source_assessment": "缺 inductor_meta_i；归约计数入口已有，但最终归约写回统计未统一。",
+      "fix_entry": "NPU CSEProxy.store_reduction 与成员统计出口。",
+      "acceptance": "与 standalone 的真实 load/store/reduction 对照，覆盖最终写回、广播及被消除的写回。",
+      "evidence": [
+        "E2",
+        "E4",
+        "E11"
+      ],
+      "kind": "成员统计",
+      "observed_human": "sum/mean 数值比较通过，随后缺 inductor_meta_0；成员 load/store/reduction 统计断言尚未执行。",
+      "summary": "导出 sum/mean 成员真实 load/store/reduction 计数",
+      "sequence": 13,
+      "anchor": "repair-13"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel"
+      ],
+      "observed": "RuntimeError: Expected to find \"\\'inductor_meta_0\\'\" but did not find it",
+      "priority": "P1",
+      "order": 42,
+      "purpose": "确定性归约携带逐成员 has_loadstore_with_contiguous_rdim。",
+      "source_assessment": "缺成员字典；native load 未同步社区连续归约标志，不能将默认 False 当真实统计。",
+      "fix_entry": "NPU load 地址／stride 分析、成员 metadata 出口与 native 确定性候选选择。",
+      "acceptance": "按真实连续归约维判断标志，保留数值；不能把缺字段解释成没有确定性归约。",
+      "evidence": [
+        "E2",
+        "E4"
+      ],
+      "kind": "成员布局统计",
+      "summary": "导出每成员连续归约维布局标志",
+      "observed_human": "确定性配置下 sum/mean 数值比较通过，随后缺 inductor_meta_0；未完成成员连续归约维标志检查。",
+      "sequence": 14,
+      "anchor": "repair-14"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_per_kernel_inductor_meta_matches_standalone",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_per_kernel_inductor_meta_matches_standalone",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_per_kernel_inductor_meta_matches_standalone"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_per_kernel_inductor_meta_matches_standalone"
+      ],
+      "observed": "AssertionError: The length of the sequences mismatch: 2 != 0",
+      "priority": "P1",
+      "order": 43,
+      "purpose": "Combo 成员与 standalone 的 load/store/reduction、atomic、no_x_dim、提示及 tiling_scores 一致。",
+      "source_assessment": "成员统计出口缺失；standalone 也需补完整必需字段，空正则匹配不能充当基准。",
+      "fix_entry": "统一 native per-kernel metadata，并修测试字段解析与非空校验。",
+      "acceptance": "两侧必需字段均非空，真实值按 NPU split 轴和布局对应，修计数后再比较。",
+      "evidence": [
+        "E2",
+        "E4",
+        "E11"
+      ],
+      "kind": "统计一致性",
+      "summary": "对齐 standalone/Combo 计数、布局和 tiling_scores",
+      "observed_human": "Combo 数值比较通过；standalone 解析为两个字典，Combo 成员字典解析为空，长度 2 对 0 而失败。必需统计字段仍需非空有效基准，不能用空字典对齐。",
+      "sequence": 15,
+      "anchor": "repair-15"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_kernel_num_gb_and_flop_match_standalone_sum",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum"
+      ],
+      "observed": "AssertionError: [] is not true : combo source missing kernel_num_gb",
+      "priority": "P1",
+      "order": 44,
+      "purpose": "Combo 总访存字节／FLOP 与其 standalone 成员之和相等。",
+      "source_assessment": "Combo 未聚合 kernel_num_gb，普通 NPU 也未统一导出 kernel_flop。",
+      "fix_entry": "NPU 字节／FLOP 估算、standalone 出口与 Combo 聚合。",
+      "acceptance": "先得到非空有效基准再聚合；本输入常规读写为 16384B，不能以空匹配求和 0 通过。",
+      "evidence": [
+        "E2",
+        "E12"
+      ],
+      "kind": "成本统计",
+      "observed_human": "原数值比较完成后，Combo kernel_num_gb 匹配为空；FLOP 聚合检查尚未执行，空 standalone 求和不是有效基准。",
+      "summary": "补 Combo 访存 GB/FLOP 聚合及有效 standalone 基准",
+      "sequence": 16,
+      "anchor": "repair-16"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth"
+      ],
+      "observed": "AssertionError: \"'kernel_num_gb'\" not found in '# AOT ID: [\\'0_inference\\']\\nfrom ctypes import c_void_p, c_long, c_int\\nimport torch\\nimport math\\nimport random\\nimport os\\nimport tempfile\\nfrom math import inf, nan\\nfrom cmath import nanj",
+      "priority": "P1",
+      "order": 45,
+      "purpose": "profile_bandwidth 只携带真实 kernel_num_gb，避免额外 FLOP 估算。",
+      "source_assessment": "普通 NPU 已按 profile 条件估算字节，Combo 未聚合并传出。",
+      "fix_entry": "NPUComboKernel.jit_line 的 profile 条件和成员字节数聚合。",
+      "acceptance": "profile 模式有真实总字节、无 kernel_flop，并联验未开 profile 时不输出该字段。",
+      "evidence": [
+        "E2",
+        "E12"
+      ],
+      "kind": "profile 成本统计",
+      "summary": "profile 模式输出真实 Combo kernel_num_gb",
+      "observed_human": "数值比较通过，随后缺 kernel_num_gb；后续不应输出 kernel_flop 的检查未执行。",
+      "sequence": 17,
+      "anchor": "repair-17"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_benchmark_combo_kernel_emits_real_num_gb",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_benchmark_combo_kernel_emits_real_num_gb",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_benchmark_combo_kernel_emits_real_num_gb"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_benchmark_combo_kernel_emits_real_num_gb"
+      ],
+      "observed": "AssertionError: Regex didn't match: 'num_gb = \\\\d*\\\\.\\\\d+' not found in '# AOT ID: [\\'0_inference\\']\\nfrom ctypes import c_void_p, c_long, c_int\\nimport torch\\nimport math\\nimport random\\nimport os\\nimport tempfile\\nfrom math import inf, na",
+      "priority": "P1",
+      "order": 46,
+      "purpose": "独立 benchmark 模板得到真实 GB 数，带宽报告才能使用有效分子。",
+      "source_assessment": "NPU Combo 调用 codegen_kernel_benchmark(num_gb=0)，当前模板收到硬编码零。",
+      "fix_entry": "NPUComboKernel.codegen_kernel 传真实成员字节估算之和。",
+      "acceptance": "正的真实浮点 num_gb、正确的 NPU device 参数及模板实际消费，不能仅把 0 改成 0.0。",
+      "evidence": [
+        "E2",
+        "E12"
+      ],
+      "kind": "benchmark 成本统计",
+      "summary": "benchmark num_gb 当前为 0，需真实访存 GB",
+      "observed_human": "数值比较通过，随后未匹配到浮点 num_gb；NPU Combo benchmark 生成入口传入硬编码 0，后续 device 参数检查未执行。",
+      "sequence": 18,
+      "anchor": "repair-18"
+    },
+    {
+      "method": "test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel",
+      "file": "test_provenance_tracing.py",
+      "class": "TestProvenanceTracingArtifact",
+      "name": "test_triton_kernel_to_post_grad_tracing_combo_kernel",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel"
+      ],
+      "nonpass_nodes": [
+        "test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel"
+      ],
+      "observed": "AssertionError: The length of the sequences mismatch: 0 != 1",
+      "priority": "P1",
+      "order": 50,
+      "purpose": "每个真实 Combo kernel 能回溯到其 post-grad FX 节点和成员 origins。",
+      "source_assessment": "define_kernel／codegen_comment 接收 Combo 外壳，而其 node=None，origins 未按真实分区展开。",
+      "fix_entry": "NPUTritonScheduling.codegen_combo_kernel 按 node_group 展开 get_nodes。",
+      "acceptance": "核对实际分区、实际命名和缓存命中；Inductor 与 AOT 两入口都需映射到真实 FX origins。",
+      "evidence": [
+        "E6"
+      ],
+      "kind": "provenance",
+      "summary": "补真实 Combo 到 post-grad FX origins 的映射",
+      "observed_human": "Inductor 编译执行与 debug trace 收集已完成；Combo 到 post-grad 的映射实际为空，期望一项。第二个 AOTInductor 子场景尚未开始。",
+      "sequence": 19,
+      "anchor": "repair-19"
+    },
+    {
+      "method": "test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask",
+      "file": "test_torchinductor.py",
+      "class": "CommonTemplate",
+      "name": "test_combo_kernel_store_mask",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_torchinductor.py::GPUTests::test_combo_kernel_store_mask_npu"
+      ],
+      "nonpass_nodes": [
+        "test_torchinductor.py::GPUTests::test_combo_kernel_store_mask_npu"
+      ],
+      "observed": "NPU does not support",
+      "priority": "P2",
+      "order": 60,
+      "purpose": "动态两个 mean 在一个 Combo 中执行，store 使用合法尾部 mask。",
+      "source_assessment": "旧 NPU skip 阻断验收；解除后须先证明原图形成 Combo，再检查 store mask。",
+      "fix_entry": "test_torchinductor 的旧 skip、NPU 动态归约轴兼容性及 store mask 生成。",
+      "acceptance": "原输入与数值保留，真实一个 Combo，最后写回 mask 覆盖有效输出；不能跳过数量检查直接称 mask 已实现。",
+      "evidence": [
+        "E1",
+        "E4"
+      ],
+      "kind": "动态归约融合与 mask",
+      "summary": "取消旧 skip，验收动态 mean Combo 的最终 store mask",
+      "sequence": 20,
+      "anchor": "repair-20"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_fuse_mix_order_reductions_combo_kernels",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels"
+      ],
+      "observed": "AssertionError: Scalars are not equal!",
+      "priority": "P2",
+      "order": 61,
+      "purpose": "共享输入的行／列归约联合执行，消费者单独执行，其他独立归约形成 Combo。",
+      "source_assessment": "NPU mix_order_reduction=False；这是共享输入 mixed-order 联合归约能力目标。",
+      "fix_entry": "NPU mixed-order 调度、lowering／成员资源分析，避免与独立成员 hint 混淆。",
+      "acceptance": "原共享 x 图数值正确，证明行列联合归约、消费者隔离及独立 y/z Combo，保留原 3-kernel 目标。",
+      "evidence": [
+        "E1",
+        "E15"
+      ],
+      "kind": "mixed-order 联合归约",
+      "summary": "支持共享输入的行／列归约联合执行目标",
+      "observed_human": "数值比较通过，随后 generated_kernel_count 期望 3、实际 4；尚需按实际生成链核对共享输入联合归约的缺口。",
+      "sequence": 21,
+      "anchor": "repair-21"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_scalar_store_broadcast",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast"
+      ],
+      "observed": "AssertionError: Scalars are not equal!",
+      "priority": "P2",
+      "order": 62,
+      "purpose": "标量加法、向量归约、读取该标量的归约在一次合法计算中组合。",
+      "source_assessment": "需要协调标量 producer/consumer 依赖和不同成员轴 ABI；不能笼统写成融合策略差异。",
+      "fix_entry": "NPU scalar write／broadcast、垂直融合边界和 Combo 成员轴兼容性。",
+      "acceptance": "原随机输入数值正确，真实一次 launch，标量只作合法写回且消费者读取正确值。",
+      "evidence": [
+        "E1",
+        "E15"
+      ],
+      "kind": "标量广播与成员组合",
+      "summary": "支持标量写回、广播消费者与向量归约的合法组合",
+      "observed_human": "标量结果、向量归约和广播消费者的数值比较通过；随后 generated_kernel_count 期望 1、实际 2，单个 Combo 的组合目标未通过。",
+      "sequence": 22,
+      "anchor": "repair-22"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_no_bench_stitched_config",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config"
+      ],
+      "observed": "AssertionError: Set comparison failed: Items in the second set but not the first:",
+      "priority": "P2",
+      "order": 70,
+      "purpose": "无 autotune 时三个成员各自的默认 X 分块与 body/grid 一致。",
+      "source_assessment": "NPU default_config 使用共享 split block，未实现三个独立 XBLOCK_i 拼接。",
+      "fix_entry": "成员 block ABI、默认候选生成、dispatch 边界与 launcher 参数映射。",
+      "acceptance": "数值通过且无 benchmark，三个真实独立默认配置与 body/grid 同源，不以共享块或空匹配通过。",
+      "evidence": [
+        "E1",
+        "E3"
+      ],
+      "kind": "独立默认分块",
+      "observed_human": "数值、单个真实 kernel 定义及 default/body 一致性检查已通过；最后缺 XBLOCK_0、XBLOCK_1、XBLOCK_2，空匹配不满足三成员独立配置。",
+      "summary": "接通三成员独立默认 X 分块及 body/grid/launcher",
+      "sequence": 23,
+      "anchor": "repair-23"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_persistent_reduction",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_no_bench_persistent_reduction",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_persistent_reduction"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_persistent_reduction"
+      ],
+      "observed": "AssertionError: Set comparison failed: Items in the second set but not the first:",
+      "priority": "P2",
+      "order": 71,
+      "purpose": "无 autotune 的三个 persistent 成员保留完整 R，X 默认分块独立。",
+      "source_assessment": "静态完整 R 生成已有；成员独立 X 默认配置和 dispatch 尚未接通。",
+      "fix_entry": "成员 X block ABI／默认配置及 persistent R 常量生成。",
+      "acceptance": "完整 R 在 body 固定，三个独立 X 默认值与实际 grid/launcher 一致，保留数值和无 benchmark。",
+      "evidence": [
+        "E1",
+        "E3"
+      ],
+      "kind": "persistent 独立默认分块",
+      "summary": "保留完整 R，接通 persistent 成员独立默认 X 分块",
+      "observed_human": "三个 sum 的数值与单定义检查通过，default_config 不含 R0_BLOCK 的检查也通过；随后缺 XBLOCK_0/1/2 的独立默认 X 配置，原方法未直接验证实际 winner/launch。",
+      "sequence": 24,
+      "anchor": "repair-24"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_carve_out",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_no_bench_carve_out",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_carve_out"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_carve_out"
+      ],
+      "observed": "AssertionError: Scalars are not equal!",
+      "priority": "P2",
+      "order": 72,
+      "purpose": "无 autotune 默认配置不适合 bucketize 时将其分离，另两个 pointwise 形成 Combo。",
+      "source_assessment": "需核对 native 默认配置接受／拒绝边界，不能直接照搬 CUDA 的候选数量门槛。",
+      "fix_entry": "NPU 默认候选／资源检查和 Combo partition 的 carve-out 决策。",
+      "acceptance": "保留 bucketize 与其他输入，真实一个 standalone 加一个 Combo 且数值正确，说明拒绝理由。",
+      "evidence": [
+        "E1",
+        "E3"
+      ],
+      "kind": "默认配置 carve-out",
+      "summary": "验收 bucketize 从不合适的默认 Combo 配置中分离",
+      "observed_human": "数值比较通过，随后 async_compile.triton 定义数期望 2、实际 1；此计数不等于实际 launch 数，原 carve-out 分区目标未验收。",
+      "sequence": 25,
+      "anchor": "repair-25"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTestsMaxAutotune",
+      "name": "test_combo_kernel_max_autotune",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune"
+      ],
+      "observed": "AssertionError: 0 not greater than 0 : _combo_sequential_autotune was not invoked",
+      "priority": "P2",
+      "order": 80,
+      "purpose": "三个激活成员各自生成候选并在完整 Combo 中顺序评价。",
+      "source_assessment": "native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。",
+      "fix_entry": "先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。",
+      "acceptance": "保留数值和实际单 Combo，验证真实候选、组成员及 winner；不能只替换日志字符串通过。",
+      "evidence": [
+        "E1",
+        "E2",
+        "E3",
+        "E11"
+      ],
+      "kind": "逐成员 autotune",
+      "summary": "实现激活成员独立候选与完整 Combo 顺序调优",
+      "observed_human": "编译执行已返回，但 Combo sequential autotune 日志匹配为 0；后续数值比较和单 kernel 断言未执行。",
+      "sequence": 26,
+      "anchor": "repair-26"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune_with_reduction",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTestsMaxAutotune",
+      "name": "test_combo_kernel_max_autotune_with_reduction",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune_with_reduction"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune_with_reduction"
+      ],
+      "observed": "AssertionError: 0 not greater than 0 : _combo_sequential_autotune was not invoked",
+      "priority": "P2",
+      "order": 81,
+      "purpose": "sum/mean 成员各自的归约候选及顺序评价。",
+      "source_assessment": "native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。",
+      "fix_entry": "先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。",
+      "acceptance": "保留数值和实际单 Combo，验证真实候选、组成员及 winner；不能只替换日志字符串通过。",
+      "evidence": [
+        "E1",
+        "E2",
+        "E3",
+        "E11"
+      ],
+      "kind": "逐成员 autotune",
+      "observed_human": "assertLogs 捕获了日志，但 Combo sequential autotune 匹配为 0；后面的数值与 kernel 数量断言尚未执行。",
+      "summary": "实现归约成员独立候选与完整 Combo 顺序调优",
+      "sequence": 27,
+      "anchor": "repair-27"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_many_subkernels",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTestsMaxAutotune",
+      "name": "test_combo_autotune_many_subkernels",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_many_subkernels"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_many_subkernels"
+      ],
+      "observed": "AssertionError: 0 not greater than 0",
+      "priority": "P2",
+      "order": 82,
+      "purpose": "六个不同工作量／算子的独立成员候选和顺序评价。",
+      "source_assessment": "native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。",
+      "fix_entry": "先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。",
+      "acceptance": "保留数值和实际单 Combo，验证真实候选、组成员及 winner；不能只替换日志字符串通过。",
+      "evidence": [
+        "E1",
+        "E2",
+        "E3",
+        "E11"
+      ],
+      "kind": "逐成员 autotune",
+      "summary": "实现六成员独立候选与顺序调优",
+      "observed_human": "六成员编译执行已返回，但 Combo sequential autotune 的日志匹配为 0；后续数值比较和单 kernel 检查未执行。",
+      "sequence": 28,
+      "anchor": "repair-28"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTestsMaxAutotune",
+      "name": "test_combo_autotune_grouping",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping"
+      ],
+      "observed": "AssertionError: Scalars are not equal!",
+      "priority": "P2",
+      "order": 83,
+      "purpose": "相同 heuristic 输入的成员共享一次调优，不同尺寸分组。",
+      "source_assessment": "native 当前共享 tile 搜索；原目标是逐成员候选／顺序调优及分组，缺社区 combo_tuning_groups 契约。",
+      "fix_entry": "先接成员 block ABI 和真实 metadata，再实现独立候选、完整 Combo 评价和可观测分组。",
+      "acceptance": "保留数值和实际单 Combo，验证真实候选、组成员及 winner；不能只替换日志字符串通过。",
+      "evidence": [
+        "E1",
+        "E2",
+        "E3",
+        "E11"
+      ],
+      "kind": "逐成员 autotune",
+      "summary": "按真实成员尺寸和 heuristic 输入划分调优组",
+      "observed_human": "编译执行已返回，期望两个调优组而实际日志解析为空；后续数值比较和单 kernel 断言未执行。",
+      "sequence": 29,
+      "anchor": "repair-29"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTestsMaxAutotune",
+      "name": "test_combo_max_persistent_rblock_gated_on_per_subkernel",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1,
+        "PASS": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel_per_subkernel_False",
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel_per_subkernel_True"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel_per_subkernel_False"
+      ],
+      "observed": "AssertionError: \"'max_persistent_rblock': 1024\" not found in '# AOT ID: [\\'0_inference\\']\\nfrom ctypes import c_void_p, c_long, c_int\\nimport torch\\nimport math\\nimport random\\nimport os\\nimport tempfile\\nfrom math import inf, nan\\nfrom cma",
+      "priority": "P2",
+      "order": 85,
+      "purpose": "共享 X 分块时应用联合 R 资源约束，真正独立 X 分块时取消该共享约束。",
+      "source_assessment": "原 max_persistent_rblock 是社区共享-X/HIP 约束字段；NPU 需验证其真实 UB／成员资源规则。",
+      "fix_entry": "NPU 共享／独立 block ABI 与每成员资源约束，不移植裸 4096 阈值。",
+      "acceptance": "区分实际共享与独立模式，验证合法完整 R、资源受限候选及字段语义；开关 True 不等于独立 X 已实现。",
+      "evidence": [
+        "E1",
+        "E3",
+        "E11"
+      ],
+      "kind": "共享／独立资源门控",
+      "summary": "区分共享／独立 X 分块的真实 R 资源门控",
+      "observed_human": "per_subkernel=False 数值通过但缺 max_persistent_rblock=1024；True 数值与字段不存在的断言通过，该负向字段检查未证明独立 X 分块生效。",
+      "sequence": 30,
+      "anchor": "repair-30"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_coordesc_tunes_largest_subkernel_first",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTestsMaxAutotune",
+      "name": "test_combo_kernel_coordesc_tunes_largest_subkernel_first",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_coordesc_tunes_largest_subkernel_first"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_coordesc_tunes_largest_subkernel_first"
+      ],
+      "observed": "AssertionError: no logs of level DEBUG or higher triggered on torch._inductor.runtime.coordinate_descent_tuner",
+      "priority": "P2",
+      "order": 86,
+      "purpose": "逐成员坐标下降先修改工作量最大的第 1 个成员 X 分块。",
+      "source_assessment": "共享 block 无独立成员坐标，不能验证仅先改变 XBLOCK_1 的目标。",
+      "fix_entry": "成员独立 ABI、coordesc 字段与工作量排序、完整配置评价。",
+      "acceptance": "真实尝试多个不同成员配置，首步只改最大成员，并保持数值；日志缺失不代表数值错误。",
+      "evidence": [
+        "E1",
+        "E3",
+        "E11"
+      ],
+      "kind": "成员 coordinate descent",
+      "observed_human": "在 assertLogs 退出时失败，未捕获 coordinate_descent_tuner 的 DEBUG 日志；后续数值、多个成员配置及最大成员优先断言均未执行。",
+      "summary": "独立成员坐标下降先调工作量最大的成员",
+      "sequence": 31,
+      "anchor": "repair-31"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_rms_norm_forwards_add_persistent_rblock",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_rms_norm_forwards_add_persistent_rblock",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_rms_norm_forwards_add_persistent_rblock"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_rms_norm_forwards_add_persistent_rblock"
+      ],
+      "observed": "RuntimeError: Expected to find \"\\'inductor_meta_0\\'\" but did not find it",
+      "priority": "P2",
+      "order": 87,
+      "purpose": "两个 RMSNorm 成员的候选保留 standalone 的完整 R／大 R 优化资格。",
+      "source_assessment": "缺逐成员 add_persistent_rblock 出口；NPU 原图可已是完整-R persistent，不能据字段认定缺 persistent。",
+      "fix_entry": "native standalone／Combo 的实际 R 候选和资源约束，再定义该优化标志的等价消费。",
+      "acceptance": "原 (2048,4096) 图数值正确，真实候选与 winner 对照；不能补无消费者标志冒充优化。",
+      "evidence": [
+        "E1",
+        "E2",
+        "E3",
+        "E11"
+      ],
+      "kind": "成员 R 候选资格",
+      "summary": "接通 RMSNorm 成员大 R 候选资格及消费者",
+      "observed_human": "两个 RMSNorm 的数值比较通过，随后缺 inductor_meta_0；未执行到成员 add_persistent_rblock 检查。",
+      "sequence": 32,
+      "anchor": "repair-32"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelMetadataTests",
+      "name": "test_combo_triton_meta_has_disable_ftz",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 2
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz_disable_ftz_False",
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz_disable_ftz_True"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz_disable_ftz_False",
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz_disable_ftz_True"
+      ],
+      "observed": "AssertionError: \"'disable_ftz': False\" not found in '# AOT ID: [\\'0_inference\\']\\nfrom ctypes import c_void_p, c_long, c_int\\nimport torch\\nimport math\\nimport random\\nimport os\\nimport tempfile\\nfrom math import inf, nan\\nfrom cmath import",
+      "priority": "P2",
+      "order": 90,
+      "purpose": "disable_ftz 开关从 Inductor 传到编译器和实际数学路径，控制非正规数保留。",
+      "source_assessment": "NPU triton_meta 未导出该字段，当前安装 Triton 的 NPUOptions 未声明它；通用编译选项及数学路径消费仍需定界。",
+      "fix_entry": "NPU jit_line、Triton Ascend compiler NPUOptions、指数数学 lowering／下层消费。",
+      "acceptance": "False/True 字段正确并有真实消费者；验证 exp/exp2 边界，不用只打印开关替代数值能力。",
+      "evidence": [
+        "E2",
+        "E8"
+      ],
+      "kind": "FTZ 配置与数值能力",
+      "summary": "接通 FTZ 字段、编译选项与非正规数数学路径",
+      "observed_human": "False/True 两个实例数值均通过，随后各缺对应 disable_ftz 字段；当前正值输入未覆盖非正规数，数学功能还需另行验收。",
+      "sequence": 33,
+      "anchor": "repair-33"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelPeakMemoryTests::test_combo_kernel_peak_memory_wide_resnet",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelPeakMemoryTests",
+      "name": "test_combo_kernel_peak_memory_wide_resnet",
+      "status": "FAIL",
+      "instance_results": {
+        "FAIL": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelPeakMemoryTests::test_combo_kernel_peak_memory_wide_resnet"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelPeakMemoryTests::test_combo_kernel_peak_memory_wide_resnet"
+      ],
+      "observed": "AssertionError: 616101888 not less than 616101888 : tight threshold did not reduce runtime peak memory (tight=616101888, disabled=616101888)",
+      "priority": "P3",
+      "order": 100,
+      "purpose": "峰值门控拒绝增加内存的合法 Combo 候选并降低运行峰值。",
+      "source_assessment": "源码已有 gate；原首次执行同时计入编译／autotune 内存，峰值不降不能直接证明 gate 缺失。",
+      "fix_entry": "用例候选有效性、正 memory delta 与 warm 运行峰值观测；再核对实际拒绝决策。",
+      "acceptance": "证明存在会被门控拒绝的真实 NPU Combo，并用相同原生内存统计隔离运行峰值；不只放宽阈值。",
+      "evidence": [
+        "E7",
+        "E13"
+      ],
+      "kind": "门控验收有效性",
+      "observed_human": "tight 与 disabled 的首次执行峰值同为 616101888B，未满足下降断言；本轮没有额外捕获 gate 候选，不能据此判定 gate 未实现。",
+      "summary": "补真实 gate 候选及隔离编译后的运行峰值验收",
+      "sequence": 34,
+      "anchor": "repair-34"
+    }
+  ],
+  "hardware_exclusions": [
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_tma_descriptor_block_name",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_tma_descriptor_block_name",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_tma_descriptor_block_name"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_tma_descriptor_block_name"
+      ],
+      "observed": "CUDA-only TMA descriptors require SM90+ Tensor Memory Accelerator hardware",
+      "reason": "NVIDIA SM90+ TMA descriptor 搬运协议。",
+      "keep_skip": true
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_amd_special_config_args",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelTests",
+      "name": "test_combo_kernel_amd_special_config_args",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 2
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_amd_special_config_args_max_autotune_False",
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_amd_special_config_args_max_autotune_True"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_amd_special_config_args_max_autotune_False",
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_amd_special_config_args_max_autotune_True"
+      ],
+      "observed": "ROCm only",
+      "reason": "ROCm/HIP 专属 compile options 与 constexpr 分离。",
+      "keep_skip": true
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_codegen_in_combo_kernel",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelPDLTests",
+      "name": "test_pdl_codegen_in_combo_kernel",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_codegen_in_combo_kernel"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_codegen_in_combo_kernel"
+      ],
+      "observed": "CUDA-only PDL requires NVIDIA SM90+ hardware and CUDA grid-dependency-control launch/synchronization intrinsics",
+      "reason": "NVIDIA SM90+ CUDA grid dependency control 和 launch_pdl。",
+      "keep_skip": true
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_combo_kernel_pointwise",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelPDLTests",
+      "name": "test_pdl_combo_kernel_pointwise",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_combo_kernel_pointwise"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_combo_kernel_pointwise"
+      ],
+      "observed": "CUDA-only PDL requires NVIDIA SM90+ hardware and CUDA grid-dependency-control launch/synchronization intrinsics",
+      "reason": "NVIDIA PDL 每成员 wait／launch_dependents 顺序。",
+      "keep_skip": true
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_combo_kernel_reduction",
+      "file": "test_combo_kernels.py",
+      "class": "ComboKernelPDLTests",
+      "name": "test_pdl_combo_kernel_reduction",
+      "status": "SKIP",
+      "instance_results": {
+        "SKIP": 1
+      },
+      "nodes": [
+        "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_combo_kernel_reduction"
+      ],
+      "nonpass_nodes": [
+        "test_combo_kernels.py::ComboKernelPDLTests::test_pdl_combo_kernel_reduction"
+      ],
+      "observed": "CUDA-only PDL requires NVIDIA SM90+ hardware and CUDA grid-dependency-control launch/synchronization intrinsics",
+      "reason": "类级开启的 NVIDIA PDL 归约 launch 协议。",
+      "keep_skip": true
+    }
+  ]
+}
