@@ -1,0 +1,39 @@
+InputDistanceTests::test_foreach_basic (SKIP)
+v2.13.0/inductor_npu/test_snode_runtime.py:305-319
+
+  305:     @unittest.skip("NPU does not support")
+  306:     def test_foreach_basic(self):
+  307:         """
+  308:         foreach_add on graph inputs should have depth 0.
+  309:         """
+  310:
+  311:         def f(xs, ys):
+  312:             return torch._foreach_add(xs, ys)
+  313:
+  314:         xs = [T(10), T(20)]
+  315:         ys = [T(10), T(20)]
+  316:         snodes = self._get_snodes(f, xs, ys)
+  317:         for s in snodes:
+  318:             self.assertEqual(s.min_input_distance, 0)
+  319:             self.assertEqual(s.max_input_distance, 0)
+
+InputDistanceTests::test_foreach_after_extern (SKIP)
+v2.13.0/inductor_npu/test_snode_runtime.py:321-337
+
+  321:     @unittest.skip("NPU does not support")
+  322:     def test_foreach_after_extern(self):
+  323:         """
+  324:         mm (extern, depth 0) -> foreach_add (depth 1)
+  325:         The extern kernel creates a fusion barrier so the foreach
+  326:         has a real dependency chain.
+  327:         """
+  328:
+  329:         def f(a, b, ys):
+  330:             c = torch.mm(a, b)
+  331:             return torch._foreach_add([c, c], ys)
+  332:
+  333:         snodes = self._get_snodes(f, T(10, 10), T(10, 10), [T(10, 10), T(10, 10)])
+  334:         all_min = [s.min_input_distance for s in snodes]
+  335:         all_max = [s.max_input_distance for s in snodes]
+  336:         self.assertEqual(min(all_min), 0)
+  337:         self.assertGreaterEqual(max(all_max), 1)

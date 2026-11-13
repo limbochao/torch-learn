@@ -1,0 +1,453 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/combo_tile_generator.py:1-122
+source_sha256=dd9fd21d0b36178adc6e305a348957e27feb093eb1c510caa418b10eca9cdeb5
+
+    1: import math
+    2:
+    3: from .tile_generator import TileGenerator
+    4: from ..codegen.triton_utils import NPUKernelType, get_byte_per_numel
+    5: from .. import config
+    6:
+    7:
+    8: class ComboTileGenerator(TileGenerator):
+    9:     """Search shared tiles, counting each subkernel's boundary independently.
+   10:
+   11:     TileGenerator supplies the split descent, subblock enumeration, alignment,
+   12:     duplicate removal and compiler options. Only the shape envelope, program
+   13:     counting and per-branch resident tile footprint differ for a combo launch.
+   14:     """
+   15:
+   16:     def __init__(self, subkernels, input_ptr_num=0, npu_kernel_type=NPUKernelType.SIMD):
+   17:         self.subkernels = subkernels
+   18:         first = subkernels[0]
+   19:         axis_names = first["axis_names"]
+   20:         split_axis = first["split_axis"]
+   21:         if len(split_axis) > 1:
+   22:             raise ValueError("Combo tile search supports at most one split axis")
+   23:
+   24:         numels = []
+   25:         for axis, name in enumerate(axis_names):
+   26:             extents = [item["size_hints"].get(name, 1) for item in subkernels]
+   27:             numels.append(sum(extents) if axis in split_axis else max(extents))
+   28:         dtype = max(
+   29:             (item["split_axis_dtype"] for item in subkernels),
+   30:             key=get_byte_per_numel,
+   31:         )
+   32:         super().__init__(
+   33:             numels, axis_names, first["tiling_axis"], first["no_loop_axis"],
+   34:             split_axis, first["low_dims"], first["persistent_reduction"], dtype,
+   35:             npu_kernel_type=npu_kernel_type, input_ptr_num=input_ptr_num,
+   36:             dual_reduction=any(item["dual_reduction"] for item in subkernels),
+   37:         )
+   38:         self.max_total_numel = sum(
+   39:             math.prod(item["size_hints"].get(name, 1) for name in axis_names)
+   40:             for item in subkernels
+   41:         )
+   42:         self.tiny_kernel = self.max_total_numel < 128 * 1024
+   43:         self.stop_numel = min(
+   44:             self.max_numel_threshold, self.max_total_numel // config.num_vector_core,
+   45:         ) // 8
+   46:
+   47:     def rebuild_dynamic_axis(self):
+   48:         # Optional pins derived from an aggregate shape need not be valid for
+   49:         # every branch. Keep the no-loop decisions already made by codegen.
+   50:         return
+   51:
+   52:     def calculate_total_programs(self, blocks):
+   53:         programs = 0
+   54:         for item in self.subkernels:
+   55:             if not item["split_axis"]:
+   56:                 programs += 1
+   57:                 continue
+   58:             axis = item["split_axis"][0]
+   59:             extent = item["size_hints"][self.axis_name[axis]]
+   60:             programs += (extent + blocks[axis] - 1) // blocks[axis]
+   61:         return programs
+   62:
+   63:     def calcu_last_split_blocks(self, axis):
+   64:         """Find the smallest shared block fitting one wave, including tails.
+   65:
+   66:         ceil(sum(extents) / cores) is only a lower bound: every subkernel has
+   67:         its own final partial block. Program count is monotone in block size,
+   68:         so a binary search finds the exact boundary without enumerating sizes.
+   69:         """
+   70:         lower = max(1, (self.numels[axis] + config.num_vector_core - 1)
+   71:                     // config.num_vector_core)
+   72:         upper = max(item["size_hints"][self.axis_name[axis]]
+   73:                     for item in self.subkernels)
+   74:         blocks = self.blocks.copy()
+   75:         blocks[axis] = upper
+   76:         if self.calculate_total_programs(blocks) > config.num_vector_core:
+   77:             raise ValueError("Combo has more nonempty subkernels than vector cores")
+   78:         while lower < upper:
+   79:             middle = (lower + upper) // 2
+   80:             blocks[axis] = middle
+   81:             if self.calculate_total_programs(blocks) > config.num_vector_core:
+   82:                 lower = middle + 1
+   83:             else:
+   84:                 upper = middle
+   85:         return lower
+   86:
+   87:     def calculate_config_numel(self, cfg):
+   88:         largest_tile = 1
+   89:         for item in self.subkernels:
+   90:             tile_numel = 1
+   91:             for axis in item["tiling_axis"]:
+   92:                 name = self.axis_name[axis]
+   93:                 if axis in item["no_loop_axis"] or (
+   94:                     name.startswith("r") and item["persistent_reduction"]
+   95:                 ):
+   96:                     extent = item["size_hints"][name]
+   97:                     if self.npu_kernel_type == NPUKernelType.SIMT_ONLY:
+   98:                         extent = 1 << (extent - 1).bit_length()
+   99:                 else:
+  100:                     extent = cfg.get(f"{name.upper()}BLOCK_SUB", 1)
+  101:                 tile_numel *= extent
+  102:             largest_tile = max(largest_tile, tile_numel)
+  103:         return largest_tile
+  104:
+  105:     def descend_split_axis_inner(self, axis_index):
+  106:         reached_stop = super().descend_split_axis_inner(axis_index)
+  107:         # A combo may be classified as non-tiny even when each branch is tiny.
+  108:         # In that case the inherited descent retains several split choices but
+  109:         # starts tiling from the final, smaller subblock. Also consider the full
+  110:         # block of each retained split choice before descending shared subtiles.
+  111:         saved_sub_blocks = self.sub_blocks.copy()
+  112:         for candidate in self.candidate_blocks:
+  113:             for axis in self.split_axis:
+  114:                 self.sub_blocks[axis] = candidate[axis]
+  115:             self.add_to_configs(candidate)
+  116:         self.sub_blocks = saved_sub_blocks
+  117:         return reached_stop
+  118:
+  119:     def add_to_configs(self, candi_block):
+  120:         if self.calculate_total_programs(candi_block) > config.num_vector_core:
+  121:             return False
+  122:         return super().add_to_configs(candi_block)
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/tile_generator.py:111-168
+source_sha256=8418a07e666f57c5f28c6602afeb95f7c032e9c361f2fd2f987dd38c4706adf3
+
+  111:     def __init__(self, numels, axis_names, tiling_axis, no_loop_axis, split_axis, low_dims, persistent_reduction,
+  112:                  dtype, npu_kernel_type=NPUKernelType.SIMD, input_ptr_num=0, dual_reduction=False):
+  113:         self.numels = copy.deepcopy(numels)
+  114:         self.blocks = list(self.numels)
+  115:         self.candidate_blocks = []
+  116:         self.sub_blocks = self.blocks.copy()
+  117:         self.axis_name = axis_names
+  118:         self.tiling_axis = tiling_axis
+  119:         self.no_loop_axis = no_loop_axis
+  120:         self.split_axis = split_axis
+  121:         self.low_dims = low_dims
+  122:         self.configs = []
+  123:         self.dtype_bytes = get_byte_per_numel(dtype)
+  124:         self.rebuild_dynamic_axis()
+  125:         self.block_name = {}
+  126:         self.sub_block_name = {}
+  127:         self.persistent_reduction = persistent_reduction
+  128:         self.dual_reduction = dual_reduction
+  129:         self.npu_kernel_type = npu_kernel_type
+  130:         self.max_total_numel = functools.reduce(lambda x, y: x * y, self.blocks) if self.blocks else 1
+  131:         self.tiny_kernel = self.max_total_numel < 128 * 1024
+  132:         self.input_ptr_num = 3 if input_ptr_num == 0 else min(input_ptr_num, 3)
+  133:
+  134:         local_mem_size = 128 * 1024 if self.npu_kernel_type == NPUKernelType.SIMT_ONLY else config.ub_size
+  135:         self.max_numel_threshold = local_mem_size // self.input_ptr_num // self.dtype_bytes
+  136:         self.stop_numel = min(self.max_numel_threshold, self.max_total_numel // config.num_vector_core) // 8
+  137:         for axis, name in enumerate(self.axis_name):
+  138:             if axis not in tiling_axis and axis not in split_axis:
+  139:                 self.blocks[axis] = 1
+  140:                 self.sub_blocks[axis] = 1
+  141:                 continue
+  142:             if axis in self.split_axis:
+  143:                 self.block_name[axis] = f"{name.upper()}BLOCK"
+  144:             if axis in self.tiling_axis:
+  145:                 self.sub_block_name[axis] = f"{name.upper()}BLOCK_SUB"
+  146:
+  147:         self.program_threshold = (
+  148:             config.num_vector_core // 8
+  149:             if self.tiny_kernel and self.npu_kernel_type != NPUKernelType.SIMT_ONLY
+  150:             else config.num_vector_core // 2
+  151:         )
+  152:         self.program_threshold = min(self.max_total_numel // 128 - 1, self.program_threshold)
+  153:         self.program_threshold = max(0, self.program_threshold)
+  154:         self.npu_kernel_type = npu_kernel_type
+  155:         self.real_tiling_axis = []
+  156:         for tiling_axis in self.tiling_axis:
+  157:             if tiling_axis in self.no_loop_axis:
+  158:                 continue
+  159:             if self.axis_name[tiling_axis][0] == "r" and self.persistent_reduction:
+  160:                 continue
+  161:             self.real_tiling_axis.append(tiling_axis)
+  162:         self.split_axis_num = len(self.split_axis)
+  163:
+  164:
+  165:     def rebuild_dynamic_axis(self):
+  166:         if len(self.tiling_axis) > 3 and not self.no_loop_axis:
+  167:             current_numels = 1
+  168:             for low_dim in self.low_dims:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/tile_generator.py:216-270
+source_sha256=8418a07e666f57c5f28c6602afeb95f7c032e9c361f2fd2f987dd38c4706adf3
+
+  216:     def valid_tile_numel(self, total_numel):
+  217:         max_numel = self.max_numel_threshold
+  218:         return total_numel <= max_numel
+  219:
+  220:     def calculate_config_numel(self, cfg):
+  221:         total_numel = 1
+  222:         for i, _ in enumerate(self.sub_blocks):
+  223:             sub_block_name = self.sub_block_name.get(i, "")
+  224:             config_sub_block = cfg.get(sub_block_name, None)
+  225:             if config_sub_block is None:
+  226:                 total_numel = total_numel * 1
+  227:             else:
+  228:                 total_numel = total_numel * config_sub_block
+  229:         return total_numel
+  230:
+  231:     def calculate_total_numel(self):
+  232:         smallest = sys.maxsize
+  233:
+  234:         def calculate_total_numel_candi(blocks):
+  235:             total_numel = 1
+  236:             for axis in self.sub_blocks:
+  237:                 total_numel = total_numel * axis
+  238:             return total_numel
+  239:
+  240:         for candi_blocks in self.candidate_blocks:
+  241:             numel = calculate_total_numel_candi(candi_blocks)
+  242:             if numel < smallest:
+  243:                 smallest = numel
+  244:         return smallest
+  245:
+  246:     def fill_config(self, cfg, blocks):
+  247:         for axis in self.split_axis:
+  248:             cfg[self.block_name[axis]] = aligned_numel_32byte(blocks[axis], self.dtype_bytes)
+  249:         for axis in self.tiling_axis:
+  250:             if self.npu_kernel_type == NPUKernelType.SIMT_ONLY:
+  251:                 tiling_numel = next_power_of_2(self.sub_blocks[axis])
+  252:                 while tiling_numel > blocks[axis]:
+  253:                     tiling_numel = tiling_numel // 2
+  254:             else:
+  255:                 tiling_numel = min(self.sub_blocks[axis], blocks[axis])
+  256:             cfg[self.sub_block_name[axis]] = aligned_numel_32byte(tiling_numel, self.dtype_bytes)
+  257:         cfg["compile_mode"] = self.npu_kernel_type.compile_mode()
+  258:
+  259:     def cal_cfg_remain_programs(self, cfg):
+  260:         remain_programs = 0
+  261:         for i, block in enumerate(self.blocks):
+  262:             block_name = self.block_name.get(i, "")
+  263:             config_block = cfg.get(block_name, None)
+  264:             if config_block is None:
+  265:                 remain_programs += self.numels[i] % block
+  266:             else:
+  267:                 remain_programs += self.numels[i] % config_block
+  268:         return remain_programs
+  269:
+  270:     def find_config(self, cfg):
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/tile_generator.py:276-295
+source_sha256=8418a07e666f57c5f28c6602afeb95f7c032e9c361f2fd2f987dd38c4706adf3
+
+  276:     def add_to_configs(self, candi_block):
+  277:         newcfg = {}
+  278:         self.fill_config(newcfg, candi_block)
+  279:         total_numel = self.calculate_config_numel(newcfg)
+  280:         stop_numel_threshold = 0 if len(self.configs) < 10 or self.tiny_kernel else self.stop_numel + 100
+  281:         if not self.valid_tile_numel(total_numel):
+  282:             return False
+  283:         if self.find_config(newcfg):
+  284:             return False
+  285:         if total_numel < stop_numel_threshold:
+  286:             return False
+  287:
+  288:         # This is tmp check for simt overflow, and will be removed latter
+  289:         if self.npu_kernel_type == NPUKernelType.SIMT_ONLY and total_numel * self.dtype_bytes > 8 * 1024:
+  290:             return False
+  291:         self.configs.append(Config(newcfg, num_warps=1, num_stages=2))
+  292:         return True
+  293:
+  294:     def desecnd_all_low_dims_with_all_blocks(self):
+  295:         restore_sub_blocks = {}
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/config.py:40-45
+source_sha256=dec7d9fbc93972f4ade7a71376e8452e256fc82a27eea67caf9aca2f0f5d630f
+
+   40: is_ascend950 = torch_npu._C._npu_get_soc_version() >= Ascend950
+   41:
+   42: ub_size = 192 * 1024
+   43: if is_ascend950:
+   44:     ub_size = 256 * 1024
+   45:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/config.py:119-135
+source_sha256=dec7d9fbc93972f4ade7a71376e8452e256fc82a27eea67caf9aca2f0f5d630f
+
+  119:
+  120: # Core-count queries are resolved lazily: evaluating them at import time
+  121: # initializes NPU (current_device/get_device_properties -> _lazy_init),
+  122: # which kills every >=2-kernel compilation inside Inductor forked compile
+  123: # workers ("Cannot re-initialize NPU in forked subprocess").  All
+  124: # cross-module consumers access these as module attributes, so PEP 562
+  125: # module __getattr__ keeps the lazy contract.
+  126: @functools.lru_cache(maxsize=1)
+  127: def _get_core_nums():
+  128:     return _obtain_and_limit_cube_vector_core_num()
+  129:
+  130:
+  131: def __getattr__(name):
+  132:     if name in ("prop", "num_cube_core", "num_vector_core"):
+  133:         prop, cube, vec = _get_core_nums()
+  134:         return {"prop": prop, "num_cube_core": cube, "num_vector_core": vec}[name]
+  135:     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:4307-4324
+source_sha256=87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923
+
+ 4307:         outer_config = outer_config_opt()
+ 4308:
+ 4309:     configs = []
+ 4310:
+ 4311:     if inductor_meta.get("add_persistent_rblock") and loads_and_red <= 8:
+ 4312:         xnumel = max(4096 // rnumel, 1)
+ 4313:         c = make_config(
+ 4314:             xnumel,
+ 4315:             min(rnumel, 32768),
+ 4316:             register_intensive=register_intensive,
+ 4317:             dynamic_scale_rblock=False,
+ 4318:         )
+ 4319:         configs.append(c)
+ 4320:
+ 4321:     result_configs = []
+ 4322:
+ 4323:     # For 3d tiling, default to more autotuning initially
+ 4324:     if "y" in size_hints:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:3463-3519
+source_sha256=ae98edb15f10e2c7eff660fcbd85e26578d5ac8400c890ef0700c050fc04088b
+
+ 3463: ) -> List[Config]:
+ 3464:     if inductor_meta.get("combo_subkernel_meta"):
+ 3465:         return _triton_config_npu_index_combo(size_hints, inductor_meta, triton_meta)
+ 3466:     if inductor_meta.get("group_enabled", False):
+ 3467:         if inductor_meta.get("extra_launcher_args"):
+ 3468:             raise RuntimeError(
+ 3469:                 "grouped autotune reached runtime config with extra_launcher_args; "
+ 3470:                 "this path is not supported for the current autogenerated Triton grouped autotune flow"
+ 3471:             )
+ 3472:         return _triton_config_npu_index_grouped(
+ 3473:             size_hints,
+ 3474:             inductor_meta,
+ 3475:             triton_meta=triton_meta,
+ 3476:             is_reduction=is_reduction,
+ 3477:             is_persistent_reduction=is_persistent_reduction,
+ 3478:         )
+ 3479:     return _triton_config_npu_index_legacy(
+ 3480:         size_hints,
+ 3481:         inductor_meta,
+ 3482:         triton_meta=triton_meta,
+ 3483:         is_reduction=is_reduction,
+ 3484:         is_persistent_reduction=is_persistent_reduction,
+ 3485:     )
+ 3486:
+ 3487:
+ 3488: def _triton_config_npu_index_combo(size_hints, inductor_meta, triton_meta):
+ 3489:     """Generate candidates for one launch containing all combo subkernels."""
+ 3490:     subkernels = inductor_meta["combo_subkernel_meta"]
+ 3491:     axis_names = inductor_meta["axis_names"]
+ 3492:     input_signature = (triton_meta or {}).get("signature", {})
+ 3493:     input_ptr_num = sum("ptr" in name for name in input_signature)
+ 3494:     kernel_type = NPUKernelType(inductor_meta.get("npu_kernel_type", "simd"))
+ 3495:     generator = ComboTileGenerator(
+ 3496:         subkernels,
+ 3497:         input_ptr_num=input_ptr_num,
+ 3498:         npu_kernel_type=kernel_type,
+ 3499:     )
+ 3500:     if kernel_type == NPUKernelType.SIMD_SIMT_MIX:
+ 3501:         configs = []
+ 3502:         for mode in (NPUKernelType.SIMT_ONLY, NPUKernelType.SIMT_TEMPLATE):
+ 3503:             generator.set_kernel_type(mode)
+ 3504:             configs.extend(generator.descend_split_tiling())
+ 3505:     else:
+ 3506:         configs = generator.descend_split_tiling()
+ 3507:     if not configs:
+ 3508:         raise RuntimeError("No legal shared tiling for the complete combo kernel")
+ 3509:
+ 3510:     for candidate in configs:
+ 3511:         candidate.kwargs["split_axis"] = tuple(generator.split_axis)
+ 3512:         candidate.kwargs["split_blocks"] = tuple(
+ 3513:             candidate.kwargs[f"{axis_names[axis].upper()}BLOCK"]
+ 3514:             for axis in generator.split_axis
+ 3515:         )
+ 3516:     logging.debug(
+ 3517:         "[%s], combo candidate tiling count: [%s]",
+ 3518:         inductor_meta["kernel_name"], len(configs),
+ 3519:     )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6285-6340
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 6285:     def add_persistent_rblock(self) -> bool:
+ 6286:         # Bail on 3d tiling, which has more complicated coalesce patterns
+ 6287:         looped_red = self.features.is_reduction() and not self.persistent_reduction
+ 6288:         tiling_scores = self.tiling_scores
+ 6289:         two_d_red = len(self.tiling) == 2
+ 6290:         if looped_red and two_d_red:
+ 6291:             memory_stats = self.features.memory_stats(self.tiling)
+ 6292:             dim_stats = memory_stats.persistent.memory.dim[0]
+ 6293:             mem_ops_per_thread = dim_stats.count_per_thread
+ 6294:
+ 6295:             if (
+ 6296:                 tiling_scores is not None
+ 6297:                 and "x" in tiling_scores
+ 6298:                 and "r0_" in tiling_scores
+ 6299:             ):
+ 6300:                 # large rblock inhibits xblock size, dont attempt if there is a decent amount of
+ 6301:                 # reads coalesced by xblock
+ 6302:                 r_coalesce_ratio = tiling_scores["r0_"] / max(tiling_scores["x"], 1)
+ 6303:                 contiguous_red = r_coalesce_ratio >= INNER_REDUCTION_RATIO_THRESHOLD
+ 6304:             else:
+ 6305:                 contiguous_red = (
+ 6306:                     self.features.get_reduction_hint(tiling_scores)
+ 6307:                     == ReductionHint.INNER
+ 6308:                 )
+ 6309:
+ 6310:             looped_mem = memory_stats.looped.memory.bytes
+ 6311:             persistent_mem = memory_stats.persistent.memory.bytes
+ 6312:             # check that we save significant memory by doing persistent
+ 6313:             saved_bytes_ratio = V.graph.sizevars.optimization_hint(looped_mem) / max(
+ 6314:                 V.graph.sizevars.optimization_hint(persistent_mem),
+ 6315:                 1,
+ 6316:             )
+ 6317:
+ 6318:             # TODO - rnumel should be reasonably close to power of 2
+ 6319:             if (
+ 6320:                 # significant memory bandwidth savings
+ 6321:                 saved_bytes_ratio >= 1.3
+ 6322:                 and contiguous_red
+ 6323:                 # TODO - need more detailed register analysis
+ 6324:                 and V.graph.sizevars.statically_known_leq(
+ 6325:                     self.features.reduction_numel, 32768
+ 6326:                 )
+ 6327:                 # We will already generate a persistent config in this case
+ 6328:                 and V.graph.sizevars.statically_known_gt(
+ 6329:                     self.features.reduction_numel, 2048
+ 6330:                 )
+ 6331:                 and mem_ops_per_thread <= 10
+ 6332:             ):
+ 6333:                 return True
+ 6334:         return False
+ 6335:
+ 6336:     def codegen_kernel(self, name=None) -> str:
+ 6337:         """
+ 6338:         Convert the TritonKernel from Inductor SIMD IR to triton code, including inductor triton heuristics, imports,
+ 6339:         metadata, and benchmarking infra.
+ 6340:         """

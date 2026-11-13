@@ -1,0 +1,263 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:3346-3388
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 3346:     def combinable_nodes(
+ 3347:         cls, nodes: list[BaseSchedulerNode]
+ 3348:     ) -> list[BaseSchedulerNode]:
+ 3349:         extern = [x for x in nodes if isinstance(x, ExternKernelSchedulerNode)]
+ 3350:         if extern:
+ 3351:             log.debug(
+ 3352:                 "ComboKernels: %d external nodes are filtered %s",
+ 3353:                 len(extern),
+ 3354:                 [node.node.get_origins() for node in extern if node.node is not None],
+ 3355:             )
+ 3356:         grouped = [x for x in nodes if isinstance(x, GroupedSchedulerNode)]
+ 3357:         if grouped:
+ 3358:             log.debug(
+ 3359:                 "ComboKernels: %d grouped nodes are filtered",
+ 3360:                 len(grouped),
+ 3361:             )
+ 3362:         mix_order = [x for x in nodes if isinstance(x, FusedMixOrderReductions)]
+ 3363:         if mix_order:
+ 3364:             log.debug(
+ 3365:                 "ComboKernels: %d FusedMixOrderReductions nodes are filtered",
+ 3366:                 len(mix_order),
+ 3367:             )
+ 3368:         nested_reductions = [x for x in nodes if isinstance(x, FusedNestedReductions)]
+ 3369:         if nested_reductions:
+ 3370:             log.debug(
+ 3371:                 "ComboKernels: %d FusedNestedReductions nodes are filtered",
+ 3372:                 len(nested_reductions),
+ 3373:             )
+ 3374:
+ 3375:         filtered_nodes = [
+ 3376:             x
+ 3377:             for x in nodes
+ 3378:             if not isinstance(
+ 3379:                 x,
+ 3380:                 (
+ 3381:                     NopKernelSchedulerNode,
+ 3382:                     ExternKernelSchedulerNode,
+ 3383:                     GroupedSchedulerNode,
+ 3384:                     FusedMixOrderReductions,
+ 3385:                     FusedNestedReductions,
+ 3386:                 ),
+ 3387:             )
+ 3388:         ]
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:6127-6149
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 6127:         for num, node_list in enumerate(
+ 6128:             ForeachKernelSchedulerNode.group_nodes_for_combo_kernels(self)
+ 6129:         ):
+ 6130:             if num_ck_nodes is not None and count > num_ck_nodes:
+ 6131:                 break
+ 6132:             members = ForeachKernelSchedulerNode.combinable_nodes(node_list)
+ 6133:             if len(members) < 2:
+ 6134:                 continue
+ 6135:
+ 6136:             for window in Scheduler._distance_windows(
+ 6137:                 members, node_to_idx, max_distance
+ 6138:             ):
+ 6139:                 if num_ck_nodes is not None and count > num_ck_nodes:
+ 6140:                     break
+ 6141:                 if len(window) < 2 or not self.speedup_by_combo_kernel(window):
+ 6142:                     continue
+ 6143:                 if memory_check:
+ 6144:                     assert mem_ctx is not None
+ 6145:                     sim_start = time.perf_counter()
+ 6146:                     self._try_combo_with_halving(
+ 6147:                         window,
+ 6148:                         num,
+ 6149:                         mem_ctx,
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1471-1496
+source_sha256=ae98edb15f10e2c7eff660fcbd85e26578d5ac8400c890ef0700c050fc04088b
+
+ 1471:     def _bench_with_launch_args(
+ 1472:         self, launcher, launch_args, reset_args, with_profiler=None, **kwargs
+ 1473:     ):
+ 1474:         device_interface = self.get_device_interface()
+ 1475:         stream = device_interface.get_raw_stream(device_interface.current_device())
+ 1476:
+ 1477:         def kernel_call():
+ 1478:             cloned_args, cloned_kwargs = self.clone_args(*launch_args, **kwargs)
+ 1479:             self.reset_to_zero_args(*reset_args, **kwargs)
+ 1480:             launcher(
+ 1481:                 *cloned_args,
+ 1482:                 **cloned_kwargs,
+ 1483:                 stream=stream,
+ 1484:             )
+ 1485:
+ 1486:         # Align with upstream CachingAutotuner.bench(): `with_profiler` is the
+ 1487:         # per-autotuner switch fed by
+ 1488:         # inductor_meta["profile_bandwidth_with_do_bench_using_profiling"].
+ 1489:         if with_profiler is None:
+ 1490:             with_profiler = self.inductor_meta.get(
+ 1491:                 "profile_bandwidth_with_do_bench_using_profiling", False
+ 1492:             )
+ 1493:         if with_profiler and not npu_profiler_session_active():
+ 1494:             return do_bench_using_profiling_npu(kernel_call, rep=1)
+ 1495:
+ 1496:         return benchmarker.benchmark_gpu(kernel_call, rep=1, device_type='npu', is_vetted_benchmarking=True)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1414-1441
+source_sha256=87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923
+
+ 1414:     def maybe_clone_args(
+ 1415:         self, exclude: Container[str], *args, **kwargs
+ 1416:     ) -> tuple[list[Any], dict[str, Any]]:
+ 1417:         """
+ 1418:         Prepare new args and kwargs by cloning any in-place buffers
+ 1419:         (that are not in the provided exclusion list), to avoid autotune
+ 1420:         contaminating them. Avoid cloning the other buffers because it
+ 1421:         leads to increased memory usage.
+ 1422:         """
+ 1423:         from ..compile_fx import clone_preserve_strides
+ 1424:
+ 1425:         def prepare_arg(name, arg):
+ 1426:             if name in self.mutated_arg_names and name not in exclude:
+ 1427:                 assert isinstance(arg, torch.Tensor)
+ 1428:                 return clone_preserve_strides(arg)
+ 1429:             else:
+ 1430:                 return arg
+ 1431:
+ 1432:         cloned_args = [
+ 1433:             prepare_arg(name, arg)
+ 1434:             for name, arg in itertools.zip_longest(self.fn.arg_names[: len(args)], args)
+ 1435:         ]
+ 1436:         cloned_kwargs = {name: prepare_arg(name, arg) for name, arg in kwargs.items()}
+ 1437:         return cloned_args, cloned_kwargs
+ 1438:
+ 1439:     def clone_args(self, *args, **kwargs) -> tuple[list[Any], dict[str, Any]]:
+ 1440:         return self.maybe_clone_args(OrderedSet(), *args, **kwargs)
+ 1441:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/benchmarking.py:480-526
+source_sha256=cb02da7bba0d8af9f864f5501f53d0b722ba4b4b5909fbdbe4ee89b018eb1031
+
+  480:     def triton_do_bench(self: Self) -> Callable[..., Any]:
+  481:         """Lazily import Triton's `do_bench`."""
+  482:         try:
+  483:             from triton.testing import do_bench
+  484:         except ImportError as e:
+  485:             raise NotImplementedError("requires Triton") from e
+  486:         return do_bench
+  487:
+  488:     @may_distort_benchmarking_result
+  489:     @time_and_count
+  490:     @gpu_benchmark_lock
+  491:     # pyrefly: ignore [bad-override]
+  492:     def benchmark_gpu(
+  493:         self: Self,
+  494:         _callable: Callable[[], Any],
+  495:         is_vetted_benchmarking: bool = False,
+  496:         **kwargs: Any,
+  497:     ) -> float:
+  498:         """Benchmark the GPU callable, `_callable`, and return the runtime, in milliseconds.
+  499:
+  500:         Arguments:
+  501:         - _callable: The GPU callable to benchmark.
+  502:
+  503:         Keyword Arguments:
+  504:         - quantiles: Optionally, a tuple of floats denoting the requested quantiles.
+  505:         - return_mode: Optionally, the requested return mode. Currently, Triton's
+  506:         `do_bench` supports min, max, mean, and median return modes.
+  507:         - **kwargs: Additional kwargs passed to Triton's `do_bench`.
+  508:
+  509:         Returns:
+  510:         - The runtime of `callable`, in milliseconds. If `kwargs["quantiles"]` is specified,
+  511:         this is the first requested quantile. Else, if `kwargs["return_mode"]` is specified,
+  512:         this is the requested return mode. Otherwise, this is the median.
+  513:         """
+  514:         if not is_vetted_benchmarking:
+  515:             may_ban_benchmarking()
+  516:
+  517:         do_bench_params = inspect.signature(self.triton_do_bench).parameters
+  518:         for kwarg in list(kwargs.keys()):
+  519:             if kwarg not in do_bench_params:
+  520:                 del kwargs[kwarg]
+  521:         try:
+  522:             if "quantiles" in kwargs:
+  523:                 return self.triton_do_bench(_callable, **kwargs)[0]
+  524:             elif "return_mode" in kwargs:
+  525:                 return self.triton_do_bench(_callable, **kwargs)
+  526:             return self.triton_do_bench(_callable, **kwargs, return_mode="median")
+
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+installed-driver.py:357-362
+source_sha256=aee286ff9317f93009ef19911a54fe8c96b5f5813ee5f6368610d433c27277b9
+
+  357:     def get_empty_cache_for_benchmark(self):
+  358:         cache_size = 192 * 1024 * 1024
+  359:         return get_backend_func("get_empty_tensor", cache_size // 4)
+  360:
+  361:     def clear_cache(self, cache):
+  362:         cache.zero_()
+
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+installed-backend-register.py:148-152
+source_sha256=374978924a5233bb7a182558294a978a959128d407eb31f2fd47c28f0d3ee432
+
+  148: @backend_strategy_registry.register("torch_npu", "get_empty_tensor")
+  149: def get_empty_tensor(size):
+  150:     import torch
+  151:     return torch.empty(size, dtype=torch.int32, device='npu')
+  152:
+
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+installed-testing.py:145-179
+source_sha256=44e3fae7b4cc41b4db3b8b41a4f0a818d7fe9d036cfe4e0f4f08036a75eaafe4
+
+  145:     assert return_mode in ["min", "max", "mean", "median", "all"]
+  146:
+  147:     di = runtime.driver.active.get_device_interface()
+  148:
+  149:     fn()
+  150:     di.synchronize()
+  151:
+  152:     cache = runtime.driver.active.get_empty_cache_for_benchmark()
+  153:
+  154:     # Estimate the runtime of the function
+  155:     start_event = di.Event(enable_timing=True)
+  156:     end_event = di.Event(enable_timing=True)
+  157:     start_event.record()
+  158:     for _ in range(5):
+  159:         runtime.driver.active.clear_cache(cache)
+  160:         fn()
+  161:     end_event.record()
+  162:     di.synchronize()
+  163:     estimate_ms = start_event.elapsed_time(end_event) / 5
+  164:
+  165:     # compute number of warmup and repeat
+  166:     n_warmup = max(1, int(warmup / estimate_ms))
+  167:     n_repeat = max(1, int(rep / estimate_ms))
+  168:     start_event = [di.Event(enable_timing=True) for i in range(n_repeat)]
+  169:     end_event = [di.Event(enable_timing=True) for i in range(n_repeat)]
+  170:     # Warm-up
+  171:     for _ in range(n_warmup):
+  172:         fn()
+  173:     # Benchmark
+  174:     for i in range(n_repeat):
+  175:         # we don't want `fn` to accumulate gradient values
+  176:         # if it contains a backward pass. So we clear the
+  177:         # provided gradients
+  178:         if grad_to_none is not None:
+  179:             for x in grad_to_none:
+
+TRITON_LATEST 62f6b54e0f2420d6b718e0d4f89fa7a464d2e78f
+third_party/ascend/backend/driver.py:353-358
+source_sha256=b71b203897b32900d3e300f58837e2fd328624360c6acc2f09f2a4f34fa0374d
+
+  353:     def get_empty_cache_for_benchmark(self):
+  354:         cache_size = 192 * 1024 * 1024
+  355:         return get_backend_func("get_empty_tensor", cache_size // 4)
+  356:
+  357:     def clear_cache(self, cache):
+  358:         cache.zero_()

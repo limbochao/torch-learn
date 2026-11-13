@@ -1,0 +1,198 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton_combo_kernel.py:741-797
+source_sha256=586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae
+
+  741:         }
+  742:
+  743:         for arg_num in equal_1_arg_indices(signature):
+  744:             triton_meta["constants"][signature[arg_num].name] = 1  # type: ignore[index,union-attr]
+  745:
+  746:         triton_meta["configs"] = [config_of(signature)]
+  747:
+  748:         mutated_args = self.get_mutated_args_sub_kernels()
+  749:         dispatch = self.dispatch_class
+  750:         assert dispatch is not None
+  751:
+  752:         # Compute the max persistent R0_BLOCK across sub-kernels.
+  753:         # This is used by _reduction_configs() to avoid generating configs
+  754:         # where XBLOCK * max_persistent_rblock creates pathologically large
+  755:         # tiles that cause extreme ROCm compilation times.
+  756:         # The max_persistent_rblock mirrors how R0_BLOCK is computed in
+  757:         # codegen_static_numels_sub_kernel() for persistent reductions.
+  758:         max_persistent_rblock = 0
+  759:         if not self.per_subkernel_blocks:
+  760:             max_persistent_rblock = max(
+  761:                 (
+  762:                     next_power_of_2(int(simplified))
+  763:                     for sub in self.sub_kernels
+  764:                     if sub.persistent_reduction
+  765:                     for tree in sub.range_trees
+  766:                     if tree.is_reduction
+  767:                     for simplified in [V.graph.sizevars.simplify(tree.numel)]
+  768:                     if isinstance(simplified, (Integer, int))
+  769:                 ),
+  770:                 default=0,
+  771:             )
+  772:
+  773:         inductor_meta = {
+  774:             "grid_type": dispatch.grid_expr.__name__,
+  775:             "combo_grid_meta": self.combo_grid_meta(size_hints_list),
+  776:             "kernel_name": str(Placeholder.DESCRIPTIVE_NAME),
+  777:             "mutated_arg_names": mutated_args,
+  778:             # Matches triton.py:codegen_kernel(): inference/backward graphs skip
+  779:             # CPU-copy of mutated args during autotune retries; training-forward
+  780:             # graphs must keep it to preserve benchmark inputs across retries.
+  781:             "optimize_mem": V.graph.is_inference or V.graph.is_backward,
+  782:             **self.triton_kernel_cls.inductor_meta_common(),
+  783:         }
+  784:         if max_persistent_rblock > 0:
+  785:             inductor_meta["max_persistent_rblock"] = max_persistent_rblock
+  786:
+  787:         # Sum per-sub-kernel bandwidth / FLOP estimates for the combo launch.
+  788:         sub_metas = [sub.inductor_meta_per_kernel() for sub in self.sub_kernels]
+  789:         self._kernel_num_gb = sum(m.get("kernel_num_gb") or 0 for m in sub_metas)
+  790:         if config.benchmark_kernel or config.profile_bandwidth:
+  791:             inductor_meta["kernel_num_gb"] = self._kernel_num_gb
+  792:         if config.benchmark_kernel:
+  793:             inductor_meta["kernel_flop"] = sum(
+  794:                 m.get("kernel_flop") or 0 for m in sub_metas
+  795:             )
+  796:
+  797:         sub_kernel = selected_kernel
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton_combo_kernel.py:1235-1267
+source_sha256=586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae
+
+ 1235:             meta["default_config"] = None
+ 1236:
+ 1237:         for num, sub_kernel in enumerate(self.sub_kernels):
+ 1238:             meta[f"no_x_dim_{num}"] = sub_kernel.no_x_dim
+ 1239:
+ 1240:             if self.per_subkernel_blocks:
+ 1241:                 meta[f"heuristic_{num}"] = (
+ 1242:                     "persistent_reduction"
+ 1243:                     if sub_kernel.persistent_reduction
+ 1244:                     else "reduction"
+ 1245:                     if sub_kernel.inside_reduction
+ 1246:                     else "pointwise"
+ 1247:                 )
+ 1248:
+ 1249:                 meta[f"size_hints_{num}"] = size_hints_list[num]
+ 1250:                 meta[f"inductor_meta_{num}"] = sub_kernel.inductor_meta_per_kernel()
+ 1251:                 if meta[f"heuristic_{num}"] == "pointwise":
+ 1252:                     if len(size_hints_list[num]) == 2:
+ 1253:                         meta[f"tile_hint_{num}"] = "TileHint.SQUARE"
+ 1254:                     else:
+ 1255:                         meta[f"tile_hint_{num}"] = "TileHint.DEFAULT"
+ 1256:                 else:
+ 1257:                     meta[f"reduction_hint_{num}"] = (
+ 1258:                         sub_kernel.features.get_reduction_hint(
+ 1259:                             sub_kernel.tiling_scores
+ 1260:                         ).name
+ 1261:                     )
+ 1262:
+ 1263:             for tree in sub_kernel.range_trees:
+ 1264:                 if not tree.is_reduction:
+ 1265:                     numel_name = f"{tree.prefix}numel_{num}"
+ 1266:                     if numel_name in self.dynamic_shape_args:
+ 1267:                         meta[numel_name] = None
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6229-6304
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 6229:             )
+ 6230:             inductor_meta["coordinate_descent_check_all_directions"] = (
+ 6231:                 config.coordinate_descent_check_all_directions
+ 6232:             )
+ 6233:         return inductor_meta
+ 6234:
+ 6235:     def inductor_meta_per_kernel(self) -> dict[str, Any]:
+ 6236:         """
+ 6237:         Used by both standalone codegen_kernel() and ComboKernel.combo_grid_meta()
+ 6238:         (which calls this on each sub_kernel).
+ 6239:         """
+ 6240:         out: dict[str, Any] = {
+ 6241:             "no_x_dim": self.no_x_dim,
+ 6242:             "atomic_add_found": self.atomic_add_found,
+ 6243:             "num_load": self.num_load,
+ 6244:             "num_store": self.num_store,
+ 6245:             "num_reduction": self.num_reduction,
+ 6246:             # Triton will not accept an OrderedSet for autotune_hints
+ 6247:             "autotune_hints": set(self.autotune_hints),  # noqa: set_linter
+ 6248:         }
+ 6249:         if self.mix_order_reduction:
+ 6250:             out["RSPLIT_SIZE"] = self.rsplit_size
+ 6251:         if config.deterministic or config.test_configs.force_filter_reduction_configs:
+ 6252:             out["has_loadstore_with_contiguous_rdim"] = (
+ 6253:                 self.has_load_with_contiguous_rdim
+ 6254:                 or self.has_store_with_contiguous_rdim
+ 6255:             )
+ 6256:         if self.tma_min_block_sizes:
+ 6257:             out["tma_min_block_sizes"] = self.tma_min_block_sizes
+ 6258:         if self.tiling_scores:
+ 6259:             out["tiling_scores"] = self.tiling_scores
+ 6260:         if self.min_xblock is not None:
+ 6261:             out["min_xblock"] = self.min_xblock
+ 6262:         if self.min_rblock is not None:
+ 6263:             out["min_rblock"] = self.min_rblock
+ 6264:         if self.cooperative_reduction:
+ 6265:             out["persistent_reduction"] = self.persistent_reduction
+ 6266:         if (rblock := self._get_native_matmul_persistent_rblock()) is not None:
+ 6267:             out["native_matmul_persistent_rblock"] = rblock
+ 6268:         if self.add_persistent_rblock:
+ 6269:             out["add_persistent_rblock"] = True
+ 6270:         if (
+ 6271:             config.benchmark_kernel
+ 6272:             or config.profile_bandwidth
+ 6273:             or config.benchmark_combo_kernel
+ 6274:         ):
+ 6275:             num_gb = self.estimate_kernel_num_bytes() / 1e9
+ 6276:             if num_gb is not None:
+ 6277:                 out["kernel_num_gb"] = num_gb
+ 6278:         if config.benchmark_kernel or config.benchmark_combo_kernel:
+ 6279:             flops = self.estimate_flops()
+ 6280:             if flops is not None:
+ 6281:                 out["kernel_flop"] = flops
+ 6282:         return out
+ 6283:
+ 6284:     @functools.cached_property
+ 6285:     def add_persistent_rblock(self) -> bool:
+ 6286:         # Bail on 3d tiling, which has more complicated coalesce patterns
+ 6287:         looped_red = self.features.is_reduction() and not self.persistent_reduction
+ 6288:         tiling_scores = self.tiling_scores
+ 6289:         two_d_red = len(self.tiling) == 2
+ 6290:         if looped_red and two_d_red:
+ 6291:             memory_stats = self.features.memory_stats(self.tiling)
+ 6292:             dim_stats = memory_stats.persistent.memory.dim[0]
+ 6293:             mem_ops_per_thread = dim_stats.count_per_thread
+ 6294:
+ 6295:             if (
+ 6296:                 tiling_scores is not None
+ 6297:                 and "x" in tiling_scores
+ 6298:                 and "r0_" in tiling_scores
+ 6299:             ):
+ 6300:                 # large rblock inhibits xblock size, dont attempt if there is a decent amount of
+ 6301:                 # reads coalesced by xblock
+ 6302:                 r_coalesce_ratio = tiling_scores["r0_"] / max(tiling_scores["x"], 1)
+ 6303:                 contiguous_red = r_coalesce_ratio >= INNER_REDUCTION_RATIO_THRESHOLD
+ 6304:             else:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/csrc/aten/common/TensorProperties.cpp:8-20
+source_sha256=f128e58299f0ba026d4c405576650827e535b4267447980d8316a7cd03f4fd35
+
+    8: namespace native {
+    9:
+   10: at::Tensor NPUNativeFunctions::contiguous(const at::Tensor& self, c10::MemoryFormat memory_format) {
+   11:   if (self.is_contiguous(memory_format)) {
+   12:     return self;
+   13:   }
+   14:
+   15:   TORCH_CHECK(
+   16:       memory_format == c10::MemoryFormat::Contiguous,
+   17:       "NPU contiguous operator only supported contiguous memory format.",
+   18:       OPS_ERROR(ErrCode::NOT_SUPPORT));
+   19:   return self.clone(memory_format);
+   20: }

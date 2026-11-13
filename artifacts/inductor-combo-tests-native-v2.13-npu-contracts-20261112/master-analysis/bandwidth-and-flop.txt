@@ -1,0 +1,209 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:2470-2495
+source_sha256=4a803679e3f268902ede150e991eaa6660009e4710da7b22b3dc98fbcc44a5e1
+
+ 2470:             "signature": triton_meta_signature,
+ 2471:             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+ 2472:             "constants": {},
+ 2473:             # special config for NPU, specify compile target
+ 2474:             "mix_mode": "aiv",
+ 2475:         }
+ 2476:
+ 2477:         inductor_meta = self.create_inductor_meta()
+ 2478:         # Keep equal-to-one arguments consistent with their specialized signature,
+ 2479:         # including when the checker compiles TTIR before a runtime launch.
+ 2480:         for arg_num in equal_1_arg_indices(signature):
+ 2481:             triton_meta["constants"][signature[arg_num].name] = 1
+ 2482:         self.triton_meta = triton_meta
+ 2483:         self.inductor_meta = inductor_meta
+ 2484:         self._disable_grouped_autotune_if_unsupported(inductor_meta)
+ 2485:         num_gb = None
+ 2486:         if config.benchmark_kernel or config.profile_bandwidth:
+ 2487:             num_gb = self.estimate_kernel_num_bytes() / 1e9
+ 2488:             inductor_meta["kernel_num_gb"] = num_gb
+ 2489:
+ 2490:         self.gen_numel_args(signature, triton_meta, triton_meta_signature, argdefs)
+ 2491:
+ 2492:         triton_meta["configs"] = [config_of(signature)]
+ 2493:
+ 2494:         if inductor_meta.get("group_enabled", False):
+ 2495:             try:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:454-470
+source_sha256=5bd282aee7759abc472217a6a7976869335e480d65b2f43d892c8148e2ddd3b0
+
+  454:             with code.indent():
+  455:                 code.splice("pass")
+  456:
+  457:         if config.benchmark_combo_kernel:
+  458:             code.splice(self.codegen_kernel_benchmark(num_gb=0))
+  459:
+  460:         # Deferred stores must see the subkernels' removed buffers.
+  461:         # Keep this state local until every partition passes validation.
+  462:         with V.set_kernel_handler(self):
+  463:             return code.getvalue()
+  464:
+  465:     def combo_grid_meta(self) -> dict[str, Any]:
+  466:         dynamic_shape = bool(self.dynamic_shape_args)
+  467:         num_kernels = len(self.sub_kernels)
+  468:         min_blocks = (
+  469:             max(self.min_x_blocks_list) * num_kernels if not dynamic_shape else None
+  470:         )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/simd.py:1266-1350
+source_sha256=643c93b29c9abf5e6a8a5a626dd07122f083199116d494b9860e1e9536f9bb1b
+
+ 1266:     def estimate_flops(self) -> int | None:
+ 1267:         flops = [
+ 1268:             node.estimate_flops()
+ 1269:             for node in NodeScheduleMarker.only_nodes(self.features.node_schedule)
+ 1270:         ]
+ 1271:         return sum(filter(None, flops))
+ 1272:
+ 1273:     def estimate_kernel_num_bytes(self):
+ 1274:         """
+ 1275:         Try the best to estimate the total size (in bytes) of the
+ 1276:         kernel's inputs and outputs, which is used for estimating the memory
+ 1277:         throughput of this kernel. This information is used for checking how
+ 1278:         far we are from the peak memory bandwidth. It's important that
+ 1279:         we want to avoid overestimating the sizes of the inputs and outputs,
+ 1280:         because it can wrongfully give us a very large memory traffic value,
+ 1281:         which may be even larger than the theoretical bandwidth and thus
+ 1282:         become very misleading. This is particularly problematic for cases
+ 1283:         where we slice some inputs. In those cases, we should only count
+ 1284:         the size of the "slices" instead of the original inputs, because
+ 1285:         only the slices contribute to the real memory traffic.
+ 1286:         """
+ 1287:         nbytes = []
+ 1288:         ninplace_args = len(unique(self.args.inplace_buffers.values()))
+ 1289:         _, call_args, _, _ = self.args.python_argdefs()
+ 1290:         buf_accesses = self.features.buf_accesses()
+ 1291:
+ 1292:         # For pointwise and reduction kernels, this is the upper-bound numels
+ 1293:         # for the output buffer.
+ 1294:         # FIXME: This is not exactly right for cases like below:
+ 1295:         #    def foo(tensor0, tensor1):
+ 1296:         #        x0 = narrow(tensor0)
+ 1297:         #        return cat(x0, tensor1)
+ 1298:         # For this example, we will end up overestimate the size for the
+ 1299:         # slice s0. Potentially, we could have precise inputs information
+ 1300:         # if we maintained the original inputs of the Pointwise kernel created
+ 1301:         # for the "cat". However, I think it might be a bit overwhelming that
+ 1302:         # we add such complexity only for handling some particular cases for
+ 1303:         # benchmarking.
+ 1304:         out_numel = V.graph.sizevars.optimization_hint(
+ 1305:             sympy_product(self.numels.values())
+ 1306:         )
+ 1307:         for i, arg in enumerate(call_args):
+ 1308:             # "buf" may be narrowed. In this case, the number of memory accesses
+ 1309:             # should be estimated based on the reinterpreted layout.
+ 1310:             # On the other hand, buf may be broadcasted. In this case,
+ 1311:             # counting the size of the underline storage would give us
+ 1312:             # a better estimation in terms of memory accesses.
+ 1313:             if arg not in buf_accesses:
+ 1314:                 nbytes.append(0)
+ 1315:                 continue
+ 1316:             arg_numel = V.graph.get_numel(arg)
+ 1317:             buf_size = V.graph.sizevars.optimization_hint(arg_numel)
+ 1318:             if buf_size > out_numel:
+ 1319:                 # This arg points to a buf that has been sliced.
+ 1320:                 # We need to count each individual slice to have
+ 1321:                 # a better estimation.
+ 1322:                 indices = OrderedSet[Any]()
+ 1323:                 no_index_dep_count = 0
+ 1324:                 for dep in buf_accesses[arg]:
+ 1325:                     if isinstance(dep, (StarDep, WeakDep)):
+ 1326:                         indices.add(f"no_index_dep_{no_index_dep_count}")
+ 1327:                         no_index_dep_count += 1
+ 1328:                     else:
+ 1329:                         indices.add(dep.index)
+ 1330:                 numel = len(indices) * out_numel
+ 1331:             else:
+ 1332:                 numel = buf_size
+ 1333:             dtype = V.graph.get_dtype(arg)
+ 1334:             dtype_size = get_dtype_size(dtype)
+ 1335:             # pyrefly: ignore [bad-argument-type]
+ 1336:             nbytes.append(numel * dtype_size * (1 + int(i < ninplace_args)))
+ 1337:         return sum(nbytes)
+ 1338:
+ 1339:     def warn_mix_layout(self, kernel_name):
+ 1340:         """
+ 1341:         Print message if the kernel have mixed layout inputs.
+ 1342:         Only care about 4D tensor for now.
+ 1343:         """
+ 1344:         if (
+ 1345:             len(self.args.input_buffers) == 1
+ 1346:             and len(self.args.output_buffers) == 1
+ 1347:             and len(self.args.inplace_buffers) == 0
+ 1348:         ):
+ 1349:             # even if input buffer and output buffer have different layout,
+ 1350:             # this can be a layout conversion kernel. No need to warn for
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton_combo_kernel.py:786-804
+source_sha256=586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae
+
+  786:
+  787:         # Sum per-sub-kernel bandwidth / FLOP estimates for the combo launch.
+  788:         sub_metas = [sub.inductor_meta_per_kernel() for sub in self.sub_kernels]
+  789:         self._kernel_num_gb = sum(m.get("kernel_num_gb") or 0 for m in sub_metas)
+  790:         if config.benchmark_kernel or config.profile_bandwidth:
+  791:             inductor_meta["kernel_num_gb"] = self._kernel_num_gb
+  792:         if config.benchmark_kernel:
+  793:             inductor_meta["kernel_flop"] = sum(
+  794:                 m.get("kernel_flop") or 0 for m in sub_metas
+  795:             )
+  796:
+  797:         sub_kernel = selected_kernel
+  798:         if heuristics == "foreach":
+  799:             heuristics_line = f"""
+  800:                 @triton_heuristics.foreach(
+  801:                     filename=__file__,
+  802:                     triton_meta={triton_meta!r},
+  803:                     inductor_meta={inductor_meta!r},
+  804:                 )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton_combo_kernel.py:1014-1026
+source_sha256=586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae
+
+ 1014:                 code.writeline(f'pl.exit_scope("{kernel_name}")')
+ 1015:
+ 1016:         if config.benchmark_combo_kernel:
+ 1017:             code.splice(self.codegen_kernel_benchmark(num_gb=self._kernel_num_gb))
+ 1018:
+ 1019:         return code.getvalue()
+ 1020:
+ 1021:     def codegen_kernel_benchmark(self, num_gb: float) -> IndentedBuffer:
+ 1022:         """
+ 1023:         Generates Python code for benchmarking this combo kernel.
+ 1024:         - Creates example inputs (random tensors, constants, sizes).
+ 1025:         - Runs the kernel on the current GPU/stream.
+ 1026:         - Prints runtime (ms) and throughput (GB/s) using `num_gb`.
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton_combo_kernel.py:1108-1127
+source_sha256=586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae
+
+ 1108:         with result.indent():
+ 1109:             result.writeline(
+ 1110:                 "from torch._inductor.runtime.benchmarking import benchmarker"
+ 1111:             )
+ 1112:             result.writeline("")
+ 1113:
+ 1114:             result.writeline("args = get_args()")
+ 1115:             result.writeline(
+ 1116:                 f"ms = benchmarker.benchmark(call, fn_args=(args,), device='{device.type}',rep=40)"
+ 1117:             )
+ 1118:             result.writeline(f"num_gb = {num_gb}")
+ 1119:             result.writeline("gb_per_s = num_gb / (ms / 1e3)")
+ 1120:             result.writeline(
+ 1121:                 'print(f"{ms:.3f}ms    {num_gb:.3f}GB    {gb_per_s:.2f}GB/s")'
+ 1122:             )
+ 1123:
+ 1124:         return result
+ 1125:
+ 1126:     def imports_for_benchmark_kernel(self) -> str:
+ 1127:         return textwrap.dedent(

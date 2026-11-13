@@ -1,0 +1,35 @@
+CommonTemplate::test_combo_kernel_filter_cpu (SKIP)
+v2.13.0/inductor_npu/test_torchinductor.py:18154-18185
+
+18154:     @config.patch(combo_kernels=True)
+18155:     def test_combo_kernel_filter_cpu(self):
+18156:         if torch.device(self.device).type == "npu":
+18157:             self.skipTest(
+18158:                 "CPU Combo-filtering policy is covered by the CPU instance; "
+18159:                 "the NPU instance does not validate that policy"
+18160:             )
+18161:
+18162:         def fn(a, b, c, d):
+18163:             a = a * 4
+18164:             b = b + 8
+18165:             return a, b, c.min(-1), d.max(-1)
+18166:
+18167:         inps = [
+18168:             torch.rand(20, 20, device=self.device),
+18169:             torch.rand(30, 30, device=self.device),
+18170:             torch.rand(256, 256, device=self.device),
+18171:             torch.rand(256, 256, device=self.device),
+18172:         ]
+18173:         torch._inductor.metrics.reset()
+18174:         compiled_fn = torch.compile(fn)
+18175:         result = compiled_fn(*inps)
+18176:         expected = fn(*inps)
+18177:
+18178:         self.assertEqual(result, expected)
+18179:         # on cuda combo kernel fuses (a, b) into one kernel and (c, d) into another (total 2)
+18180:         # on cpu combo kernel is skipped (a), (b), (c), (d) each run as separate kernels (total 4)
+18181:         if self.device.lower() == "cpu":
+18182:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 4)
+18183:
+18184:         if self.device.lower() == "cuda":
+18185:             self.assertEqual(torch._inductor.metrics.generated_kernel_count, 2)

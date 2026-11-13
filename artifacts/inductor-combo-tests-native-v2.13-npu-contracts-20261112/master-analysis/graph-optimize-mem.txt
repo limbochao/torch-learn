@@ -1,0 +1,353 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:1978-2002
+source_sha256=4a803679e3f268902ede150e991eaa6660009e4710da7b22b3dc98fbcc44a5e1
+
+ 1978:             "traced_graph_hash": "TRACED_GRAPH_HASH",
+ 1979:             "traced_graph_dir": "TRACED_GRAPH_DIR",
+ 1980:             "are_deterministic_algorithms_enabled": torch.are_deterministic_algorithms_enabled(),
+ 1981:             "runtime_block_arg_names": runtime_block_arg_names,
+ 1982:             **TritonKernel.inductor_meta_common(),
+ 1983:         }
+ 1984:         vector_axis_length = (
+ 1985:             self.vectorized_welford_axis.length
+ 1986:             if self.vectorized_welford_axis is not None
+ 1987:             else None
+ 1988:         )
+ 1989:         if (
+ 1990:             self.full_static_welford_reduction
+ 1991:             and isinstance(vector_axis_length, (int, sympy.Integer))
+ 1992:         ):
+ 1993:             inductor_meta["vectorized_welford_axis"] = (
+ 1994:                 self.vectorized_welford_axis.sorted_order
+ 1995:             )
+ 1996:         grouped_meta = getattr(self, "grouped_autotune_meta", None)
+ 1997:         if grouped_meta is not None:
+ 1998:             inductor_meta.update(
+ 1999:                 {
+ 2000:                     "group_enabled": bool(grouped_meta.enabled),
+ 2001:                     "group_template": grouped_meta.template,
+ 2002:                     "group_workload": grouped_meta.workload,
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:697-760
+source_sha256=ae98edb15f10e2c7eff660fcbd85e26578d5ac8400c890ef0700c050fc04088b
+
+  697:     def copy_args_to_cpu_if_needed(self, *args, **kwargs):
+  698:         if not self.optimize_mem:
+  699:             return {}
+  700:
+  701:         copies = {}
+  702:         try:
+  703:             if torch.accelerator.current_accelerator() is None:
+  704:                 return {}
+  705:             budget = (
+  706:                 torch.accelerator.max_memory_allocated()
+  707:                 - torch.accelerator.memory_allocated()
+  708:             )
+  709:         except RuntimeError:
+  710:             return {}
+  711:
+  712:         def maybe_copy(name, arg):
+  713:             if name in self.mutated_arg_names and arg.device.type in (
+  714:                 "cuda",
+  715:                 "xpu",
+  716:                 "npu",
+  717:             ):
+  718:                 nonlocal budget
+  719:                 assert isinstance(arg, torch.Tensor)
+  720:                 required_storage_length = compute_required_storage_length(
+  721:                     arg.size(), arg.stride(), 0,
+  722:                 )
+  723:                 size = required_storage_length * arg.element_size()
+  724:                 if size > budget:
+  725:                     try:
+  726:                         cpu_arg = torch.empty_strided(
+  727:                             (required_storage_length,),
+  728:                             (1,),
+  729:                             dtype=arg.dtype,
+  730:                             device="cpu",
+  731:                             pin_memory=True,
+  732:                         )
+  733:                         cpu_arg.copy_(
+  734:                             arg.as_strided(
+  735:                                 (required_storage_length,), (1,)
+  736:                             ),
+  737:                             non_blocking=True,
+  738:                         )
+  739:                     except RuntimeError:
+  740:                         cpu_arg = arg.to("cpu")
+  741:                     copies[name] = (arg, cpu_arg)
+  742:                 else:
+  743:                     budget -= size
+  744:
+  745:         for name, arg in zip(self.fn.arg_names, args):
+  746:             maybe_copy(name, arg)
+  747:         for name, arg in kwargs.items():
+  748:             maybe_copy(name, arg)
+  749:
+  750:         return copies
+  751:
+  752:     def _set_best_candidate(
+  753:         self,
+  754:         candidate,
+  755:         launcher,
+  756:         runtime_blocks=None,
+  757:     ):
+  758:         if runtime_blocks is None:
+  759:             runtime_blocks = tuple(
+  760:                 value for _, value in candidate.get("runtime_blocks", ())
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:3323-3332
+source_sha256=ae98edb15f10e2c7eff660fcbd85e26578d5ac8400c890ef0700c050fc04088b
+
+ 3323:             log.debug("autotune caching is disabled by config.force_disable_caches")
+ 3324:
+ 3325:     mutated_arg_names = inductor_meta.pop("mutated_arg_names", ())
+ 3326:     optimize_mem = inductor_meta.pop("optimize_mem", True)
+ 3327:
+ 3328:     if "restore_value" in triton_meta:
+ 3329:         mutated_arg_names += triton_meta.pop("restore_value")
+ 3330:
+ 3331:     reset_to_zero_arg_names: List[str] = []
+ 3332:     if "reset_to_zero" in triton_meta:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1443-1498
+source_sha256=ae98edb15f10e2c7eff660fcbd85e26578d5ac8400c890ef0700c050fc04088b
+
+ 1443:     def bench(self, launcher, *args, with_profiler=None, runtime_blocks=None, **kwargs):
+ 1444:         """Measure the performance of a given launcher"""
+ 1445:
+ 1446:         if not self.custom_kernel and launcher.n_spills > self.inductor_meta.get(
+ 1447:                 "spill_threshold", 16
+ 1448:         ):
+ 1449:             return float("inf")
+ 1450:
+ 1451:         if runtime_blocks is None:
+ 1452:             if launcher is self.best_launcher:
+ 1453:                 runtime_blocks = self.best_runtime_blocks
+ 1454:             else:
+ 1455:                 runtime_blocks = ()
+ 1456:                 for entry in self.compiled_candidate_entries:
+ 1457:                     if entry["launcher"] is launcher:
+ 1458:                         runtime_blocks = self._diagnostic_runtime_blocks(
+ 1459:                             entry["candidate"], args
+ 1460:                         )
+ 1461:                         break
+ 1462:         launch_args = self._build_runtime_launch_args(args, tuple(runtime_blocks))
+ 1463:         return self._bench_with_launch_args(
+ 1464:             launcher,
+ 1465:             launch_args,
+ 1466:             args,
+ 1467:             with_profiler=with_profiler,
+ 1468:             **kwargs,
+ 1469:         )
+ 1470:
+ 1471:     def _bench_with_launch_args(
+ 1472:         self, launcher, launch_args, reset_args, with_profiler=None, **kwargs
+ 1473:     ):
+ 1474:         device_interface = self.get_device_interface()
+ 1475:         stream = device_interface.get_raw_stream(device_interface.current_device())
+ 1476:
+ 1477:         def kernel_call():
+ 1478:             cloned_args, cloned_kwargs = self.clone_args(*launch_args, **kwargs)
+ 1479:             self.reset_to_zero_args(*reset_args, **kwargs)
+ 1480:             launcher(
+ 1481:                 *cloned_args,
+ 1482:                 **cloned_kwargs,
+ 1483:                 stream=stream,
+ 1484:             )
+ 1485:
+ 1486:         # Align with upstream CachingAutotuner.bench(): `with_profiler` is the
+ 1487:         # per-autotuner switch fed by
+ 1488:         # inductor_meta["profile_bandwidth_with_do_bench_using_profiling"].
+ 1489:         if with_profiler is None:
+ 1490:             with_profiler = self.inductor_meta.get(
+ 1491:                 "profile_bandwidth_with_do_bench_using_profiling", False
+ 1492:             )
+ 1493:         if with_profiler and not npu_profiler_session_active():
+ 1494:             return do_bench_using_profiling_npu(kernel_call, rep=1)
+ 1495:
+ 1496:         return benchmarker.benchmark_gpu(kernel_call, rep=1, device_type='npu', is_vetted_benchmarking=True)
+ 1497:
+ 1498:     def _profile_batch_benchmark(self, kernel_funcs):
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:1645-1665
+source_sha256=ae98edb15f10e2c7eff660fcbd85e26578d5ac8400c890ef0700c050fc04088b
+
+ 1645:             def prerun(launcher=launcher, launch_args=launch_args):
+ 1646:                 if launcher.config.pre_hook is not None:
+ 1647:                     launcher.config.pre_hook(
+ 1648:                         {
+ 1649:                             **dict(zip(self.arg_names, launch_args)),
+ 1650:                             **launcher.config.kwargs,
+ 1651:                         }
+ 1652:                     )
+ 1653:                 cloned_args, cloned_kwargs = self.clone_args(*launch_args, **kwargs)
+ 1654:                 self.reset_to_zero_args(*args, **kwargs)
+ 1655:                 launcher(
+ 1656:                     *cloned_args,
+ 1657:                     **cloned_kwargs,
+ 1658:                     stream=stream,
+ 1659:                 )
+ 1660:
+ 1661:             try:
+ 1662:                 prerun_ms = _measure_prerun_ms(prerun)
+ 1663:                 prerun_timings.append((candidate_id, prerun_ms))
+ 1664:                 runnable_candidates.append(
+ 1665:                     {
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/runtime/triton_heuristics.py:2970-2990
+source_sha256=ae98edb15f10e2c7eff660fcbd85e26578d5ac8400c890ef0700c050fc04088b
+
+ 2970:                     return
+ 2971:                 if launcher.config.pre_hook is not None:
+ 2972:                     pre_hook_args = {
+ 2973:                         **dict(zip(self.arg_names, launch_args)),
+ 2974:                         **launcher.config.kwargs,
+ 2975:                     }
+ 2976:                     launcher.config.pre_hook(
+ 2977:                         pre_hook_args
+ 2978:                     )
+ 2979:                 cloned_args, cloned_kwargs = self.clone_args(*launch_args, **kwargs)
+ 2980:                 self.reset_to_zero_args(*kernel_args_prefix, **kwargs)
+ 2981:                 launcher(
+ 2982:                     *cloned_args,
+ 2983:                     **cloned_kwargs,
+ 2984:                     stream=stream,
+ 2985:                 )
+ 2986:
+ 2987:             return call_kernel
+ 2988:
+ 2989:         for entry_idx, entry in enumerate(entries):
+ 2990:             launcher = entry["launcher"]
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton_combo_kernel.py:773-796
+source_sha256=586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae
+
+  773:         inductor_meta = {
+  774:             "grid_type": dispatch.grid_expr.__name__,
+  775:             "combo_grid_meta": self.combo_grid_meta(size_hints_list),
+  776:             "kernel_name": str(Placeholder.DESCRIPTIVE_NAME),
+  777:             "mutated_arg_names": mutated_args,
+  778:             # Matches triton.py:codegen_kernel(): inference/backward graphs skip
+  779:             # CPU-copy of mutated args during autotune retries; training-forward
+  780:             # graphs must keep it to preserve benchmark inputs across retries.
+  781:             "optimize_mem": V.graph.is_inference or V.graph.is_backward,
+  782:             **self.triton_kernel_cls.inductor_meta_common(),
+  783:         }
+  784:         if max_persistent_rblock > 0:
+  785:             inductor_meta["max_persistent_rblock"] = max_persistent_rblock
+  786:
+  787:         # Sum per-sub-kernel bandwidth / FLOP estimates for the combo launch.
+  788:         sub_metas = [sub.inductor_meta_per_kernel() for sub in self.sub_kernels]
+  789:         self._kernel_num_gb = sum(m.get("kernel_num_gb") or 0 for m in sub_metas)
+  790:         if config.benchmark_kernel or config.profile_bandwidth:
+  791:             inductor_meta["kernel_num_gb"] = self._kernel_num_gb
+  792:         if config.benchmark_kernel:
+  793:             inductor_meta["kernel_flop"] = sum(
+  794:                 m.get("kernel_flop") or 0 for m in sub_metas
+  795:             )
+  796:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1233-1248
+source_sha256=87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923
+
+ 1233:
+ 1234:         device_interface = self.get_device_interface()
+ 1235:         stream = device_interface.get_raw_stream(device_interface.current_device())
+ 1236:
+ 1237:         cpu_copies = self.copy_args_to_cpu_if_needed(*args, **kwargs)
+ 1238:
+ 1239:         def kernel_call():
+ 1240:             cloned_args, cloned_kwargs = self.maybe_clone_args(
+ 1241:                 cpu_copies, *args, **kwargs
+ 1242:             )
+ 1243:             kernel_name = self.inductor_meta.get("kernel_name", "triton kernel")
+ 1244:             # reset to zero before evaluating any config
+ 1245:             self.reset_to_zero_args(*args, **kwargs)
+ 1246:             if autograd_profiler._is_profiler_enabled:
+ 1247:                 profiler_kwargs = self.get_profiler_kwargs(stream, launcher)
+ 1248:                 with torch._C._profiler._RecordFunctionFast(
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1288-1295
+source_sha256=87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923
+
+ 1288:                         launcher.config.kwargs,
+ 1289:                     )
+ 1290:                     raise
+ 1291:             self.restore_args_from_cpu(cpu_copies)
+ 1292:
+ 1293:         # only use profiler when not already in a profiler instance
+ 1294:         if with_profiler and not autograd_profiler._is_profiler_enabled:
+ 1295:             from torch._inductor.utils import do_bench_using_profiling
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1318-1342
+source_sha256=87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923
+
+ 1318:     def copy_args_to_cpu_if_needed(self, *args, **kwargs):
+ 1319:         """
+ 1320:         To support benchmarking in the presence of mutated args, we need to avoid
+ 1321:         autotuning contaminating them. We try to pass cloned args to the kernel.
+ 1322:         If those clones would increase the peak memory usage, however, we instead
+ 1323:         copy to cpu and restore them after each iteration. Figure out the args
+ 1324:         to be copied and do the copying.
+ 1325:         """
+ 1326:         if not self.optimize_mem:
+ 1327:             return {}
+ 1328:
+ 1329:         copies = {}
+ 1330:         try:
+ 1331:             if torch.accelerator.current_accelerator() is None:
+ 1332:                 # No initialized accelerator; skip memory-optimized path
+ 1333:                 return {}
+ 1334:             budget = (
+ 1335:                 torch.accelerator.max_memory_allocated()
+ 1336:                 - torch.accelerator.memory_allocated()
+ 1337:             )
+ 1338:         except RuntimeError:
+ 1339:             # Possibly a custom CUDA allocator, see https://github.com/pytorch/pytorch/issues/163257
+ 1340:             return {}
+ 1341:
+ 1342:         def maybe_copy(name, arg):
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1414-1442
+source_sha256=87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923
+
+ 1414:     def maybe_clone_args(
+ 1415:         self, exclude: Container[str], *args, **kwargs
+ 1416:     ) -> tuple[list[Any], dict[str, Any]]:
+ 1417:         """
+ 1418:         Prepare new args and kwargs by cloning any in-place buffers
+ 1419:         (that are not in the provided exclusion list), to avoid autotune
+ 1420:         contaminating them. Avoid cloning the other buffers because it
+ 1421:         leads to increased memory usage.
+ 1422:         """
+ 1423:         from ..compile_fx import clone_preserve_strides
+ 1424:
+ 1425:         def prepare_arg(name, arg):
+ 1426:             if name in self.mutated_arg_names and name not in exclude:
+ 1427:                 assert isinstance(arg, torch.Tensor)
+ 1428:                 return clone_preserve_strides(arg)
+ 1429:             else:
+ 1430:                 return arg
+ 1431:
+ 1432:         cloned_args = [
+ 1433:             prepare_arg(name, arg)
+ 1434:             for name, arg in itertools.zip_longest(self.fn.arg_names[: len(args)], args)
+ 1435:         ]
+ 1436:         cloned_kwargs = {name: prepare_arg(name, arg) for name, arg in kwargs.items()}
+ 1437:         return cloned_args, cloned_kwargs
+ 1438:
+ 1439:     def clone_args(self, *args, **kwargs) -> tuple[list[Any], dict[str, Any]]:
+ 1440:         return self.maybe_clone_args(OrderedSet(), *args, **kwargs)
+ 1441:
+ 1442:     @staticmethod

@@ -1,0 +1,175 @@
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_snode_runtime.py:32-38
+source_sha256=cf5e8bbb3b616dea4642a90a23988ab57ff099febf0265d8284c25accca8d423
+
+   32: def compile_but_use_eager(gm, example_inputs):
+   33:     def inner_compile(gm, *args, **kwargs):
+   34:         compile_fx_inner(gm, *args, **kwargs)
+   35:         return gm
+   36:
+   37:     return compile_fx(gm, example_inputs, inner_compile=inner_compile)
+   38:
+
+TEST e71a557c8748f4ff703462bc59bc18dac1cc0173
+v2.13.0/inductor_npu/test_snode_runtime.py:247-337
+source_sha256=cf5e8bbb3b616dea4642a90a23988ab57ff099febf0265d8284c25accca8d423
+
+  247: class InputDistanceTests(TestCase):
+  248:     device = DEVICE
+  249:
+  250:     def _get_snodes(self, f, *args):
+  251:         metrics.reset()
+  252:         torch._logging.set_logs(inductor_metrics=True)
+  253:         torch.compile(f, backend=compile_but_use_eager)(*args)
+  254:         torch._logging.set_logs()
+  255:         return [snode for snode, _ in metrics.nodes_num_elem]
+  256:
+  257:     def test_chain_with_reduction(self):
+  258:         """
+  259:         input -> sum (depth 0) -> sum (depth 1)
+  260:         Reductions prevent full fusion, giving us distinct depth levels.
+  261:         """
+  262:
+  263:         def f(x):
+  264:             a = x.sum(dim=-1)
+  265:             return a.sum(dim=-1)
+  266:
+  267:         snodes = self._get_snodes(f, T(10, 10, 10))
+  268:         all_min = [s.min_input_distance for s in snodes]
+  269:         all_max = [s.max_input_distance for s in snodes]
+  270:         self.assertEqual(min(all_min), 0)
+  271:         self.assertEqual(max(all_max), 1)
+  272:
+  273:     def test_fused_node_depth_range(self):
+  274:         """
+  275:         A reduction fused with its pointwise epilogue should have
+  276:         min_input_distance=0 and max_input_distance=1.
+  277:         """
+  278:
+  279:         def f(x):
+  280:             a = x.sum(dim=-1)
+  281:             return a.cos()
+  282:
+  283:         snodes = self._get_snodes(f, T(10, 10))
+  284:         # The reduction and pointwise get fused
+  285:         self.assertEqual(len(snodes), 1)
+  286:         self.assertEqual(snodes[0].min_input_distance, 0)
+  287:         self.assertEqual(snodes[0].max_input_distance, 1)
+  288:
+  289:     def test_extern_kernel_chain(self):
+  290:         """
+  291:         mm (depth 0, extern) -> cos+sum fused (depth 1)
+  292:         """
+  293:
+  294:         def f(a, b):
+  295:             c = torch.mm(a, b)
+  296:             d = c.cos()
+  297:             return d.sum(dim=-1)
+  298:
+  299:         snodes = self._get_snodes(f, T(10, 10), T(10, 10))
+  300:         all_min = [s.min_input_distance for s in snodes]
+  301:         all_max = [s.max_input_distance for s in snodes]
+  302:         self.assertEqual(min(all_min), 0)
+  303:         self.assertEqual(max(all_max), 1)
+  304:
+  305:     @unittest.skip("NPU does not support")
+  306:     def test_foreach_basic(self):
+  307:         """
+  308:         foreach_add on graph inputs should have depth 0.
+  309:         """
+  310:
+  311:         def f(xs, ys):
+  312:             return torch._foreach_add(xs, ys)
+  313:
+  314:         xs = [T(10), T(20)]
+  315:         ys = [T(10), T(20)]
+  316:         snodes = self._get_snodes(f, xs, ys)
+  317:         for s in snodes:
+  318:             self.assertEqual(s.min_input_distance, 0)
+  319:             self.assertEqual(s.max_input_distance, 0)
+  320:
+  321:     @unittest.skip("NPU does not support")
+  322:     def test_foreach_after_extern(self):
+  323:         """
+  324:         mm (extern, depth 0) -> foreach_add (depth 1)
+  325:         The extern kernel creates a fusion barrier so the foreach
+  326:         has a real dependency chain.
+  327:         """
+  328:
+  329:         def f(a, b, ys):
+  330:             c = torch.mm(a, b)
+  331:             return torch._foreach_add([c, c], ys)
+  332:
+  333:         snodes = self._get_snodes(f, T(10, 10), T(10, 10), [T(10, 10), T(10, 10)])
+  334:         all_min = [s.min_input_distance for s in snodes]
+  335:         all_max = [s.max_input_distance for s in snodes]
+  336:         self.assertEqual(min(all_min), 0)
+  337:         self.assertGreaterEqual(max(all_max), 1)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:4930-4961
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 4930:         """
+ 4931:         Populate each node's min/max_input_distance with the depth from graph
+ 4932:         inputs, measured as dependency hops before fusion. Nodes whose
+ 4933:         dependencies are all satisfied by graph inputs/constants have depth 0.
+ 4934:         """
+ 4935:         name_to_min_distance: dict[str, int] = {}
+ 4936:         name_to_max_distance: dict[str, int] = {}
+ 4937:         for node in self.nodes:
+ 4938:             if not node.unmet_dependencies:
+ 4939:                 min_dist = 0
+ 4940:                 max_dist = 0
+ 4941:             else:
+ 4942:                 dep_min_dists = [
+ 4943:                     name_to_min_distance[self.name_to_buf[dep.name].defining_op_name()]
+ 4944:                     + 1
+ 4945:                     for dep in node.unmet_dependencies
+ 4946:                 ]
+ 4947:                 dep_max_dists = [
+ 4948:                     name_to_max_distance[self.name_to_buf[dep.name].defining_op_name()]
+ 4949:                     + 1
+ 4950:                     for dep in node.unmet_dependencies
+ 4951:                 ]
+ 4952:                 min_dist = min(dep_min_dists)
+ 4953:                 max_dist = max(dep_max_dists)
+ 4954:             name_to_min_distance[node.get_name()] = min_dist
+ 4955:             name_to_max_distance[node.get_name()] = max_dist
+ 4956:             node.min_input_distance = min_dist
+ 4957:             node.max_input_distance = max_dist
+ 4958:
+ 4959:     def merge_loops(self) -> None:
+ 4960:         if not config.loop_ordering_after_fusion:
+ 4961:             return
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:2604-2614
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 2604:     group_snode.max_order = max(x.max_order for x in group_snode.snodes)
+ 2605:     group_snode.min_input_distance = min(
+ 2606:         x.min_input_distance for x in group_snode.snodes
+ 2607:     )
+ 2608:     group_snode.max_input_distance = max(
+ 2609:         x.max_input_distance for x in group_snode.snodes
+ 2610:     )
+ 2611:     group_snode.outputs_by_name = {
+ 2612:         buf.get_name(): buf for buf in group_snode.get_outputs()
+ 2613:     }
+ 2614:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/scheduling.py:189-198
+source_sha256=5b65295323dd0c6a277377cb919e0b1ddb3ee541eb9c4f5bcc6ac52275967a91
+
+  189:
+  190: class NPUTritonScheduling(TritonScheduling):
+  191:     kernel_type = NPUIndexTritonKernel
+  192:     backend_features = OrderedSet(
+  193:         [
+  194:             BackendFeature.BUCKETIZE,
+  195:             BackendFeature.INPLACE_BUFFERS,
+  196:             BackendFeature.MASKED_SCATTER_WITH_INDEX,
+  197:             BackendFeature.SCAN,
+  198:             BackendFeature.SORT,

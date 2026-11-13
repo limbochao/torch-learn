@@ -1,0 +1,196 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/scheduling.py:492-505
+source_sha256=5b65295323dd0c6a277377cb919e0b1ddb3ee541eb9c4f5bcc6ac52275967a91
+
+  492:         for src_code, kernel, node_group in kernel_code_list:
+  493:             subkernels = kernel.sub_kernels if isinstance(kernel, NPUComboKernel) else [kernel]
+  494:             for subkernel_node, subkernel in zip(node_group, subkernels):
+  495:                 with V.set_kernel_handler(subkernel):
+  496:                     for snode in subkernel_node.get_nodes():
+  497:                         snode.mark_run()
+  498:                 V.graph.removed_buffers |= subkernel.removed_buffers
+  499:                 V.graph.inplaced_to_remove |= subkernel.inplaced_to_remove
+  500:             kernel_name, _ = self.define_kernel(src_code, [combo_kernel_node], kernel, None)
+  501:             self.codegen_comment([combo_kernel_node], kernel_name)
+  502:             log.debug("ComboKernels: generated kernel %s.", kernel_name)
+  503:             kernel.call_kernel(kernel_name)
+  504:
+  505:         self.free_buffers_in_scheduler()
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/scheduling.py:594-618
+source_sha256=5b65295323dd0c6a277377cb919e0b1ddb3ee541eb9c4f5bcc6ac52275967a91
+
+  594:     def define_kernel(self, src_code, node_schedule, kernel, traced_graph_hash: str, kernel_graph_hash: str = None):
+  595:         wrapper = V.graph.wrapper_code
+  596:         kernel_cache_key = (src_code, kernel_graph_hash)
+  597:         if kernel_cache_key in wrapper.src_to_kernel:
+  598:             kernel_name = wrapper.src_to_kernel[kernel_cache_key]
+  599:             if npu_config.dump_fx_graph:
+  600:                 src_code = src_code.replace(str(Placeholder.DESCRIPTIVE_NAME), kernel_name)
+  601:                 subs_name = kernel_name if config.triton.unique_kernel_names else "triton_"
+  602:                 src_code = src_code.replace(str(Placeholder.KERNEL_NAME), subs_name)
+  603:                 if traced_graph_hash:
+  604:                     src_code = src_code.replace('TRACED_GRAPH_HASH', traced_graph_hash)
+  605:                     src_code = src_code.replace('TRACED_GRAPH_DIR', npu_config.traced_fx_graph_cache)
+  606:         else:
+  607:             fused_name = (
+  608:                 get_fused_kernel_name(node_schedule, config.triton.descriptive_names)
+  609:                 if config.triton.descriptive_names
+  610:                 else ""
+  611:             )
+  612:             npu_extra_name = getattr(kernel, "npu_extra_name", None)
+  613:             if npu_extra_name:
+  614:                 fused_name = "_".join(filter(None, (fused_name, npu_extra_name)))
+  615:             kernel_category = get_kernel_category_by_source_code(src_code)[:3]
+  616:             kernel_name = _make_triton_kernel_name(
+  617:                 kernel_category, fused_name, wrapper.next_kernel_suffix()
+  618:             )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:7214-7229
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 7214:
+ 7215:         if kernel_name:
+ 7216:             debug_handle = set_kernel_post_grad_provenance_tracing(
+ 7217:                 node_schedule,  # type: ignore[arg-type]
+ 7218:                 kernel_name,
+ 7219:             )
+ 7220:             wrapper.write_provenance_debug_handle(kernel_name, debug_handle)
+ 7221:
+ 7222:     def _emit_kernel_to_wrapper(
+ 7223:         self,
+ 7224:         wrapper,
+ 7225:         kernel,
+ 7226:         src_code,
+ 7227:         kernel_name,
+ 7228:         subs_name,
+ 7229:         node_schedule,
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/debug.py:1142-1212
+source_sha256=1490664071aafeb1b3160725c13efe0af8bfabcf06471355a7afa29f9795f248
+
+ 1142: def set_kernel_post_grad_provenance_tracing(
+ 1143:     node_schedule: Sequence[BaseSchedulerNode] | ExternKernel,
+ 1144:     kernel_name: str,
+ 1145:     is_extern: bool = False,
+ 1146: ) -> int | None:
+ 1147:     """
+ 1148:     Set the mapping between `kernel_name` and the post_grad nodes in `node_schedule`.
+ 1149:
+ 1150:     Returns a unique int debug handler for each call to this function.
+ 1151:     """
+ 1152:
+ 1153:     if config.trace.provenance_tracking_level == 0:
+ 1154:         return None
+ 1155:
+ 1156:     try:
+ 1157:         from .codegen.simd_kernel_features import DisableReduction, EnableReduction
+ 1158:
+ 1159:         global _inductor_triton_kernel_to_post_grad_node_info
+ 1160:         global _inductor_kernel_stack_trace
+ 1161:         global _inductor_kernel_provenance_debug_handle
+ 1162:
+ 1163:         _inductor_kernel_provenance_debug_handle += 1
+ 1164:         stack_traces: list[str] = []
+ 1165:         kernel_name = f"{kernel_name}:{_inductor_kernel_provenance_debug_handle}"
+ 1166:         if is_extern:
+ 1167:             assert isinstance(node_schedule, ExternKernel)
+ 1168:             curr_node_info = _inductor_triton_kernel_to_post_grad_node_info.setdefault(
+ 1169:                 kernel_name, []
+ 1170:             )
+ 1171:             # 'origins' on IR nodes gives what FX IR nodes contributed to any given fused kernel.
+ 1172:             # "origin_node" is more precise and says that the contents of this node corresponds
+ 1173:             # EXACTLY to the output of a particular FX node, but it's not always available
+ 1174:             if node_schedule.origin_node:
+ 1175:                 origin_node_name = node_schedule.origin_node.name
+ 1176:                 if origin_node_name not in curr_node_info:
+ 1177:                     curr_node_info.append(origin_node_name)
+ 1178:             else:
+ 1179:                 curr_node_info.extend(
+ 1180:                     origin.name
+ 1181:                     for origin in node_schedule.origins
+ 1182:                     if origin.name not in curr_node_info
+ 1183:                 )
+ 1184:             stack_traces = list(node_schedule.get_stack_traces())
+ 1185:         else:
+ 1186:             assert isinstance(node_schedule, list)
+ 1187:             stack_traces_set: OrderedSet[str] = OrderedSet()
+ 1188:             for snode in node_schedule:
+ 1189:                 if snode not in (EnableReduction, DisableReduction):
+ 1190:                     if snode.node is not None:
+ 1191:                         curr_node_info = (
+ 1192:                             _inductor_triton_kernel_to_post_grad_node_info.setdefault(
+ 1193:                                 kernel_name, []
+ 1194:                             )
+ 1195:                         )
+ 1196:                         # pyrefly: ignore [missing-attribute]
+ 1197:                         stack_traces_set.update(snode.node.get_stack_traces())
+ 1198:                         curr_node_info.extend(
+ 1199:                             origin.name
+ 1200:                             # pyrefly: ignore [missing-attribute]
+ 1201:                             for origin in snode.node.origins
+ 1202:                             if origin.name not in curr_node_info
+ 1203:                         )
+ 1204:             stack_traces = list(stack_traces_set)
+ 1205:         _inductor_kernel_stack_trace.setdefault(kernel_name, []).extend(stack_traces)
+ 1206:         return _inductor_kernel_provenance_debug_handle
+ 1207:     except Exception as e:
+ 1208:         # Since this is just debugging, it should never interfere with regular
+ 1209:         # program execution, so we use this try-except to guard against any error
+ 1210:         signpost_event(
+ 1211:             "inductor",
+ 1212:             "provenance_tracking_error",
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:2586-2614
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 2586:
+ 2587:
+ 2588: def init_group_node(
+ 2589:     group_snode: FusedSchedulerNode | GroupedSchedulerNode,
+ 2590:     scheduler: Scheduler,
+ 2591:     snodes: list[BaseSchedulerNode],
+ 2592: ) -> None:
+ 2593:     assert isinstance(group_snode, (FusedSchedulerNode, GroupedSchedulerNode))
+ 2594:     group_snode.snodes = snodes
+ 2595:     group_snode.scheduler = scheduler
+ 2596:     group_snode.node = None
+ 2597:     group_snode.ancestors = OrderedSet.union(
+ 2598:         *[x.ancestors for x in snodes if x.ancestors is not None]
+ 2599:     )
+ 2600:
+ 2601:     refresh_group_node_dependencies(group_snode)
+ 2602:
+ 2603:     group_snode.min_order = min(x.min_order for x in group_snode.snodes)
+ 2604:     group_snode.max_order = max(x.max_order for x in group_snode.snodes)
+ 2605:     group_snode.min_input_distance = min(
+ 2606:         x.min_input_distance for x in group_snode.snodes
+ 2607:     )
+ 2608:     group_snode.max_input_distance = max(
+ 2609:         x.max_input_distance for x in group_snode.snodes
+ 2610:     )
+ 2611:     group_snode.outputs_by_name = {
+ 2612:         buf.get_name(): buf for buf in group_snode.get_outputs()
+ 2613:     }
+ 2614:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/scheduler.py:3496-3507
+source_sha256=829becc15ce05534a1ee4fefd2319cd5d5a5bf4483cc51827b83556a39bc5aa3
+
+ 3496:     def get_subkernel_nodes(self) -> list[BaseSchedulerNode]:
+ 3497:         """Returns a list of nodes which comprise the combo kernel.
+ 3498:         These nodes may be vertically fused."""
+ 3499:         return list(self.snodes)
+ 3500:
+ 3501:     def get_nodes(self) -> Sequence[BaseSchedulerNode]:
+ 3502:         """Returns all nodes contained in this kernel, unpacking fused nodes
+ 3503:         into their constituent scheduler nodes."""
+ 3504:         return list(itertools.chain.from_iterable(x.get_nodes() for x in self.snodes))
+ 3505:
+ 3506:     def get_first_name(self) -> str:
+ 3507:         return self.snodes[0].get_first_name()

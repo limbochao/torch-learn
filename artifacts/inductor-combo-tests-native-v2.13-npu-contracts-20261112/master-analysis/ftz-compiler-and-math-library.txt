@@ -1,0 +1,479 @@
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+ascend-compiler.py:1245-1405
+source_sha256=710158edfd5c3e6935e0f93cbc306ebf9e7d42ead8137263158e5767b3ff645c
+
+ 1245: @dataclass(frozen=True)
+ 1246: class NPUOptions:
+ 1247:     debug: bool = False
+ 1248:     sanitize_overflow: bool = True
+ 1249:     # Backend-only construction input.  AscendBackend.parse_options injects
+ 1250:     # GPUTarget.arch and never forwards a user-supplied compile option.
+ 1251:     arch: InitVar[str] = ""
+ 1252:     rule_mask: InitVar[int] = DEFAULT_GRAPH_OPTIMIZATION_RULE_MASK
+ 1253:     # This becomes compiler metadata, so its name must also be valid for the
+ 1254:     # namedtuple constructed by CompiledKernel on Python 3.10.
+ 1255:     target_arch: str = field(init=False, repr=False)
+ 1256:
+ 1257:     cluster_dims: tuple = (1, 1, 1)
+ 1258:     num_warps: int = 32
+ 1259:     num_ctas: int = 1
+ 1260:     # Keep an omitted stage count distinct from an explicit mode.
+ 1261:     num_stages: Optional[int] = None
+ 1262:     # Ascend threads-per-warp is a backend capability, not a compile option.
+ 1263:     warp_size: int = field(default=32, init=False)
+ 1264:     ir_override: Optional[str] = None  # filename of a user-defined IR (*.{ttir|ttadapter|npubin})
+ 1265:
+ 1266:     # Deprecated constructor-only compatibility input.  The supplied value is
+ 1267:     # ignored and replaced with the lowering selector derived from GPUTarget.arch.
+ 1268:     compile_on_910_95: Optional[bool] = field(default=None, repr=False, kw_only=True)
+ 1269:     enable_warp_specialization: bool = False
+ 1270:     enable_persistent: bool = False
+ 1271:     optimize_epilogue: bool = False
+ 1272:     enable_fp_fusion: bool = True
+ 1273:     launch_cooperative_grid: bool = False
+ 1274:     backend_name: str = 'cann'
+ 1275:     instrumentation_mode: str = ""
+ 1276:     # Proton profile scratch bytes per block; 0 (default) keeps the
+ 1277:     # driver-side profile scratch path inert.
+ 1278:     profile_scratch_size: int = 0
+ 1279:     enable_graph_optimize: bool = True
+ 1280:     supported_fp8_dtypes: Tuple[str] = ("fp8e5", "fp8e4b15", "fp8e4nv", "fp8e4b8", "fp8e5b16")
+ 1281:     deprecated_fp8_dtypes: Tuple[str] = ()
+ 1282:     deprecated_fp8_dot_operand_dtypes: Tuple[str] = ()
+ 1283:     vf_merge_level: int = 1
+ 1284:     default_dot_input_precision: str = "ieee"
+ 1285:     allowed_dot_input_precisions: Tuple[str] = ("ieee", "hf32")
+ 1286:     max_num_imprecise_acc_default: int = 0
+ 1287:     extern_libs: dict = None
+ 1288:     # Backend-managed BiSheng arguments. Keep the name discoverable so legacy
+ 1289:     # launch keywords are accepted, but never forward a user-supplied value.
+ 1290:     bisheng_options: Optional[str] = field(default=None, init=False)
+ 1291:     multibuffer: bool = True
+ 1292:     # Public dictionaries are stored as sorted pairs for hashing and JSON caches.
+ 1293:     multibuffer_mode: Optional[Union[Dict[str, int], Tuple[Tuple[str, int], ...]]] = None
+ 1294:     vf_fusion_mode: str = None
+ 1295:     enable_ubuf_saving: bool = None
+ 1296:     disable_size_align_for_cast: bool = None
+ 1297:     enable_preload: bool = None
+ 1298:     enable_auto_bind_sub_block: bool = None
+ 1299:     disable_tightly_coupled_buffer_reuse: bool = False
+ 1300:     enable_hivm_auto_cv_balance: bool = None
+ 1301:     # Temporary 910_95 switch; the NPU compiler plans to make this default in Q4.
+ 1302:     enable_hivm_batch_matmul: bool = False
+ 1303:     # Only takes effect on the Ascend 950 non-pure-SIMT BiShengIR compilation path.
+ 1304:     enable_vf_stack_limit: bool = False
+ 1305:     sync_solver: bool = None
+ 1306:     unit_flag: bool = None
+ 1307:     enable_flatten: bool = None
+ 1308:     enable_auto_vectorize_v2: bool = None
+ 1309:     auto_vectorize_v2_max_fused_ops_num: int = None
+ 1310:     prevec_max_fused_ops_num: int = None
+ 1311:     inject_barrier_all: bool = None
+ 1312:     inject_block_all: bool = None
+ 1313:     limit_auto_multi_buffer_only_for_local_buffer: bool = None
+ 1314:     limit_auto_multi_buffer_of_local_buffer: str = None
+ 1315:     limit_auto_multi_buffer_buffer: str = None
+ 1316:     set_workspace_multibuffer: int = None
+ 1317:     tile_mix_vector_loop: int = None
+ 1318:     tile_mix_cube_loop: int = None
+ 1319:     disable_auto_inject_block_sync: bool = None
+ 1320:     enable_mixed_cv: bool = None
+ 1321:     enable_dynamic_cv_pipeline: bool = None
+ 1322:     enable_tla_mode: bool = field(default=False, init=False)
+ 1323:     enable_cube_block_merge: bool = False
+ 1324:     hfusion_enable_multiple_consumer_fusion: bool = None
+ 1325:     buf_slot_num_of_veccore: int = None
+ 1326:     buf_slot_num_of_crosscore: int = None
+ 1327:     buf_slot_num_of_gm: int = None
+ 1328:
+ 1329:     # plan memory strategy: "default" (default) or "largest-first"
+ 1330:     plan_memory_strategy: str = None
+ 1331:     # Internal launch metadata.  The mode is initially derived from
+ 1332:     # compile_mode, then replaced with the mode emitted by TritonToLinalg.
+ 1333:     parallel_mode: str = field(default="simd", init=False)
+ 1334:     # Internal pure-SIMT state, derived from the effective lowering mode.
+ 1335:     is_pure_simt: bool = field(default=False, init=False)
+ 1336:     # Only takes effect on the pure-SIMT path.
+ 1337:     shared_mem_dynamic_size: int = None
+ 1338:     # Ascend 950 pure-SIMT-only option passed as -simt-optimization-mode
+ 1339:     # to bishengir-compile. Its value grammar belongs to the toolchain.
+ 1340:     # Individual digits are passed to various passes to control behavior,
+ 1341:     # and are parsed right-to-left.
+ 1342:     # For example, a value of 101 is interpreted as 0000101.
+ 1343:     # If left as 0, bishengir-compile sets this to 900101
+ 1344:     simt_optimization_mode: int = 0000000
+ 1345:     # Canonical modes: SIMD (D), SIMD with template-SIMT (P), and pure-SIMT
+ 1346:     # (T). ``unstructured_in_simt`` is an equivalent P spelling.
+ 1347:     compile_mode: str = "simd_simt_template"
+ 1348:     # disable simt fma optimization to get high precision
+ 1349:     disable_fma: bool = False
+ 1350:
+ 1351:     # superblocking factor
+ 1352:     superblock_factor: int = 1
+ 1353:
+ 1354:     # ChunkCoalescing: number of tiles along the outermost grid axis.
+ 1355:     # Auto-injected from static grid tuples; enables safe coalescing for
+ 1356:     # unmasked kernels whose grid dims are compile-time known.
+ 1357:     grid_num_tiles: int = None
+ 1358:
+ 1359:     # Deprecated names remain visible to callers that use parse_options({})
+ 1360:     # to distinguish compile options from kernel arguments. Their public
+ 1361:     # values are ignored (or routed to canonical options) before construction.
+ 1362:     add_auto_scheduling: bool = field(default=False, init=False)
+ 1363:     allow_fp8e4nv: bool = field(default=False, init=False)
+ 1364:     auto_blockify_size: int = field(default=1, init=False)
+ 1365:     auto_tile_and_bind_subblock: bool = field(default=True, init=False)
+ 1366:     code_motion: Optional[bool] = field(default=None, init=False)
+ 1367:     enable_auto_blockify: Optional[bool] = field(default=None, init=False)
+ 1368:     enable_bishengir_simt_optimization: int = field(default=0, init=False)
+ 1369:     enable_buffer_insert_optimization: bool = field(default=True, init=False)
+ 1370:     enable_cce_vf_auto_sync: Optional[bool] = field(default=None, init=False)
+ 1371:     enable_cce_vf_remove_membar: Optional[bool] = field(default=None, init=False)
+ 1372:     enable_cross_if_fusion: bool = field(default=False, init=False)
+ 1373:     enable_drop_unit_dims: Optional[bool] = field(default=None, init=False)
+ 1374:     enable_linearize: Optional[bool] = field(default=None, init=False)
+ 1375:     enable_mask_fallback_conversion: bool = field(default=False, init=False)
+ 1376:     enable_nd2nz_on_vector: bool = field(default=False, init=False)
+ 1377:     enable_select_analysis: bool = field(default=True, init=False)
+ 1378:     enable_simt_reorder_instruction: bool = field(default=False, init=False)
+ 1379:     enable_sync_block_lock: Optional[bool] = field(default=None, init=False)
+ 1380:     enable_ub_refine_opt: bool = field(default=False, init=False)
+ 1381:     enable_vf_fusion: Optional[bool] = field(default=None, init=False)
+ 1382:     force_simt_only: bool = field(default=False, init=False)
+ 1383:     force_simt_template: bool = field(default=False, init=False)
+ 1384:     graph_optimize_emit_remarks: bool = field(default=False, init=False)
+ 1385:     graph_optimize_max_rewrites_per_function: int = field(default=64, init=False)
+ 1386:     graph_optimize_rule_mask: int = field(default=DEFAULT_GRAPH_OPTIMIZATION_RULE_MASK, init=False)
+ 1387:     graph_optimize_ub_capacity_bytes: Optional[int] = field(default=None, init=False)
+ 1388:     has_auto_blockify_blacklist_op: Optional[bool] = field(default=None, init=False)
+ 1389:     inter_cache_num: Optional[int] = field(default=None, init=False)
+ 1390:     intra_cache_num: Optional[int] = field(default=None, init=False)
+ 1391:     kernel_name: str = field(default="triton_", init=False)
+ 1392:     llvm_version: int = field(default=15, init=False)
+ 1393:     load_cache_num: Optional[int] = field(default=None, init=False)
+ 1394:     mix_mode: str = field(default="", init=False)
+ 1395:     ops_reorder: Optional[bool] = field(default=None, init=False)
+ 1396:     optimize_dynamic_offset: bool = field(default=False, init=False)
+ 1397:     simt_reorder_instruction: bool = field(default=False, init=False)
+ 1398:     storage_align: Optional[bool] = field(default=None, init=False)
+ 1399:     stream: Optional[int] = field(default=None, init=False)
+ 1400:     use_bytecode: bool = field(default=False, init=False)
+ 1401:
+ 1402:     def __post_init__(self, arch, rule_mask):
+ 1403:         from triton.backends.ascend import _apply_ascend_patch
+ 1404:
+ 1405:         if self.ir_override and self.ir_override.endswith((".mlirbc", ".bcmlir")):
+
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+ascend-compiler.py:1637-1660
+source_sha256=710158edfd5c3e6935e0f93cbc306ebf9e7d42ead8137263158e5767b3ff645c
+
+ 1637:     def parse_options(self, opts) -> Any:
+ 1638:         # TODO: get available targets when building options?
+ 1639:         if self.target.backend == "npu":
+ 1640:             _warn_deprecated_ascend_env_vars()
+ 1641:             option_names = {
+ 1642:                 name
+ 1643:                 for name, option_field in NPUOptions.__dataclass_fields__.items()
+ 1644:                 if option_field.init and name not in {"arch", "compile_on_910_95"}
+ 1645:             }
+ 1646:             # Serialized NPUOptions include backend-only derived fields.  Use
+ 1647:             # those provenance markers instead of depending on every public
+ 1648:             # field being present, which changes whenever the dataclass evolves.
+ 1649:             internal_options = _is_internal_npu_options(opts, self.target.arch)
+ 1650:             # Normalize a copy, except for the legacy launch keyword below.
+ 1651:             # NPUOptions retains compatibility defaults for legacy names so
+ 1652:             # JIT and Inductor can still recognize them as compile options.
+ 1653:             normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)
+ 1654:             frontend_kind = normalized_opts.get("_frontend_kind")
+ 1655:             if frontend_kind not in (None, "triton", "tla"):
+ 1656:                 raise ValueError(f"unsupported Ascend frontend kind: {frontend_kind!r}")
+ 1657:             args = {k: normalized_opts[k] for k in option_names if k in normalized_opts}
+ 1658:             options = NPUOptions(arch=self.target.arch, **args)
+ 1659:             # Frontend identity comes from the source.
+ 1660:             # A launch keyword alone cannot select TLA.
+
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+installed-libdevice.py:3883-3922
+source_sha256=7a93469e082ef2940976b78b26bd23204955e54851e8688bcdfd898310e7b0d9
+
+ 3883: @core.extern
+ 3884: @math._check_dtype(dtypes=["fp16", "fp32", "fp64"])
+ 3885: def exp(arg0, _semantic=None):
+ 3886:     """
+ 3887:     Exponential function, computes e raised to the power of x.
+ 3888:
+ 3889:     :param arg0: ``x``. Supported dtype(s): ``float32``.
+ 3890:     :type arg0: scalar or tl.tensor
+ 3891:     :return: The result of e raised to the power of x.
+ 3892:     :rtype: ``float32``
+ 3893:     """
+ 3894:     arg0 = _semantic.to_tensor(arg0)
+ 3895:     if (_is_a5_target(_semantic) or _is_a3_target(_semantic)) and arg0.dtype == core.dtype("fp32"):
+ 3896:         return core.extern_elementwise("", "", [arg0], {
+ 3897:             (core.dtype("fp32"), ): ("__hmf_exp_fp32", core.dtype("fp32")),
+ 3898:         }, is_pure=True, _semantic=_semantic)
+ 3899:     arg0 = _semantic.to_tensor(arg0)
+ 3900:     return core.tensor(_semantic.builder.create_exp(arg0.handle), arg0.type)
+ 3901:
+ 3902:
+ 3903: @core.extern
+ 3904: @math._check_dtype(dtypes=["fp32", "fp64"])
+ 3905: def exp2(arg0, _semantic=None):
+ 3906:     """
+ 3907:     Base-2 exponential function, computes 2 raised to the power of x.
+ 3908:
+ 3909:     :param arg0: ``x``. Supported dtype(s): ``float32``.
+ 3910:     :type arg0: scalar or tl.tensor
+ 3911:     :return: The result of 2 raised to the power of x.
+ 3912:     :rtype: ``float32``
+ 3913:     """
+ 3914:     arg0 = _semantic.to_tensor(arg0)
+ 3915:     if (_is_a5_target(_semantic) or _is_a3_target(_semantic)) and arg0.dtype == core.dtype("fp32"):
+ 3916:         return core.extern_elementwise("", "", [arg0], {
+ 3917:             (core.dtype("fp32"), ): ("__hmf_exp2_fp32", core.dtype("fp32")),
+ 3918:         }, is_pure=True, _semantic=_semantic)
+ 3919:     arg0 = _semantic.to_tensor(arg0)
+ 3920:     return core.tensor(_semantic.builder.create_exp2(arg0.handle), arg0.type)
+ 3921:
+ 3922:
+
+TRITON_LATEST 62f6b54e0f2420d6b718e0d4f89fa7a464d2e78f
+third_party/ascend/backend/compiler.py:1265-1425
+source_sha256=279be2d3dce718ec831ffa4c7fe87d03d7df489f78f57bfb89dc6a20a1ad83bb
+
+ 1265: @dataclass(frozen=True)
+ 1266: class NPUOptions:
+ 1267:     debug: bool = False
+ 1268:     sanitize_overflow: bool = True
+ 1269:     # Backend-only construction input.  AscendBackend.parse_options injects
+ 1270:     # GPUTarget.arch and never forwards a user-supplied compile option.
+ 1271:     arch: InitVar[str] = ""
+ 1272:     rule_mask: InitVar[int] = DEFAULT_GRAPH_OPTIMIZATION_RULE_MASK
+ 1273:     # This becomes compiler metadata, so its name must also be valid for the
+ 1274:     # namedtuple constructed by CompiledKernel on Python 3.10.
+ 1275:     target_arch: str = field(init=False, repr=False)
+ 1276:
+ 1277:     cluster_dims: tuple = (1, 1, 1)
+ 1278:     num_warps: int = 32
+ 1279:     num_ctas: int = 1
+ 1280:     # Keep an omitted stage count distinct from an explicit mode.
+ 1281:     num_stages: Optional[int] = None
+ 1282:     # Ascend threads-per-warp is a backend capability, not a compile option.
+ 1283:     warp_size: int = field(default=32, init=False)
+ 1284:     ir_override: Optional[str] = None  # filename of a user-defined IR (*.{ttir|ttadapter|npubin})
+ 1285:
+ 1286:     # Deprecated constructor-only compatibility input.  The supplied value is
+ 1287:     # ignored and replaced with the lowering selector derived from GPUTarget.arch.
+ 1288:     compile_on_910_95: Optional[bool] = field(default=None, repr=False, kw_only=True)
+ 1289:     enable_warp_specialization: bool = False
+ 1290:     enable_persistent: bool = False
+ 1291:     optimize_epilogue: bool = False
+ 1292:     enable_fp_fusion: bool = True
+ 1293:     launch_cooperative_grid: bool = False
+ 1294:     backend_name: str = 'cann'
+ 1295:     instrumentation_mode: str = ""
+ 1296:     # Proton profile scratch bytes per block; 0 (default) keeps the
+ 1297:     # driver-side profile scratch path inert.
+ 1298:     profile_scratch_size: int = 0
+ 1299:     enable_graph_optimize: bool = True
+ 1300:     supported_fp8_dtypes: Tuple[str] = ("fp8e5", "fp8e4b15", "fp8e4nv", "fp8e4b8", "fp8e5b16")
+ 1301:     deprecated_fp8_dtypes: Tuple[str] = ()
+ 1302:     deprecated_fp8_dot_operand_dtypes: Tuple[str] = ()
+ 1303:     vf_merge_level: int = 1
+ 1304:     default_dot_input_precision: str = "ieee"
+ 1305:     allowed_dot_input_precisions: Tuple[str] = ("ieee", "hf32")
+ 1306:     max_num_imprecise_acc_default: int = 0
+ 1307:     extern_libs: dict = None
+ 1308:     # Backend-managed BiSheng arguments. Keep the name discoverable so legacy
+ 1309:     # launch keywords are accepted, but never forward a user-supplied value.
+ 1310:     bisheng_options: Optional[str] = field(default=None, init=False)
+ 1311:     multibuffer: bool = True
+ 1312:     # Public dictionaries are stored as sorted pairs for hashing and JSON caches.
+ 1313:     multibuffer_mode: Optional[Union[Dict[str, int], Tuple[Tuple[str, int], ...]]] = None
+ 1314:     vf_fusion_mode: str = None
+ 1315:     enable_ubuf_saving: bool = None
+ 1316:     disable_size_align_for_cast: bool = None
+ 1317:     enable_preload: bool = None
+ 1318:     enable_auto_bind_sub_block: bool = None
+ 1319:     disable_tightly_coupled_buffer_reuse: bool = False
+ 1320:     enable_hivm_auto_cv_balance: bool = None
+ 1321:     # Temporary 910_95 switch; the NPU compiler plans to make this default in Q4.
+ 1322:     enable_hivm_batch_matmul: bool = False
+ 1323:     # Only takes effect on the Ascend 950 non-pure-SIMT BiShengIR compilation path.
+ 1324:     enable_vf_stack_limit: bool = False
+ 1325:     sync_solver: bool = None
+ 1326:     unit_flag: bool = None
+ 1327:     enable_flatten: bool = None
+ 1328:     enable_auto_vectorize_v2: bool = None
+ 1329:     auto_vectorize_v2_max_fused_ops_num: int = None
+ 1330:     prevec_max_fused_ops_num: int = None
+ 1331:     inject_barrier_all: bool = None
+ 1332:     inject_block_all: bool = None
+ 1333:     limit_auto_multi_buffer_only_for_local_buffer: bool = None
+ 1334:     limit_auto_multi_buffer_of_local_buffer: str = None
+ 1335:     limit_auto_multi_buffer_buffer: str = None
+ 1336:     set_workspace_multibuffer: int = None
+ 1337:     tile_mix_vector_loop: int = None
+ 1338:     tile_mix_cube_loop: int = None
+ 1339:     disable_auto_inject_block_sync: bool = None
+ 1340:     enable_mixed_cv: bool = None
+ 1341:     enable_dynamic_cv_pipeline: bool = None
+ 1342:     enable_tla_mode: bool = field(default=False, init=False)
+ 1343:     enable_cube_block_merge: bool = False
+ 1344:     hfusion_enable_multiple_consumer_fusion: bool = None
+ 1345:     buf_slot_num_of_veccore: int = None
+ 1346:     buf_slot_num_of_crosscore: int = None
+ 1347:     buf_slot_num_of_gm: int = None
+ 1348:
+ 1349:     # plan memory strategy: "default" (default) or "largest-first"
+ 1350:     plan_memory_strategy: str = None
+ 1351:     # Internal launch metadata.  The mode is initially derived from
+ 1352:     # compile_mode, then replaced with the mode emitted by TritonToLinalg.
+ 1353:     parallel_mode: str = field(default="simd", init=False)
+ 1354:     # Internal pure-SIMT state, derived from the effective lowering mode.
+ 1355:     is_pure_simt: bool = field(default=False, init=False)
+ 1356:     # Only takes effect on the pure-SIMT path.
+ 1357:     shared_mem_dynamic_size: int = None
+ 1358:     # Ascend 950 pure-SIMT-only option passed as -simt-optimization-mode
+ 1359:     # to bishengir-compile. Its value grammar belongs to the toolchain.
+ 1360:     # Individual digits are passed to various passes to control behavior,
+ 1361:     # and are parsed right-to-left.
+ 1362:     # For example, a value of 101 is interpreted as 0000101.
+ 1363:     # If left as 0, bishengir-compile sets this to 900101
+ 1364:     simt_optimization_mode: int = 0000000
+ 1365:     # Canonical modes: SIMD (D), SIMD with template-SIMT (P), and pure-SIMT
+ 1366:     # (T). ``unstructured_in_simt`` is an equivalent P spelling.
+ 1367:     compile_mode: str = "simd_simt_template"
+ 1368:     # disable simt fma optimization to get high precision
+ 1369:     disable_fma: bool = False
+ 1370:
+ 1371:     # superblocking factor
+ 1372:     superblock_factor: int = 1
+ 1373:
+ 1374:     # ChunkCoalescing: number of tiles along the outermost grid axis.
+ 1375:     # Auto-injected from static grid tuples; enables safe coalescing for
+ 1376:     # unmasked kernels whose grid dims are compile-time known.
+ 1377:     grid_num_tiles: int = None
+ 1378:
+ 1379:     # Deprecated names remain visible to callers that use parse_options({})
+ 1380:     # to distinguish compile options from kernel arguments. Their public
+ 1381:     # values are ignored (or routed to canonical options) before construction.
+ 1382:     add_auto_scheduling: bool = field(default=False, init=False)
+ 1383:     allow_fp8e4nv: bool = field(default=False, init=False)
+ 1384:     auto_blockify_size: int = field(default=1, init=False)
+ 1385:     auto_tile_and_bind_subblock: bool = field(default=True, init=False)
+ 1386:     code_motion: Optional[bool] = field(default=None, init=False)
+ 1387:     enable_auto_blockify: Optional[bool] = field(default=None, init=False)
+ 1388:     enable_bishengir_simt_optimization: int = field(default=0, init=False)
+ 1389:     enable_buffer_insert_optimization: bool = field(default=True, init=False)
+ 1390:     enable_cce_vf_auto_sync: Optional[bool] = field(default=None, init=False)
+ 1391:     enable_cce_vf_remove_membar: Optional[bool] = field(default=None, init=False)
+ 1392:     enable_cross_if_fusion: bool = field(default=False, init=False)
+ 1393:     enable_drop_unit_dims: Optional[bool] = field(default=None, init=False)
+ 1394:     enable_linearize: Optional[bool] = field(default=None, init=False)
+ 1395:     enable_mask_fallback_conversion: bool = field(default=False, init=False)
+ 1396:     enable_nd2nz_on_vector: bool = field(default=False, init=False)
+ 1397:     enable_select_analysis: bool = field(default=True, init=False)
+ 1398:     enable_simt_reorder_instruction: bool = field(default=False, init=False)
+ 1399:     enable_sync_block_lock: Optional[bool] = field(default=None, init=False)
+ 1400:     enable_ub_refine_opt: bool = field(default=False, init=False)
+ 1401:     enable_vf_fusion: Optional[bool] = field(default=None, init=False)
+ 1402:     force_simt_only: bool = field(default=False, init=False)
+ 1403:     force_simt_template: bool = field(default=False, init=False)
+ 1404:     graph_optimize_emit_remarks: bool = field(default=False, init=False)
+ 1405:     graph_optimize_max_rewrites_per_function: int = field(default=64, init=False)
+ 1406:     graph_optimize_rule_mask: int = field(default=DEFAULT_GRAPH_OPTIMIZATION_RULE_MASK, init=False)
+ 1407:     graph_optimize_ub_capacity_bytes: Optional[int] = field(default=None, init=False)
+ 1408:     has_auto_blockify_blacklist_op: Optional[bool] = field(default=None, init=False)
+ 1409:     inter_cache_num: Optional[int] = field(default=None, init=False)
+ 1410:     intra_cache_num: Optional[int] = field(default=None, init=False)
+ 1411:     kernel_name: str = field(default="triton_", init=False)
+ 1412:     llvm_version: int = field(default=15, init=False)
+ 1413:     load_cache_num: Optional[int] = field(default=None, init=False)
+ 1414:     mix_mode: str = field(default="", init=False)
+ 1415:     ops_reorder: Optional[bool] = field(default=None, init=False)
+ 1416:     optimize_dynamic_offset: bool = field(default=False, init=False)
+ 1417:     simt_reorder_instruction: bool = field(default=False, init=False)
+ 1418:     storage_align: Optional[bool] = field(default=None, init=False)
+ 1419:     stream: Optional[int] = field(default=None, init=False)
+ 1420:     use_bytecode: bool = field(default=False, init=False)
+ 1421:
+ 1422:     def __post_init__(self, arch, rule_mask):
+ 1423:         from triton.backends.ascend import _apply_ascend_patch
+ 1424:
+ 1425:         if self.ir_override and self.ir_override.endswith((".mlirbc", ".bcmlir")):
+
+TRITON_LATEST 62f6b54e0f2420d6b718e0d4f89fa7a464d2e78f
+third_party/ascend/backend/compiler.py:1657-1680
+source_sha256=279be2d3dce718ec831ffa4c7fe87d03d7df489f78f57bfb89dc6a20a1ad83bb
+
+ 1657:     def parse_options(self, opts) -> Any:
+ 1658:         # TODO: get available targets when building options?
+ 1659:         if self.target.backend == "npu":
+ 1660:             _warn_deprecated_ascend_env_vars()
+ 1661:             option_names = {
+ 1662:                 name
+ 1663:                 for name, option_field in NPUOptions.__dataclass_fields__.items()
+ 1664:                 if option_field.init and name not in {"arch", "compile_on_910_95"}
+ 1665:             }
+ 1666:             # Serialized NPUOptions include backend-only derived fields.  Use
+ 1667:             # those provenance markers instead of depending on every public
+ 1668:             # field being present, which changes whenever the dataclass evolves.
+ 1669:             internal_options = _is_internal_npu_options(opts, self.target.arch)
+ 1670:             # Normalize a copy, except for the legacy launch keyword below.
+ 1671:             # NPUOptions retains compatibility defaults for legacy names so
+ 1672:             # JIT and Inductor can still recognize them as compile options.
+ 1673:             normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)
+ 1674:             frontend_kind = normalized_opts.get("_frontend_kind")
+ 1675:             if frontend_kind not in (None, "triton", "tla"):
+ 1676:                 raise ValueError(f"unsupported Ascend frontend kind: {frontend_kind!r}")
+ 1677:             args = {k: normalized_opts[k] for k in option_names if k in normalized_opts}
+ 1678:             options = NPUOptions(arch=self.target.arch, **args)
+ 1679:             # Frontend identity comes from the source.
+ 1680:             # A launch keyword alone cannot select TLA.
+
+TRITON_LATEST 62f6b54e0f2420d6b718e0d4f89fa7a464d2e78f
+third_party/ascend/language/cann/libdevice.py:3883-3922
+source_sha256=7a93469e082ef2940976b78b26bd23204955e54851e8688bcdfd898310e7b0d9
+
+ 3883: @core.extern
+ 3884: @math._check_dtype(dtypes=["fp16", "fp32", "fp64"])
+ 3885: def exp(arg0, _semantic=None):
+ 3886:     """
+ 3887:     Exponential function, computes e raised to the power of x.
+ 3888:
+ 3889:     :param arg0: ``x``. Supported dtype(s): ``float32``.
+ 3890:     :type arg0: scalar or tl.tensor
+ 3891:     :return: The result of e raised to the power of x.
+ 3892:     :rtype: ``float32``
+ 3893:     """
+ 3894:     arg0 = _semantic.to_tensor(arg0)
+ 3895:     if (_is_a5_target(_semantic) or _is_a3_target(_semantic)) and arg0.dtype == core.dtype("fp32"):
+ 3896:         return core.extern_elementwise("", "", [arg0], {
+ 3897:             (core.dtype("fp32"), ): ("__hmf_exp_fp32", core.dtype("fp32")),
+ 3898:         }, is_pure=True, _semantic=_semantic)
+ 3899:     arg0 = _semantic.to_tensor(arg0)
+ 3900:     return core.tensor(_semantic.builder.create_exp(arg0.handle), arg0.type)
+ 3901:
+ 3902:
+ 3903: @core.extern
+ 3904: @math._check_dtype(dtypes=["fp32", "fp64"])
+ 3905: def exp2(arg0, _semantic=None):
+ 3906:     """
+ 3907:     Base-2 exponential function, computes 2 raised to the power of x.
+ 3908:
+ 3909:     :param arg0: ``x``. Supported dtype(s): ``float32``.
+ 3910:     :type arg0: scalar or tl.tensor
+ 3911:     :return: The result of 2 raised to the power of x.
+ 3912:     :rtype: ``float32``
+ 3913:     """
+ 3914:     arg0 = _semantic.to_tensor(arg0)
+ 3915:     if (_is_a5_target(_semantic) or _is_a3_target(_semantic)) and arg0.dtype == core.dtype("fp32"):
+ 3916:         return core.extern_elementwise("", "", [arg0], {
+ 3917:             (core.dtype("fp32"), ): ("__hmf_exp2_fp32", core.dtype("fp32")),
+ 3918:         }, is_pure=True, _semantic=_semantic)
+ 3919:     arg0 = _semantic.to_tensor(arg0)
+ 3920:     return core.tensor(_semantic.builder.create_exp2(arg0.handle), arg0.type)
+ 3921:
+ 3922:

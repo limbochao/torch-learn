@@ -1,0 +1,275 @@
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:5500-5552
+source_sha256=4a803679e3f268902ede150e991eaa6660009e4710da7b22b3dc98fbcc44a5e1
+
+ 5500:                     # A load from an invalidated store requires us to
+ 5501:                     # keep the actual buffer around
+ 5502:                     V.kernel.must_keep_buffers.add(name)
+ 5503:                 if free_symbol_is_type(index, NPUSymT.TMP):
+ 5504:                     return self.indirect_load(name, index)
+ 5505:                 store_cache = self.cse.store_cache
+ 5506:                 if name in store_cache:
+ 5507:                     return self.load(name, index)
+ 5508:                 out = self.load(name, index)
+ 5509:                 # count load that is not in the store_cache, and also not in the
+ 5510:                 # cse cache.
+ 5511:                 if out.use_count == 1:
+ 5512:                     self.num_load += 1
+ 5513:                 return out
+ 5514:
+ 5515:             @staticmethod
+ 5516:             def _update_store_cache(name: str, value: CSEVariable):
+ 5517:                 self.cse.store_cache[name] = value
+ 5518:                 if self.current_node and name in V.graph.name_to_buffer:
+ 5519:                     buf = self.current_node.get_output(name)
+ 5520:                     for other_name in buf.get_mutations():
+ 5521:                         self.cse.store_cache[other_name] = value
+ 5522:
+ 5523:             @staticmethod
+ 5524:             def store(
+ 5525:                 name: str, index: sympy.Expr, value: CSEVariable, mode: StoreMode = None
+ 5526:             ) -> None:
+ 5527:                 self.store_buffer_names.add(name)
+ 5528:                 if mode is None:
+ 5529:                     CSEProxy._update_store_cache(name, value)
+ 5530:                 if name not in V.graph.removed_buffers:
+ 5531:                     return self.store(name, index, value, mode=mode)
+ 5532:                 return None  # type: ignore[return-value]
+ 5533:
+ 5534:             @staticmethod
+ 5535:             def store_reduction(name: str, index: sympy.Expr, value: CSEVariable):
+ 5536:                 self.store_buffer_names.add(name)
+ 5537:                 CSEProxy._update_store_cache(name, value)
+ 5538:
+ 5539:                 if name not in V.graph.removed_buffers:
+ 5540:                     return self.store_reduction(name, index, value)
+ 5541:                 raise RuntimeError("store_reduction")
+ 5542:
+ 5543:             @staticmethod
+ 5544:             def reduction(
+ 5545:                 dtype: torch.dtype,
+ 5546:                 src_dtype: torch.dtype,
+ 5547:                 reduction_type: ReductionType,
+ 5548:                 value: CSEVariable | tuple[CSEVariable, ...],
+ 5549:             ) -> CSEVariable | tuple[CSEVariable, ...]:
+ 5550:                 self.num_reduction += 1
+ 5551:                 return self.reduction(dtype, src_dtype, reduction_type, value)
+ 5552:
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:5905-5920
+source_sha256=4a803679e3f268902ede150e991eaa6660009e4710da7b22b3dc98fbcc44a5e1
+
+ 5905:                     )
+ 5906:                     indirect_var = self.cse.generate(self.compute, line, dtype=dtype)
+ 5907:                     line = f"tl.reshape({store_var}, ({before_scatter_shape}))"
+ 5908:                     store_var = self.cse.generate(self.compute, line, dtype=dtype)
+ 5909:                 line = f"extension.scatter_ub_to_out({var}, {store_var}, {indirect_var}, {boundary}, {indirect_dim}, {dst_stride}, ({axis_shape_val}, ), ({tiling_offset_val}, ))"  # noqa: B950
+ 5910:                 return self.cse.generate(self.compute, line, dtype=dtype)
+ 5911:
+ 5912:         super().__enter__()
+ 5913:         if not self.overrides:
+ 5914:             raise RuntimeError("assert self.overrides")
+ 5915:         parent_handler = self.overrides()
+ 5916:         self.exit_stack.enter_context(V.set_ops_handler(CSEProxy()))
+ 5917:         self.exit_stack.enter_context(V.set_kernel_handler(self))
+ 5918:         return self
+ 5919:
+ 5920:     def call_kernel(self, name: str, node: IRNode | None = None, deallocate_ws: bool = True, origin_node=None):
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton.py:4688-4728
+source_sha256=4a803679e3f268902ede150e991eaa6660009e4710da7b22b3dc98fbcc44a5e1
+
+ 4688:     def load(self, name: str, index: sympy.Expr):
+ 4689:         """
+ 4690:         NPU implement of load ops, add nddma feature
+ 4691:         """
+ 4692:
+ 4693:         var = self.args.input(name)
+ 4694:         original_index = index
+ 4695:         store_cache = self.cse.store_cache
+ 4696:         if name in store_cache:
+ 4697:             result_var = store_cache[name]
+ 4698:             return result_var
+ 4699:
+ 4700:         index_analyze = IndexAnalysis(self, index)
+ 4701:         nddma_switch = npu_config.nddma_switch
+ 4702:         indirect_indexing = self.is_indirect_indexing(index)
+ 4703:         indexing = self.indexing(
+ 4704:             index,
+ 4705:             nddma=nddma_switch,
+ 4706:             block_ptr=True,
+ 4707:             index_analyze=index_analyze,
+ 4708:         )
+ 4709:         has_rindex = indexing.has_rindex()
+ 4710:         has_tmpmask = indexing.has_tmpmask()
+ 4711:         ep = ""
+ 4712:         if (
+ 4713:             V.graph.get_dtype(name) != torch.bool
+ 4714:             and indexing.has_mask()
+ 4715:             and (
+ 4716:                 self._load_other is not None
+ 4717:                 or has_tmpmask
+ 4718:                 or has_rindex
+ 4719:                 or isinstance(original_index, sympy.Integer)
+ 4720:             )
+ 4721:         ):
+ 4722:             # Honor ops.masked's fill value, including signed zero. Retain the
+ 4723:             # NPU bool-load exclusion; its explicit fill is selected below.
+ 4724:             if self._load_other is not None:
+ 4725:                 other = f", other={constant_repr(self._load_other)}"
+ 4726:             else:
+ 4727:                 other = ", other=0.0"
+ 4728:         else:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/common.py:2171-2186
+source_sha256=bb56bdbbaf16a5c9cc9eaceac6237e53187d9994cdaf860ffd1f0be8f9b94496
+
+ 2171:             metrics.generated_kernel_count += 1
+ 2172:         self.args = args or KernelArgs()
+ 2173:         self.loads = IndentedBuffer()
+ 2174:         self.compute = IndentedBuffer()
+ 2175:         self.stores = IndentedBuffer()
+ 2176:
+ 2177:         self.atomic_add_found = False
+ 2178:         self.num_load = 0
+ 2179:         self.num_store = 0
+ 2180:         self.num_reduction = 0
+ 2181:
+ 2182:         self.cse: CSE[CSEVariableType, Any] = CSE(self.newvar_prefix, self.suffix)
+ 2183:         self.must_keep_buffers: OrderedSet[str] = OrderedSet()
+ 2184:         self.store_buffer_names: OrderedSet[str] = OrderedSet()
+ 2185:         self._load_mask: str | None = None
+ 2186:         self._load_other: None | int | float = None
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/common.py:2870-2926
+source_sha256=bb56bdbbaf16a5c9cc9eaceac6237e53187d9994cdaf860ffd1f0be8f9b94496
+
+ 2870:     def load(self, name: str, index: sympy.Expr) -> CSEVariable:
+ 2871:         if name in self.kernel.cse.invalidated_stores:
+ 2872:             # A load from an invalidated store requires us to
+ 2873:             # keep the actual buffer around
+ 2874:             V.kernel.must_keep_buffers.add(name)
+ 2875:         if free_symbol_is_type(index, SymT.TMP):
+ 2876:             return self.kernel.indirect_load(name, index)
+ 2877:         store_cache = self.kernel.cse.store_cache
+ 2878:         if name in store_cache:
+ 2879:             return store_cache[name]
+ 2880:         out = self.kernel.load(name, index)
+ 2881:         # count load that is not in the store_cache, and also not in the
+ 2882:         # cse cache.
+ 2883:         if out.use_count == 1:
+ 2884:             self.kernel.num_load += 1
+ 2885:         return out
+ 2886:
+ 2887:     def _update_store_cache(self, name: str, value: CSEVariable) -> None:
+ 2888:         self.kernel.cse.store_cache[name] = value
+ 2889:         if self.kernel.current_node and name in V.graph.name_to_buffer:
+ 2890:             buf = self.kernel.current_node.get_output(name)
+ 2891:             for other_name in buf.get_mutations():
+ 2892:                 self.kernel.cse.store_cache[other_name] = value
+ 2893:
+ 2894:     def store(
+ 2895:         self, name: str, index: sympy.Expr, value: CSEVariable, mode: StoreMode = None
+ 2896:     ) -> None:
+ 2897:         self.kernel.store_buffer_names.add(name)
+ 2898:         # Update store cache when mode is None or "tma"
+ 2899:         if mode != "atomic_add":
+ 2900:             self._update_store_cache(name, value)
+ 2901:         if name not in V.graph.removed_buffers:
+ 2902:             self.kernel.store(name, index, value, mode=mode)
+ 2903:             self.kernel.num_store += 1
+ 2904:
+ 2905:     def device_assert_async(self, cond: CSEVariable, msg: str) -> None:
+ 2906:         self.kernel.device_assert_async(cond, msg)
+ 2907:
+ 2908:     # pyrefly: ignore [bad-override]
+ 2909:     def partial_accumulate(self, *args: Any) -> None:
+ 2910:         self.kernel.partial_accumulate(*args)
+ 2911:
+ 2912:     def store_reduction(self, name: str, index: sympy.Expr, value: CSEVariable) -> None:
+ 2913:         self.kernel.store_buffer_names.add(name)
+ 2914:         self._update_store_cache(name, value)
+ 2915:
+ 2916:         if name not in V.graph.removed_buffers:
+ 2917:             self.kernel.num_store += 1
+ 2918:             return self.kernel.store_reduction(name, index, value)
+ 2919:
+ 2920:     def reduction(
+ 2921:         self,
+ 2922:         dtype: torch.dtype,
+ 2923:         src_dtype: torch.dtype,
+ 2924:         reduction_type: ReductionType,
+ 2925:         value: CSEVariable | tuple[CSEVariable, ...],
+ 2926:     ) -> CSEVariable | tuple[CSEVariable, ...]:
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:3147-3155
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 3147:         if self.cooperative_reduction:
+ 3148:             self.init_cooperative_reduction_mask()
+ 3149:
+ 3150:         self.has_load_with_contiguous_rdim = False
+ 3151:         # We track the store name since a store can be canceled later
+ 3152:         self.stores_with_contiguous_rdim: list[str] = []
+ 3153:
+ 3154:     def triton_tensor_ndim(self) -> int:
+ 3155:         return sum(int(tree.tensor_dim is not None) for tree in self.range_trees)
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:3200-3217
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 3200:
+ 3201:         if len(reduce_vars) == 0:
+ 3202:             return False
+ 3203:
+ 3204:         # for expression "x0 + 150528*((x1//(s27*s38))) + 3*(ModularIndexing(x1, 1, s38)) + 672*(ModularIndexing(x1, s38, s27))"
+ 3205:         # stride_vars will results in DivisionByZero error
+ 3206:         try:
+ 3207:             stride_vars = V.graph.sizevars.stride_vars(index, reduce_vars, support_vars)
+ 3208:         except ZeroDivisionError:
+ 3209:             return False
+ 3210:
+ 3211:         return any(stride == 1 for stride in stride_vars)
+ 3212:
+ 3213:     @property
+ 3214:     def has_store_with_contiguous_rdim(self) -> bool:
+ 3215:         return not all(
+ 3216:             is_buffer_removed(name) for name in self.stores_with_contiguous_rdim
+ 3217:         )
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:4145-4170
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 4145:         load_counts[name] += 1
+ 4146:         make_line: Callable[[str], str | DelayReplaceLine] = identity
+ 4147:         indirect_indexing = self.is_indirect_indexing(index)
+ 4148:         original_index = index
+ 4149:         dtype = V.graph.get_dtype(name)
+ 4150:         uses_uint8_storage = use_uint8_triton_storage_for_cuda_float8_e4m3fn(dtype, var)
+ 4151:         indexing = self.indexing(
+ 4152:             index,
+ 4153:             block_ptr=True,
+ 4154:             tma_compatibility_checker=self.tma_compatibility_checker_cls(
+ 4155:                 self,
+ 4156:                 dtype,
+ 4157:                 for_store=False,
+ 4158:                 force=getattr(self, "tma_load_for_template_epilogue", False),
+ 4159:                 buffer_name=name,
+ 4160:             ),
+ 4161:         )
+ 4162:
+ 4163:         if isinstance(indexing, IndexingOptions) and self._has_stride1_on_rdim(
+ 4164:             indexing.index
+ 4165:         ):
+ 4166:             self.has_load_with_contiguous_rdim = True
+ 4167:
+ 4168:         has_rindex = indexing.has_rindex()
+ 4169:         has_tmpmask = indexing.has_tmpmask()
+ 4170:

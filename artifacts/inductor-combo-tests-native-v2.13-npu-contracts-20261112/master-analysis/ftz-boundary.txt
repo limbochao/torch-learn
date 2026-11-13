@@ -1,0 +1,275 @@
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/codegen/triton.py:6173-6188
+source_sha256=76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8
+
+ 6173:
+ 6174:         return imports.getvalue()
+ 6175:
+ 6176:     @classmethod
+ 6177:     def triton_meta_common(cls):
+ 6178:         return {
+ 6179:             "enable_fp_fusion": not config.emulate_precision_casts,
+ 6180:             "launch_pdl": cls._enable_pdl_codegen(),
+ 6181:             "disable_ftz": config.eager_numerics.disable_ftz,
+ 6182:         }
+ 6183:
+ 6184:     @classmethod
+ 6185:     def inductor_meta_common(cls):
+ 6186:         inductor_meta = {
+ 6187:             "backend_hash": torch.utils._triton.triton_hash_with_backend(),
+ 6188:             "assert_indirect_indexing": config.assert_indirect_indexing,
+
+TORCH cf30153c4c131c8164ee7798e5022d810682e2cb
+torch/_inductor/runtime/triton_heuristics.py:1067-1110
+source_sha256=87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923
+
+ 1067:         """
+ 1068:         Create options to pass to triton.compile based on the compile metadata
+ 1069:         and the given config.
+ 1070:         """
+ 1071:         options = {
+ 1072:             "num_warps": compile_meta["num_warps"],
+ 1073:             "num_stages": compile_meta["num_stages"],
+ 1074:             "debug": compile_meta["debug"],
+ 1075:             "sanitize_overflow": False,  # turn off additional asserts added for overflow checks
+ 1076:         }
+ 1077:         if "enable_fp_fusion" in compile_meta:
+ 1078:             options["enable_fp_fusion"] = compile_meta["enable_fp_fusion"]
+ 1079:         if HAS_WARP_SPEC:
+ 1080:             options.update(
+ 1081:                 {
+ 1082:                     "num_consumer_groups": compile_meta.get("num_consumer_groups", 0),
+ 1083:                     "num_buffers_warp_spec": compile_meta.get(
+ 1084:                         "num_buffers_warp_spec", 0
+ 1085:                     ),
+ 1086:                 }
+ 1087:             )
+ 1088:         if self.device_props.type == "cuda":
+ 1089:             options.update(
+ 1090:                 {
+ 1091:                     "launch_cooperative_grid": compile_meta.get(
+ 1092:                         "launch_cooperative_grid", False
+ 1093:                     ),
+ 1094:                     "launch_pdl": compile_meta.get("launch_pdl", False),  # True
+ 1095:                 }
+ 1096:             )
+ 1097:             if compile_meta.get("disable_ftz", False):
+ 1098:                 options["enable_reflect_ftz"] = False
+ 1099:             for k in tlx_only_cuda_options():
+ 1100:                 if v := getattr(cfg, k, None):
+ 1101:                     options[k] = v
+ 1102:         if self.device_props.type == "hip":
+ 1103:             # HIP backend options are consumed by Triton out-of-band from the kernel
+ 1104:             # signature. They are intentionally *not* present in `constants`.
+ 1105:             options.update(compile_meta.get("backend_options", {}))
+ 1106:
+ 1107:         if self.device_props.type == "xpu" and XPU_KERNEL_FORMAT == "zebin":
+ 1108:             options["generate_native_code"] = True
+ 1109:
+ 1110:         return options
+
+NPU 44555141711c0c825c5a201e303dcadad1f5fcb4
+torch_npu/_inductor/codegen/triton_combo_kernel.py:194-213
+source_sha256=5bd282aee7759abc472217a6a7976869335e480d65b2f43d892c8148e2ddd3b0
+
+  194:         triton_meta = {
+  195:             "signature": signature_to_meta(
+  196:                 signature, size_dtype=size_dtype, argdefs=argdefs
+  197:             ),
+  198:             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+  199:             "constants": {
+  200:                 signature[index].name: 1 for index in equal_1_arg_indices(signature)
+  201:             },
+  202:             "mix_mode": "aiv"
+  203:         }
+  204:
+  205:         triton_meta["configs"] = [config_of(signature)]
+  206:         mutated_args = self.get_mutated_args_sub_kernels()
+  207:         inductor_meta = self.sub_kernels[0].create_inductor_meta()
+  208:         self.sub_kernels[0]._disable_grouped_autotune(
+  209:             inductor_meta, "Combo kernels do not support grouped autotune"
+  210:         )
+  211:         # Keep runtime BLOCK arguments, but use the actual Combo signature
+  212:         # rather than a member's cached grouped plan.
+  213:         inductor_meta["runtime_block_arg_names"] = tuple(self.block_args)
+
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+ascend-compiler.py:1245-1375
+source_sha256=710158edfd5c3e6935e0f93cbc306ebf9e7d42ead8137263158e5767b3ff645c
+
+ 1245: @dataclass(frozen=True)
+ 1246: class NPUOptions:
+ 1247:     debug: bool = False
+ 1248:     sanitize_overflow: bool = True
+ 1249:     # Backend-only construction input.  AscendBackend.parse_options injects
+ 1250:     # GPUTarget.arch and never forwards a user-supplied compile option.
+ 1251:     arch: InitVar[str] = ""
+ 1252:     rule_mask: InitVar[int] = DEFAULT_GRAPH_OPTIMIZATION_RULE_MASK
+ 1253:     # This becomes compiler metadata, so its name must also be valid for the
+ 1254:     # namedtuple constructed by CompiledKernel on Python 3.10.
+ 1255:     target_arch: str = field(init=False, repr=False)
+ 1256:
+ 1257:     cluster_dims: tuple = (1, 1, 1)
+ 1258:     num_warps: int = 32
+ 1259:     num_ctas: int = 1
+ 1260:     # Keep an omitted stage count distinct from an explicit mode.
+ 1261:     num_stages: Optional[int] = None
+ 1262:     # Ascend threads-per-warp is a backend capability, not a compile option.
+ 1263:     warp_size: int = field(default=32, init=False)
+ 1264:     ir_override: Optional[str] = None  # filename of a user-defined IR (*.{ttir|ttadapter|npubin})
+ 1265:
+ 1266:     # Deprecated constructor-only compatibility input.  The supplied value is
+ 1267:     # ignored and replaced with the lowering selector derived from GPUTarget.arch.
+ 1268:     compile_on_910_95: Optional[bool] = field(default=None, repr=False, kw_only=True)
+ 1269:     enable_warp_specialization: bool = False
+ 1270:     enable_persistent: bool = False
+ 1271:     optimize_epilogue: bool = False
+ 1272:     enable_fp_fusion: bool = True
+ 1273:     launch_cooperative_grid: bool = False
+ 1274:     backend_name: str = 'cann'
+ 1275:     instrumentation_mode: str = ""
+ 1276:     # Proton profile scratch bytes per block; 0 (default) keeps the
+ 1277:     # driver-side profile scratch path inert.
+ 1278:     profile_scratch_size: int = 0
+ 1279:     enable_graph_optimize: bool = True
+ 1280:     supported_fp8_dtypes: Tuple[str] = ("fp8e5", "fp8e4b15", "fp8e4nv", "fp8e4b8", "fp8e5b16")
+ 1281:     deprecated_fp8_dtypes: Tuple[str] = ()
+ 1282:     deprecated_fp8_dot_operand_dtypes: Tuple[str] = ()
+ 1283:     vf_merge_level: int = 1
+ 1284:     default_dot_input_precision: str = "ieee"
+ 1285:     allowed_dot_input_precisions: Tuple[str] = ("ieee", "hf32")
+ 1286:     max_num_imprecise_acc_default: int = 0
+ 1287:     extern_libs: dict = None
+ 1288:     # Backend-managed BiSheng arguments. Keep the name discoverable so legacy
+ 1289:     # launch keywords are accepted, but never forward a user-supplied value.
+ 1290:     bisheng_options: Optional[str] = field(default=None, init=False)
+ 1291:     multibuffer: bool = True
+ 1292:     # Public dictionaries are stored as sorted pairs for hashing and JSON caches.
+ 1293:     multibuffer_mode: Optional[Union[Dict[str, int], Tuple[Tuple[str, int], ...]]] = None
+ 1294:     vf_fusion_mode: str = None
+ 1295:     enable_ubuf_saving: bool = None
+ 1296:     disable_size_align_for_cast: bool = None
+ 1297:     enable_preload: bool = None
+ 1298:     enable_auto_bind_sub_block: bool = None
+ 1299:     disable_tightly_coupled_buffer_reuse: bool = False
+ 1300:     enable_hivm_auto_cv_balance: bool = None
+ 1301:     # Temporary 910_95 switch; the NPU compiler plans to make this default in Q4.
+ 1302:     enable_hivm_batch_matmul: bool = False
+ 1303:     # Only takes effect on the Ascend 950 non-pure-SIMT BiShengIR compilation path.
+ 1304:     enable_vf_stack_limit: bool = False
+ 1305:     sync_solver: bool = None
+ 1306:     unit_flag: bool = None
+ 1307:     enable_flatten: bool = None
+ 1308:     enable_auto_vectorize_v2: bool = None
+ 1309:     auto_vectorize_v2_max_fused_ops_num: int = None
+ 1310:     prevec_max_fused_ops_num: int = None
+ 1311:     inject_barrier_all: bool = None
+ 1312:     inject_block_all: bool = None
+ 1313:     limit_auto_multi_buffer_only_for_local_buffer: bool = None
+ 1314:     limit_auto_multi_buffer_of_local_buffer: str = None
+ 1315:     limit_auto_multi_buffer_buffer: str = None
+ 1316:     set_workspace_multibuffer: int = None
+ 1317:     tile_mix_vector_loop: int = None
+ 1318:     tile_mix_cube_loop: int = None
+ 1319:     disable_auto_inject_block_sync: bool = None
+ 1320:     enable_mixed_cv: bool = None
+ 1321:     enable_dynamic_cv_pipeline: bool = None
+ 1322:     enable_tla_mode: bool = field(default=False, init=False)
+ 1323:     enable_cube_block_merge: bool = False
+ 1324:     hfusion_enable_multiple_consumer_fusion: bool = None
+ 1325:     buf_slot_num_of_veccore: int = None
+ 1326:     buf_slot_num_of_crosscore: int = None
+ 1327:     buf_slot_num_of_gm: int = None
+ 1328:
+ 1329:     # plan memory strategy: "default" (default) or "largest-first"
+ 1330:     plan_memory_strategy: str = None
+ 1331:     # Internal launch metadata.  The mode is initially derived from
+ 1332:     # compile_mode, then replaced with the mode emitted by TritonToLinalg.
+ 1333:     parallel_mode: str = field(default="simd", init=False)
+ 1334:     # Internal pure-SIMT state, derived from the effective lowering mode.
+ 1335:     is_pure_simt: bool = field(default=False, init=False)
+ 1336:     # Only takes effect on the pure-SIMT path.
+ 1337:     shared_mem_dynamic_size: int = None
+ 1338:     # Ascend 950 pure-SIMT-only option passed as -simt-optimization-mode
+ 1339:     # to bishengir-compile. Its value grammar belongs to the toolchain.
+ 1340:     # Individual digits are passed to various passes to control behavior,
+ 1341:     # and are parsed right-to-left.
+ 1342:     # For example, a value of 101 is interpreted as 0000101.
+ 1343:     # If left as 0, bishengir-compile sets this to 900101
+ 1344:     simt_optimization_mode: int = 0000000
+ 1345:     # Canonical modes: SIMD (D), SIMD with template-SIMT (P), and pure-SIMT
+ 1346:     # (T). ``unstructured_in_simt`` is an equivalent P spelling.
+ 1347:     compile_mode: str = "simd_simt_template"
+ 1348:     # disable simt fma optimization to get high precision
+ 1349:     disable_fma: bool = False
+ 1350:
+ 1351:     # superblocking factor
+ 1352:     superblock_factor: int = 1
+ 1353:
+ 1354:     # ChunkCoalescing: number of tiles along the outermost grid axis.
+ 1355:     # Auto-injected from static grid tuples; enables safe coalescing for
+ 1356:     # unmasked kernels whose grid dims are compile-time known.
+ 1357:     grid_num_tiles: int = None
+ 1358:
+ 1359:     # Deprecated names remain visible to callers that use parse_options({})
+ 1360:     # to distinguish compile options from kernel arguments. Their public
+ 1361:     # values are ignored (or routed to canonical options) before construction.
+ 1362:     add_auto_scheduling: bool = field(default=False, init=False)
+ 1363:     allow_fp8e4nv: bool = field(default=False, init=False)
+ 1364:     auto_blockify_size: int = field(default=1, init=False)
+ 1365:     auto_tile_and_bind_subblock: bool = field(default=True, init=False)
+ 1366:     code_motion: Optional[bool] = field(default=None, init=False)
+ 1367:     enable_auto_blockify: Optional[bool] = field(default=None, init=False)
+ 1368:     enable_bishengir_simt_optimization: int = field(default=0, init=False)
+ 1369:     enable_buffer_insert_optimization: bool = field(default=True, init=False)
+ 1370:     enable_cce_vf_auto_sync: Optional[bool] = field(default=None, init=False)
+ 1371:     enable_cce_vf_remove_membar: Optional[bool] = field(default=None, init=False)
+ 1372:     enable_cross_if_fusion: bool = field(default=False, init=False)
+ 1373:     enable_drop_unit_dims: Optional[bool] = field(default=None, init=False)
+ 1374:     enable_linearize: Optional[bool] = field(default=None, init=False)
+ 1375:     enable_mask_fallback_conversion: bool = field(default=False, init=False)
+
+TRITON_INSTALLED installed Triton 3.6.0; not asserted to be latest triton-ascend master
+ascend-compiler.py:1637-1676
+source_sha256=710158edfd5c3e6935e0f93cbc306ebf9e7d42ead8137263158e5767b3ff645c
+
+ 1637:     def parse_options(self, opts) -> Any:
+ 1638:         # TODO: get available targets when building options?
+ 1639:         if self.target.backend == "npu":
+ 1640:             _warn_deprecated_ascend_env_vars()
+ 1641:             option_names = {
+ 1642:                 name
+ 1643:                 for name, option_field in NPUOptions.__dataclass_fields__.items()
+ 1644:                 if option_field.init and name not in {"arch", "compile_on_910_95"}
+ 1645:             }
+ 1646:             # Serialized NPUOptions include backend-only derived fields.  Use
+ 1647:             # those provenance markers instead of depending on every public
+ 1648:             # field being present, which changes whenever the dataclass evolves.
+ 1649:             internal_options = _is_internal_npu_options(opts, self.target.arch)
+ 1650:             # Normalize a copy, except for the legacy launch keyword below.
+ 1651:             # NPUOptions retains compatibility defaults for legacy names so
+ 1652:             # JIT and Inductor can still recognize them as compile options.
+ 1653:             normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)
+ 1654:             frontend_kind = normalized_opts.get("_frontend_kind")
+ 1655:             if frontend_kind not in (None, "triton", "tla"):
+ 1656:                 raise ValueError(f"unsupported Ascend frontend kind: {frontend_kind!r}")
+ 1657:             args = {k: normalized_opts[k] for k in option_names if k in normalized_opts}
+ 1658:             options = NPUOptions(arch=self.target.arch, **args)
+ 1659:             # Frontend identity comes from the source.
+ 1660:             # A launch keyword alone cannot select TLA.
+ 1661:             object.__setattr__(options, "enable_tla_mode", frontend_kind == "tla")
+ 1662:             # Lazy init enable_dynamic_cv_pipeline if not provided.
+ 1663:             # compile_on_910_95 is already resolved from the requested target.
+ 1664:             if options.enable_dynamic_cv_pipeline is None:
+ 1665:                 object.__setattr__(options, "enable_dynamic_cv_pipeline", options.compile_on_910_95)
+ 1666:             if not internal_options:
+ 1667:                 _normalize_bishengir_simt_optimization_for_context(options, normalized_opts)
+ 1668:                 # Community JIT rejects the legacy launch keyword "stream"
+ 1669:                 # even when options.__dict__ recognizes it. Consume it at
+ 1670:                 # the Ascend boundary; the returned compatibility field stays
+ 1671:                 # None and the runtime still selects the current stream.
+ 1672:                 opts.pop("stream", None)
+ 1673:         else:
+ 1674:             raise NotImplementedError(f"Backend '{self.target.backend}' is not supported. "
+ 1675:                                       "Please ensure the target backend is set to 'npu'.")
+ 1676:         return options
