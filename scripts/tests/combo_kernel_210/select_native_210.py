@@ -13,7 +13,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 DEFAULT_SOURCE = REPO.parent / "Community-Use-Case-Testing/v2.10.0/test_inductor"
-DEFAULT_TABLE = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-v2.13.csv"
+DEFAULT_TABLE = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"
 DEFAULT_OUTPUT = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-native-v2.10.csv"
 
 
@@ -78,7 +78,7 @@ def main():
         file, name = row["测试文件"], row["函数名"]
         hits = cache[file].get(name, [])
         methods = [hit for hit in hits if hit["kind"] == "method"]
-        if row["类型"] == "嵌套函数":
+        if row["执行范围"] == "随外层方法验证":
             status = "nested" if hits else "absent"
         elif not methods:
             status = "absent"
@@ -91,12 +91,12 @@ def main():
                 seen.add(key)
                 selected.append({
                     "file": file, "name": name, "class": key[1],
-                    "support": row["v2.10.0存在性"],
+                    "support": row["v2.10.0存在性/实现差异"],
                 })
                 table.append({
                     "测试文件": file,
                     "函数名": name,
-                    "存在性/实现差异": row["v2.10.0存在性"],
+                    "存在性/实现差异": row["v2.10.0存在性/实现差异"],
                     "2.10 原生执行说明": execution_note(file, name),
                     "执行状态": "待收集、未执行",
                 })

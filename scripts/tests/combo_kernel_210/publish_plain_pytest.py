@@ -19,6 +19,14 @@ def command(args, **kwargs):
     return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
 
 
+def online_status(job, online_nodes):
+    nodes = set(job.get("full_nodes", job.get("nodes", ())))
+    count = len(nodes & online_nodes)
+    if not count:
+        return "否"
+    return "是" if count == len(nodes) else f"部分（{count}/{len(nodes)}）"
+
+
 def baseline_pass_methods():
     path = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"
     with path.open(encoding="utf-8-sig", newline="") as stream:
@@ -111,6 +119,8 @@ def render_and_publish(args, state, artifact, table_name, terminal):
     jobs_file = artifact / "jobs.json"
     jobs = json.loads(jobs_file.read_text()) if jobs_file.exists() else []
     by_method = {(row["file"], row["class"], row["name"]): row for row in jobs}
+    online_list = REPO / "scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt"
+    online_nodes = {line.strip() for line in online_list.read_text().splitlines() if line.strip()}
     priority = baseline_pass_methods() if layout.exists() else {}
     analysis_file = artifact / "current-analysis.json"
     analyses = json.loads(analysis_file.read_text()) if analysis_file.exists() else {}
@@ -160,8 +170,7 @@ def render_and_publish(args, state, artifact, table_name, terminal):
             analysis = overlap_analysis(job, detail, analysis)
         key = f"{row['file']}::{row['class']}::{source_name}"
         if job.get("status") != "PASS" and key in analyses:
-            prefix = "2.10 基线 PASS；" if (row["file"], source_name) in priority else ""
-            analysis = prefix + analyses[key]
+            analysis = analyses[key]
         if state["stage"] == "error" and status in ("待执行", "PENDING", "RUNNING"):
             status = "ERROR"
         instances = "; ".join(f"{key} {value}" for key, value in sorted(counts.items()))
@@ -178,7 +187,7 @@ def render_and_publish(args, state, artifact, table_name, terminal):
             status = "随外层验证/" + status
             instances = "随 " + source_name + " 验证"
         result = previous_row.copy()
-        result.update(最新结果=status, 实例结果=instances, 当前分析=analysis)
+        result.update(已上线=online_status(job, online_nodes), 最新结果=status, 实例结果=instances, 当前分析=analysis)
         rows.append(result)
     with target.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
@@ -242,8 +251,10 @@ def render_and_publish(args, state, artifact, table_name, terminal):
                  f"{state.get('instances')} 个实例；不是完整参数化全量。"
                  "实际抽样 node ID 见证据目录的 `foreach-sample-nodeids.txt`。\n")
     if layout.exists():
-        text += ("\n表格行顺序与 `inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv` 一致。"
-                 "嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数；不沿用 2.10 的排除范围。\n"
+        text += ("\n表格只维护 2.13 的用例类型、上线状态、最新结果、实例统计和当前分析。"
+                 "嵌套函数随外层方法验证，不作为独立 pytest 方法重复计数。"
+                 "“已上线”按[上线清单](../../../../scripts/tests/combo_kernel_210/"
+                 "combo_native_213_passed_nodeids.txt)逐实例匹配，当前 PASS 不自动视为已上线。\n"
                  f"已复用相同包、相同测试文件及相同 node ID 的既有结果："
                  f"`{state.get('reused_methods', 0)}` 个方法。\n")
     if priority:

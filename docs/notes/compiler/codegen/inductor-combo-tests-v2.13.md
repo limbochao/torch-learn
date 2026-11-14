@@ -9,48 +9,40 @@ published: false
 <!-- combo-section:validation213:start -->
 ## 最新执行结果
 
-2026-11-13 在 NPU_A5 Docker 的 `pta_213_case` 环境，按固定 CSV 全量重新收集和执行 105 个源方法、464 个参数实例。CSV 的 116 行包含 11
-个随外层方法验证的嵌套函数。实例结果为 **419 PASS、35 FAIL、10 SKIP**；没有抽样或复用旧执行结果。
+当前 [2.13 进展表][csv]维护 116 行：105 个独立源方法、11 行随外层验证的嵌套函数，共 464 个实例。
 
 | 范围 | PASS | FAIL | SKIP |
 | --- | ---: | ---: | ---: |
-| 2.10 重合范围 60 个方法 | 57 | 3 | 0 |
-| 2.10 重合范围 413 个实例 | 410 | 3 | 0 |
-| 重合范围外 45 个方法 | 6 | 30 | 9 |
-| 重合范围外 51 个实例 | 9 | 32 | 10 |
-| 全量 105 个方法 | 63 | 33 | 9 |
-| 全量 464 个实例 | 419 | 35 | 10 |
+| 独立源方法 | 66 | 34 | 5 |
+| 参数实例 | 422 | 36 | 6 |
 
-### 验证版本与范围
+本次仅复测 4 个软件 SKIP，结果为 **3 PASS、1 FAIL**；其余 460 个实例保留原结果及实际验证来源。
+没有重跑历史 PASS，也没有启动全量测试。[当前逐实例汇总][current-jobs]的 `validation` 字段记录各实例来源。
 
-torch_npu `2.13.0.dev20261113`，提交 `44555141711c0c825c5a201e303dcadad1f5fcb4`。
+两个输入距离用例 `test_foreach_basic`、`test_foreach_after_extern`，以及
+`test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu` 已放开门控并实际 PASS。
+`test_combo_kernel_store_mask` 放开后为 FAIL：数值通过，kernel 数量期望 1、实际 3，尚未执行最终 store mask 断言。
+日志出现归约索引轴缺失，最终生成三个普通 kernel；详见 [本次日志][store-mask-current-log]和[生成代码][store-mask-current-code]。
 
-PyTorch `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton `3.6.0`。
+### 本次验证版本与范围
 
-物理卡 1、2、3，每卡两个进程，Inductor/Triton 缓存和日志独立；没有生产代码 overlay。
+执行时间：北京时间 2026-11-14 18:40:16 至 18:43:44；NPU_A5 Docker 的 `pta_213_case` 环境，物理卡 5。
+启动前计算利用率为 0，执行时间符合该物理卡使用时段约束；使用独立 Inductor/Triton 缓存。
 
-测试分支 `fix/combo-213-210-overlap`，提交 `a3cfe564cd60cb83f4c81bab5dcd388305992ff2`，main 基线
-`91435bdf732e772c3240329797a9a29166ce533a`。
+Community 用例统一使用 `fix/combo_case`，提交 `9a86e684e2666069d203043ff5e9d2f6fd23c903`。
+4 个用例仅调整软件门控，原 body、数值/数量/mask 断言及 config decorators 均保留，见 [门控审计][software-gates-audit]。
+执行前后测试源码和安装的 Inductor Python 源码哈希一致。
 
-执行时间：北京时间 2026-11-13 18:58:49 至 2026-11-13 20:11:18。
+本次 torch_npu 为 `2.13.0+gitefc05dd`，提交 `efc05dd90b5fe31717d5f13e51fb3e49035bea30`，没有 Python overlay。
+PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton 为 `3.6.0`。
 
-Community 分支只包含与既定 60 个重合方法相关的适配，修改 3 个文件、30 个方法；范围外测试修改未迁入该分支。仅本轮验证副本加上 TMA 和三个 PDL 方法的硬件 SKIP，方法
-body 和断言保持原内容。foreach 按已确认口径保留数值、mutation、布局和梯度检查，NPU 不要求 CUDA 单 kernel／FOREACH 专属结构。
+未复测实例沿用 [原报告][jobs]：torch_npu `44555141711c0c825c5a201e303dcadad1f5fcb4`，
+测试提交 `a3cfe564cd60cb83f4c81bab5dcd388305992ff2`。本次汇总不代表 464 个实例在新版本上重新验证。
+[定向报告][software-rerun]、JUnit、源码哈希和逐实例来源共同保存实际证据。
 
-执行前后 301 个测试文件、588 个 Torch/NPU Inductor Python 文件哈希一致；其中 194 个 NPU Inductor Python
-文件与实际包提交逐项一致。三卡基础计算均通过。全部分片 JUnit 已独立重新解析，464 个实例无遗漏或跨分片重复。
-
-[2.13 PASS 清单][pass213]保留 2.10 重合范围口径，当前为 410 个实际 PASS 实例，在 2.13 NPU 测试目录执行；[全范围
-PASS][all-pass]另存在本轮证据目录。2.10 原生 397 条清单保持不变。既定 60 方法适配范围与 2.10 原生 54 方法清单的口径不同，本轮用 [60
-方法范围清单][overlap]精确划分。
-
-`test_combo_autotune_grouping_by_metadata_fingerprint` 直接调用社区 helper 和模拟 metadata；其 PASS 证明该 helper
-的分组规则，本轮未验收真实 NPU 成员 metadata 到该分组的连接。
-
-[唯一进展表][csv]保留 116 行顺序，以实际 2.13 报告维护结果、实例统计和当前分析，同表保留用例类型、2.10 源码存在性及直接运行兼容性。
-后续只定向复测最新 FAIL、SKIP 实例，执行 ERROR 也按失败处理；历史 PASS 保留实际验证来源，不重跑全量。
-参数化方法中已 PASS 的实例不随失败参数重复执行。[方法与逐实例报告][jobs]、[完整环境和分片证据][evidence]、[JUnit
-交叉核对][junit]及[Community 范围审计][scope]可追溯当前结论。
+表格只维护 2.13 的用例类型、已上线、最新结果、实例统计和简短分析。
+“已上线”以 [上线清单][pass213]为准，嵌套函数随外层方法；当前 PASS 不自动视为已上线。
+详细定位与修复方案留在下文。后续仍只选择最新 FAIL、SKIP/ERROR 实例，执行方式见 [脚本说明][run213]。
 
 <!-- combo-section:validation213:end -->
 
@@ -59,13 +51,16 @@ PASS][all-pass]另存在本轮证据目录。2.10 原生 397 条清单保持不�
 <!-- combo-section:analysis213:start -->
 ## 当前问题与按根因排序的修复队列
 
-原全量共有 **33 FAIL、9 SKIP 方法**。其中 **37 个非硬件方法（33 FAIL＋4 软件 SKIP）**进入根因队列，包括 2.10 重合范围的 3 个 FAIL；另 5 个硬件/平台协议方法保留 SKIP。下表按生成正确性、真实统计、出口、成员 ABI、调优与功能验收的依赖排序；同一用例可以覆盖多个根因。
+当前共有 **34 FAIL、5 SKIP 方法**。34 个 FAIL 进入根因队列，5 个硬件差异方法保留 SKIP；4 个软件门控已经解除。
+全范围根因表记录生成正确性、真实统计、出口、成员 ABI、调优与功能验收的依赖；同一用例可以覆盖多个根因。
+本次 `bugfix/combo_fix_meta` 的 R09—R17 按修改量、影响范围和依赖安排实施顺序，见下节。
 
-**R 表示已定位的根因/能力或验收缺口，D 表示仍需定界的数值或原生优化契约。**当前为 27 项已定位根因/缺口、3 项待定界。本文给出 22 项 Inductor 相关修复方案，均未实施；只利用固定版本源码、已有 NPU
-失败证据和一次本地源码控制流隔离复核，没有修改实现代码、上卡复测或扩张 Community 分支。CSV 原状态、410 条重合范围 2.13 PASS 清单和原全量结果保持。未实现的软件目标后续应保持
-FAIL，只有硬件差异或明确不再支持的目标可 SKIP。
+**R 表示已定位的根因/能力或验收缺口，D 表示仍需定界的数值或原生优化契约。**当前保留 26 项根因/缺口、3 项待定界。
+22 项 Inductor 实现修复方案仍未实施。软件门控已在 `fix/combo_case` 修改并定向验证，当前状态以本次逐实例汇总为准。
+未实现的软件目标保持 FAIL，硬件差异保留 SKIP；已 PASS 的用例不保留旧失败分析。
 
-全部证据固定在实际安装的 Torch/NPU 提交。[结构化根因队列及 42 方法/45 个非 PASS 实例覆盖审计][root-queue]和[10 项有效补充诊断][root-evidence]可逐项追溯；无效的早期 hook/仍未解除 skip 的记录已排除。
+根因源码与原始诊断固定在各自实际安装的 Torch/NPU 提交，见 [原根因审计][root-queue]和[固定补充证据][root-evidence]。
+本次 [定向报告][software-rerun]和[当前汇总][current-jobs]记录软件门控解除后的实际状态与验证版本。
 
 这里的“成员”是 Combo 中保留独立计算域的一条分支。ABI 指生成 body 与 launcher 之间参数名、类型和值的约定；TTIR 是 Triton 编译的中间表示，校验失败后可能退回普通 kernel。CSE（公共子表达式消除）用缓存复用相同计算，计数应排除这类复用。block tensor 是 DSL 中向量/矩阵形状的值，标量只有一个值。fingerprint 由真实尺寸和优化字段判断候选是否等价；坐标下降在固定其他配置时，依次改变一组分块参数并实测。
 
@@ -79,29 +74,68 @@ FAIL，只有硬件差异或明确不再支持的目标可 SKIP。
 | 统计、metadata、成本和追踪，9 项 | R09—R17 | 分开修 producer、逐成员出口、GB/FLOP/benchmark、图阶段值和真实 origins。 |
 | NPU Combo 新功能，7 项 | R18—R24 | 成员独立 block/body/grid/runtime ABI、默认拼接、顺序调优、真实分组、坐标下降、异构打包、联合归约。 |
 | 跨层接口，1 项 | R25 FTZ | 分开列 Inductor 的 flag 传递和 Triton Ascend 的实际 option/数学消费者。 |
-| 不属于生产 Inductor | R05 eager；R06/R07/R08 测试门控/观测；R26 峰值验收前提 | 保留定界与验收入口，本次不提出生产 Inductor 修复。 |
+| 不属于生产 Inductor | R05 eager；R07/R08 测试观测；R26 峰值验收前提 | 保留定界与验收入口，本次不提出生产 Inductor 修复。 |
 | 仍待定界 | D01 精度责任；D03 共享/独立资源；D04 大 R 优化资格 | 明确下一份证据和判定分支，不给猜测性修复。 |
 
-先修 R27 的跨 kernel 状态，使候选、实际生成和回退各使用自己的索引，再修 rank/dtype/mask。
-R09/R10/R11 的真实 producer 完成后接 R12；R13→R14→R15 形成同源成本出口。
-R18 完成成员 ABI 后再接默认配置和调优消费者。P0 的 D01 可并行定界，不作为已确认根因的实施方案。
+生成正确性队列先处理 R27 的跨 kernel 状态，再修 rank/dtype/mask。
+统计队列中 R09/R10/R11 的真实 producer 完成后接完整 R12；R13→R14→R15 形成同源成本出口。
+R18 完成成员 ABI 后再接默认配置和调优消费者。D01 继续定界。
 
 所有“预期生成行为”和“验收计划”都是方案要求，没有修复后的 DSL 或设备 PASS。
 本地 [控制流隔离复核][axis-cache-probe]执行了固定源码的三个索引函数及实际轴使用判断，
 但符号线性化、形状证明等 helper 为 mock；它证明缓存生命周期规则，不证明完整 NPU lowering 或数值已通过。
 
-### 根因队列
+### 本次分支的实施优先级
 
-| 优先级 | 根因/定位项 | 当前判定 | 前置依赖 | 覆盖方法 |
+排期已核对本地 `pytorch_new:bugfix/combo_fix_meta`，提交 `efc05dd90b5fe31717d5f13e51fb3e49035bea30`。
+以下修改量是按当前入口评估的范围，尚无实现 diff；各实例的实际验证版本见上文及逐实例报告。
+
+先补入口集中的真实状态和已有消费者的接入，再做需要统一来源的成本链，最后处理归约布局和完整成员 metadata。
+表中的“影响范围”同时考虑代码是否共用，以及字段是否改变实际运行决策，不能只按补丁行数判断。
+
+| 执行优先级 | 顺序 | 项目 | 预计修改量 | 影响范围与排序依据 |
+| --- | ---: | --- | --- | --- |
+| 高 | 1 | [R09](#root-r09) `num_store` | 极小；1 文件、2 个计数入口 | Native Index 有效写回计数，沿用已有缓存和移除规则。 |
+| 高 | 2 | [R10](#root-r10) `atomic_add_found` | 极小；1 文件、atomic 分支状态 | 只在真实生成原子写回时置位；普通 pointwise 保持 False。 |
+| 高 | 3 | [R16](#root-r16) `optimize_mem` | 极小；1 文件、Combo 图阶段字段 | 已有 runtime 消费者；训练前向的 CPU 备份策略会变化，需核对输入保护。 |
+| 高 | 4 | [R17](#root-r17) provenance | 小；1 文件、分区节点展开与接入 | Combo 定义和追踪使用实际分区叶子，需核对缓存复用时的映射。 |
+| 中 | 5 | [R13](#root-r13) standalone FLOP | 小；1 文件、成本估算出口 | 复用已有估算器，仅在成本开关下导出；standalone 使用面较广。 |
+| 中 | 6 | [R14](#root-r14) Combo GB/FLOP | 小至中；成本来源和成员求和 | 依赖 R13，需核对实际分区、共享参数和移除 buffer 的计量口径。 |
+| 中 | 7 | [R15](#root-r15) benchmark `num_gb` | 极小；1 文件、benchmark 入参 | 依赖 R14 的有效总量，适合紧接成本聚合完成。 |
+| 后 | 8 | [R11](#root-r11) 连续归约维状态 | 中至大；轴、stride、load/store 状态 | 涉及 Native Index 方向替代、动态证明和候选输入，范围大于补字段。 |
+| 后 | 9 | [R12](#root-r12) 完整逐成员 metadata | 中；至少 2 文件、统一来源和成员出口 | 依赖 R09/R10/R11；跨 standalone/Combo，需拆开 CUDA 专属资格计算。 |
+
+建议按四个独立批次实施：**R09＋R10 → R16＋R17 → R13＋R14＋R15 → R11＋R12**。
+R09/R10 是 R12 的真实状态前置，先补状态本身不意味着缺成员字典的原 FAIL 已通过。
+R16 与 R17 没有互相依赖，可以分别提交；成本链共用一个小的估算出口，再由完整 per-kernel serializer 复用。
+
+R15 的调用点虽小，必须等 R14 提供真实 GB；把 `0` 换成 `0.0` 或固定正数没有修复价值。
+R11 的真实布局统计合理；先补可证明的状态，再核对 native 候选消费者。
+候选策略的修改有条件后置，CUDA 的归约过滤规则需单独证明等价后再接入。
+R12 可以先拆出普通计数出口，但包含 deterministic 布局的完整验收仍以 R11 为前置。
+`tiling_scores`、`add_persistent_rblock` 和 HIP 的资源字段按真实 NPU producer/consumer 判断，缺字段本身不构成照搬理由。
+
+R18—R24 的成员 block/body/grid/runtime ABI、调优和联合归约涉及多层行为，安排在这批之后。
+R25 的 FTZ 还需编译器及硬件消费证据，也后置。
+R01—R04/R27 的生成正确性缺陷仍保留独立修复队列，若目标 FAIL 在这些位置受阻，就保留其阻塞关系。
+每批只定向复验最新 FAIL、SKIP/ERROR 实例，并合并回唯一进展表；历史 PASS 及其验证来源继续保留。
+
+以上判断的 producer、图阶段、成本和追踪证据分别见 [R09/R10/R11 源码][E22]、
+[图阶段消费者][E31]、[共同成本/字段契约][E27]和 [provenance 调用链][E6]。
+
+### 全范围根因及依赖
+
+下表 P0—P3 保留全范围问题的原分类层级；本次 R09—R17 的实际执行顺序以上节为准。
+
+| 问题层级 | 根因/定位项 | 当前判定 | 前置依赖 | 覆盖方法 |
 | --- | --- | --- | --- | ---: |
 | P0 | [R27 LoopBody 的候选索引缓存跨 kernel 复用，导致 x0/y0 轴错配](#root-r27) | 失败 DSL、固定源码及 CPU 控制流隔离复核已定位；未修复 | — | 1 |
 | P0 | [R01 persistent 多轴归约的 store 指针是标量，结果却是 block tensor](#root-r01) | 生成缺陷已实测确认；未修复 | — | 2 |
 | P0 | [R02 argmin/argmax 的轴索引实际 int32，却被 CSE 标成 int64](#root-r02) | 生成缺陷已在原 pytest 实测确认；未修复 | — | 1 |
-| P0 | [R03 动态 shape/stride 符号被当成 masked subblock 的迭代轴](#root-r03) | 生成前缺陷已实测及源码确认；未修复 | R06 门控已在诊断解除 | 1 |
-| P0 | [R04 动态整数 index_expr 在实际 cast 前被声明为 FP32](#root-r04) | 生成缺陷已实测及版本源码对照确认；未修复 | R06 | 1 |
+| P0 | [R03 动态 shape/stride 符号被当成 masked subblock 的迭代轴](#root-r03) | 生成前缺陷已实测及源码确认；未修复 | — | 1 |
+| P0 | [R04 动态整数 index_expr 在实际 cast 前被声明为 FP32](#root-r04) | 生成缺陷已实测及版本源码对照确认；未修复 | — | 1 |
 | P0 | [D01 非连续多轴 FP32 sum 超差，数值责任模块尚未定界](#root-d01) | 仍 FAIL；同输入证据已固定，根因待定界 | — | 1 |
 | P1 | [R05 eager contiguous(memory_format=channels_last) 被 NPU 公共接口拒绝](#root-r05) | 原 eager 前置失败已确认；未修复 | — | 1 |
-| P1 | [R06 通用软件测试被旧 NPU/XPU decorator 提前跳过](#root-r06) | 门控原因已确认；补充诊断 3 PASS、1 FAIL，正式分支未改 | — | 4 |
 | P1 | [R07 测试固定匹配 CUDA Grid1D/XBLOCK/size_hints，未读取 NPU 真实 ABI](#root-r07) | 测试观测不兼容已确认；功能目标保留 | — | 3 |
 | P1 | [R08 profiler JSON 读取器只接受 traceEvents 字典，不接受 NPU 列表](#root-r08) | 测试数据解析根因已确认；后续 grid 尚未验收 | R05 | 2 |
 | P1 | [R09 Native Index 的有效普通/归约 store 没有维护 num_store](#root-r09) | producer 缺口已由源码确认；原用例先停在成员字典缺失 | — | 3 |
@@ -125,7 +159,8 @@ R18 完成成员 ABI 后再接默认配置和调优消费者。P0 的 D01 可并
 | P2 | [R25 disable_ftz 没有从 NPU codegen 贯通到实际编译选项/数学路径](#root-r25) | 生成/编译消费链缺口已确认；硬件非正规数能力尚未知 | — | 1 |
 | P3 | [R26 WideResNet 图没有进入 memory gate，原峰值比较未覆盖拒绝路径](#root-r26) | 验收前提缺失已实测确认；gate 本身已有实现 | — | 1 |
 
-表中覆盖数可以重叠，不能相加当成失败数。R03/R04 对 R06 的依赖是执行测试需解除门控，补充诊断已经完成；它不是需要先做的生产修复。P0 先修生成状态与语义，D01 并行定界；P1 修实际统计和出口，P2 在依赖齐备后验收新功能，P3 补有效峰值拒绝路径。
+表中覆盖数可以重叠，不能相加当成失败数。R03/R04 对应的 store_mask 已解除门控，当前正式复测为 FAIL。
+P0 记录生成状态与语义及 D01 数值定界；P1 记录前置接口、统计和出口；P2 在依赖齐备后验收新功能；P3 补有效峰值拒绝路径。
 
 ```mermaid
 flowchart LR
@@ -186,8 +221,12 @@ flowchart LR
 
 **P0 · 失败 DSL、固定源码及 CPU 控制流隔离复核已定位；未修复**。失败阶段：候选索引准备/普通 kernel 重建 → Native Index DSL/TTIR。
 
-实测/原首失败：store_mask 原全量为软件 SKIP；补充原 pytest 的候选成员轴为 x0/x1/r2，随后普通 kernel 的轴为 y0/x1/r2，却保留含 x0 的 load/store，TTIR 报
-NameError。y0 的索引/mask 未进入 body，最终数值通过、单 Combo 期望 1 实际 3。
+当前正式复测：store_mask 数值通过，单 Combo 期望 1、实际 3；最终 store mask 断言尚未执行。
+[当前日志][store-mask-current-log]记录缺失 x0/s0/s53 range entry，[最终 wrapper][store-mask-current-code]
+包含三个普通 mean kernel 定义及三次 launch，未形成目标 Combo。
+
+固定补充诊断进一步定位：候选成员轴为 x0/x1/r2，随后普通 kernel 的轴为 y0/x1/r2，却保留含 x0 的 load/store，TTIR 报
+NameError。y0 的索引/mask 未进入 body。索引准备缺陷与异构组合缺口分别按 R27/R03/R04、R23 处理。
 
 根因与代码方案源码依据：[E26][E26]、[E21][E21]。
 
@@ -232,9 +271,9 @@ y0，也不无条件补所有轴定义。
                 tmp0 = tl.load(in_ptr0 + (x0 + ks0*r2 + ks0*ks1*x1), r2_mask & x1_mask, other=0.0)
 ```
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
-- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 SKIP；解除 gate 的补充诊断关联。
+- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 FAIL；数值通过，单 Combo 目标未通过。
 
 证据：[E26][E26]、[E21][E21]；[CPU 控制流隔离复核][axis-cache-probe]；补充诊断
 [store-mask-open][diag-store-mask-open]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
@@ -287,7 +326,7 @@ tensor 契约。
                 tl.store(out_ptr0 + (x0 ), tmp4, None)
 ```
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_red`：2.10 重合，1 FAIL；原首失败关联。
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1`：范围外，1 FAIL；补充生成缺陷关联；最终精度另属 D01。
@@ -337,7 +376,7 @@ masked_value 的形状。
             tl.static_assert(tmp5.dtype == tl.int64)
 ```
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_torchinductor.py::CommonTemplate::test_combo_kernel_filter_cpu`：2.10 重合，1 FAIL；原首失败关联。
 
@@ -379,9 +418,9 @@ torch_npu/_inductor/codegen/triton.py::NPUTritonOverrides.masked（315）、inde
 - 原动态 mean 图不再在 sympy_index_symbol 构造阶段失败；检查动态尾块、嵌套 masked 和间接索引的访问范围。
 - 配合 R27/R04/R23 后执行原 test_combo_kernel_store_mask 的数值、单 Combo 和最终 store mask 目标；保持未实现软件目标 FAIL。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
-- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 SKIP；解除 gate 的补充诊断关联。
+- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 FAIL；数值通过，单 Combo 目标未通过。
 
 证据：[E19][E19]；补充诊断 [store-mask-open][diag-store-mask-open]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
@@ -429,9 +468,9 @@ dtype。
     tmp4 = tmp3.to(tl.float32)
 ```
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
-- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 SKIP；解除 gate 的补充诊断关联。
+- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 FAIL；数值通过，单 Combo 目标未通过。
 
 证据：[E20][E20]、[E18][E18]；补充诊断 [store-mask-open][diag-store-mask-open]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
@@ -453,7 +492,7 @@ R01，但最终数值失败仍发生在 no-linear 路径。
 
 完整验收：固定非连续输入在原 dtype 和原容差下通过；数值检查通过后再完成原组合目标。若 R01 修复使图改走 Combo，仍单独保留这个 no-linear 固定输入复现，不能由新路径 PASS 宣称旧路径已修复。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1`：范围外，1 FAIL；原首失败关联。
 
@@ -475,37 +514,11 @@ R01，但最终数值失败仍发生在 no-linear 路径。
 
 完整验收：原 NCHW → channels_last 的 eager/compiled 数值、stride 和布局正确；再完成逐成员分块及真实 launch grid 检查。没有明确不再支持的依据，目标保持 FAIL。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size`：范围外，1 FAIL；原首失败关联。
 
 证据：[E11][E11]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-r06"></a>
-
-#### R06 通用软件测试被旧 NPU/XPU decorator 提前跳过
-
-**P1 · 门控原因已确认；补充诊断 3 PASS、1 FAIL，正式分支未改**。失败阶段：test collection / decorator。
-
-实测/原首失败：原全量四个方法仍为 SKIP。只解除软件门控、保留 body 和其他 config decorators 的补充原 pytest：basic、after_extern、dynamic persistent 三项
-PASS；store_mask FAIL。
-
-根因与代码证据：两个输入距离用例仅检查图输入依赖深度：basic 捕获 2 个真实 SchedulerNode，min/max 均 0；after_extern 捕获 mm extern 距离 0、foreach 消费者
-FusedSchedulerNode 距离 1。它们不要求 NPU FOREACH 专属单 kernel。动态归约没有 XPU intrinsic，补充诊断已形成 sum/mean/max 三成员 NPUComboKernel，实际
-benchmark/准入事件与原数值检查完成。store_mask 的真实阻塞另列 R03/R27/R04/R23。
-
-修复入口：后续在获准的测试范围内移除这四个旧软件 skip，以实际功能断言决定 PASS/FAIL。当前仅定位和归档；不把范围外适配迁入已完成的 2.10 重合 Community 分支。
-
-完整验收：输入距离检查的节点集合非空；dynamic 保留动态约束、编译期 autotune 和数值检查；store_mask 在未完成原目标时保持 FAIL。原全量 CSV 的 SKIP 不由补充诊断悄悄改写。
-
-覆盖用例（结果为原全量，非补充诊断）：
-
-- `test_snode_runtime.py::InputDistanceTests::test_foreach_basic`：范围外，1 SKIP；原首失败关联。
-- `test_snode_runtime.py::InputDistanceTests::test_foreach_after_extern`：范围外，1 SKIP；原首失败关联。
-- `test_combo_kernels.py::ComboKernelDynamicShapesTests::test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu`：范围外，1 SKIP；原首失败关联。
-- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 SKIP；原首失败关联。
-
-证据：[E9][E9]、[E10][E10]；补充诊断 [input-basic-open][diag-input-basic-open]、[input-after-open][diag-input-after-open]、[dynamic-gate-open][diag-dynamic-gate-open]、[store-mask-open][diag-store-mask-open]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
 <a id="root-r07"></a>
 
@@ -524,7 +537,7 @@ x0=1536、R 包络 r1=32；成员真实 R=16/32 应分别核对。per 用例的�
 
 完整验收：single 两种开关均保持两个独立计算且无 Combo；size_hint 覆盖两个成员真实 R 和共享候选包络并完成数值；per 保持实际单 Combo 和两个成员完整 R。不能只删除 FileCheck。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels`：范围外，2 FAIL；原首失败关联。
 - `test_combo_kernels.py::ComboKernelTests::test_persistent_reduction_size_hint`：范围外，1 FAIL；原首失败关联。
@@ -547,7 +560,7 @@ x0=1536、R 包络 r1=32；成员真实 R=16/32 应分别核对。per 用例的�
 
 完整验收：保留原大尺寸 permute/clone 和数值检查，确认真实 NPU X grid 合法、Y/Z 为 1；布局用例解除 R05 后继续分块/grid 原目标。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_yz_overflow`：范围外，1 FAIL；原首失败关联。
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size`：范围外，1 FAIL；相关/后续覆盖。
@@ -588,7 +601,7 @@ torch/_inductor/codegen/common.py::CSEProxy.store/store_reduction（2894、2912�
 - 原四个计数/布局相关方法在 R12 接通后比较非空完整字段。
 - 检查保留/移除写回、mutation 别名及 deferred reduction store，计数不因渲染次数变化。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields`：范围外，1 FAIL；相关/后续覆盖。
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_combo_grid_meta_has_per_subkernel_fields`：范围外，1 FAIL；相关/后续覆盖。
@@ -628,7 +641,7 @@ torch/_inductor/codegen/common.py::CSEProxy.store/store_reduction（2894、2912�
 - 真实保留/移除 atomic 写回及普通写回分别核对状态；standalone/Combo 字段与生成操作一致。
 - 原 metadata 比较用例保持数值与成员差异检查。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields`：范围外，1 FAIL；相关/后续覆盖。
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_per_kernel_inductor_meta_matches_standalone`：范围外，1 FAIL；相关/后续覆盖。
@@ -657,7 +670,8 @@ torch/_inductor/codegen/triton.py::_has_stride1_on_rdim/has_store_with_contiguou
 时认定连续。不能直接依赖只识别共同 r0_/r1_ 类型的 helper。
 2. 有效 load 设置 has_load_with_contiguous_rdim；有效 store 记录 buffer 名，最终 has_store_with_contiguous_rdim 排除已移除 buffer。block
 pointer helper 不作为统计生产端，仍在语义 indexing 层记录。
-3. 按共同 deterministic/force_filter_reduction_configs 条件通过 R12 导出两者的 OR，并接入原生归约候选过滤；其意义是访问布局，不能当作确定性归约支持开关。
+3. 按共同 deterministic/force_filter_reduction_configs 条件通过 R12 导出两者的 OR。
+候选过滤的接入以真实 native 消费者和等价规则为前提；其意义是访问布局，不能当作确定性归约支持开关。
 
 预期生成行为：连续和非连续真实访存产生不同布局值，字段在应开启的过滤模式下导出。
 
@@ -670,7 +684,7 @@ pointer helper 不作为统计生产端，仍在语义 indexing 层记录。
 - 原 deterministic sum/mean 方法继续通过数值，并检查真实连续布局标志。
 - 用 stride==1、明确非连续、符号 stride 及已移除写回对照，确认候选消费与字段相符。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel`：范围外，1 FAIL；相关/后续覆盖。
 
@@ -718,7 +732,7 @@ INNER、列 OUTER 的原目标完整执行。
 - 原四个计数/布局方法和逐成员 reduction_hint 方法执行完整；比较前检查成员数量、必需字段和有效值，避免空解析相等。
 - 候选生成实际消费各成员字典；模拟 fingerprint helper 的 PASS 不替代真实链验收。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields`：范围外，1 FAIL；原首失败关联。
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_combo_grid_meta_has_per_subkernel_fields`：范围外，1 FAIL；原首失败关联。
@@ -764,7 +778,7 @@ torch/_inductor/codegen/simd.py::estimate_flops（1266）；triton.py::inductor_
 - 原 GB/FLOP 求和方法先确认 standalone 数量和字段非空，再比较 Combo。
 - benchmark-only、combo-benchmark-only、profile-only、全部关闭分别核对字段出现条件。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum`：范围外，1 FAIL；相关/后续覆盖。
 
@@ -803,7 +817,7 @@ carve-out 的成员重复算入。
 - 原成本求和和 profile-only 两个方法执行后续断言；关闭开关的已 PASS 行为继续满足无字段目标。
 - 有多个实际分区或 carve-out 时逐个核对成员归属与总量。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum`：范围外，1 FAIL；原首失败关联。
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth`：范围外，1 FAIL；原首失败关联。
@@ -841,7 +855,7 @@ metadata 出口是两个不同接入点。
 
 - 原 test_benchmark_combo_kernel_emits_real_num_gb 核对真实 num_gb、NPU device 参数、输入数值和 launcher 一致。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_benchmark_combo_kernel_emits_real_num_gb`：范围外，1 FAIL；原首失败关联。
 
@@ -881,7 +895,7 @@ torch_npu/_inductor/runtime/triton_heuristics.py::cached_autotune/copy_args_to_c
 - 原推理和训练前向两个方法执行完整字段与数值检查，训练继续验证梯度。
 - 对相同 mutation/alias 输入分别验 True/False 和重试后的恢复；CPU 备份只在允许且超预算时发生。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_optimize_mem`：范围外，1 FAIL；原首失败关联。
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward`：范围外，1 FAIL；原首失败关联。
@@ -922,7 +936,7 @@ source cache，缓存命中时也记录本次图的对应关系。
 - 原 tracing 方法依次完成 Inductor 和 AOTInductor 两个子场景。
 - 单 Combo、singleton、多分区/carve-out 和缓存复用分别检查不存在跨分区误归属。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel`：范围外，1 FAIL；原首失败关联。
 
@@ -973,7 +987,7 @@ suffix，不做任意字符串替换。
 - 覆盖静态/动态尾块、无 split 成员及仅改变单个成员 BLOCK；检查最终 grid 的前缀区间不重叠、不漏计算。
 - 原布局用例仍先处理 eager R05 和 profiler R08；foreach 已接受的功能适配不恢复 CUDA 结构断言。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size`：范围外，1 FAIL；相关/后续覆盖。
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config`：范围外，1 FAIL；原首失败关联。
@@ -1024,7 +1038,7 @@ Combo，共两个定义。
 - 原 stitched_config、persistent_reduction、carve_out 三个方法按实际配置、定义数、数值及真实无搜索行为完整验收。
 - 检查没有成员被遗漏或重复生成，固定配置与实际 launch 一致。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config`：范围外，1 FAIL；相关/后续覆盖。
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_persistent_reduction`：范围外，1 FAIL；相关/后续覆盖。
@@ -1070,7 +1084,7 @@ mutation clone/restore。
 - 原三项 max_autotune 方法执行后续数值和实际单 Combo 检查，记录至少一个真实成员配置变更。
 - 检查候选合法性、runtime-only/compile-time 变化、cache 重载和 mutation 输入恢复；无搜索模式没有意外 benchmark。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune`：范围外，1 FAIL；原首失败关联。
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune_with_reduction`：范围外，1 FAIL；原首失败关联。
@@ -1114,7 +1128,7 @@ torch/_inductor/runtime/triton_heuristics.py::_subkernel_fingerprint/_handle_com
 - 原 test_combo_autotune_grouping 完成两个组、数值及单 Combo 检查。
 - 从真实图改变 dtype/stride/候选提示或动态约束，验证只有实际改变候选等价性时才改变组；模拟 helper PASS 单独保留其范围。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping`：范围外，1 FAIL；原首失败关联。
 
@@ -1139,7 +1153,7 @@ XBLOCK*R<=4096。若现有共享约束已等价，只适配有效验收；若合
 
 完整验收：证明开关实际改变成员 block ABI；共享/独立模式的合法候选和资源约束行为分别验收，不以缺字段的负向 PASS 代替能力验证。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel`：范围外，1 FAIL、1 PASS；原首失败关联。
 
@@ -1164,7 +1178,7 @@ standalone 有合法大 R 而 Combo 丢失，则定位具体成员资格/候选�
 
 完整验收：原 RMSNorm 数值、成员资格及合法完整 R/大 R 候选与 standalone 对齐；字段必须有实际消费者，不能补一个永远 True 的标志冒充优化。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_rms_norm_forwards_add_persistent_rblock`：范围外，1 FAIL；相关/后续覆盖。
 
@@ -1207,7 +1221,7 @@ torch/_inductor/runtime/triton_heuristics.py::Combo coordesc 字段顺序/上限
 - 原 coordesc 方法保留数值、多个不同配置及最大成员优先目标，按实际 NPU 字段映射检查首个变更。
 - 检查编译/运行参数两类变化、缓存标志和重载；关闭 coordesc 不执行邻域搜索。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_coordesc_tunes_largest_subkernel_first`：范围外，1 FAIL；原首失败关联。
 
@@ -1251,10 +1265,10 @@ torch_npu/_inductor/runtime/combo_tile_generator.py 与 native 公共 compiler o
 - 原 scalar_store_broadcast 的原数值、标量写回、广播和单 Combo 目标完整验收。
 - 原动态 mean 先验访问/归约元素集合与 mask，再验单 Combo 和最终 store mask；模式不可合法组合时目标仍 FAIL，不按硬件差异 SKIP。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast`：范围外，1 FAIL；原首失败关联。
-- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 SKIP；解除 gate 的补充诊断关联。
+- `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 FAIL；数值通过，单 Combo 目标未通过。
 
 证据：[E1][E1]、[E15][E15]；补充诊断 [scalar-v2][diag-scalar-v2]、[store-mask-open][diag-store-mask-open]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
@@ -1303,7 +1317,7 @@ wrapper ATen 后处理的真实 launch，不能把三个定义写成总共三次
 - 原 test_fuse_mix_order_reductions_combo_kernels 检查联合节点、实际共享输入访问、partial 合并、四个输出及三个 Inductor 定义目标；额外 ATen 后处理单独核对。
 - 检查非整除尾块、不同 stride 和 consumer 依赖；确定性配置的合法实现需按实际规则验收。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels`：范围外，1 FAIL；原首失败关联。
 
@@ -1349,7 +1363,7 @@ enable_reflect_ftz 的名字后让 NPU 过滤。
 - 原 False/True metadata 方法及两条编译路径分别核对实际 options，保留原数值。
 - 下层消费证明、cache 区分及非正规数边界必须另验；未实施，未声称硬件不支持。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz`：范围外，2 FAIL；原首失败关联。
 
@@ -1371,32 +1385,23 @@ wave 过滤理由未逐组捕获，不能把未进 gate 的原因定到某一个
 
 完整验收：有真实候选、正 delta 和实际拒绝事件；相同输入的 warm 运行峰值下降且数值正确。原模型若仍无有效候选，其当前 FAIL 保留，不能仅放宽阈值。
 
-覆盖用例（结果为原全量，非补充诊断）：
+覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelPeakMemoryTests::test_combo_kernel_peak_memory_wide_resnet`：范围外，1 FAIL；原首失败关联。
 
 证据：[E7][E7]、[E13][E13]；补充诊断 [peak-pytest][diag-peak-pytest]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
-### 软件 SKIP 的补充诊断与硬件 SKIP 边界
-
-| 原软件 SKIP 方法 | 解除门控的原 pytest | 已验到/尚未验到 |
-| --- | --- | --- |
-| `test_foreach_basic` | PASS | 2 个真实节点，min/max 距离均 0；不要求 FOREACH 分组单 kernel。 |
-| `test_foreach_after_extern` | PASS | mm 距离 0、真实消费节点距离 1。 |
-| `test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu` | PASS | 三成员 NPUCombo、benchmark、动态约束和数值。 |
-| `test_combo_kernel_store_mask` | FAIL | 数值通过；1 vs 3，mask 符号/后续 DSL/异构分区仍阻塞最终 store mask。 |
-
-以上均为补充定位，四个原 SKIP 保留在全量报告中；它们没有增加正式 PASS 清单条数。各次诊断所用脚本版本/哈希记录在 [manifest][root-evidence]，未把 v5 冒充 v2/v3/v4 的执行版本。v4 峰值诊断与 v5 四个门控诊断记录 588 个安装 Python 文件执行前后未变；v2/v3 报告没有该末尾哈希字段，不声称它们做过同样的独立审计。
+### 硬件 SKIP 边界
 
 | 保留 SKIP 的方法 | 明确硬件/平台协议原因 |
 | --- | --- |
-| `test_combo_kernel_tma_descriptor_block_name` | NVIDIA SM90+ TMA descriptor 搬运协议。 |
-| `test_combo_kernel_amd_special_config_args` | ROCm/HIP 专属 compile options 与 constexpr 分离。 |
-| `test_pdl_codegen_in_combo_kernel` | NVIDIA SM90+ CUDA grid dependency control 和 launch_pdl。 |
-| `test_pdl_combo_kernel_pointwise` | NVIDIA PDL 每成员 wait／launch_dependents 顺序。 |
-| `test_pdl_combo_kernel_reduction` | 类级开启的 NVIDIA PDL 归约 launch 协议。 |
+| `test_combo_kernel_tma_descriptor_block_name` | 硬件差异，涉及 NVIDIA SM90+ GPU 专属的 TMA 描述符特性。 |
+| `test_combo_kernel_amd_special_config_args` | 硬件差异，涉及 AMD GPU 专属的 ROCm/HIP 编译选项特性。 |
+| `test_pdl_codegen_in_combo_kernel` | 硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性。 |
+| `test_pdl_combo_kernel_pointwise` | 硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性。 |
+| `test_pdl_combo_kernel_reduction` | 硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性。 |
 
-这 5 个方法对应 6 个 SKIP 实例，未计 PASS，不进入 NPU 同协议实现队列。XPU-only 动态归约没有专属 intrinsic，已按 R06 实际验证；FTZ 尚无明确硬件不支持证据，继续保留 FAIL。
+这 5 个方法对应 6 个 SKIP 实例。FTZ 尚无明确硬件不支持证据，继续保留 FAIL。
 
 ### 水平融合、垂直融合和 foreach
 
@@ -1413,13 +1418,15 @@ wave 过滤理由未逐组捕获，不能把未进 gate 的原因定到某一个
 
 ### 固定输入/生成代码的针对性复现
 
-诊断脚本只在进程内观察 scheduler/codegen、保存原始 DSL/wrapper；`--open-software-gate` 只对白名单四方法解除软件 decorator，保留 body 和其他 config decorators。以下命令在目标 NPU Docker 工作目录、`pta_213_case` 及对应测试快照中执行，按物理卡设置选卡变量；本轮无需重跑全量。
+诊断脚本在进程内观察 scheduler/codegen，保存原始 DSL/wrapper。
+以下命令使用 `fix/combo_case` 的测试源码，在目标 NPU Docker 工作目录及 `pta_213_case` 环境执行。
+四个软件门控已在用例源码中解除；诊断仅选择仍为 FAIL 的 store_mask 实例，按物理卡设置选卡变量。
 
 ```bash
 python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/instrumentation/diagnose_roots_v5.py \
   --test-root <community>/v2.13.0/inductor_npu \
   --node test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask \
-  --output <diagnostic-workspace>/store-mask-focused --pytest --open-software-gate
+  --output <diagnostic-workspace>/store-mask-focused --pytest
 ```
 
 该归档 driver 无论测试结果如何都会正常落盘；判断 PASS/FAIL 必须读取 `result.json` 的 `pytest_returncode` 与 JUnit，不用外层 driver 的退出码代替测试结果。[精度输入][accuracy-inputs]、[eager/compiled 输出][accuracy-outputs]、[实际 winner 与 float64 对照][diag-accuracy-v2]和[最终 wrapper][accuracy-diagnostic-wrapper]已固定。生成 Python 均按原始字节保存，未重排或格式化。
@@ -1430,6 +1437,18 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
   ../../../../scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt
 [csv]:
   inductor-combo-tests-v2.13.csv
+[run213]:
+  ../../../../scripts/tests/combo_kernel_210/README-213.md
+[current-jobs]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-9a86e68-20261114/jobs.json
+[software-rerun]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/
+[software-gates-audit]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/case-gates-audit.json
+[store-mask-current-log]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/02-test_combo_kernel_store_mask.log
+[store-mask-current-code]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/generated-store-mask/output_code.py
 [jobs]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/jobs.json
 [evidence]:

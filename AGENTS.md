@@ -37,6 +37,7 @@
 
 ## Combo 用例文档维护
 
+- `Community-Use-Case-Testing` 的所有用例修改统一放在 `fix/combo_case` 分支，远程验证记录该分支实际提交。
 - Combo/foreach 测试与问题分析仅维护 `docs/notes/compiler/codegen/inductor-combo-tests-v2.10.md`
   和 `docs/notes/compiler/codegen/inductor-combo-tests-v2.13.md` 两份版本文档。
 - 文档只保留最新结果、实际验证版本和对应的当前问题分析；不再按分支、提交或执行批次新增文档。
@@ -44,7 +45,11 @@
 - 已 PASS 的用例不保留旧失败分析；脚本 README 仅说明运行方式，不重复维护结果和问题分析。
 - CSV 结果表和 `artifacts/` 原始证据独立保留；自动发布只更新固定版本文档的当前结果章节。
 - 2.13 用例适配进展统一维护 `docs/notes/compiler/codegen/inductor-combo-tests-v2.13.csv`，
-  同表保留 2.10 源码对照信息，不再按分支或比较范围维护另一份 2.13 进展表。
+  只记录 2.13 的类型、上线状态、最新结果、实例统计和当前分析，不保留 2.10 源码或运行兼容性列。
+- 2.13 的“已上线”以 `scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt` 为准，
+  按实际实例匹配，嵌套函数随外层方法；当前 PASS 不自动视为已上线。
 - 后续 2.13 验证只选择最新逐实例报告中的 FAIL、SKIP（含执行 ERROR），不重跑历史 PASS，
   不启动全量测试；参数化方法也必须通过 `only_nodes` 排除已 PASS 的实例。
 - 定向复测结果按实例合并回当前快照，保留未重跑实例的结果和验证来源，再更新唯一进展表。
+- 2.13 进展表的“当前分析”只写简短原因，例如“独立块功能缺失”；详细证据和修复方案留在版本文档。
+  硬件 SKIP 写“硬件差异，涉及 xx 硬件专属的 xx 特性”，PASS 保持“—”。

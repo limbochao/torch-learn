@@ -1,117 +1,117 @@
-﻿测试文件,函数名,类型,最新结果,实例结果,当前分析,v2.10.0存在性,2.13 用例能否直接在 2.10 运行
-test_triton_kernels.py,test_combo_fp_self_sub_rewrite,独立测试方法,PASS,PASS 2,—,未找到同名定义（缺修复：浮点自减的局部数值改写）,—
-test_torchinductor.py,test_adaptive_avg_pool2d1,独立测试方法,PASS,PASS 2,—,一致,否：文件导入 2.10 缺少的 highest_precision_float
-test_torchinductor.py,test_mean,独立测试方法,PASS,PASS 1,—,存在（差异：开启 Combo）,否：文件导入 2.10 缺少的 highest_precision_float
-test_torchinductor.py,test_rand_like_deterministic,独立测试方法,PASS,PASS 2,—,存在（差异：增加 random.seed）,否：文件导入 2.10 缺少的 highest_precision_float
-test_combo_kernels.py,test_activation_functions,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_activations,嵌套函数,随外层验证/PASS,随 test_activation_functions 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_reduce_functions,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_reduce,嵌套函数,随外层验证/PASS,随 test_reduce_functions 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_mutated_args,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_mutated,嵌套函数,随外层验证/PASS,随 test_mutated_args 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_reduce_split,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_2d_blocking_partitioning,独立测试方法,PASS,PASS 1,—,存在（差异：增加 C++ wrapper grid 检查）,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_persistent_reduction_size_hint,独立测试方法,FAIL,FAIL 1,R07（P1）：persistent 成员真实 R=16/32 与候选包络。原全量首失败／门控：native persistent heuristic 已匹配，但原固定 CUDA size_hints 检查失败。实际为 x0=1536、r1=32，共享 split extent 求和；最终数值比较尚未执行。 固定 CUDA 字典不适用于 native 多轴 metadata。按两个成员 R=16/32 和共享包络 x0=1536/r1=32 验真实 persistent 候选，随后完成原数值检查。,未找到同名定义（缺修复：按最大归约维选择 size hint）,—
-test_combo_kernels.py,test_sort_in_combo_kernel_forces_persistent_reduction,独立测试方法,PASS,PASS 1,—,未找到同名定义（缺修复：Combo sort 强制持久归约）,—
-test_combo_kernels.py,test_fuse_mix_order_reductions_combo_kernels,独立测试方法,FAIL,FAIL 1,R24（P2）：共享输入行/列联合归约与原 3 kernel 目标。原全量首失败／门控：数值比较通过，随后 generated_kernel_count 期望 3、实际 4；尚需按实际生成链核对共享输入联合归约的缺口。 诊断 y_sum/z_sum 已组成 Combo，row/column 未联合；NPU config 关闭且共同 backend 资格排除 npu，mixed-order 未进入联合生成。按共享输入联合归约特性补 native lowering，不改数量期望。 修复方案（未实施）：R24：同时接入 NPU scheduler 资格与 native 联合 axis/grid/workspace/partial 累加，实现共享输入行列归约新特性。,未找到同名定义（缺修复：混合顺序归约及消费者排除）,—
-test_combo_kernels.py,test_combo_kernel_scalar_store_broadcast,独立测试方法,FAIL,FAIL 1,R23（P2）：已垂直融合的 scalar 链与 vector reduction 水平组成一个 Combo。原全量首失败／门控：标量结果、向量归约和广播消费者的数值比较通过；随后 generated_kernel_count 期望 1、实际 2，单个 Combo 的组合目标未通过。 诊断确认 scalar add→mul→sum 已组成 FusedSchedulerNode；与 vector reduction 因 split/轴 ABI 不同分开。需补合法异构成员打包能力，不是普通垂直融合整体缺失。 修复方案（未实施）：R23：在独立成员 ABI 上证明共享编译模式合法，再打包标量/向量及动态 mean；保留真实依赖和标量写回范围。,未找到同名定义（缺修复：标量 store 指针广播）,—
-test_combo_kernels.py,test_single_combo_kernels,独立测试方法,FAIL,FAIL 2,R07（P1）：两个 standalone 与两种 benchmark 开关。原全量首失败／门控：两种 benchmark 开关均在固定 Grid1D FileCheck 失败，实际普通 kernel 为 GridNpu；先前数值和原 kernel 计数检查已通过。 当前失败仅是固定 Grid1D 观测，NPU 实际 GridNpu。改为真实 native launcher 观测，保留两个 standalone、无 Combo、两种 benchmark 开关和数值目标。,未找到同名定义（缺能力：单节点分区改用普通 kernel）,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi,独立测试方法,PASS,PASS 1,—,未找到同名定义（部分支持：共享块已有，独立块缺失）,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_per,独立测试方法,FAIL,FAIL 1,R07（P1）：实际单 Combo、R=64/512 完整归约和真实 block ABI。原全量首失败／门控：数值和 generated_kernel_count=1 通过，随后固定 CUDA XBLOCK : tl.constexpr 检查失败。 当前共享 block 分支的 native runtime block ABI 不叫固定 CUDA constexpr XBLOCK。改为真实轴/block/launch 观测，保留原单 Combo 和 R=64/512 完整归约。,未找到同名定义（部分支持：共享块已有，独立块缺失）,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red_per,独立测试方法,PASS,PASS 1,—,未找到同名定义（部分支持：共享块已有，独立块缺失）,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red,独立测试方法,FAIL,FAIL 1,R01（P0）：两条非连续多轴归约实际组成一个 Combo。原全量首失败／门控：数值通过，generated_kernel_count 期望 1、实际 2；后续 X/R 配置检查未执行。 已确认同分区内 persistent 多 R 的 promote_to_tensor 结果为 block，store pointer 为标量；TTIR 失败后整体回退，不是分区拒绝。修 pointer/value/mask rank，保留单 Combo。 修复方案（未实施）：R01：统一归约后的输出布局，按单元素/向量语义对齐 pointer、value、mask，并覆盖普通和 deferred 写回。,未找到同名定义（部分支持：共享块已有，独立块缺失）,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_r0_r1,独立测试方法,FAIL,FAIL 1,D01（P0）：非连续多轴 sum 的原精度和组合目标。原全量首失败／门控：原数值比较失败：报错的 16 元素向量中 1 个输出超差，最大绝对误差 1.1920928955078125e-5，atol=1e-5。执行的是同一定义的两次普通归约 launch；后续数量断言未执行。 补充已保存新构造的同一组输入、eager/compiled/float64 基准和真实 winner；数值责任模块仍待定界。R01 为补充观察到的 Combo 生成缺陷，不能当作最终 no-linear 数值根因。 相关根因／后续依赖：R01；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R01：统一归约后的输出布局，按单元素/向量语义对齐 pointer、value、mask，并覆盖普通和 deferred 写回。,未找到同名定义（缺能力：二维归约排除 Combo 策略）,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi_3d,独立测试方法,PASS,PASS 1,—,未找到同名定义（缺能力：3D pointwise 排除策略）,—
-test_combo_kernels.py,test_combo_kernel_per_config_subkernel_block_size,独立测试方法,FAIL,FAIL 1,R05（P1）：八种 channels_last 转换、成员独立分块及 grid。原全量首失败／门控：先在 eager 的 contiguous(memory_format=channels_last) 报 NPU 仅支持 contiguous 格式；compiled、独立成员分块和 grid 检查均未开始。 责任先在 NPU eager memory-format；原 compiled 尚未开始，不能换 stride 宣称布局已支持。解除后再验 R18 独立分块与 R08 profiler/grid。 相关根因／后续依赖：R08、R18；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间。,未找到同名定义（部分支持：共享块已有，独立块及扁平 grid 缺失）,—
-test_combo_kernels.py,test_combo_kernels_pointwise_only,独立测试方法,PASS,PASS 2,—,未找到同名定义（缺能力：仅融合 pointwise 的开关）,—
-test_combo_kernels.py,test_combo_kernel_max_num_nodes,独立测试方法,PASS,PASS 3,—,未找到同名定义（部分支持：节点上限固定 8，不可配置）,—
-test_combo_kernels.py,test_combo_kernel_yz_overflow,独立测试方法,FAIL,FAIL 1,"R08（P1）：原大尺寸图的真实合法 grid 与数值。原全量首失败／门控：编译执行已完成；读取 NPU profiler 的 trace_json[""traceEvents""] 时报 TypeError，实际 JSON 是列表，后续 grid 及最终数值断言未执行。 测试假定 CUDA profiler 的事件容器和三维 grid；NPU 导出列表并用 native split/一维 dispatch。解析错误不能证明 launch grid 已溢出或已正确。 修复入口：兼容实际 NPU 事件容器，关联执行 wrapper 的最终 kernel launch；原生 launcher 参数是 grid 的判定依据，过滤 autotune 的测量 launch。",未找到同名定义（缺修复：grid Y 溢出转移至 Z）,—
-test_combo_kernels.py,test_combo_kernel_no_bench_stitched_config,独立测试方法,FAIL,FAIL 1,R18（P2）：三成员独立默认 X、body/default/grid 一致。原全量首失败／门控：数值、单个真实 kernel 定义及 default/body 一致性检查已通过；最后缺 XBLOCK_0、XBLOCK_1、XBLOCK_2，空匹配不满足三成员独立配置。 per_subkernel_blocks 在 NPU scheduling 未传递，成员 body/grid 共用 block_args[0]；另有 R19 默认 probe/stitch 流程被 override 绕过。需接真实独立 X 默认值与同源 launch。 相关根因／后续依赖：R19；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间；R19：取得成员合法 native 默认配置，按独立 ABI 拼接；不能安全默认拼接的成员单独 carve-out，并关闭性能搜索。,未找到同名定义（缺能力：免 benchmark 拼接独立块配置）,—
-test_combo_kernels.py,test_combo_kernel_no_bench_persistent_reduction,独立测试方法,FAIL,FAIL 1,R18（P2）：完整静态 R 和独立默认 X。原全量首失败／门控：三个 sum 的数值与单定义检查通过，default_config 不含 R0_BLOCK 的检查也通过；随后缺 XBLOCK_0/1/2 的独立默认 X 配置，原方法未直接验证实际 winner/launch。 静态完整 R 已生成，缺的是成员独立默认 X：flag 未贯通，body/grid 共用 block；R19 默认 probe/stitch 也被绕过。保持完整 R 与实际单 Combo，不用缺字段推断 persistent 缺失。 相关根因／后续依赖：R19；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间；R19：取得成员合法 native 默认配置，按独立 ABI 拼接；不能安全默认拼接的成员单独 carve-out，并关闭性能搜索。,未找到同名定义（缺能力：免 benchmark 持久归约配置拼接）,—
-test_combo_kernels.py,test_combo_kernel_no_bench_carve_out,独立测试方法,FAIL,FAIL 1,R19（P2）：bucketize 独立、其余 pointwise 保持 Combo。原全量首失败／门控：数值比较通过，随后 async_compile.triton 定义数期望 2、实际 1；此计数不等于实际 launch 数，原 carve-out 分区目标未验收。 共同 simd.py:3504 的 _stitch_no_bench_combo_config 与 :3644 的成员默认 config probe、carve-out、stitch 流程没有进入 NPU generate_combo_kernel_code:509 的 override，后者直接生成 Combo。 修复入口：基于 R18 的独立 ABI 接通成员合法默认配置探测、拼接与不适合拼接成员的分离；body、default_config 与 launcher 必须使用同源数值配置。不要照搬 CUDA 的候选数量门槛。 修复方案（未实施）：R19：取得成员合法 native 默认配置，按独立 ABI 拼接；不能安全默认拼接的成员单独 carve-out，并关闭性能搜索。,未找到同名定义（缺能力：免 benchmark 不适配节点拆出）,—
-test_combo_kernels.py,test_activation_benchmark,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_activations,嵌套函数,随外层验证/PASS,随 test_activation_benchmark 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_reduce_benchmark,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_reduce,嵌套函数,随外层验证/PASS,随 test_reduce_benchmark 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_mutated_benchmark,独立测试方法,PASS,PASS 1,—,存在（差异：kernel 数 6/9→5～10）,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_mutated,嵌套函数,随外层验证/PASS,随 test_mutated_benchmark 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_round_robin_dispatch,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_mutated,嵌套函数,随外层验证/PASS,随 test_round_robin_dispatch 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_2d_blocking_benchmark,独立测试方法,PASS,PASS 1,—,存在（差异：kernel 数 7～8→6）,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_persistent_reduction_no_x_dim,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_combo_kernel_per_subkernel_reduction_hint,独立测试方法,FAIL,FAIL 1,R12（P1）：行 INNER、列 OUTER 的逐成员归约方向。原全量首失败／门控：行／列归约数值比较通过，随后缺 reduction_hint_0；INNER/OUTER 的成员分类检查未完成。 缺 reduction_hint_0/1 的成员方向出口；当前只沿用首成员 hint。按实际归约轴/stride 分别导出行 INNER、列 OUTER；native 已有真实成员轴约束。 修复方案（未实施）：R12：统一 standalone 与 Combo 的真实 per-kernel serializer，逐成员导出统计、类别、尺寸及归约方向，不复用首成员字典。,未找到同名定义（缺能力：逐子 kernel 归约方向提示）,—
-test_combo_kernels.py,test_combo_rms_norm_forwards_add_persistent_rblock,独立测试方法,FAIL,FAIL 1,R12（P1）：RMSNorm 逐成员大 R 候选资格及 native 消费。原全量首失败／门控：两个 RMSNorm 的数值比较通过，随后缺 inductor_meta_0；未执行到成员 add_persistent_rblock 检查。 R12 的成员字典出口缺失已确认；D04 需对照真实 standalone/Combo 的完整 R/大 R 候选资格，不能从字段缺失断言 persistent 未实现。 相关根因／后续依赖：D04；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R12：统一 standalone 与 Combo 的真实 per-kernel serializer，逐成员导出统计、类别、尺寸及归约方向，不复用首成员字典。,未找到同名定义（缺能力：转发持久归约候选标记）,—
-test_foreach.py,test_single_list,独立测试方法,PASS,PASS 33,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_single_scalar,独立测试方法,PASS,PASS 16,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_single_scalar_tensor,独立测试方法,PASS,PASS 16,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_scheduler_fusion_list,独立测试方法,PASS,PASS 33,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_scheduler_fusion_scalar,独立测试方法,PASS,PASS 16,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_broadcasting,独立测试方法,PASS,PASS 16,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_type_promotion,独立测试方法,PASS,PASS 20,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_kernel_split_arg_limit_list,独立测试方法,PASS,PASS 16,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_fusion_duplicate_buffer_list,独立测试方法,PASS,PASS 20,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_non_foreach_producer_list,独立测试方法,PASS,PASS 33,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_non_foreach_producer_scalar,独立测试方法,PASS,PASS 16,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_non_foreach_consumer_producer_list,独立测试方法,PASS,PASS 33,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_non_foreach_consumer_producer_scalar,独立测试方法,PASS,PASS 16,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_enable_dynamic_shapes_python_wrapper,独立测试方法,PASS,PASS 1,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_decomp,独立测试方法,PASS,PASS 1,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_fuse_concat,独立测试方法,PASS,PASS 1,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_2d_blocking,独立测试方法,PASS,PASS 20,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_2d_blocking_partitioning_elems,独立测试方法,PASS,PASS 20,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_2d_blocking_partitioning_mixed_sizes,独立测试方法,PASS,PASS 20,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_reinplacing,独立测试方法,PASS,PASS 4,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_reinplacing_mut_before,独立测试方法,PASS,PASS 4,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_reinplacing_mut_after,独立测试方法,PASS,PASS 4,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_aliasing,独立测试方法,PASS,PASS 1,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_2d_block_no_mixed_sizes_no_mask,独立测试方法,PASS,PASS 1,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_2d_block_mixed_sizes_with_mask,独立测试方法,PASS,PASS 1,—,存在（差异：启用子 kernel 独立块并检查生成代码）,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_foreach_map_backward_binary,独立测试方法,PASS,PASS 10,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_foreach.py,test_foreach_map_backward_unary,独立测试方法,PASS,PASS 4,—,一致,否：依赖文件导入失败，且缺少 _foreach_clone
-test_snode_runtime.py,test_foreach_basic,独立测试方法,SKIP,SKIP 1,R06（P1）：图输入真实节点的 min/max_input_distance 均 0。原全量首失败／门控：NPU does not support 补充解除软件 skip 后原 pytest PASS，2 个真实 SchedulerNode 距离均 0；这是输入距离测试，不要求 FOREACH 专属单 kernel。原全量结果仍 SKIP。,未找到同名定义（缺能力：调度节点输入距离指标）,—
-test_snode_runtime.py,test_foreach_after_extern,独立测试方法,SKIP,SKIP 1,R06（P1）：mm 距离 0、foreach 消费节点距离至少 1。原全量首失败／门控：NPU does not support 补充解除软件 skip 后原 pytest PASS，mm 距离 0、真实 FusedSchedulerNode 消费者距离 1；原全量结果仍 SKIP。,未找到同名定义（缺能力：外部算子后的输入距离指标）,—
-test_torchinductor.py,test_combo_kernel_store_mask,独立测试方法,SKIP,SKIP 1,R06（P1）：动态 mean 的实际单 Combo 与最终 store mask。原全量为旧软件门控 SKIP；补充原 pytest 数值通过、期望 1 实际 3，最终 mask 断言未执行。 已定位：R27 候选的 LoopBody 索引缓存跨 kernel 复用导致 x0/y0 错配；R03 动态尺寸系数误作 mask 轴；R04 整数 index_expr 在 cast 前标 FP32；R23 异构 mean 缺合法共享编译模式/成员 ABI。 修复方案（未实施）：R27 按当前 kernel 准备索引并在退出时恢复；R03 用真实活跃轴及实际 mask；R04 将 cast 与 CSE 登记合并；R23 打通合法异构成员分发。各生产根因按队列处理，最终目标未完成保持 FAIL，不改原 SKIP 报告。,未找到同名定义（缺修复：动态 Combo 常量索引 store mask）,—
-test_unbacked_symints.py,test_combo_kernel_size_hint_failure,独立测试方法,PASS,PASS 1,—,一致,否：本轮 NPU 实测 Combo benchmark 缺动态尺寸参数
-test_combo_kernels.py,test_combo_kernel_dynamic_shapes_grid_changes,独立测试方法,PASS,PASS 1,—,未找到同名定义（部分支持：动态 grid 已有，独立块扁平 grid 缺失）,—
-test_combo_kernels.py,test_dynamic_shapes_activations,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_activations,嵌套函数,随外层验证/PASS,随 test_dynamic_shapes_activations 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_dynamic_shapes_2d_blocking,独立测试方法,PASS,PASS 1,—,存在（差异：kernel 数 7～8→6）,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_dynamic_shapes_reduce,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_reduce,嵌套函数,随外层验证/PASS,随 test_dynamic_shapes_reduce 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_dynamic_shapes_mutated,独立测试方法,PASS,PASS 1,—,存在（差异：增加 XPU 跳过条件）,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_mutated,嵌套函数,随外层验证/PASS,随 test_dynamic_shapes_mutated 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_dynamic_shapes_activations_no_autotune,独立测试方法,PASS,PASS 1,—,存在（差异：kernel 数=5 改为源码编译调用数=1）,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_activations,嵌套函数,随外层验证/PASS,随 test_dynamic_shapes_activations_no_autotune 验证,—,一致,不适用：嵌套函数；所属文件同样导入失败
-test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_no_x_dim,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_no_x_dim_2,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_dynamic_shapes_2d_blocking_round_robin,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda,独立测试方法,PASS,PASS 1,—,存在（差异：装饰器仅限 CUDA）,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu,独立测试方法,SKIP,SKIP 1,R06（P1）：不同 X 动态 sum/mean/max 与编译期 autotune。原全量首失败／门控：requires xpu and triton 补充解除 XPU 软件 gate 后原 pytest PASS，实际 sum/mean/max 三成员 Combo 与 benchmark/数值已执行；原全量结果仍 SKIP。,未找到同名定义（待验证：已有同体 GPU 测试，XPU 待验证）,—
-test_torchinductor.py,test_combo_kernel_filter_cpu,独立测试方法,FAIL,FAIL 1,R02（P0）：pointwise 与 min/max 实际组成两个 Combo。原全量首失败／门控：数值通过，generated_kernel_count 期望 2、实际 4。 原 pytest 已确认准入和两组分区成立；argreduce 轴索引实际 int32、CSE 标 int64，dtype 断言触发整组回退。修真实 cast/CSE 契约，保留两个 Combo。 修复方案（未实施）：R02：在 argreduce 索引 reshape/broadcast 前显式 cast int64，之后再登记 CSE dtype，保留最小索引优先语义。,一致,否：文件导入 2.10 缺少的 highest_precision_float
-test_provenance_tracing.py,test_triton_kernel_to_post_grad_tracing_combo_kernel,独立测试方法,FAIL,FAIL 1,R17（P1）：真实 Combo 分区到 post-grad origins 映射。原全量首失败／门控：Inductor 编译执行与 debug trace 收集已完成；Combo 到 post-grad 的映射实际为空，期望一项。第二个 AOTInductor 子场景尚未开始。 NPU scheduling.py:500/501 把 [combo_kernel_node] 传给 define_kernel/codegen_comment。该外壳 node=None，共同 provenance 追踪跳过它；实际 kernel 分区 node_group 的真实叶子节点/origins 没有展开传递。 修复入口：按每个实际生成分区展开真实 get_nodes()/origins 给定义与追踪链，避免把外层全部 Combo origins 复制到每个分区。 修复方案（未实施）：R17：按实际生成分区展开真实叶子节点，将其传入 kernel 定义和 provenance 链，覆盖 cache 命中。,一致,否：依赖的 test_torchinductor 导入失败
-test_user_streams.py,test_combo_kernel_fusion_within_same_stream,独立测试方法,PASS,PASS 1,—,未找到同名定义（缺能力：按 stream 分组及传递 stream）,—
-test_combo_kernels.py,test_combo_kernel_tma_descriptor_block_name,独立测试方法,SKIP,SKIP 1,硬件／平台协议 SKIP：NVIDIA SM90+ TMA descriptor 搬运协议。保留实际 SKIP，未计 PASS，不进入 NPU 同协议修复队列。,未找到同名定义（缺修复：Combo TMA 前导代码及块名替换）,—
-test_combo_kernels.py,test_combo_kernel_amd_special_config_args,独立测试方法,SKIP,SKIP 2,硬件／平台协议 SKIP：ROCm/HIP 专属 compile options 与 constexpr 分离。保留实际 SKIP，未计 PASS，不进入 NPU 同协议修复队列。,未找到同名定义（缺修复：独立块路径的 HIP 编译参数传递）,—
-test_combo_kernels.py,test_helper_fn_defined,独立测试方法,PASS,PASS 1,—,一致,否：导入缺少 requires_xpu_and_triton
-test_combo_kernels.py,test_pdl_codegen_in_combo_kernel,独立测试方法,SKIP,SKIP 1,硬件／平台协议 SKIP：NVIDIA SM90+ CUDA grid dependency control 和 launch_pdl。保留实际 SKIP，未计 PASS，不进入 NPU 同协议修复队列。,未找到同名定义（缺能力：Combo PDL 代码生成）,—
-test_combo_kernels.py,test_pdl_combo_kernel_pointwise,独立测试方法,SKIP,SKIP 1,硬件／平台协议 SKIP：NVIDIA PDL 每成员 wait／launch_dependents 顺序。保留实际 SKIP，未计 PASS，不进入 NPU 同协议修复队列。,未找到同名定义（缺能力：Combo pointwise PDL 接入）,—
-test_combo_kernels.py,test_pdl_combo_kernel_reduction,独立测试方法,SKIP,SKIP 1,硬件／平台协议 SKIP：类级开启的 NVIDIA PDL 归约 launch 协议。保留实际 SKIP，未计 PASS，不进入 NPU 同协议修复队列。,未找到同名定义（缺能力：Combo reduction PDL 接入）,—
-test_combo_kernels.py,test_combo_kernel_max_autotune,独立测试方法,FAIL,FAIL 1,R20（P2）：pointwise 逐成员候选与真实顺序调优。原全量首失败／门控：编译执行已返回，但 Combo sequential autotune 日志匹配为 0；后续数值比较和单 kernel 断言未执行。 NPU 已有 combo_subkernel_meta 驱动的共享 tile 搜索，native autotune_to_one_config 按实际 candidate timings 取 min。它没有共同运行时逐成员 block 坐标的 chained/sequential tuning 链；因此日志缺失背后是消费者缺口，而非只换日志名即可解决，也不能说 NPU 完全没有 autotune。 修复入口：在 R18 和 R12 上建立每成员合法候选，用完整 Combo 的计时评价逐成员变更；候选、试验配置、winner 和实际 launch 可对应。 相关根因／后续依赖：R18；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间；R20：按成员产生 native 候选，用完整 Combo 计时逐成员变更，再调公共选项并保存实际 winner/runtime blocks。,未找到同名定义（缺能力：独立块逐子 kernel 最大调优）,—
-test_combo_kernels.py,test_combo_kernel_max_autotune_with_reduction,独立测试方法,FAIL,FAIL 1,R20（P2）：归约成员独立候选与真实顺序调优。原全量首失败／门控：assertLogs 捕获了日志，但 Combo sequential autotune 匹配为 0；后面的数值与 kernel 数量断言尚未执行。 NPU 已有 combo_subkernel_meta 驱动的共享 tile 搜索，native autotune_to_one_config 按实际 candidate timings 取 min。它没有共同运行时逐成员 block 坐标的 chained/sequential tuning 链；因此日志缺失背后是消费者缺口，而非只换日志名即可解决，也不能说 NPU 完全没有 autotune。 修复入口：在 R18 和 R12 上建立每成员合法候选，用完整 Combo 的计时评价逐成员变更；候选、试验配置、winner 和实际 launch 可对应。 相关根因／后续依赖：R18；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间；R20：按成员产生 native 候选，用完整 Combo 计时逐成员变更，再调公共选项并保存实际 winner/runtime blocks。,未找到同名定义（缺能力：独立块归约最大调优）,—
-test_combo_kernels.py,test_combo_autotune_many_subkernels,独立测试方法,FAIL,FAIL 1,R20（P2）：六成员独立候选与真实顺序调优。原全量首失败／门控：六成员编译执行已返回，但 Combo sequential autotune 的日志匹配为 0；后续数值比较和单 kernel 检查未执行。 NPU 已有 combo_subkernel_meta 驱动的共享 tile 搜索，native autotune_to_one_config 按实际 candidate timings 取 min。它没有共同运行时逐成员 block 坐标的 chained/sequential tuning 链；因此日志缺失背后是消费者缺口，而非只换日志名即可解决，也不能说 NPU 完全没有 autotune。 修复入口：在 R18 和 R12 上建立每成员合法候选，用完整 Combo 的计时评价逐成员变更；候选、试验配置、winner 和实际 launch 可对应。 相关根因／后续依赖：R18；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间；R20：按成员产生 native 候选，用完整 Combo 计时逐成员变更，再调公共选项并保存实际 winner/runtime blocks。,未找到同名定义（缺能力：逐子 kernel 串行调优策略）,—
-test_combo_kernels.py,test_combo_autotune_grouping,独立测试方法,FAIL,FAIL 1,R21（P2）：真实成员候选分成预期两个组。原全量首失败／门控：编译执行已返回，期望两个调优组而实际日志解析为空；后续数值比较和单 kernel 断言未执行。 共同 _subkernel_fingerprint 从各成员尺寸、heuristic 和 per-kernel 统计推导候选等价性，再产生 combo_tuning_groups。NPU Combo 缺这些真实输入和对应消费者。已 PASS 的 grouping_by_metadata_fingerprint 只直接调用共同 helper 与模拟 metadata，不证明真实 NPU 图接通。NPU 已有 standalone symbolic grouped autotune；其 Combo 中的禁用说明不能与这里的成员候选分组混为同一个概念。 修复入口：用 R12 的真实成员输入构建候选等价组，接入 R20 的独立成员调优；组成员与候选要可观察。 相关根因／后续依赖：R12、R18；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R12：统一 standalone 与 Combo 的真实 per-kernel serializer，逐成员导出统计、类别、尺寸及归约方向，不复用首成员字典；R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间；R21：按真实 native 候选输入建立等价 fingerprint，将实际组接入顺序调优；每成员计算和 grid 保持独立。,未找到同名定义（缺能力：相同子 kernel 分组调优）,—
-test_combo_kernels.py,test_combo_autotune_grouping_by_metadata_fingerprint,独立测试方法,PASS,PASS 1,—,未找到同名定义（缺能力：按完整元数据指纹分组）,—
-test_combo_kernels.py,test_combo_max_persistent_rblock_gated_on_per_subkernel,独立测试方法,FAIL,FAIL 1; PASS 1,D03（P2）：实际共享/独立 X 的 R 资源门控差异。原全量首失败／门控：per_subkernel=False 数值通过但缺 max_persistent_rblock=1024；True 数值与字段不存在的断言通过，该负向字段检查未证明独立 X 分块生效。 R18 已确认独立 flag/ABI 未贯通；True 的负向字段 PASS 不证明独立模式。先明确原生共享/独立 UB 资源契约，不照搬 HIP 裸阈值。 相关根因／后续依赖：R18；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间。,未找到同名定义（缺能力：持久归约块上限及分模式控制）,—
-test_combo_kernels.py,test_combo_kernel_coordesc_tunes_largest_subkernel_first,独立测试方法,FAIL,FAIL 1,R22（P2）：独立坐标下降首步只改变最大成员。原全量首失败／门控：在 assertLogs 退出时失败，未捕获 coordinate_descent_tuner 的 DEBUG 日志；后续数值、多个成员配置及最大成员优先断言均未执行。 Native 有 CoordescTuner 和 timing 缓存，但终选是候选最小 timing、run 未进入成员 coordesc；接真实独立坐标、最大成员排序和试验，不能只补日志。 相关根因／后续依赖：R18；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R18：贯通开关，统一成员 BLOCK/BLOCK_SUB 命名、body、grid 和 runtime 候选，按每成员 block 计算分发区间；R22：接通真实坐标下降回调，按最大成员优先修改独立字段，重编译或重算 runtime grid 后以完整 Combo 计时。,未找到同名定义（缺能力：Combo 坐标下降及大子 kernel 优先）,—
-test_combo_kernels.py,test_combo_inductor_meta_has_optimize_mem,独立测试方法,FAIL,FAIL 1,"R16（P1）：推理 optimize_mem=True 与输入备份恢复契约。原全量首失败／门控：推理图 relu/sigmoid 数值比较通过，随后缺 optimize_mem=True；输入备份／恢复的真实消费契约尚需另验。 两个方法检查同一个字段的两个阶段。NPU Combo 未显式导出该字段，runtime 用 pop(..., True) 得到默认 True。True 允许按内存预算把待保护 mutation 输入备份到 CPU；False 关闭这一内存优化。两种值都仍需正确保护输入；Native benchmark 的 clone 逻辑已有，字段缺失不能直接证明 alias/mutation 已被污染。 修复入口：在 Combo jit_line 按推理/反向 True、训练前向 False 的图阶段契约传值，核对 NPU save/restore 与 clone 的实际消费路径。 修复方案（未实施）：R16：按推理/反向与训练前向导出 optimize_mem，打通实际消费；两种值均保留 mutation 输入保护。",未找到同名定义（缺能力：Combo 内存优化标记）,—
-test_combo_kernels.py,test_combo_inductor_meta_optimize_mem_false_in_training_forward,独立测试方法,FAIL,FAIL 1,"R16（P1）：训练前向 optimize_mem=False 与输入保护。原全量首失败／门控：训练前向数值比较通过，随后缺 optimize_mem=False；本方法未进行反向梯度和 autotune 输入恢复验收。 两个方法检查同一个字段的两个阶段。NPU Combo 未显式导出该字段，runtime 用 pop(..., True) 得到默认 True。True 允许按内存预算把待保护 mutation 输入备份到 CPU；False 关闭这一内存优化。两种值都仍需正确保护输入；Native benchmark 的 clone 逻辑已有，字段缺失不能直接证明 alias/mutation 已被污染。 修复入口：在 Combo jit_line 按推理/反向 True、训练前向 False 的图阶段契约传值，核对 NPU save/restore 与 clone 的实际消费路径。 修复方案（未实施）：R16：按推理/反向与训练前向导出 optimize_mem，打通实际消费；两种值均保留 mutation 输入保护。",未找到同名定义（缺能力：训练前向内存优化标记）,—
-test_combo_kernels.py,test_combo_triton_meta_has_disable_ftz,独立测试方法,FAIL,FAIL 2,R25（P2）：FTZ 开关真实编译消费及非正规数数学目标。原全量首失败／门控：False/True 两个实例数值均通过，随后各缺对应 disable_ftz 字段；当前正值输入未覆盖非正规数，数学功能还需另行验收。 NPU codegen/native options 没有 FTZ 转译，实际 NPUOptions 未声明且 parse_options 过滤未知项；仅加字段没有消费者。非正规数能力尚未知，保持 FAIL。 修复方案（未实施）：R25：贯通 codegen 到两条 Ascend 编译路径，并与 Triton 定义实际被数学 lowering 消费的 FTZ option；硬件能力仍待验证。,未找到同名定义（缺能力：disable_ftz 配置及传递）,—
-test_combo_kernels.py,test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields,独立测试方法,FAIL,FAIL 1,R12（P1）：三成员 num_load/num_store/num_reduction、autotune_hints、atomic_add_found。原全量首失败／门控：relu/sigmoid/tanh 数值比较通过，随后缺 inductor_meta_0；成员真实计数、提示和 atomic 标志的检查未完成。 缺三个真实 inductor_meta_i 的统计出口；num_load/num_reduction producer 已有，Native Index 的 num_store 未维护（R09），atomic_add 分支也未设置状态（R10）。原图没有 atomic，实际 True 分支尚需另验。 相关根因／后续依赖：R09、R10；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R09：在 Native Index 两个保留写回入口各计一次 num_store，deferred 排队与渲染不重复计数；R10：在真实保留 atomic_add 的生成分支设置状态，再由成员 metadata 导出并供候选消费者使用；R12：统一 standalone 与 Combo 的真实 per-kernel serializer，逐成员导出统计、类别、尺寸及归约方向，不复用首成员字典。,未找到同名定义（缺能力：子 kernel pointwise 元数据）,—
-test_combo_kernels.py,test_combo_reduction_combo_grid_meta_has_per_subkernel_fields,独立测试方法,FAIL,FAIL 1,R12（P1）：sum/mean 两成员 num_load/num_store/num_reduction。原全量首失败／门控：sum/mean 数值比较通过，随后缺 inductor_meta_0；成员 load/store/reduction 统计断言尚未执行。 缺 sum/mean 两个成员统计字典；load/reduction producer 已有，最终 store 计数 在 Native Index CSEProxy 未维护（R09）。先修真实计数再统一导出，不填 0/空字典。 相关根因／后续依赖：R09；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R09：在 Native Index 两个保留写回入口各计一次 num_store，deferred 排队与渲染不重复计数；R12：统一 standalone 与 Combo 的真实 per-kernel serializer，逐成员导出统计、类别、尺寸及归约方向，不复用首成员字典。,未找到同名定义（缺能力：子 kernel reduction 元数据）,—
-test_combo_kernels.py,test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel,独立测试方法,FAIL,FAIL 1,R12（P1）：deterministic 两成员 has_loadstore_with_contiguous_rdim。原全量首失败／门控：确定性配置下 sum/mean 数值比较通过，随后缺 inductor_meta_0；未完成成员连续归约维标志检查。 缺两成员字典；Native Index 未维护实际连续归约维 load/store 状态（R11）。布局标志要由真实地址/stride 生成，不能由缺字段推断确定性归约不支持。 相关根因／后续依赖：R11；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R11：按真实归约轴求访存 stride，维护 load 状态与保留 store 集合，再导出连续归约维布局标志；R12：统一 standalone 与 Combo 的真实 per-kernel serializer，逐成员导出统计、类别、尺寸及归约方向，不复用首成员字典。,未找到同名定义（缺能力：子 kernel 连续归约维元数据）,—
-test_combo_kernels.py,test_combo_per_kernel_inductor_meta_matches_standalone,独立测试方法,FAIL,FAIL 1,R12（P1）：standalone/Combo 的真实计数、atomic、no_x_dim、autotune_hints、tiling_scores 对齐。原全量首失败／门控：Combo 数值比较通过；standalone 解析为两个字典，Combo 成员字典解析为空，长度 2 对 0 而失败。必需统计字段仍需非空有效基准，不能用空字典对齐。 standalone 与 Combo 都需完整非空字段后再比较；NPU 没接统一 per-kernel helper，Combo 只取首成员 metadata。真实 store/atomic producer 后续 R09/R10，不能用空解析对齐。 相关根因／后续依赖：R09、R10；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R09：在 Native Index 两个保留写回入口各计一次 num_store，deferred 排队与渲染不重复计数；R10：在真实保留 atomic_add 的生成分支设置状态，再由成员 metadata 导出并供候选消费者使用；R12：统一 standalone 与 Combo 的真实 per-kernel serializer，逐成员导出统计、类别、尺寸及归约方向，不复用首成员字典。,未找到同名定义（缺能力：与普通 kernel 一致的子级元数据）,—
-test_combo_kernels.py,test_combo_kernel_num_gb_and_flop_match_standalone_sum,独立测试方法,FAIL,FAIL 1,R14（P1）：有效 standalone 基准与 Combo GB/FLOP 求和。原全量首失败／门控：原数值比较完成后，Combo kernel_num_gb 匹配为空；FLOP 聚合检查尚未执行，空 standalone 求和不是有效基准。 NPU 普通 kernel 的 profile/benchmark GB 估算已有，Combo 未聚合；standalone kernel_flop 出口也未生成（R13），共同 FLOP 估算器仍可继承。先建非空有效基准再聚合。 相关根因／后续依赖：R13；以根因队列验收，不给用例另排修复序号。 修复方案（未实施）：R13：使用已继承的节点 FLOP 估算器导出 standalone kernel_flop，仅在 benchmark 开关下出现；R14：按实际分区聚合成员同源 GB/FLOP，并按 benchmark/profile 条件导出总量。,未找到同名定义（缺能力：Combo 字节量及 FLOP 汇总）,—
-test_combo_kernels.py,test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth,独立测试方法,FAIL,FAIL 1,R14（P1）：profile-only 导出 Combo 真实 GB。原全量首失败／门控：数值比较通过，随后缺 kernel_num_gb；后续不应输出 kernel_flop 的检查未执行。 普通 NPU profile GB 估算已有，Combo 没有成员聚合和出口。接同源逻辑读写量之和，保留 profile-only 不输出 FLOP 的后续目标。 修复方案（未实施）：R14：按实际分区聚合成员同源 GB/FLOP，并按 benchmark/profile 条件导出总量。,未找到同名定义（缺能力：带宽分析的 Combo 字节量）,—
-test_combo_kernels.py,test_combo_inductor_meta_no_kernel_num_gb_without_profile,独立测试方法,PASS,PASS 1,—,未找到同名定义（已有行为：默认不输出统计字段；新增覆盖）,—
-test_combo_kernels.py,test_benchmark_combo_kernel_emits_real_num_gb,独立测试方法,FAIL,FAIL 1,R15（P1）：benchmark 使用真实正 GB 与 native device 参数。原全量首失败／门控：数值比较通过，随后未匹配到浮点 num_gb；NPU Combo benchmark 生成入口传入硬编码 0，后续 device 参数检查未执行。 NPU triton_combo_kernel.py 的独立 benchmark 生成调用 codegen_kernel_benchmark(num_gb=0)，模板没有拿到真实 Combo 访存量。它与 R14 的主 metadata 出口是两个不同接入点。 修复入口：把 R14 同源计算的实际逻辑 GB 传给 benchmark 模板，并核对 native device/launch 参数。 修复方案（未实施）：R15：让独立 benchmark 模板消费同源 Combo GB，替代 num_gb=0，并保留 NPU device/launch 参数检查。,未找到同名定义（缺能力：benchmark 使用真实字节量）,—
-test_combo_kernels.py,test_combo_kernel_peak_memory_wide_resnet,独立测试方法,FAIL,FAIL 1,R26（P3）：真实正 delta 候选被 gate 拒绝并降低 warm 峰值。原全量首失败／门控：tight 与 disabled 的首次执行峰值同为 616101888B，未满足下降断言；本轮没有额外捕获 gate 候选，不能据此判定 gate 未实现。 补充原 pytest 确认两次 schedule 前后相同、memory-gate 调用 0，峰值仍各 616101888 B；验收未覆盖拒绝路径，gate 源码已有。先建真实正 delta 候选和 warm 峰值验收。,未找到同名定义（缺能力：按峰值内存限制融合）,—
+﻿测试文件,函数名,类型,已上线,最新结果,实例结果,当前分析
+test_triton_kernels.py,test_combo_fp_self_sub_rewrite,独立测试方法,否,PASS,PASS 2,—
+test_torchinductor.py,test_adaptive_avg_pool2d1,独立测试方法,是,PASS,PASS 2,—
+test_torchinductor.py,test_mean,独立测试方法,是,PASS,PASS 1,—
+test_torchinductor.py,test_rand_like_deterministic,独立测试方法,是,PASS,PASS 2,—
+test_combo_kernels.py,test_activation_functions,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_activations,嵌套函数,是,随外层验证/PASS,随 test_activation_functions 验证,—
+test_combo_kernels.py,test_reduce_functions,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_reduce,嵌套函数,是,随外层验证/PASS,随 test_reduce_functions 验证,—
+test_combo_kernels.py,test_mutated_args,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_mutated,嵌套函数,是,随外层验证/PASS,随 test_mutated_args 验证,—
+test_combo_kernels.py,test_reduce_split,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_2d_blocking_partitioning,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_persistent_reduction_size_hint,独立测试方法,否,FAIL,FAIL 1,CUDA 尺寸断言与 NPU 尺寸元信息不兼容
+test_combo_kernels.py,test_sort_in_combo_kernel_forces_persistent_reduction,独立测试方法,否,PASS,PASS 1,—
+test_combo_kernels.py,test_fuse_mix_order_reductions_combo_kernels,独立测试方法,否,FAIL,FAIL 1,共享输入的行列联合归约功能缺失
+test_combo_kernels.py,test_combo_kernel_scalar_store_broadcast,独立测试方法,否,FAIL,FAIL 1,标量与向量成员的异构组合功能缺失
+test_combo_kernels.py,test_single_combo_kernels,独立测试方法,否,FAIL,FAIL 2,CUDA Grid1D 断言与 NPU GridNpu 不兼容
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_per,独立测试方法,否,FAIL,FAIL 1,CUDA XBLOCK 断言与 NPU 分块接口不兼容
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red_per,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_red,独立测试方法,否,FAIL,FAIL 1,多轴归约写回的指针与结果形状不匹配
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_r0_r1,独立测试方法,否,FAIL,FAIL 1,非连续多轴 sum 精度超差，原因待定界
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi_3d,独立测试方法,否,PASS,PASS 1,—
+test_combo_kernels.py,test_combo_kernel_per_config_subkernel_block_size,独立测试方法,否,FAIL,FAIL 1,NPU eager 不支持 channels_last contiguous
+test_combo_kernels.py,test_combo_kernels_pointwise_only,独立测试方法,否,PASS,PASS 2,—
+test_combo_kernels.py,test_combo_kernel_max_num_nodes,独立测试方法,是,PASS,PASS 3,—
+test_combo_kernels.py,test_combo_kernel_yz_overflow,独立测试方法,否,FAIL,FAIL 1,profiler 事件格式解析不兼容 NPU
+test_combo_kernels.py,test_combo_kernel_no_bench_stitched_config,独立测试方法,否,FAIL,FAIL 1,独立块功能缺失
+test_combo_kernels.py,test_combo_kernel_no_bench_persistent_reduction,独立测试方法,否,FAIL,FAIL 1,独立块功能缺失
+test_combo_kernels.py,test_combo_kernel_no_bench_carve_out,独立测试方法,否,FAIL,FAIL 1,默认配置拼接及成员分离功能缺失
+test_combo_kernels.py,test_activation_benchmark,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_activations,嵌套函数,是,随外层验证/PASS,随 test_activation_benchmark 验证,—
+test_combo_kernels.py,test_reduce_benchmark,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_reduce,嵌套函数,是,随外层验证/PASS,随 test_reduce_benchmark 验证,—
+test_combo_kernels.py,test_mutated_benchmark,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_mutated,嵌套函数,是,随外层验证/PASS,随 test_mutated_benchmark 验证,—
+test_combo_kernels.py,test_round_robin_dispatch,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_mutated,嵌套函数,是,随外层验证/PASS,随 test_round_robin_dispatch 验证,—
+test_combo_kernels.py,test_2d_blocking_benchmark,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_persistent_reduction_no_x_dim,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_combo_kernel_per_subkernel_reduction_hint,独立测试方法,否,FAIL,FAIL 1,逐成员归约方向 metadata 缺失
+test_combo_kernels.py,test_combo_rms_norm_forwards_add_persistent_rblock,独立测试方法,否,FAIL,FAIL 1,逐成员 metadata 缺失，大 R 优化资格待确认
+test_foreach.py,test_single_list,独立测试方法,是,PASS,PASS 33,—
+test_foreach.py,test_single_scalar,独立测试方法,是,PASS,PASS 16,—
+test_foreach.py,test_single_scalar_tensor,独立测试方法,是,PASS,PASS 16,—
+test_foreach.py,test_scheduler_fusion_list,独立测试方法,是,PASS,PASS 33,—
+test_foreach.py,test_scheduler_fusion_scalar,独立测试方法,是,PASS,PASS 16,—
+test_foreach.py,test_broadcasting,独立测试方法,是,PASS,PASS 16,—
+test_foreach.py,test_type_promotion,独立测试方法,是,PASS,PASS 20,—
+test_foreach.py,test_kernel_split_arg_limit_list,独立测试方法,是,PASS,PASS 16,—
+test_foreach.py,test_fusion_duplicate_buffer_list,独立测试方法,是,PASS,PASS 20,—
+test_foreach.py,test_non_foreach_producer_list,独立测试方法,是,PASS,PASS 33,—
+test_foreach.py,test_non_foreach_producer_scalar,独立测试方法,是,PASS,PASS 16,—
+test_foreach.py,test_non_foreach_consumer_producer_list,独立测试方法,是,PASS,PASS 33,—
+test_foreach.py,test_non_foreach_consumer_producer_scalar,独立测试方法,是,PASS,PASS 16,—
+test_foreach.py,test_enable_dynamic_shapes_python_wrapper,独立测试方法,是,PASS,PASS 1,—
+test_foreach.py,test_decomp,独立测试方法,是,PASS,PASS 1,—
+test_foreach.py,test_fuse_concat,独立测试方法,是,PASS,PASS 1,—
+test_foreach.py,test_2d_blocking,独立测试方法,是,PASS,PASS 20,—
+test_foreach.py,test_2d_blocking_partitioning_elems,独立测试方法,是,PASS,PASS 20,—
+test_foreach.py,test_2d_blocking_partitioning_mixed_sizes,独立测试方法,是,PASS,PASS 20,—
+test_foreach.py,test_reinplacing,独立测试方法,是,PASS,PASS 4,—
+test_foreach.py,test_reinplacing_mut_before,独立测试方法,是,PASS,PASS 4,—
+test_foreach.py,test_reinplacing_mut_after,独立测试方法,是,PASS,PASS 4,—
+test_foreach.py,test_aliasing,独立测试方法,是,PASS,PASS 1,—
+test_foreach.py,test_2d_block_no_mixed_sizes_no_mask,独立测试方法,是,PASS,PASS 1,—
+test_foreach.py,test_2d_block_mixed_sizes_with_mask,独立测试方法,是,PASS,PASS 1,—
+test_foreach.py,test_foreach_map_backward_binary,独立测试方法,是,PASS,PASS 10,—
+test_foreach.py,test_foreach_map_backward_unary,独立测试方法,是,PASS,PASS 4,—
+test_snode_runtime.py,test_foreach_basic,独立测试方法,否,PASS,PASS 1；复验 1（efc05dd90b），其余沿用历史结果,—
+test_snode_runtime.py,test_foreach_after_extern,独立测试方法,否,PASS,PASS 1；复验 1（efc05dd90b），其余沿用历史结果,—
+test_torchinductor.py,test_combo_kernel_store_mask,独立测试方法,否,FAIL,FAIL 1；复验 1（efc05dd90b），其余沿用历史结果,动态归约索引生成错误，单 Combo 组合未完成
+test_unbacked_symints.py,test_combo_kernel_size_hint_failure,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_combo_kernel_dynamic_shapes_grid_changes,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_dynamic_shapes_activations,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_activations,嵌套函数,是,随外层验证/PASS,随 test_dynamic_shapes_activations 验证,—
+test_combo_kernels.py,test_dynamic_shapes_2d_blocking,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_dynamic_shapes_reduce,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_reduce,嵌套函数,是,随外层验证/PASS,随 test_dynamic_shapes_reduce 验证,—
+test_combo_kernels.py,test_dynamic_shapes_mutated,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_mutated,嵌套函数,是,随外层验证/PASS,随 test_dynamic_shapes_mutated 验证,—
+test_combo_kernels.py,test_dynamic_shapes_activations_no_autotune,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_activations,嵌套函数,是,随外层验证/PASS,随 test_dynamic_shapes_activations_no_autotune 验证,—
+test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_no_x_dim,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_no_x_dim_2,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_dynamic_shapes_2d_blocking_round_robin,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_cuda,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_dynamic_shapes_persistent_reduction_mixed_x_dim_xpu,独立测试方法,否,PASS,PASS 1；复验 1（efc05dd90b），其余沿用历史结果,—
+test_torchinductor.py,test_combo_kernel_filter_cpu,独立测试方法,否,FAIL,FAIL 1,argmin/argmax 索引的实际 dtype 与声明不一致
+test_provenance_tracing.py,test_triton_kernel_to_post_grad_tracing_combo_kernel,独立测试方法,否,FAIL,FAIL 1,Combo 到实际 FX 节点的追踪映射缺失
+test_user_streams.py,test_combo_kernel_fusion_within_same_stream,独立测试方法,否,PASS,PASS 1,—
+test_combo_kernels.py,test_combo_kernel_tma_descriptor_block_name,独立测试方法,否,SKIP,SKIP 1,硬件差异，涉及 NVIDIA SM90+ GPU 专属的 TMA 描述符特性
+test_combo_kernels.py,test_combo_kernel_amd_special_config_args,独立测试方法,否,SKIP,SKIP 2,硬件差异，涉及 AMD GPU 专属的 ROCm/HIP 编译选项特性
+test_combo_kernels.py,test_helper_fn_defined,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_pdl_codegen_in_combo_kernel,独立测试方法,否,SKIP,SKIP 1,硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性
+test_combo_kernels.py,test_pdl_combo_kernel_pointwise,独立测试方法,否,SKIP,SKIP 1,硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性
+test_combo_kernels.py,test_pdl_combo_kernel_reduction,独立测试方法,否,SKIP,SKIP 1,硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性
+test_combo_kernels.py,test_combo_kernel_max_autotune,独立测试方法,否,FAIL,FAIL 1,成员独立块及顺序调优功能缺失
+test_combo_kernels.py,test_combo_kernel_max_autotune_with_reduction,独立测试方法,否,FAIL,FAIL 1,成员独立块及顺序调优功能缺失
+test_combo_kernels.py,test_combo_autotune_many_subkernels,独立测试方法,否,FAIL,FAIL 1,成员独立块及顺序调优功能缺失
+test_combo_kernels.py,test_combo_autotune_grouping,独立测试方法,否,FAIL,FAIL 1,真实成员调优分组功能未接通
+test_combo_kernels.py,test_combo_autotune_grouping_by_metadata_fingerprint,独立测试方法,否,PASS,PASS 1,—
+test_combo_kernels.py,test_combo_max_persistent_rblock_gated_on_per_subkernel,独立测试方法,否,FAIL,FAIL 1; PASS 1,max_persistent_rblock 的 NPU 资源契约待明确
+test_combo_kernels.py,test_combo_kernel_coordesc_tunes_largest_subkernel_first,独立测试方法,否,FAIL,FAIL 1,成员坐标下降调优功能缺失
+test_combo_kernels.py,test_combo_inductor_meta_has_optimize_mem,独立测试方法,否,FAIL,FAIL 1,optimize_mem 图阶段 metadata 缺失
+test_combo_kernels.py,test_combo_inductor_meta_optimize_mem_false_in_training_forward,独立测试方法,否,FAIL,FAIL 1,optimize_mem 图阶段 metadata 缺失
+test_combo_kernels.py,test_combo_triton_meta_has_disable_ftz,独立测试方法,否,FAIL,FAIL 2,disable_ftz 编译接口未适配
+test_combo_kernels.py,test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields,独立测试方法,否,FAIL,FAIL 1,逐成员访存及归约统计 metadata 缺失
+test_combo_kernels.py,test_combo_reduction_combo_grid_meta_has_per_subkernel_fields,独立测试方法,否,FAIL,FAIL 1,逐成员访存及归约统计 metadata 缺失
+test_combo_kernels.py,test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel,独立测试方法,否,FAIL,FAIL 1,逐成员 metadata 及连续归约维统计缺失
+test_combo_kernels.py,test_combo_per_kernel_inductor_meta_matches_standalone,独立测试方法,否,FAIL,FAIL 1,standalone 与 Combo 的统计 metadata 不完整
+test_combo_kernels.py,test_combo_kernel_num_gb_and_flop_match_standalone_sum,独立测试方法,否,FAIL,FAIL 1,Combo GB/FLOP 成本统计缺失
+test_combo_kernels.py,test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth,独立测试方法,否,FAIL,FAIL 1,profile 模式的 Combo GB 统计缺失
+test_combo_kernels.py,test_combo_inductor_meta_no_kernel_num_gb_without_profile,独立测试方法,是,PASS,PASS 1,—
+test_combo_kernels.py,test_benchmark_combo_kernel_emits_real_num_gb,独立测试方法,否,FAIL,FAIL 1,benchmark 带宽分子 num_gb 固定为 0
+test_combo_kernels.py,test_combo_kernel_peak_memory_wide_resnet,独立测试方法,否,FAIL,FAIL 1,用例未覆盖内存门控拒绝路径

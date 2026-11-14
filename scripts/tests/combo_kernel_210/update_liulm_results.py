@@ -102,11 +102,7 @@ def main():
     repo = args.repo.resolve()
     art = repo / "artifacts" / args.artifact
     table = repo / "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"
-    originals = load_csv(table.parent / "inductor-combo-tests-v2.13.csv")
     previous = load_csv(table)
-    assert [(r["测试文件"], r["函数名"]) for r in originals] == [
-        (r["测试文件"], r["函数名"]) for r in previous
-    ], "The 2.10 snapshot and shared source inventory must have the same row order"
     focused = json.loads((art / "with_fixes/functional_results.json").read_text())["methods"]
     focused_map = {(m["file"], m["name"]): m for m in focused}
     full_path = art / "full/functional_results.json"
@@ -142,14 +138,14 @@ def main():
         latest = list(latest_map.values())
         stamp = "全量快照 + " + retests[-1][0]
     rows = []
-    for original, old in zip(originals, previous):
-        key = original["测试文件"], original["函数名"]
+    for old in previous:
+        key = old["测试文件"], old["函数名"]
         baseline = old["原 e32+F1/F3 结果"]
-        row = {"测试文件": key[0], "函数名": key[1], "v2.10.0存在性/实现差异": original["v2.10.0存在性"],
+        row = {"测试文件": key[0], "函数名": key[1], "v2.10.0存在性/实现差异": old["v2.10.0存在性/实现差异"],
                "执行范围": old.get("执行范围", "未运行"),
                "原 e32+F1/F3 结果": baseline,
                "最新结果": "未运行", "当前分析": old["当前分析"]}
-        if original["类型"] == "嵌套函数":
+        if old["执行范围"] == "随外层方法验证":
             row.update(执行范围="随外层方法验证", 最新结果=baseline)
         elif baseline == "未运行":
             row["执行范围"] = "未运行"
@@ -178,7 +174,7 @@ def main():
             key = row["测试文件"], row["函数名"]
             if note and row["最新结果"].startswith("失败") and key not in tested_keys:
                 row["当前分析"] = row["当前分析"].replace("仍存在", "历史失败") + "；" + note
-    assert [(r["测试文件"], r["函数名"]) for r in rows] == [(r["测试文件"], r["函数名"]) for r in originals]
+    assert [(r["测试文件"], r["函数名"]) for r in rows] == [(r["测试文件"], r["函数名"]) for r in previous]
     with table.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=FIELDS, lineterminator="\n")
         writer.writeheader()

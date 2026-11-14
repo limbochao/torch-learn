@@ -2,13 +2,17 @@
 
 结果和当前问题分析只更新 [2.13 固定文档](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13.md)。
 用例适配进展统一更新 [2.13 进展表](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13.csv)，
-同表保留用例类型、2.10 源码存在性和直接运行兼容性，结果与分析以实际 2.13 报告为准。
+只维护 2.13 的用例类型、上线状态、最新结果、实例统计和当前分析。
+“已上线”以 [上线清单](combo_native_213_passed_nodeids.txt) 为准，全部实例在清单中标“是”，
+部分实例在清单中标“部分（已上线数/总数）”，均不在清单中标“否”；嵌套函数随外层方法。
+当前 PASS 不自动视为已上线，结果与分析以实际 2.13 报告为准。
 运行批次使用独立证据目录，表格和文档文件名不随分支或提交变化。
 
 ## 环境与执行范围
 
 使用 NPU_A5 的 `pta_213_case` 环境，在用户指定的 `PTA_213` 工作目录中执行。
 测试源为 `Community-Use-Case-Testing/v2.13.0/inductor_npu`。
+用例仓库统一使用 `fix/combo_case` 分支，所有用例修改在该分支提交和推送；验证记录实际提交。
 执行前确认实际安装代码；采用 Python overlay 时记录所依据的提交及覆盖文件哈希，
 基础 wheel 与 C++ 版本不因 overlay 自动改变。具体当前版本见固定文档。
 
@@ -79,11 +83,13 @@ python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
   --local-artifact artifacts/<new-merged-run> --name <new-merged-run>
 ```
 
-发布器只更新 `inductor-combo-tests-v2.13.csv`，保留表格行顺序和源码对照列；
+发布器只更新 `inductor-combo-tests-v2.13.csv`，保留表格行顺序，并按上线清单刷新“已上线”列；
 定向结果必须先合并为完整快照，避免覆盖未重跑用例的进展。
 Markdown 始终更新 `inductor-combo-tests-v2.13.md` 的当前结果章节。
 对应问题分析同步在该文档维护，PASS 不保留旧失败原因，正文不累积旧轮次结果。
+证据目录的 `current-analysis.json` 只维护表格所需的一句话原因，详细定位和修复方案写入固定版本文档。
+硬件 SKIP 简写为“硬件差异，涉及 xx 硬件专属的 xx 特性”。
 `--push` 可提交推送，`--stop-timer <unit>.timer` 可在收尾时停止本地定时检查。
 
-[2.13 PASS 清单](combo_native_213_passed_nodeids.txt) 仅保留为已有通过范围的查询依据。
+[2.13 上线清单](combo_native_213_passed_nodeids.txt) 用于维护上线状态，不作为后续复测清单。
 2.10 原生清单及结果按 [2.10 说明](README-native-210.md) 单独维护。

@@ -62,7 +62,8 @@ def main():
         rerun_results.append({**source, "method_results": current["method_results"],
                               "instance_results": current["instance_results"]})
         state.update({key: current[key] for key in (
-            "test_commit", "npu_fix_commit", "torch_npu", "torch_npu_git", "finished",
+            "test_commit", "test_root", "python", "devices", "npu_fix_commit",
+            "torch_npu", "torch_npu_git", "started", "finished",
         )})
     assert all(item == fingerprints[0] for item in fingerprints), "Rerun phases used different installed sources"
     args.output.mkdir(parents=True, exist_ok=False)
@@ -71,12 +72,13 @@ def main():
     for name in metadata:
         if (args.reference / name).exists():
             shutil.copy2(args.reference / name, args.output / name)
-    state.update(failed_only_merge=True, reference_artifact=args.reference.name, rerun_results=rerun_results,
+    state.update(failed_only_merge=True, reusing_old_results=True,
+                 reference_artifact=args.reference.name, rerun_results=rerun_results,
                  method_results=dict(Counter(j["status"] for j in jobs)),
                  instance_results=dict(Counter(r["status"] for j in jobs for r in j["reports"].values())))
     state.pop("cache_root", None)
     # These fields describe a historical live-queue handoff, not this failed-only update.
-    for key in ("execution_order", "phase", "phase_state", "phase_runs", "reused_methods"):
+    for key in ("execution_order", "phase", "phase_state", "phase_runs", "reused_methods", "shards", "cache_roots"):
         state.pop(key, None)
     save(args.output / "status.json", state)
     save(args.output / "jobs.json", jobs)
