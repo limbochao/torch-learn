@@ -64,6 +64,26 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 
 这里的“成员”是 Combo 中保留独立计算域的一条分支。ABI 指生成 body 与 launcher 之间参数名、类型和值的约定；TTIR 是 Triton 编译的中间表示，校验失败后可能退回普通 kernel。CSE（公共子表达式消除）用缓存复用相同计算，计数应排除这类复用。block tensor 是 DSL 中向量/矩阵形状的值，标量只有一个值。fingerprint 由真实尺寸和优化字段判断候选是否等价；坐标下降在固定其他配置时，依次改变一组分块参数并实测。
 
+### FAIL 原因的能力归属
+
+已按当前失败实例、用例配置、实际断言和实现消费链复核全部 **34 个 FAIL 方法、36 个失败实例**。
+本次为源码复核，执行结果仍采用上文的逐实例实测记录；[归因审计][failure-capability-audit]保存全部方法的分类、源码版本及依据。
+
+其中 **14 个方法直接涉及成员独立块及配套能力**：默认配置 3 个、成员调优 5 个、逐成员 metadata 6 个。
+共同实现仅在 `per_subkernel_blocks` 模式下导出成员统计、尺寸和归约方向，调优入口再消费这些信息。
+因此表格统一写“独立块配套统计/归约布局 metadata 缺失”等原因，完整验收需要 R18 接通真实成员 block/body/grid 协议。
+基础计数和 standalone 统计可先单独补齐；R18 完成后仍需各自补齐统计、默认配置和调优消费者。
+
+另有 **2 个异构组合方法按当前 R23 方案间接依赖独立块**：
+`test_combo_kernel_scalar_store_broadcast` 和 `test_combo_kernel_store_mask`。
+前者保留异构组合缺口；后者还保留动态归约索引缺陷，不能只修独立块就视为完成。
+
+其余 **18 个方法保留各自原因**。成本汇总、`optimize_mem`、FTZ、追踪和共享输入联合归约分别有自己的消费链；
+Metadata 测试类开启独立块不改变这些字段的归属。
+`max_persistent_rblock` 当前只有 `per_subkernel=False` 实例失败，按共享块资源契约待明确记录；
+`True` 实例仅通过字段不存在断言，继续保留原 PASS，不作为独立块 ABI 已实现的证据。
+eager 内存格式、profiler 解析、后端专属文本断言、归约代码生成、精度和峰值验收也分别保留已确认的原因或待定界状态。
+
 <a id="fix-plans213"></a>
 
 ### Inductor 修复方案范围
@@ -112,7 +132,7 @@ R16 与 R17 没有互相依赖，可以分别提交；成本链共用一个小�
 R15 的调用点虽小，必须等 R14 提供真实 GB；把 `0` 换成 `0.0` 或固定正数没有修复价值。
 R11 的真实布局统计合理；先补可证明的状态，再核对 native 候选消费者。
 候选策略的修改有条件后置，CUDA 的归约过滤规则需单独证明等价后再接入。
-R12 可以先拆出普通计数出口，但包含 deterministic 布局的完整验收仍以 R11 为前置。
+R12 的基础计数和统一序列化可先补；完整逐成员协议验收还需要 R18，deterministic 布局另需 R11。
 `tiling_scores`、`add_persistent_rblock` 和 HIP 的资源字段按真实 NPU producer/consumer 判断，缺字段本身不构成照搬理由。
 
 R18—R24 的成员 block/body/grid/runtime ABI、调优和联合归约涉及多层行为，安排在这批之后。
@@ -141,17 +161,17 @@ R01—R04/R27 的生成正确性缺陷仍保留独立修复队列，若目标 FA
 | P1 | [R09 Native Index 的有效普通/归约 store 没有维护 num_store](#root-r09) | producer 缺口已由源码确认；原用例先停在成员字典缺失 | — | 3 |
 | P1 | [R10 Native Index 发出 atomic_add，却没有设置 atomic_add_found](#root-r10) | producer 缺口已由源码确认；相关原图未触发原子加验收 | — | 2 |
 | P1 | [R11 Native Index load/store 未维护连续归约维布局状态](#root-r11) | producer 缺口已由源码确认；原用例先停在成员字典缺失 | — | 1 |
-| P1 | [R12 standalone/Combo 没有统一 per-kernel 统计出口，Combo 缺逐成员 metadata](#root-r12) | 出口缺口已由原断言和源码确认；未修复 | R09、R10、R11 | 7 |
+| P1 | [R12 统一逐成员统计出口缺失](#root-r12) | 独立块配套 metadata 缺失 | 统计：R09/R10/R11；完整验收：R18 | 7 |
 | P1 | [R13 standalone 的 FLOP 估算没有导出为 kernel_flop](#root-r13) | 出口缺口已由源码确认；原比较先停在 Combo GB | — | 1 |
 | P1 | [R14 Combo 没有聚合成员访存 GB/FLOP，也未在 profile 模式导出 GB](#root-r14) | Combo 成本出口缺口已由原断言和源码确认；未修复 | R13 | 2 |
 | P1 | [R15 Combo benchmark 带宽分子 num_gb 被硬编码为 0](#root-r15) | 独立 benchmark 出口缺口已由原断言和源码确认；未修复 | R14 | 1 |
 | P1 | [R16 Combo 未导出 optimize_mem 的图阶段取值，训练前向错误依赖默认 True](#root-r16) | 图阶段 metadata 缺口已确认；尚未证明输入污染 | — | 2 |
 | P1 | [R17 provenance 接收 node=None 的 Combo 外壳，真实分区 origins 被跳过](#root-r17) | 追踪映射缺口已由原产物和源码确认；未修复 | — | 1 |
-| P2 | [R18 per_subkernel_blocks 在 NPU scheduling 接入时丢失，body/grid 共用 block ABI](#root-r18) | 独立成员分块能力缺口已由源码确认；未实现 | R27 | 9 |
+| P2 | [R18 成员独立块开关与 body/grid ABI 未贯通](#root-r18) | 基础能力缺失，阻塞配套协议验收 | R27 | 14；另 2 项间接依赖 |
 | P2 | [R19 NPU override 绕过无 benchmark 的默认配置拼接和 carve-out](#root-r19) | 默认配置处理能力缺口已由源码确认；未实现 | R18 | 3 |
 | P2 | [R20 NPU runtime 没有逐成员候选的 Combo 顺序调优消费者](#root-r20) | 独立成员调优能力缺口已由源码确认；未实现 | R18、R12 | 3 |
 | P2 | [R21 真实 NPU 成员 metadata 未接入 fingerprint 调优分组](#root-r21) | 分组输入/消费链缺口已由源码确认；未实现 | R12、R18、R20 | 1 |
-| P2 | [D03 共享/独立 X 模式的 max_persistent_rblock 原生资源契约待明确](#root-d03) | 原 False 实例 FAIL；True 实例 PASS 不证明独立 ABI | R18、R20 | 1 |
+| P2 | [D03 共享块 max_persistent_rblock 资源契约待明确](#root-d03) | False FAIL；True 负向断言 PASS | 共享模式单独定界；独立模式另需 R18/R20 | 1 |
 | P2 | [D04 RMSNorm add_persistent_rblock 的资格与 native R 候选对应待确认](#root-d04) | 原首失败是 R12；不能认作 persistent 归约整体缺失 | R12、R18、R20 | 1 |
 | P2 | [R22 NPU 有 CoordescTuner 对象和计时缓存，但未执行成员坐标下降](#root-r22) | 成员坐标下降能力缺口已由源码确认；未实现 | R18、R20、R21 | 1 |
 | P2 | [R23 共享 launcher 限制异构成员组合，标量链/向量归约被拆为 singleton](#root-r23) | 特定组合能力缺口已由实际分区及源码确认；未实现 | R18；mean 另需 R03/R04/R27 | 2 |
@@ -168,6 +188,7 @@ flowchart LR
     A[有效 store / atomic / 连续归约维统计] --> B[统一 standalone 与逐成员 metadata]
     B --> D[真实逐成员候选与顺序调优]
     C[成员独立 block / body / grid / runtime ABI] --> D
+    C -->|完整成员协议验收| B
     C --> E[无 benchmark 默认配置拼接与 carve-out]
     D --> F[真实 fingerprint 分组]
     F --> G[最大成员优先的坐标下降]
@@ -699,6 +720,10 @@ pointer helper 不作为统计生产端，仍在语义 indexing 层记录。
 实测/原首失败：四个计数/布局方法在缺 inductor_meta_i 或 Combo 成员解析为 0 项时失败；归约方向方法缺 reduction_hint_0；RMSNorm 在缺成员字典时失败，尚未执行
 add_persistent_rblock 检查。调优分组日志未出现，R21 的真实输入链未完成。
 
+这些用例检查的成员字典、heuristic、size_hints 和 reduction_hint，在共同 `combo_grid_meta` 中受
+`per_subkernel_blocks` 控制，属于独立块配套协议。基础统计可先修，完整用例还需 R18 接通真实独立分块；
+真实调优分组另需 R20/R21。已开启测试配置不代表 NPU 生成入口实际采用了该模式。
+
 根因与代码方案源码依据：[E22][E22]、[E27][E27]、[E2][E2]。
 
 证据：NPU create_inductor_meta:1926 不调用共同 inductor_meta_per_kernel；Combo jit_line:207 只取第一个成员的
@@ -985,19 +1010,23 @@ suffix，不做任意字符串替换。
 
 - 原 no-bench 两个方法及三成员 pointwise 用实际 NPU ABI 检查独立分块和原数值/单 Combo 目标。
 - 覆盖静态/动态尾块、无 split 成员及仅改变单个成员 BLOCK；检查最终 grid 的前缀区间不重叠、不漏计算。
-- 原布局用例仍先处理 eager R05 和 profiler R08；foreach 已接受的功能适配不恢复 CUDA 结构断言。
+- 独立块布局验收还受 eager R05 和 profiler R08 的前置条件约束；当前共享块布局用例按自身实际失败归因。
 
-覆盖用例（未复测项沿用原报告）：
+直接覆盖以下 14 个当前 FAIL 方法，均来自 `test_combo_kernels.py`；分类及对应实例见 [归因审计][failure-capability-audit]：
 
-- `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size`：范围外，1 FAIL；相关/后续覆盖。
-- `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config`：范围外，1 FAIL；原首失败关联。
-- `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_persistent_reduction`：范围外，1 FAIL；原首失败关联。
-- `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune`：范围外，1 FAIL；相关/后续覆盖。
-- `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune_with_reduction`：范围外，1 FAIL；相关/后续覆盖。
-- `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_many_subkernels`：范围外，1 FAIL；相关/后续覆盖。
-- `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping`：范围外，1 FAIL；相关/后续覆盖。
-- `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel`：范围外，1 FAIL、1 PASS；相关/后续覆盖。
-- `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_coordesc_tunes_largest_subkernel_first`：范围外，1 FAIL；相关/后续覆盖。
+- 默认配置 3 个：`test_combo_kernel_no_bench_stitched_config`、
+  `test_combo_kernel_no_bench_persistent_reduction`、`test_combo_kernel_no_bench_carve_out`。
+- 成员调优 5 个：`test_combo_kernel_max_autotune`、`test_combo_kernel_max_autotune_with_reduction`、
+  `test_combo_autotune_many_subkernels`、`test_combo_autotune_grouping`、
+  `test_combo_kernel_coordesc_tunes_largest_subkernel_first`。
+- 逐成员 metadata 6 个：`test_combo_kernel_per_subkernel_reduction_hint`、
+  `test_combo_rms_norm_forwards_add_persistent_rblock`、`test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields`、
+  `test_combo_reduction_combo_grid_meta_has_per_subkernel_fields`、
+  `test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel`、
+  `test_combo_per_kernel_inductor_meta_matches_standalone`。
+
+R23 的两个异构组合方法间接依赖成员独立 ABI，仍须修复自身的组合/索引缺陷。
+当前共享块布局方法的 eager 失败，以及 `max_persistent_rblock` 的 False 实例失败，分别保留 R05、D03 原因。
 
 证据：[E1][E1]、[E23][E23]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
@@ -1147,9 +1176,10 @@ torch/_inductor/runtime/triton_heuristics.py::_subkernel_fingerprint/_handle_com
 证据：原注释针对共享 XBLOCK 的 HIP 资源过滤（XBLOCK * max_persistent_rblock <= 4096）。NPU 有自己的
 UB/成员资源候选规则；字段缺失不能证明所有资源约束都没有实现。而 R18 已确认 True 未贯通，当前负向字段检查并没有覆盖真正独立模式。
 
-定位入口：先用 R18 形成真实共享/独立模式，逐项保存成员完整 R、BLOCK、BLOCK_SUB、dtype、program 数和编译资源。Native ComboTileGenerator 已按最大成员驻留 tile
-估算候选、按成员边界计算总 program；对照 TileGenerator 的 UB/SIMT 阈值及真实 compiler resource，而不是移植 HIP 的
-XBLOCK*R<=4096。若现有共享约束已等价，只适配有效验收；若合法小 tile 在共享或独立模式被错误遗漏，再按具体候选规则形成修复项。
+定位入口：当前 False 失败先在共享模式对照原 HIP 字段的资源前提、NPU UB/SIMT 阈值及真实 compiler resource，
+记录成员完整 R、BLOCK、BLOCK_SUB、dtype 和 program 数。Native ComboTileGenerator 已按最大成员驻留 tile
+估算候选、按成员边界计算总 program；现有共享约束若已等价，应适配有效验收，不直接移植 HIP 的 XBLOCK*R<=4096。
+True 模式的完整 ABI 与资源验收另需 R18/R20。若合法小 tile 被具体规则错误遗漏，再按对应模式形成修复项。
 
 完整验收：证明开关实际改变成员 block ABI；共享/独立模式的合法候选和资源约束行为分别验收，不以缺字段的负向 PASS 代替能力验证。
 
@@ -1441,6 +1471,8 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
   ../../../../scripts/tests/combo_kernel_210/README-213.md
 [current-jobs]:
   ../../../../artifacts/inductor-combo-tests-v2.13-current-9a86e68-20261114/jobs.json
+[failure-capability-audit]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-9a86e68-20261114/failure-capability-audit.json
 [software-rerun]:
   ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/
 [software-gates-audit]:

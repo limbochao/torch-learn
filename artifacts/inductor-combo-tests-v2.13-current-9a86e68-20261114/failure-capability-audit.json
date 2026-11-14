@@ -1,0 +1,727 @@
+{
+  "review_kind": "source-only failure capability review; no new device execution",
+  "result_snapshot": "inductor-combo-tests-v2.13-current-9a86e68-20261114",
+  "result_provenance": "jobs.json reports retain their original per-instance validation",
+  "reviewed_methods": 34,
+  "reviewed_failed_instances": 36,
+  "source_revisions": {
+    "Community-Use-Case-Testing": {
+      "branch": "fix/combo_case",
+      "commit": "9a86e684e2666069d203043ff5e9d2f6fd23c903"
+    },
+    "pytorch_new": {
+      "branch": "bugfix/combo_fix_meta",
+      "commit": "efc05dd90b5fe31717d5f13e51fb3e49035bea30"
+    },
+    "pytorch": {
+      "commit": "cf30153c4c131c8164ee7798e5022d810682e2cb"
+    }
+  },
+  "rules": [
+    "按当前失败实例和实际断言的消费链分类，类配置开关本身不作为归因依据。",
+    "逐成员 metadata 和候选分组受 per_subkernel_blocks 协议控制；基础统计 producer 可独立先补。",
+    "异构组合按 R23 方案依赖独立块 ABI；store_mask 的索引缺陷仍须另外修复。",
+    "共享块资源契约、图阶段内存优化、Combo 总成本、FTZ、追踪和联合归约各自保留原因。"
+  ],
+  "relation_counts": {
+    "none": 18,
+    "indirect": 2,
+    "direct": 14
+  },
+  "capability_counts": {
+    "其他原因": 18,
+    "异构组合间接依赖独立块": 2,
+    "独立块默认配置": 3,
+    "独立块配套 metadata": 6,
+    "独立块成员调优": 5
+  },
+  "evidence": {
+    "metadata_gate": "pytorch:torch/_inductor/codegen/triton_combo_kernel.py::ComboKernel.combo_grid_meta:1240",
+    "tuning_consumer": "pytorch:torch/_inductor/runtime/triton_heuristics.py::_handle_combo_kernel_per_subkernel_blocks:3617",
+    "shared_resource_and_common_meta": "pytorch:torch/_inductor/codegen/triton_combo_kernel.py::ComboKernel.jit_line:715",
+    "npu_switch_handoff": "pytorch_new:torch_npu/_inductor/codegen/scheduling.py::NPUTritonScheduling.codegen_combo_kernel:474",
+    "npu_shared_block_abi": "pytorch_new:torch_npu/_inductor/codegen/triton_combo_kernel.py::NPUComboKernel.get_block_args:442",
+    "existing_root_evidence": "inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/"
+  },
+  "source_files": [
+    {
+      "repository": "Community-Use-Case-Testing",
+      "path": "v2.13.0/inductor_npu/test_combo_kernels.py",
+      "sha256": "153844c4b6da9789e4a1763c8b7cd1f9bb7983c7700c0b6a319c17e34aca0b57"
+    },
+    {
+      "repository": "Community-Use-Case-Testing",
+      "path": "v2.13.0/inductor_npu/test_provenance_tracing.py",
+      "sha256": "070689e6cb0773325bfade5ac59a6411e434f25fb2d831fd10e30373bb170f68"
+    },
+    {
+      "repository": "Community-Use-Case-Testing",
+      "path": "v2.13.0/inductor_npu/test_torchinductor.py",
+      "sha256": "514a3e9a29668479e65856d0062c2477acab203971c56e1c68c3ce759e642cef"
+    },
+    {
+      "repository": "pytorch_new",
+      "path": "torch_npu/_inductor/codegen/scheduling.py",
+      "sha256": "5b65295323dd0c6a277377cb919e0b1ddb3ee541eb9c4f5bcc6ac52275967a91"
+    },
+    {
+      "repository": "pytorch_new",
+      "path": "torch_npu/_inductor/codegen/triton_combo_kernel.py",
+      "sha256": "fb3b6e36b33c29cd089c66f053ba79de926dd60622aaa83a1fa019b72ebc8fa0"
+    },
+    {
+      "repository": "pytorch_new",
+      "path": "torch_npu/_inductor/codegen/triton.py",
+      "sha256": "ca7c4fcb1228724136f53d70aba1557389e8ff148c0ef5daadcd83b0b52059cc"
+    },
+    {
+      "repository": "pytorch",
+      "path": "torch/_inductor/codegen/triton_combo_kernel.py",
+      "sha256": "586683c17a148982934d0927b46019e5ea627b0b359bd4eb21ba1586e54415ae",
+      "source": "git show at recorded runtime PyTorch commit"
+    },
+    {
+      "repository": "pytorch",
+      "path": "torch/_inductor/runtime/triton_heuristics.py",
+      "sha256": "87a1937c8179f44b082736d6144b6f29e7cb56ec771a0fe973379aa99fcb3923",
+      "source": "git show at recorded runtime PyTorch commit"
+    },
+    {
+      "repository": "pytorch",
+      "path": "torch/_inductor/codegen/triton.py",
+      "sha256": "76db8896b4ddac153d7cc7ea7a97b3974da01c110a7f56c8be234281545617e8",
+      "source": "git show at recorded runtime PyTorch commit"
+    },
+    {
+      "repository": "pytorch",
+      "path": "torch/_inductor/config.py",
+      "sha256": "4cdbe0025fd4890e2dfaa6395e57a08971c33889265cbcd26b33a1cf9ee1fa7f",
+      "source": "git show at recorded runtime PyTorch commit"
+    }
+  ],
+  "methods": [
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_persistent_reduction_size_hint",
+      "source_line": 229,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "CUDA 尺寸断言与 NPU 尺寸元信息不兼容",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_persistent_reduction_size_hint"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R07"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels",
+      "source_line": 323,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "共享输入的行列联合归约功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_fuse_mix_order_reductions_combo_kernels"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R24"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast",
+      "source_line": 353,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "异构组合间接依赖独立块",
+      "independent_block_relation": "indirect",
+      "analysis": "异构成员组合功能缺失（依赖独立块）",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_scalar_store_broadcast"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R23",
+        "R18"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels",
+      "source_line": 374,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "CUDA Grid1D 断言与 NPU GridNpu 不兼容",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels_benchmark_combo_kernel_False",
+        "test_combo_kernels.py::ComboKernelTests::test_single_combo_kernels_benchmark_combo_kernel_True"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R07"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_per",
+      "source_line": 426,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "CUDA XBLOCK 断言与 NPU 分块接口不兼容",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_per"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R07"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_red",
+      "source_line": 473,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "多轴归约写回的指针与结果形状不匹配",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_red"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R01"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1",
+      "source_line": 505,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "非连续多轴 sum 精度超差，原因待定界",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "D01"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size",
+      "source_line": 548,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "NPU eager 不支持 channels_last contiguous",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_block_size"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R05",
+        "R08"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_yz_overflow",
+      "source_line": 800,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "profiler 事件格式解析不兼容 NPU",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_yz_overflow"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R08"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config",
+      "source_line": 856,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块默认配置",
+      "independent_block_relation": "direct",
+      "analysis": "独立块功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_stitched_config"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R19"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_persistent_reduction",
+      "source_line": 895,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块默认配置",
+      "independent_block_relation": "direct",
+      "analysis": "独立块功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_persistent_reduction"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R19"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_carve_out",
+      "source_line": 925,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块默认配置",
+      "independent_block_relation": "direct",
+      "analysis": "独立块默认配置拼接及成员分离功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTests::test_combo_kernel_no_bench_carve_out"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R19"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_per_subkernel_reduction_hint",
+      "source_line": 1651,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块配套 metadata",
+      "independent_block_relation": "direct",
+      "analysis": "独立块配套归约方向 metadata 缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_per_subkernel_reduction_hint"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R12",
+        "R18"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_rms_norm_forwards_add_persistent_rblock",
+      "source_line": 2108,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块配套 metadata",
+      "independent_block_relation": "direct",
+      "analysis": "独立块配套大 R 优化 metadata 缺失，资格待确认",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_rms_norm_forwards_add_persistent_rblock"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R12",
+        "R18",
+        "D04"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask",
+      "source_line": 18204,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "异构组合间接依赖独立块",
+      "independent_block_relation": "indirect",
+      "analysis": "动态归约索引及异构组合缺陷（组合依赖独立块）",
+      "failed_nodes": [
+        "test_torchinductor.py::GPUTests::test_combo_kernel_store_mask_npu"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R27",
+        "R03",
+        "R04",
+        "R23",
+        "R18"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_torchinductor.py::CommonTemplate::test_combo_kernel_filter_cpu",
+      "source_line": 18175,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "argmin/argmax 索引的实际 dtype 与声明不一致",
+      "failed_nodes": [
+        "test_torchinductor.py::GPUTests::test_combo_kernel_filter_cpu_npu"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R02"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel",
+      "source_line": 384,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "Combo 到实际 FX 节点的追踪映射缺失",
+      "failed_nodes": [
+        "test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R17"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune",
+      "source_line": 1564,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块成员调优",
+      "independent_block_relation": "direct",
+      "analysis": "独立块顺序调优功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R12",
+        "R20"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune_with_reduction",
+      "source_line": 1593,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块成员调优",
+      "independent_block_relation": "direct",
+      "analysis": "独立块顺序调优功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_max_autotune_with_reduction"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R12",
+        "R20"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_many_subkernels",
+      "source_line": 1618,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块成员调优",
+      "independent_block_relation": "direct",
+      "analysis": "独立块顺序调优功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_many_subkernels"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R12",
+        "R20"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping",
+      "source_line": 1686,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块成员调优",
+      "independent_block_relation": "direct",
+      "analysis": "独立块调优分组功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R12",
+        "R20",
+        "R21"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel",
+      "source_line": 1822,
+      "configured_per_subkernel_blocks": "False: FAIL; True: PASS（仅字段不存在断言）",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "共享块的 max_persistent_rblock 资源契约待明确",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel_per_subkernel_False"
+      ],
+      "passed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel_per_subkernel_True"
+      ],
+      "related_root_ids": [
+        "D03"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_coordesc_tunes_largest_subkernel_first",
+      "source_line": 1850,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块成员调优",
+      "independent_block_relation": "direct",
+      "analysis": "独立块坐标下降调优功能缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_kernel_coordesc_tunes_largest_subkernel_first"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R18",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_optimize_mem",
+      "source_line": 1937,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "optimize_mem 图阶段 metadata 缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_optimize_mem"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R16"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward",
+      "source_line": 1946,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "optimize_mem 图阶段 metadata 缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R16"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz",
+      "source_line": 1956,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "disable_ftz 编译接口未适配",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz_disable_ftz_False",
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz_disable_ftz_True"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R25"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields",
+      "source_line": 1966,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块配套 metadata",
+      "independent_block_relation": "direct",
+      "analysis": "独立块配套统计 metadata 缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R12",
+        "R09",
+        "R10",
+        "R18"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_combo_grid_meta_has_per_subkernel_fields",
+      "source_line": 1989,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块配套 metadata",
+      "independent_block_relation": "direct",
+      "analysis": "独立块配套统计 metadata 缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_combo_grid_meta_has_per_subkernel_fields"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R12",
+        "R09",
+        "R18"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel",
+      "source_line": 2005,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块配套 metadata",
+      "independent_block_relation": "direct",
+      "analysis": "独立块配套归约布局 metadata 缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R12",
+        "R11",
+        "R18"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_per_kernel_inductor_meta_matches_standalone",
+      "source_line": 2020,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "独立块配套 metadata",
+      "independent_block_relation": "direct",
+      "analysis": "独立块成员与 standalone 的统计 metadata 不完整",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_per_kernel_inductor_meta_matches_standalone"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R12",
+        "R09",
+        "R10",
+        "R18"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum",
+      "source_line": 2057,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "Combo GB/FLOP 成本统计缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R13",
+        "R14"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth",
+      "source_line": 2088,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "profile 模式的 Combo GB 统计缺失",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R14"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelMetadataTests::test_benchmark_combo_kernel_emits_real_num_gb",
+      "source_line": 2138,
+      "configured_per_subkernel_blocks": "True",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "Combo benchmark 未使用真实访存量",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelMetadataTests::test_benchmark_combo_kernel_emits_real_num_gb"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R14",
+        "R15"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    },
+    {
+      "method": "test_combo_kernels.py::ComboKernelPeakMemoryTests::test_combo_kernel_peak_memory_wide_resnet",
+      "source_line": 2407,
+      "configured_per_subkernel_blocks": "False",
+      "capability": "其他原因",
+      "independent_block_relation": "none",
+      "analysis": "用例未覆盖内存门控拒绝路径",
+      "failed_nodes": [
+        "test_combo_kernels.py::ComboKernelPeakMemoryTests::test_combo_kernel_peak_memory_wide_resnet"
+      ],
+      "passed_nodes": [],
+      "related_root_ids": [
+        "R26"
+      ],
+      "body_matches_reference_snapshot": true,
+      "reference_definition_commit": "a3cfe564cd60cb83f4c81bab5dcd388305992ff2"
+    }
+  ],
+  "source_review_checks": {
+    "all_14_direct_cases_explicitly_enable_independent_blocks": true,
+    "device_execution": "none during this review",
+    "all_34_method_bodies_match_reference_snapshot": true
+  }
+}

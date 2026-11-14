@@ -14,7 +14,7 @@ test_combo_kernels.py,test_2d_blocking_partitioning,独立测试方法,是,PASS,
 test_combo_kernels.py,test_persistent_reduction_size_hint,独立测试方法,否,FAIL,FAIL 1,CUDA 尺寸断言与 NPU 尺寸元信息不兼容
 test_combo_kernels.py,test_sort_in_combo_kernel_forces_persistent_reduction,独立测试方法,否,PASS,PASS 1,—
 test_combo_kernels.py,test_fuse_mix_order_reductions_combo_kernels,独立测试方法,否,FAIL,FAIL 1,共享输入的行列联合归约功能缺失
-test_combo_kernels.py,test_combo_kernel_scalar_store_broadcast,独立测试方法,否,FAIL,FAIL 1,标量与向量成员的异构组合功能缺失
+test_combo_kernels.py,test_combo_kernel_scalar_store_broadcast,独立测试方法,否,FAIL,FAIL 1,异构成员组合功能缺失（依赖独立块）
 test_combo_kernels.py,test_single_combo_kernels,独立测试方法,否,FAIL,FAIL 2,CUDA Grid1D 断言与 NPU GridNpu 不兼容
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_poi,独立测试方法,是,PASS,PASS 1,—
 test_combo_kernels.py,test_combo_kernel_per_config_subkernel_per,独立测试方法,否,FAIL,FAIL 1,CUDA XBLOCK 断言与 NPU 分块接口不兼容
@@ -28,7 +28,7 @@ test_combo_kernels.py,test_combo_kernel_max_num_nodes,独立测试方法,是,PAS
 test_combo_kernels.py,test_combo_kernel_yz_overflow,独立测试方法,否,FAIL,FAIL 1,profiler 事件格式解析不兼容 NPU
 test_combo_kernels.py,test_combo_kernel_no_bench_stitched_config,独立测试方法,否,FAIL,FAIL 1,独立块功能缺失
 test_combo_kernels.py,test_combo_kernel_no_bench_persistent_reduction,独立测试方法,否,FAIL,FAIL 1,独立块功能缺失
-test_combo_kernels.py,test_combo_kernel_no_bench_carve_out,独立测试方法,否,FAIL,FAIL 1,默认配置拼接及成员分离功能缺失
+test_combo_kernels.py,test_combo_kernel_no_bench_carve_out,独立测试方法,否,FAIL,FAIL 1,独立块默认配置拼接及成员分离功能缺失
 test_combo_kernels.py,test_activation_benchmark,独立测试方法,是,PASS,PASS 1,—
 test_combo_kernels.py,test_activations,嵌套函数,是,随外层验证/PASS,随 test_activation_benchmark 验证,—
 test_combo_kernels.py,test_reduce_benchmark,独立测试方法,是,PASS,PASS 1,—
@@ -39,8 +39,8 @@ test_combo_kernels.py,test_round_robin_dispatch,独立测试方法,是,PASS,PASS
 test_combo_kernels.py,test_mutated,嵌套函数,是,随外层验证/PASS,随 test_round_robin_dispatch 验证,—
 test_combo_kernels.py,test_2d_blocking_benchmark,独立测试方法,是,PASS,PASS 1,—
 test_combo_kernels.py,test_persistent_reduction_no_x_dim,独立测试方法,是,PASS,PASS 1,—
-test_combo_kernels.py,test_combo_kernel_per_subkernel_reduction_hint,独立测试方法,否,FAIL,FAIL 1,逐成员归约方向 metadata 缺失
-test_combo_kernels.py,test_combo_rms_norm_forwards_add_persistent_rblock,独立测试方法,否,FAIL,FAIL 1,逐成员 metadata 缺失，大 R 优化资格待确认
+test_combo_kernels.py,test_combo_kernel_per_subkernel_reduction_hint,独立测试方法,否,FAIL,FAIL 1,独立块配套归约方向 metadata 缺失
+test_combo_kernels.py,test_combo_rms_norm_forwards_add_persistent_rblock,独立测试方法,否,FAIL,FAIL 1,独立块配套大 R 优化 metadata 缺失，资格待确认
 test_foreach.py,test_single_list,独立测试方法,是,PASS,PASS 33,—
 test_foreach.py,test_single_scalar,独立测试方法,是,PASS,PASS 16,—
 test_foreach.py,test_single_scalar_tensor,独立测试方法,是,PASS,PASS 16,—
@@ -70,7 +70,7 @@ test_foreach.py,test_foreach_map_backward_binary,独立测试方法,是,PASS,PAS
 test_foreach.py,test_foreach_map_backward_unary,独立测试方法,是,PASS,PASS 4,—
 test_snode_runtime.py,test_foreach_basic,独立测试方法,否,PASS,PASS 1；复验 1（efc05dd90b），其余沿用历史结果,—
 test_snode_runtime.py,test_foreach_after_extern,独立测试方法,否,PASS,PASS 1；复验 1（efc05dd90b），其余沿用历史结果,—
-test_torchinductor.py,test_combo_kernel_store_mask,独立测试方法,否,FAIL,FAIL 1；复验 1（efc05dd90b），其余沿用历史结果,动态归约索引生成错误，单 Combo 组合未完成
+test_torchinductor.py,test_combo_kernel_store_mask,独立测试方法,否,FAIL,FAIL 1；复验 1（efc05dd90b），其余沿用历史结果,动态归约索引及异构组合缺陷（组合依赖独立块）
 test_unbacked_symints.py,test_combo_kernel_size_hint_failure,独立测试方法,是,PASS,PASS 1,—
 test_combo_kernels.py,test_combo_kernel_dynamic_shapes_grid_changes,独立测试方法,是,PASS,PASS 1,—
 test_combo_kernels.py,test_dynamic_shapes_activations,独立测试方法,是,PASS,PASS 1,—
@@ -96,22 +96,22 @@ test_combo_kernels.py,test_helper_fn_defined,独立测试方法,是,PASS,PASS 1,
 test_combo_kernels.py,test_pdl_codegen_in_combo_kernel,独立测试方法,否,SKIP,SKIP 1,硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性
 test_combo_kernels.py,test_pdl_combo_kernel_pointwise,独立测试方法,否,SKIP,SKIP 1,硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性
 test_combo_kernels.py,test_pdl_combo_kernel_reduction,独立测试方法,否,SKIP,SKIP 1,硬件差异，涉及 NVIDIA SM90+ GPU 专属的 PDL 依赖启动特性
-test_combo_kernels.py,test_combo_kernel_max_autotune,独立测试方法,否,FAIL,FAIL 1,成员独立块及顺序调优功能缺失
-test_combo_kernels.py,test_combo_kernel_max_autotune_with_reduction,独立测试方法,否,FAIL,FAIL 1,成员独立块及顺序调优功能缺失
-test_combo_kernels.py,test_combo_autotune_many_subkernels,独立测试方法,否,FAIL,FAIL 1,成员独立块及顺序调优功能缺失
-test_combo_kernels.py,test_combo_autotune_grouping,独立测试方法,否,FAIL,FAIL 1,真实成员调优分组功能未接通
+test_combo_kernels.py,test_combo_kernel_max_autotune,独立测试方法,否,FAIL,FAIL 1,独立块顺序调优功能缺失
+test_combo_kernels.py,test_combo_kernel_max_autotune_with_reduction,独立测试方法,否,FAIL,FAIL 1,独立块顺序调优功能缺失
+test_combo_kernels.py,test_combo_autotune_many_subkernels,独立测试方法,否,FAIL,FAIL 1,独立块顺序调优功能缺失
+test_combo_kernels.py,test_combo_autotune_grouping,独立测试方法,否,FAIL,FAIL 1,独立块调优分组功能缺失
 test_combo_kernels.py,test_combo_autotune_grouping_by_metadata_fingerprint,独立测试方法,否,PASS,PASS 1,—
-test_combo_kernels.py,test_combo_max_persistent_rblock_gated_on_per_subkernel,独立测试方法,否,FAIL,FAIL 1; PASS 1,max_persistent_rblock 的 NPU 资源契约待明确
-test_combo_kernels.py,test_combo_kernel_coordesc_tunes_largest_subkernel_first,独立测试方法,否,FAIL,FAIL 1,成员坐标下降调优功能缺失
+test_combo_kernels.py,test_combo_max_persistent_rblock_gated_on_per_subkernel,独立测试方法,否,FAIL,FAIL 1; PASS 1,共享块的 max_persistent_rblock 资源契约待明确
+test_combo_kernels.py,test_combo_kernel_coordesc_tunes_largest_subkernel_first,独立测试方法,否,FAIL,FAIL 1,独立块坐标下降调优功能缺失
 test_combo_kernels.py,test_combo_inductor_meta_has_optimize_mem,独立测试方法,否,FAIL,FAIL 1,optimize_mem 图阶段 metadata 缺失
 test_combo_kernels.py,test_combo_inductor_meta_optimize_mem_false_in_training_forward,独立测试方法,否,FAIL,FAIL 1,optimize_mem 图阶段 metadata 缺失
 test_combo_kernels.py,test_combo_triton_meta_has_disable_ftz,独立测试方法,否,FAIL,FAIL 2,disable_ftz 编译接口未适配
-test_combo_kernels.py,test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields,独立测试方法,否,FAIL,FAIL 1,逐成员访存及归约统计 metadata 缺失
-test_combo_kernels.py,test_combo_reduction_combo_grid_meta_has_per_subkernel_fields,独立测试方法,否,FAIL,FAIL 1,逐成员访存及归约统计 metadata 缺失
-test_combo_kernels.py,test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel,独立测试方法,否,FAIL,FAIL 1,逐成员 metadata 及连续归约维统计缺失
-test_combo_kernels.py,test_combo_per_kernel_inductor_meta_matches_standalone,独立测试方法,否,FAIL,FAIL 1,standalone 与 Combo 的统计 metadata 不完整
+test_combo_kernels.py,test_combo_pointwise_combo_grid_meta_has_per_subkernel_fields,独立测试方法,否,FAIL,FAIL 1,独立块配套统计 metadata 缺失
+test_combo_kernels.py,test_combo_reduction_combo_grid_meta_has_per_subkernel_fields,独立测试方法,否,FAIL,FAIL 1,独立块配套统计 metadata 缺失
+test_combo_kernels.py,test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel,独立测试方法,否,FAIL,FAIL 1,独立块配套归约布局 metadata 缺失
+test_combo_kernels.py,test_combo_per_kernel_inductor_meta_matches_standalone,独立测试方法,否,FAIL,FAIL 1,独立块成员与 standalone 的统计 metadata 不完整
 test_combo_kernels.py,test_combo_kernel_num_gb_and_flop_match_standalone_sum,独立测试方法,否,FAIL,FAIL 1,Combo GB/FLOP 成本统计缺失
 test_combo_kernels.py,test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth,独立测试方法,否,FAIL,FAIL 1,profile 模式的 Combo GB 统计缺失
 test_combo_kernels.py,test_combo_inductor_meta_no_kernel_num_gb_without_profile,独立测试方法,是,PASS,PASS 1,—
-test_combo_kernels.py,test_benchmark_combo_kernel_emits_real_num_gb,独立测试方法,否,FAIL,FAIL 1,benchmark 带宽分子 num_gb 固定为 0
+test_combo_kernels.py,test_benchmark_combo_kernel_emits_real_num_gb,独立测试方法,否,FAIL,FAIL 1,Combo benchmark 未使用真实访存量
 test_combo_kernels.py,test_combo_kernel_peak_memory_wide_resnet,独立测试方法,否,FAIL,FAIL 1,用例未覆盖内存门控拒绝路径
