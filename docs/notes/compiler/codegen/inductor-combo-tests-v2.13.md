@@ -13,35 +13,50 @@ published: false
 
 | 范围 | PASS | FAIL | SKIP |
 | --- | ---: | ---: | ---: |
-| 独立源方法 | 68 | 32 | 5 |
-| 参数实例 | 424 | 34 | 6 |
+| 独立源方法 | 73 | 27 | 5 |
+| 参数实例 | 430 | 28 | 6 |
 
-本次仅定向复测两个 `optimize_mem` FAIL，结果为 **2 PASS**；其余 462 个实例保留原结果及实际验证来源。
-没有重跑历史 PASS，也没有启动全量测试。[当前逐实例汇总][current-jobs]的 `validation` 字段记录各实例来源。
+本次只复测三个问题对应的 5 个 FAIL 方法、6 个失败实例，结果为 **6 PASS**。
+其余 458 个实例保留原结果与实际验证来源；没有重跑历史 PASS，也没有启动全量测试。
+[当前逐实例汇总][current-jobs]的 `validation` 字段记录各实例来源。
 
-- `test_combo_inductor_meta_has_optimize_mem`：PASS，推理图导出 `optimize_mem=True`。
-- `test_combo_inductor_meta_optimize_mem_false_in_training_forward`：PASS，训练前向图导出 `optimize_mem=False`。
+| 问题 | 独立修复提交 | 本次实例 | 结果 |
+| --- | --- | ---: | --- |
+| GB/FLOP 出口、Combo 成本聚合与 benchmark 访存量 | `72b172702045fd1bb4f084dd67c5faa65c180694` | 3 | PASS |
+| argmin/argmax 索引 dtype | `0503095a63116ca0cd815486b15324b9affef044` | 1 | PASS |
+| 公共 Triton metadata 中的 FTZ 参数传递 | `9f639af716399c15e07dbe341ecb2490a9f36e87` | 2 | PASS |
 
-两个方法均通过原 eager/compiled 输出比较及 metadata 断言，用例源码未修改。
-[生成代码及字段核对][optimize-generated]确认两种场景均为两个成员的 Combo，使用 `SequentialComboKernelGrid`。
-本次验证范围为这两个原用例的字段与输出检查。
+所有原方法的数值与 metadata/数量断言均保留，用例源码未修改。
+[生成代码核对][three-generated]与[验证摘要][three-summary]确认：
+
+- 两个 standalone 成员各为 `8.192e-06 GB`，Combo 为 `1.6384e-05 GB`，benchmark 使用相同总量。
+- profile-only 导出 GB，不导出 FLOP。FLOP 沿用现有 `estimate_flops()`：本次两个 relu/sigmoid 图各为 0，聚合值为 0；没有新增逐算子 FLOP 公式。
+- `filter_cpu` 生成两个 Combo 定义，归约索引的实际 cast 与 dtype assertion 均为 `tl.int32`，原数值和数量检查通过。
+- FTZ 的 False/True 两个参数实例均导出对应值，且均为两个成员的 Combo。
+
+FTZ 的本次 PASS 证明公共 metadata 传递与普通输入数值检查通过。
+实际安装的 Triton Ascend `NPUOptions` 仍未注册 `disable_ftz` 或 `enable_reflect_ftz`，
+见 [编译器接口记录][three-ftz-interface]和[实际声明及解析源码][three-ftz-source]。
+这两个原用例没有覆盖非正规数保留行为，底层 option 消费与数学能力仍需单独验收。
 
 ### 本次验证版本与范围
 
-执行时间：北京时间 2026-11-14 23:57:53 至 23:58:44；NPU_A5 Docker 的 `pta_213_case` 环境，物理卡 2。
+执行时间：北京时间 2026-11-15 00:17:20 至 00:19:57；NPU_A5 Docker 的 `pta_213_case` 环境，物理卡 3。
 启动前该卡没有运行进程，执行时间符合该物理卡使用时段约束；使用独立 Inductor/Triton 缓存。
 
 Community 用例统一使用 `fix/combo_case`，提交 `9a86e684e2666069d203043ff5e9d2f6fd23c903`。
-执行前后测试源码和安装的 Inductor Python 源码哈希一致，见 [覆盖文件及源码哈希记录][optimize-overlay]。
+执行前后两个测试文件和安装的 Inductor Python 源码哈希一致，见 [Python 覆盖及哈希记录][three-overlay]。
 
 基础 torch_npu 为 `2.13.0+gitefc05dd`，包提交 `efc05dd90b5fe31717d5f13e51fb3e49035bea30`。
-在该包上覆盖 `torch_npu/_inductor/codegen/triton_combo_kernel.py`，Python overlay 提交为
-`43c727fb812260f1fe7afa22b336fa2987cf0693`，来源分支为 `bugfix/combo_fix_meta`；没有重新构建 wheel/C++。
+覆盖 `torch_npu/_inductor/codegen/triton.py` 和 `triton_combo_kernel.py`，Python overlay 为
+`9f639af716399c15e07dbe341ecb2490a9f36e87`，来源分支为 `bugfix/combo_fix_meta`，包含表中的三个独立提交。
+本次没有重新构建 wheel/C++，也没有修改 Triton Ascend 安装包。
 PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton 为 `3.6.0`。
 
-未复测实例分别沿用 [原报告][jobs]和[软件门控报告][software-rerun]记录的包与测试版本。
-本次汇总不代表 464 个实例在 overlay 提交上重新验证。
-[本次定向报告][optimize-rerun]、JUnit、生成代码和源码哈希共同保存实际证据。
+未复测实例保留各自原报告中的包、测试与 overlay 版本，不能视为在本次提交上重新验证。
+[本次定向报告][three-rerun]、JUnit、生成代码与源码哈希共同保存实际证据。
+部分测试的临时缓存随 pytest 清理，归档代码由 `TORCH_LOGS=output_code` 原日志去除日志前缀后恢复，
+仅保留原代码行顺序和缩进；来源日志及行号记录在生成代码核对文件中。
 
 表格只维护 2.13 的用例类型、已上线、最新结果、实例统计和简短分析。
 “已上线”以 [上线清单][pass213]为准，嵌套函数随外层方法；当前 PASS 不自动视为已上线。
@@ -54,22 +69,22 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 <!-- combo-section:analysis213:start -->
 ## 当前问题与按根因排序的修复队列
 
-当前共有 **32 FAIL、5 SKIP 方法**。32 个 FAIL 进入根因队列，5 个硬件差异方法保留 SKIP；4 个软件门控已经解除。
+当前共有 **27 FAIL、5 SKIP 方法**。27 个 FAIL 进入根因队列，5 个硬件差异方法保留 SKIP；4 个软件门控已经解除。
 全范围根因表记录生成正确性、真实统计、出口、成员 ABI、调优与功能验收的依赖；同一用例可以覆盖多个根因。
-本次 `bugfix/combo_fix_meta` 的剩余 R09—R15、R17 按修改量、影响范围和依赖安排实施顺序，见下节。
+本次 `bugfix/combo_fix_meta` 的剩余 R09—R12、R17 按修改量、影响范围和依赖安排实施顺序，见下节。
 
-**R 表示已定位的根因/能力或验收缺口，D 表示仍需定界的数值或原生优化契约。**当前保留 25 项根因/缺口、3 项待定界。
-21 项 Inductor 实现修复方案仍未实施。软件门控已在 `fix/combo_case` 修改并定向验证，当前状态以本次逐实例汇总为准。
+**R 表示已定位的根因/能力或验收缺口，D 表示仍需定界的数值或原生优化契约。**当前保留 20 项根因/缺口、3 项待定界。
+16 项 Inductor 实现修复方案仍未实施。软件门控已在 `fix/combo_case` 修改并定向验证，当前状态以本次逐实例汇总为准。
 未实现的软件目标保持 FAIL，硬件差异保留 SKIP；已 PASS 的用例不保留旧失败分析。
 
 根因源码与原始诊断固定在各自实际安装的 Torch/NPU 提交，见 [原根因审计][root-queue]和[固定补充证据][root-evidence]。
-本次 [定向报告][optimize-rerun]和[当前汇总][current-jobs]记录实际状态与验证版本。
+本次 [定向报告][three-rerun]和[当前汇总][current-jobs]记录实际状态与验证版本。
 
 这里的“成员”是 Combo 中保留独立计算域的一条分支。ABI 指生成 body 与 launcher 之间参数名、类型和值的约定；TTIR 是 Triton 编译的中间表示，校验失败后可能退回普通 kernel。CSE（公共子表达式消除）用缓存复用相同计算，计数应排除这类复用。block tensor 是 DSL 中向量/矩阵形状的值，标量只有一个值。fingerprint 由真实尺寸和优化字段判断候选是否等价；坐标下降在固定其他配置时，依次改变一组分块参数并实测。
 
 ### FAIL 原因的能力归属
 
-已按当前失败实例、用例配置、实际断言和实现消费链复核当前 **32 个 FAIL 方法、34 个失败实例**。
+已按当前失败实例、用例配置、实际断言和实现消费链复核当前 **27 个 FAIL 方法、28 个失败实例**。
 当前失败分类沿用固定源码复核依据，执行结果采用上文的逐实例实测记录；
 [归因审计][failure-capability-audit]保存剩余失败方法的分类、源码版本及依据。
 
@@ -82,7 +97,7 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 `test_combo_kernel_scalar_store_broadcast` 和 `test_combo_kernel_store_mask`。
 前者保留异构组合缺口；后者还保留动态归约索引缺陷，不能只修独立块就视为完成。
 
-其余 **16 个方法保留各自原因**。成本汇总、FTZ、追踪和共享输入联合归约分别有自己的消费链；
+其余 **11 个方法保留各自原因**。追踪和共享输入联合归约分别有自己的消费链；
 Metadata 测试类开启独立块不改变这些字段的归属。
 `max_persistent_rblock` 当前只有 `per_subkernel=False` 实例失败，按共享块资源契约待明确记录；
 `True` 实例仅通过字段不存在断言，继续保留原 PASS，不作为独立块 ABI 已实现的证据。
@@ -94,15 +109,14 @@ eager 内存格式、profiler 解析、后端专属文本断言、归约代码�
 
 | 责任与类型 | 具体根因 | 本次提供的方案 |
 | --- | --- | --- |
-| 生成正确性，5 项 | R27 索引缓存；R01 归约 store rank；R02 argreduce dtype；R03 masked 轴；R04 index_expr cast | 指向具体生成规则，写明合法 DSL/索引如何形成。 |
-| 统计、metadata、成本和追踪，8 项 | R09—R15、R17 | 分开修 producer、逐成员出口、GB/FLOP/benchmark 和真实 origins。 |
+| 生成正确性，4 项 | R27 索引缓存；R01 归约 store rank；R03 masked 轴；R04 index_expr cast | 指向具体生成规则，写明合法 DSL/索引如何形成。 |
+| 统计、metadata 和追踪，5 项 | R09—R12、R17 | 分开修 producer、逐成员出口和真实 origins。 |
 | NPU Combo 新功能，7 项 | R18—R24 | 成员独立 block/body/grid/runtime ABI、默认拼接、顺序调优、真实分组、坐标下降、异构打包、联合归约。 |
-| 跨层接口，1 项 | R25 FTZ | 分开列 Inductor 的 flag 传递和 Triton Ascend 的实际 option/数学消费者。 |
 | 不属于生产 Inductor | R05 eager；R07/R08 测试观测；R26 峰值验收前提 | 保留定界与验收入口，本次不提出生产 Inductor 修复。 |
 | 仍待定界 | D01 精度责任；D03 共享/独立资源；D04 大 R 优化资格 | 明确下一份证据和判定分支，不给猜测性修复。 |
 
 生成正确性队列先处理 R27 的跨 kernel 状态，再修 rank/dtype/mask。
-统计队列中 R09/R10/R11 的真实 producer 完成后接完整 R12；R13→R14→R15 形成同源成本出口。
+统计队列中 R09/R10/R11 的真实 producer 完成后接完整 R12。
 R18 完成成员 ABI 后再接默认配置和调优消费者。D01 继续定界。
 
 所有“预期生成行为”和“验收计划”都是方案要求，没有修复后的 DSL 或设备 PASS。
@@ -111,10 +125,10 @@ R18 完成成员 ABI 后再接默认配置和调优消费者。D01 继续定界�
 
 ### 本次分支的实施优先级
 
-排期已核对本地 `pytorch_new:bugfix/combo_fix_meta`，提交 `43c727fb812260f1fe7afa22b336fa2987cf0693`。
+排期已核对本地 `pytorch_new:bugfix/combo_fix_meta`，提交 `9f639af716399c15e07dbe341ecb2490a9f36e87`。
 以下是剩余项按当前入口评估的修改范围；各实例的实际验证版本见上文及逐实例报告。
 
-先补入口集中的真实状态和已有消费者的接入，再做需要统一来源的成本链，最后处理归约布局和完整成员 metadata。
+先补入口集中的真实状态和已有消费者的接入，再处理归约布局和完整成员 metadata。
 表中的“影响范围”同时考虑代码是否共用，以及字段是否改变实际运行决策，不能只按补丁行数判断。
 
 | 执行优先级 | 顺序 | 项目 | 预计修改量 | 影响范围与排序依据 |
@@ -122,29 +136,23 @@ R18 完成成员 ABI 后再接默认配置和调优消费者。D01 继续定界�
 | 高 | 1 | [R09](#root-r09) `num_store` | 极小；1 文件、2 个计数入口 | Native Index 有效写回计数，沿用已有缓存和移除规则。 |
 | 高 | 2 | [R10](#root-r10) `atomic_add_found` | 极小；1 文件、atomic 分支状态 | 只在真实生成原子写回时置位；普通 pointwise 保持 False。 |
 | 高 | 3 | [R17](#root-r17) provenance | 小；1 文件、分区节点展开与接入 | Combo 定义和追踪使用实际分区叶子，需核对缓存复用时的映射。 |
-| 中 | 4 | [R13](#root-r13) standalone FLOP | 小；1 文件、成本估算出口 | 复用已有估算器，仅在成本开关下导出；standalone 使用面较广。 |
-| 中 | 5 | [R14](#root-r14) Combo GB/FLOP | 小至中；成本来源和成员求和 | 依赖 R13，需核对实际分区、共享参数和移除 buffer 的计量口径。 |
-| 中 | 6 | [R15](#root-r15) benchmark `num_gb` | 极小；1 文件、benchmark 入参 | 依赖 R14 的有效总量，适合紧接成本聚合完成。 |
-| 后 | 7 | [R11](#root-r11) 连续归约维状态 | 中至大；轴、stride、load/store 状态 | 涉及 Native Index 方向替代、动态证明和候选输入，范围大于补字段。 |
-| 后 | 8 | [R12](#root-r12) 完整逐成员 metadata | 中；至少 2 文件、统一来源和成员出口 | 依赖 R09/R10/R11；跨 standalone/Combo，需拆开 CUDA 专属资格计算。 |
+| 后 | 4 | [R11](#root-r11) 连续归约维状态 | 中至大；轴、stride、load/store 状态 | 涉及 Native Index 方向替代、动态证明和候选输入，范围大于补字段。 |
+| 后 | 5 | [R12](#root-r12) 完整逐成员 metadata | 中；至少 2 文件、统一来源和成员出口 | 依赖 R09/R10/R11；跨 standalone/Combo，需拆开 CUDA 专属资格计算。 |
 
-建议按四个独立批次实施：**R09＋R10 → R17 → R13＋R14＋R15 → R11＋R12**。
+建议按三个独立批次实施：**R09＋R10 → R17 → R11＋R12**。
 R09/R10 是 R12 的真实状态前置，先补状态本身不意味着缺成员字典的原 FAIL 已通过。
-R17 可单独提交；成本链共用一个小的估算出口，再由完整 per-kernel serializer 复用。
+R17 可单独提交。
 
-R15 的调用点虽小，必须等 R14 提供真实 GB；把 `0` 换成 `0.0` 或固定正数没有修复价值。
 R11 的真实布局统计合理；先补可证明的状态，再核对 native 候选消费者。
 候选策略的修改有条件后置，CUDA 的归约过滤规则需单独证明等价后再接入。
 R12 的基础计数和统一序列化可先补；完整逐成员协议验收还需要 R18，deterministic 布局另需 R11。
 `tiling_scores`、`add_persistent_rblock` 和 HIP 的资源字段按真实 NPU producer/consumer 判断，缺字段本身不构成照搬理由。
 
 R18—R24 的成员 block/body/grid/runtime ABI、调优和联合归约涉及多层行为，安排在这批之后。
-R25 的 FTZ 还需编译器及硬件消费证据，也后置。
-R01—R04/R27 的生成正确性缺陷仍保留独立修复队列，若目标 FAIL 在这些位置受阻，就保留其阻塞关系。
+R01、R03/R04、R27 的生成正确性缺陷仍保留独立修复队列，若目标 FAIL 在这些位置受阻，就保留其阻塞关系。
 每批只定向复验最新 FAIL、SKIP/ERROR 实例，并合并回唯一进展表；历史 PASS 及其验证来源继续保留。
 
-以上判断的 producer、成本和追踪证据分别见 [R09/R10/R11 源码][E22]、
-[共同成本/字段契约][E27]和 [provenance 调用链][E6]。
+以上判断的 producer 和追踪证据分别见 [R09/R10/R11 源码][E22]和 [provenance 调用链][E6]。
 
 ### 全范围根因及依赖
 
@@ -154,7 +162,6 @@ R01—R04/R27 的生成正确性缺陷仍保留独立修复队列，若目标 FA
 | --- | --- | --- | --- | ---: |
 | P0 | [R27 LoopBody 的候选索引缓存跨 kernel 复用，导致 x0/y0 轴错配](#root-r27) | 失败 DSL、固定源码及 CPU 控制流隔离复核已定位；未修复 | — | 1 |
 | P0 | [R01 persistent 多轴归约的 store 指针是标量，结果却是 block tensor](#root-r01) | 生成缺陷已实测确认；未修复 | — | 2 |
-| P0 | [R02 argmin/argmax 的轴索引实际 int32，却被 CSE 标成 int64](#root-r02) | 生成缺陷已在原 pytest 实测确认；未修复 | — | 1 |
 | P0 | [R03 动态 shape/stride 符号被当成 masked subblock 的迭代轴](#root-r03) | 生成前缺陷已实测及源码确认；未修复 | — | 1 |
 | P0 | [R04 动态整数 index_expr 在实际 cast 前被声明为 FP32](#root-r04) | 生成缺陷已实测及版本源码对照确认；未修复 | — | 1 |
 | P0 | [D01 非连续多轴 FP32 sum 超差，数值责任模块尚未定界](#root-d01) | 仍 FAIL；同输入证据已固定，根因待定界 | — | 1 |
@@ -165,9 +172,6 @@ R01—R04/R27 的生成正确性缺陷仍保留独立修复队列，若目标 FA
 | P1 | [R10 Native Index 发出 atomic_add，却没有设置 atomic_add_found](#root-r10) | producer 缺口已由源码确认；相关原图未触发原子加验收 | — | 2 |
 | P1 | [R11 Native Index load/store 未维护连续归约维布局状态](#root-r11) | producer 缺口已由源码确认；原用例先停在成员字典缺失 | — | 1 |
 | P1 | [R12 统一逐成员统计出口缺失](#root-r12) | 独立块配套 metadata 缺失 | 统计：R09/R10/R11；完整验收：R18 | 7 |
-| P1 | [R13 standalone 的 FLOP 估算没有导出为 kernel_flop](#root-r13) | 出口缺口已由源码确认；原比较先停在 Combo GB | — | 1 |
-| P1 | [R14 Combo 没有聚合成员访存 GB/FLOP，也未在 profile 模式导出 GB](#root-r14) | Combo 成本出口缺口已由原断言和源码确认；未修复 | R13 | 2 |
-| P1 | [R15 Combo benchmark 带宽分子 num_gb 被硬编码为 0](#root-r15) | 独立 benchmark 出口缺口已由原断言和源码确认；未修复 | R14 | 1 |
 | P1 | [R17 provenance 接收 node=None 的 Combo 外壳，真实分区 origins 被跳过](#root-r17) | 追踪映射缺口已由原产物和源码确认；未修复 | — | 1 |
 | P2 | [R18 成员独立块开关与 body/grid ABI 未贯通](#root-r18) | 基础能力缺失，阻塞配套协议验收 | R27 | 14；另 2 项间接依赖 |
 | P2 | [R19 NPU override 绕过无 benchmark 的默认配置拼接和 carve-out](#root-r19) | 默认配置处理能力缺口已由源码确认；未实现 | R18 | 3 |
@@ -178,7 +182,6 @@ R01—R04/R27 的生成正确性缺陷仍保留独立修复队列，若目标 FA
 | P2 | [R22 NPU 有 CoordescTuner 对象和计时缓存，但未执行成员坐标下降](#root-r22) | 成员坐标下降能力缺口已由源码确认；未实现 | R18、R20、R21 | 1 |
 | P2 | [R23 共享 launcher 限制异构成员组合，标量链/向量归约被拆为 singleton](#root-r23) | 特定组合能力缺口已由实际分区及源码确认；未实现 | R18；mean 另需 R03/R04/R27 | 2 |
 | P2 | [R24 NPU 配置与 backend 资格阻断 mixed-order 联合归约入口](#root-r24) | 共享输入行/列联合归约特性未启用，原目标未实现 | — | 1 |
-| P2 | [R25 disable_ftz 没有从 NPU codegen 贯通到实际编译选项/数学路径](#root-r25) | 生成/编译消费链缺口已确认；硬件非正规数能力尚未知 | — | 1 |
 | P3 | [R26 WideResNet 图没有进入 memory gate，原峰值比较未覆盖拒绝路径](#root-r26) | 验收前提缺失已实测确认；gate 本身已有实现 | — | 1 |
 
 表中覆盖数可以重叠，不能相加当成失败数。R03/R04 对应的 store_mask 已解除门控，当前正式复测为 FAIL。
@@ -194,13 +197,12 @@ flowchart LR
     C --> E[无 benchmark 默认配置拼接与 carve-out]
     D --> F[真实 fingerprint 分组]
     F --> G[最大成员优先的坐标下降]
-    H[有效 standalone GB / FLOP 基准] --> I[Combo 成本聚合]
-    I --> J[benchmark 真实带宽分子]
 ```
 
-### metadata 和七个统计用例具体检查什么
+### 逐成员 metadata 和四个统计用例检查什么
 
-“metadata 2”是两个 `optimize_mem` 图阶段方法，不是缺两个不同 metadata。“统计 7”是四个计数/布局方法加三个成本/带宽方法，不是缺七种计数。下表逐字段说明实际用途和确认到的缺口；成员字典缺失与真实 producer 未维护是不同根因。
+当前四个统计/布局方法分别检查逐成员计数、atomic 状态、连续归约维和 standalone 字段一致性。
+下表逐字段说明实际用途和确认到的缺口；成员字典缺失与真实 producer 未维护是不同根因。
 
 | 字段/出口 | 作用 | 当前具体缺口或已有能力 |
 | --- | --- | --- |
@@ -215,14 +217,10 @@ flowchart LR
 | `has_loadstore_with_contiguous_rdim` | 是否有真实连续归约维的 load/保留 store，参与归约候选过滤。 | [R11](#root-r11)：Native Index 未维护布局 producer；[R12](#root-r12) 出口也缺。 |
 | `no_x_dim` | 成员 DSL 的非归约维优化，按成员.no_x_dim 导出；与 dispatch 无 split 不同。 | dispatch 的 no_x_dim_i/no_split 已有；[R12](#root-r12) 的完整 per-kernel 字典未导出。 |
 | `tiling_scores` | 各轴 tiling 评价信息，standalone/Combo 的比较需对应 native 候选语义。 | [R12](#root-r12)：未接统一字段出口；不能用空解析作为相同基准。 |
-| `kernel_num_gb` | 逻辑读写字节的 GB 估算，供成本/带宽报告使用。 | 普通 kernel 在 profile/benchmark 下已有；[R14](#root-r14) 缺 Combo 聚合和出口。 |
-| `kernel_flop` | 按共同规则估算逻辑计算量；Combo 需聚合成员。 | [R13](#root-r13) 缺 standalone 出口，[R14](#root-r14) 缺聚合；不能说估算器整体没有实现。 |
-| benchmark `num_gb` | 独立 benchmark 带宽计算的访存分子。 | [R15](#root-r15) 生成入口硬编码 0，需消费 [R14](#root-r14) 的真实 GB。 |
 | `max_persistent_rblock` | 原共享 X/HIP 候选资源限制，与真实独立 X 模式有不同约束。 | [D03](#root-d03)：原生 UB/共享与独立约束需明确；True 的负向字段 PASS 未验实际独立 ABI。 |
 | `add_persistent_rblock` | 资格标志，让候选生成器增加专门的大 R 配置。 | 原首失败是 [R12](#root-r12)；[D04](#root-d04) 尚需对照 native 实际候选，不能说 persistent 归约缺失。 |
-| `disable_ftz` | 控制是否保留非正规数，需要实际编译选项/数学消费者。 | [R25](#root-r25)：codegen、native options 和 Triton Ascend 消费链未接通，硬件能力尚未知。 |
 
-七个方法与字段一一对应如下。原方法多为字段存在性/解析比较；“需验真实值”是完整修复验收要求，不冒充原方法已经检查到真实 producer。
+四个方法与字段一一对应如下。原方法多为字段存在性/解析比较；“需验真实值”是完整修复验收要求，不冒充原方法已经检查到真实 producer。
 
 | 统计方法 | 具体目标 | 原首失败/后续依赖 |
 | --- | --- | --- |
@@ -230,9 +228,6 @@ flowchart LR
 | `test_combo_reduction_combo_grid_meta_has_per_subkernel_fields` | sum/mean 两成员的有效 load/store/reduction | 缺成员字典 R12；store producer 后续 R09。 |
 | `test_combo_reduction_deterministic_has_contiguous_rdim_per_subkernel` | 确定性 sum/mean 逐成员连续归约维布局 | 缺成员字典 R12；布局 producer 后续 R11。 |
 | `test_combo_per_kernel_inductor_meta_matches_standalone` | 两侧非空完整计数、atomic、no_x_dim、提示和 tiling_scores 相同 | standalone 两项 vs Combo 零项；R12 和 R09/R10。 |
-| `test_combo_kernel_num_gb_and_flop_match_standalone_sum` | Combo GB/FLOP 等于有效 standalone 成员之和 | 先缺 Combo GB R14；standalone FLOP 出口 R13 未执行到。 |
-| `test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth` | profile-only 导出真实 Combo GB，不导出 FLOP | 先缺 GB R14，后续 FLOP 负向检查未执行。 |
-| `test_benchmark_combo_kernel_emits_real_num_gb` | benchmark 实际带宽分子与 NPU device 参数 | 入口 num_gb=0，R15；device 后续检查未执行。 |
 
 ### 各根因的证据与修复方案
 
@@ -354,55 +349,6 @@ tensor 契约。
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1`：范围外，1 FAIL；补充生成缺陷关联；最终精度另属 D01。
 
 证据：[E17][E17]；补充诊断 [reduction-v2][diag-reduction-v2]、[accuracy-v2][diag-accuracy-v2]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-r02"></a>
-
-#### R02 argmin/argmax 的轴索引实际 int32，却被 CSE 标成 int64
-
-**P0 · 生成缺陷已在原 pytest 实测确认；未修复**。失败阶段：Native Index DSL → dtype assertion → fallback。
-
-实测/原首失败：原 pytest 数值通过，两个 Combo 目标期望 2、实际 4。补充原 pytest 已复现；速度准入为 True，pointwise 和 min/max 的分区已是
-[['op4','op5'],['op0_op1','op2_op3']]。
-
-根因与代码方案源码依据：[E18][E18]。
-
-证据：NPU triton.py:4438 的 argreduce 中，logical_index 分支显式 .to(tl.int64)，axis-derived 分支只
-tl.broadcast_to(r1.reshape(...), tmp2.shape)，却以 dtype=torch.int64 创建 CSE 变量。实际 r1 是 int32，生成
-tl.static_assert(tmp5.dtype == tl.int64) 失败。codegen_combo_kernel 会先校验所有分区，因此 min/max 分区失败连带丢掉合法 pointwise Combo，最终为 4
-个普通 kernel。早期手工调用的完成结果不覆盖原 pytest 生命周期下的失败。
-
-**修复方案（未实施）**。责任：torch_npu Inductor argreduce 索引构造。
-
-拟修改入口：NPU torch_npu/_inductor/codegen/triton.py::reduction 的 argmin/argmax 分支（4438—4470）。
-
-1. 让 axis-derived 路径与 logical_index 路径在进入 argreduce helper 前都实际生成 tl.int64 索引：对轴坐标表达式显式 cast，再 reshape/broadcast 到
-masked_value 的形状。
-2. 仅在表达式已经为 int64 后以 dtype=torch.int64 创建 CSE 变量，实际索引与缓存 metadata、dtype assertion 和最终 ATen index 输出保持一致。
-3. 保留原 argmin/argmax 的最小索引优先规则、无效 lane 的单位元和原归约值，不改分区准入或整组 fallback 来绕开类型错误。
-
-预期生成行为：broadcast 的索引值实际是 tl.int64，原 tl.static_assert(tmp5.dtype == tl.int64) 成立；pointwise 与 min/max 两个合法分区均保留。
-
-影响范围：Native Index 的 axis-derived argmin/argmax；非连续 logical_index 已有 cast，采用同一构造规则。
-
-方案风险：大索引路径仍需由 index_dtype 保障坐标运算在溢出前使用 int64，不能事后 cast 已溢出的 int32 地址。
-
-**验收计划（尚未执行）**：
-
-- 原 pytest test_combo_kernel_filter_cpu 数值通过且实际生成两个 Combo。
-- axis-derived 和非连续 logical-index 都检查实际 index dtype；并检查并列极值、尾块 mask 和大索引语义。
-
-原始失败 DSL 关键行（保持生成格式）：
-
-```python
-            tmp5 = tl.broadcast_to(r1.reshape([1,R1BLOCK_SUB]), tmp2.shape)
-            tl.static_assert(tmp5.dtype == tl.int64)
-```
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_torchinductor.py::CommonTemplate::test_combo_kernel_filter_cpu`：2.10 重合，1 FAIL；原首失败关联。
-
-证据：[E18][E18]、[E17][E17]；补充诊断 [filter-pytest][diag-filter-pytest]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
 <a id="root-r03"></a>
 
@@ -769,123 +715,6 @@ INNER、列 OUTER 的原目标完整执行。
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping`：范围外，1 FAIL；相关/后续覆盖。
 
 证据：[E2][E2]、[E4][E4]、[E11][E11]、[E22][E22]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-r13"></a>
-
-#### R13 standalone 的 FLOP 估算没有导出为 kernel_flop
-
-**P1 · 出口缺口已由源码确认；原比较先停在 Combo GB**。失败阶段：standalone cost metadata generation。
-
-实测/原首失败：原数值检查已完成，先在 Combo kernel_num_gb 的空匹配失败；FLOP 聚合检查还未执行。空 standalone 匹配的求和不能视为有效基准。
-
-根因与代码方案源码依据：[E12][E12]、[E27][E27]。
-
-证据：NPU 普通 kernel 在 benchmark/profile 模式生成 kernel_num_gb，但没有 kernel_flop 出口。estimate_flops 的共同估算器仍可继承，当前证据不能说整个
-FLOP 估算器未实现。
-
-**修复方案（未实施）**。责任：torch_npu Inductor standalone 成本 metadata。
-
-拟修改入口：NPU torch_npu/_inductor/codegen/triton.py::codegen_kernel/create_inductor_meta（2440、1926）；TORCH
-torch/_inductor/codegen/simd.py::estimate_flops（1266）；triton.py::inductor_meta_per_kernel（6270）。
-
-1. 在 standalone/Combo 共用的成本 serializer 中调用继承的 estimate_flops；该方法聚合真实 node_schedule 中的节点估算，当前缺的是导出而非估算器。
-2. 仅在 benchmark_kernel 或 benchmark_combo_kernel 下导出 kernel_flop；kernel_num_gb 的开启条件为这两者或 profile_bandwidth，profile-only
-不产生 FLOP。
-3. 建立数量非空的 standalone 解析基准并按共同估算口径保留未知算子的处理，不为了字段存在性伪造正数。
-
-预期生成行为：原 relu/sigmoid 两个 standalone 在 benchmark 模式具备真实 GB/FLOP，R14 可按成员聚合。
-
-影响范围：逻辑计算量 metadata 出口及开关矩阵，不改变算子的数学实现。
-
-方案风险：FLOP 是框架的逻辑估算，不是设备指令计数；不要混用 profile 测量或空解析求和。
-
-**验收计划（尚未执行）**：
-
-- 原 GB/FLOP 求和方法先确认 standalone 数量和字段非空，再比较 Combo。
-- benchmark-only、combo-benchmark-only、profile-only、全部关闭分别核对字段出现条件。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum`：范围外，1 FAIL；相关/后续覆盖。
-
-证据：[E12][E12]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-r14"></a>
-
-#### R14 Combo 没有聚合成员访存 GB/FLOP，也未在 profile 模式导出 GB
-
-**P1 · Combo 成本出口缺口已由原断言和源码确认；未修复**。失败阶段：Combo cost metadata generation。
-
-实测/原首失败：两个原方法数值通过后缺 Combo kernel_num_gb；FLOP 求和或 profile 不应输出 FLOP 的后续检查未执行。
-
-根因与代码方案源码依据：[E12][E12]、[E27][E27]。
-
-证据：普通 NPU triton.py:2470 已按 benchmark/profile 条件计算逻辑读写字节；Combo 的独立生成路径没有成员成本求和和同期开关出口。kernel_num_gb 是逻辑读写量的 GB
-估算，不是 profiler 测得的真实传输量。
-
-**修复方案（未实施）**。责任：torch_npu Inductor Combo 成本聚合。
-
-拟修改入口：NPU torch_npu/_inductor/codegen/triton_combo_kernel.py::jit_line/codegen_kernel（174、385）。
-
-1. 从当前实际分区的每个成员取得与 standalone 相同的 GB/FLOP metadata，Combo 级 GB=sum(成员 GB)，FLOP=sum(成员 FLOP)。只聚合该 kernel 的成员，不把外层所有分区或被
-carve-out 的成员重复算入。
-2. 跨成员即使共用同一个 pointer 参数，仍按各成员逻辑访问分别计算；成员内部的 buffer 去除与 fusion 由共同估算器处理，不用合并参数集合替代成员成本。
-3. 按 R13 的开关条件输出总量，并把同一个 GB 值保存在 Combo 生成对象供 R15 使用。成员字段在前、总量在 combo_grid_meta 后输出，保持当前解析可识别的明确层级。
-
-预期生成行为：Combo 总 GB/FLOP 等于有效 standalone 成员之和；profile-only 有 GB 且无 FLOP。
-
-影响范围：实际 Combo 的逻辑成本聚合；standalone 基准采用 R13 同一来源。
-
-方案风险：成员字典和总量同时出现，按正则全部求和会重复；验收要按 metadata 层级读取总量。
-
-**验收计划（尚未执行）**：
-
-- 原成本求和和 profile-only 两个方法执行后续断言；关闭开关的已 PASS 行为继续满足无字段目标。
-- 有多个实际分区或 carve-out 时逐个核对成员归属与总量。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_kernel_num_gb_and_flop_match_standalone_sum`：范围外，1 FAIL；原首失败关联。
-- `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_has_kernel_num_gb_under_profile_bandwidth`：范围外，1 FAIL；原首失败关联。
-
-证据：[E12][E12]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-r15"></a>
-
-#### R15 Combo benchmark 带宽分子 num_gb 被硬编码为 0
-
-**P1 · 独立 benchmark 出口缺口已由原断言和源码确认；未修复**。失败阶段：benchmark source generation。
-
-实测/原首失败：原数值通过，随后没有匹配到浮点 num_gb；后续 device 参数检查未执行。
-
-根因与代码方案源码依据：[E12][E12]。
-
-证据：NPU triton_combo_kernel.py 的独立 benchmark 生成调用 codegen_kernel_benchmark(num_gb=0)，模板没有拿到真实 Combo 访存量。它与 R14 的主
-metadata 出口是两个不同接入点。
-
-**修复方案（未实施）**。责任：torch_npu Inductor Combo benchmark 模板接入。
-
-拟修改入口：NPU torch_npu/_inductor/codegen/triton_combo_kernel.py::codegen_kernel 的 benchmark 生成（458—459）。
-
-1. 把 R14 计算并保存的当前 Combo GB 传入 codegen_kernel_benchmark(num_gb=...)，替代硬编码 0；格式化为有效浮点数，不从原始代码正则反推成本。
-2. 沿用 NPU benchmark 输入、device 字符串和真实 launcher 参数，验证独立 benchmark 调用的 kernel 正是这份成本所描述的 Combo。
-3. 该出口与 jit metadata 消费同一成本结果；有 carve-out 时按实际每个 kernel 分别生成 benchmark。
-
-预期生成行为：原两成员 pointwise benchmark 的 num_gb 为真实正值，与 Combo kernel_num_gb 一致。
-
-影响范围：独立 Combo benchmark 的带宽分子，运行数学语义不变。
-
-方案风险：仅把 0 改为 0.0 只能满足格式，无法得到正确带宽；不能复用其他 kernel 的成本。
-
-**验收计划（尚未执行）**：
-
-- 原 test_benchmark_combo_kernel_emits_real_num_gb 核对真实 num_gb、NPU device 参数、输入数值和 launcher 一致。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelMetadataTests::test_benchmark_combo_kernel_emits_real_num_gb`：范围外，1 FAIL；原首失败关联。
-
-证据：[E12][E12]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
 <a id="root-r17"></a>
 
@@ -1313,52 +1142,6 @@ wrapper ATen 后处理的真实 launch，不能把三个定义写成总共三次
 
 证据：[E15][E15]、[E3][E3]；补充诊断 [mixed][diag-mixed]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
-<a id="root-r25"></a>
-
-#### R25 disable_ftz 没有从 NPU codegen 贯通到实际编译选项/数学路径
-
-**P2 · 生成/编译消费链缺口已确认；硬件非正规数能力尚未知**。失败阶段：triton_meta → NPU compiler options → math。
-
-FTZ（Flush To Zero）将很接近零的浮点非正规数变成零；disable_ftz=True 请求保留这类值，需要编译器和数学实现实际支持。
-
-实测/原首失败：False/True 两个原实例数值通过，随后分别缺 disable_ftz 字段；正值输入没有覆盖非正规数。
-
-根因与代码方案源码依据：[E25][E25]、[E30][E30]、[E8][E8]。
-
-证据：NPU jit_line 未导出该值，native _make_ttir_module_from_cfg:922 和 _precompile_config:1220 显式构造 options 时没有 FTZ 转译。共同
-runtime 只在 CUDA 分支转为 enable_reflect_ftz=False。实际安装 Triton 的 NPUOptions 没有这两个选项；AscendBackend.parse_options:1656
-按声明字段过滤，单补 triton_meta 字符串也没有消费者。硬件数学能力仍需实测，不满足硬件 SKIP 的证据要求。
-
-**修复方案（未实施）**。责任：Inductor flag 传递；Triton Ascend option/数学实现分别负责消费。
-
-拟修改入口：NPU torch_npu/_inductor/codegen/triton_combo_kernel.py::jit_line/triton_meta；NPU
-torch_npu/_inductor/runtime/triton_heuristics.py::_make_ttir_module_from_cfg/_precompile_config/parse_triton_ascend_options（909、1216、1152）；安装
-Triton Ascend compiler.py::NPUOptions/AscendBackend.parse_options 及数学 lowering。
-
-1. Inductor 端按配置显式导出 disable_ftz 的 False/True 两种值。集中构造 TTIR check 和实际 precompile 的 Ascend options，确保两条路径都传递同一值，不套用 CUDA
-enable_reflect_ftz 的名字后让 NPU 过滤。
-2. 提出与 Triton Ascend 对齐的显式 disable_ftz option：NPUOptions 声明字段，parse_options 保留并参与编译/cache 身份，lowering
-必须实际读取。这里是需要下层配合的接口方案，不声称当前已有支持。
-3. 底层按硬件和数学指令能力确定保留非正规数的合法 exp/exp2 等实现，并让选项改变实际数学路径；若某条路径不能实现，不静默忽略 True。Inductor 接口接通与底层非正规数支持分别验收。
-4. 当前正值图只能检查 metadata 与普通数值。用相同输入在 FP32 最小正规数附近及非正规输出范围检查 eager/compiled 和高精度基准，结果确认前保持软件目标 FAIL。
-
-预期生成行为：原两种 flag 正确出现在 metadata 和实际 compiler options；下层支持时能证明非正规数保留行为。
-
-影响范围：NPU Inductor 的 flag 传递方案与需要 Triton Ascend 配合的消费接口。
-
-方案风险：硬件/数学能力未定界，Inductor 单独加字段不能完成 FTZ 特性；未知字段被过滤不能视为已消费，也没有硬件 SKIP 依据。
-
-**验收计划（尚未执行）**：
-
-- 原 False/True metadata 方法及两条编译路径分别核对实际 options，保留原数值。
-- 下层消费证明、cache 区分及非正规数边界必须另验；未实施，未声称硬件不支持。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelMetadataTests::test_combo_triton_meta_has_disable_ftz`：范围外，2 FAIL；原首失败关联。
-
-证据：[E8][E8]、[E25][E25]；[安装的 NPUOptions 字段][triton-options]与[实际 parse_options 源码][triton-compiler]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
 <a id="root-r26"></a>
 
 #### R26 WideResNet 图没有进入 memory gate，原峰值比较未覆盖拒绝路径
@@ -1430,15 +1213,21 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 [run213]:
   ../../../../scripts/tests/combo_kernel_210/README-213.md
 [current-jobs]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-current-43c727fb81-20261114/jobs.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-9f639af716-20261115/jobs.json
 [failure-capability-audit]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-current-43c727fb81-20261114/failure-capability-audit.json
-[optimize-rerun]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-optimize-mem-43c727fb81-20261114/
-[optimize-generated]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-optimize-mem-43c727fb81-20261114/generated-metadata.json
-[optimize-overlay]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-optimize-mem-43c727fb81-20261114/overlay.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-9f639af716-20261115/failure-capability-audit.json
+[three-rerun]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-meta-three-9f639af716-20261115/
+[three-generated]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-meta-three-9f639af716-20261115/generated-metadata.json
+[three-summary]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-meta-three-9f639af716-20261115/validation-summary.json
+[three-overlay]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-meta-three-9f639af716-20261115/overlay.json
+[three-ftz-interface]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-meta-three-9f639af716-20261115/ftz-backend-interface.json
+[three-ftz-source]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-meta-three-9f639af716-20261115/ftz-backend-options.txt
 [software-rerun]:
   ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/
 [software-gates-audit]:
