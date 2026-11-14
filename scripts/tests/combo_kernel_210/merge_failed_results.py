@@ -1,4 +1,4 @@
-"""Update an existing result snapshot with failed-only reruns, preserving validation provenance."""
+"""Merge FAIL/SKIP instance reruns into the current snapshot, preserving validation provenance."""
 
 import argparse
 from collections import Counter
@@ -12,7 +12,8 @@ from run_plain_pytest import save
 
 def provenance(directory, state):
     return {"artifact": directory.name, "test_commit": state["test_commit"],
-            "npu_fix_commit": state.get("npu_fix_commit")}
+            "npu_fix_commit": state.get("npu_fix_commit"),
+            "torch_npu": state["torch_npu"], "torch_npu_git": state["torch_npu_git"]}
 
 
 def main():
@@ -39,7 +40,7 @@ def main():
     for directory in args.rerun:
         current = json.loads((directory / "status.json").read_text())
         assert current["stage"] == "complete" and current["installed_source_unchanged"]
-        for key in ("torch_git", "torch_npu_git", "triton"):
+        for key in ("torch_git", "triton"):
             assert current[key] == state[key], f"Different base environment: {key}"
         fingerprints.append(json.loads((directory / "installed_sha256.json").read_text()))
         source = provenance(directory, current)
@@ -60,10 +61,12 @@ def main():
                              else "SKIP" if "SKIP" in statuses else "PASS")
         rerun_results.append({**source, "method_results": current["method_results"],
                               "instance_results": current["instance_results"]})
-        state.update({key: current[key] for key in ("test_commit", "npu_fix_commit", "finished")})
+        state.update({key: current[key] for key in (
+            "test_commit", "npu_fix_commit", "torch_npu", "torch_npu_git", "finished",
+        )})
     assert all(item == fingerprints[0] for item in fingerprints), "Rerun phases used different installed sources"
     args.output.mkdir(parents=True, exist_ok=False)
-    metadata = ("manifest.json", "table_rows.json", "full-collection.json",
+    metadata = ("manifest.json", "table_rows.json", "full-collection.json", "current-analysis.json",
                 "foreach-sampling.json", "foreach-sample-nodeids.txt")
     for name in metadata:
         if (args.reference / name).exists():

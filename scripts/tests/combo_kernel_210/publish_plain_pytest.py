@@ -60,16 +60,15 @@ def main():
     source.add_argument("--remote-root")
     source.add_argument("--local-artifact", type=Path, help="Render a downloaded or provenance-merged run")
     parser.add_argument("--name", required=True)
-    parser.add_argument("--table-name", help="Optional stable table name when the evidence run name changes")
+    parser.add_argument("--table-name", default="inductor-combo-tests-v2.13",
+                        choices=["inductor-combo-tests-v2.13"], help="The single maintained 2.13 progress table")
     parser.add_argument("--initial", action="store_true")
     parser.add_argument("--push", action="store_true")
     parser.add_argument("--stop-timer")
     args = parser.parse_args()
     if not args.name.replace("-", "").replace("_", "").replace(".", "").isalnum():
         raise ValueError("name must contain only letters, digits, dots, hyphens and underscores")
-    table_name = args.table_name or args.name
-    if not table_name.replace("-", "").replace("_", "").replace(".", "").isalnum():
-        raise ValueError("Invalid table name")
+    table_name = args.table_name
     lock = Path("/home/qc/Repos/Ascend/tmp") / (args.name + ".publish.lock")
     lock.parent.mkdir(parents=True, exist_ok=True)
     with lock.open("w") as stream:
@@ -115,9 +114,20 @@ def render_and_publish(args, state, artifact, table_name, terminal):
     priority = baseline_pass_methods() if layout.exists() else {}
     analysis_file = artifact / "current-analysis.json"
     analyses = json.loads(analysis_file.read_text()) if analysis_file.exists() else {}
-    columns = ["测试文件", "函数名", "最新结果", "实例结果", "当前分析"]
+    target = REPO / "docs/notes/compiler/codegen" / (table_name + ".csv")
+    with target.open(encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream)
+        columns = reader.fieldnames
+        previous_rows = list(reader)
+    if [(row["测试文件"], row["函数名"]) for row in previous_rows] != [
+        (row["file"], row["name"]) for row in table_rows
+    ]:
+        raise ValueError("Publish the full merged snapshot to preserve the progress table's row order")
+    expected = {(row["file"], row["class"], row.get("source_method", row["name"])) for row in table_rows}
+    if set(by_method) != expected:
+        raise ValueError("Merge targeted reruns with merge_failed_results.py before publishing")
     rows = []
-    for row in table_rows:
+    for row, previous_row in zip(table_rows, previous_rows):
         source_name = row.get("source_method", row["name"])
         job = by_method.get((row["file"], row["class"], source_name), {})
         reports = job.get("reports", {})
@@ -156,8 +166,9 @@ def render_and_publish(args, state, artifact, table_name, terminal):
             status = "ERROR"
         instances = "; ".join(f"{key} {value}" for key, value in sorted(counts.items()))
         if state.get("failed_only_merge") and job.get("rerun_nodes"):
-            versions = sorted({reports[node]["validation"]["npu_fix_commit"][:10]
-                               for node in job["rerun_nodes"]})
+            versions = sorted({(reports[node]["validation"].get("npu_fix_commit")
+                                or reports[node]["validation"].get("torch_npu_git")
+                                or "未记录")[:10] for node in job["rerun_nodes"]})
             instances += f"；复验 {len(job['rerun_nodes'])}（{', '.join(versions)}），其余沿用历史结果"
         if job.get("full_nodes"):
             instances = (instances or "待执行") + f"；抽样 {len(job['nodes'])}/{len(job['full_nodes'])}"
@@ -166,12 +177,12 @@ def render_and_publish(args, state, artifact, table_name, terminal):
         if row.get("nested"):
             status = "随外层验证/" + status
             instances = "随 " + source_name + " 验证"
-        rows.append([row["file"], row["name"], status,
-                     instances, analysis])
-    target = REPO / "docs/notes/compiler/codegen" / (table_name + ".csv")
+        result = previous_row.copy()
+        result.update(最新结果=status, 实例结果=instances, 当前分析=analysis)
+        rows.append(result)
     with target.open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.writer(stream, lineterminator="\n")
-        writer.writerow(columns)
+        writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
+        writer.writeheader()
         writer.writerows(rows)
     notes = document_path(REPO, "2.13")
     summary = Counter(job["status"] for job in jobs)
@@ -189,7 +200,7 @@ def render_and_publish(args, state, artifact, table_name, terminal):
         environment += (f"另设独立 TORCHINDUCTOR_CACHE_DIR：`{state['cache_root']}`，"
                         "避免 Python 修复后复用旧编译代码；未清理共享缓存。")
     text = (f"# 2.13 ComboKernel 同步分支验证\n\n"
-            f"使用 NPU_A5 的 `pta_213_case` 环境及本地 `sync/combo-kernel-master` 对应包。\n"
+            f"使用 NPU_A5 的 `pta_213_case` 环境，版本以各实例实际执行记录为准。\n"
             f"torch_npu：`{state.get('torch_npu', '待获取')}`，提交：`{state.get('torch_npu_git', '待获取')}`。\n"
             f"NPU Python 修复叠加提交：`{state.get('npu_fix_commit') or '无'}`。\n"
             f"PyTorch：`{state.get('torch', '待获取')}`，Triton：`{state.get('triton', '待获取')}`。\n"
@@ -202,10 +213,11 @@ def render_and_publish(args, state, artifact, table_name, terminal):
             f"[原始证据](../../../../artifacts/{args.name}/)。\n\n"
             + environment + policy + "\n\n"
             "表格中的异常摘要来自 JUnit 报告；尚未逐项定位的错误不能直接据此归因于 ComboKernel。"
-            "PASS 项不保留历史失败分析。\n")
+            "PASS 项不保留历史失败分析。后续只复测最新 FAIL、SKIP（含执行 ERROR）实例，"
+            "不重跑历史 PASS，不执行全量测试。\n")
     preflight_file = artifact / "foreach-preflight.json"
     if state.get("failed_only_merge"):
-        text += ("\n本次仅复验原失败实例及取消旧 NPU skip 后的实例；未重跑历史 PASS。"
+        text += ("\n本次仅复验所选 FAIL、SKIP 或 ERROR 实例；未重跑历史 PASS。"
                  "当前表为逐实例更新后的汇总，不能视为全部方法在最新修复上重新执行。"
                  "每条报告的实际验证版本与来源保存在 `jobs.json` 的 `validation` 字段中。\n")
     if preflight_file.exists():

@@ -13,7 +13,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 DEFAULT_SOURCE = REPO.parent / "Community-Use-Case-Testing/v2.10.0/test_inductor"
-DEFAULT_TABLE = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-v2.13-vs-v2.10.csv"
+DEFAULT_TABLE = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-v2.13.csv"
 DEFAULT_OUTPUT = REPO / "docs/notes/compiler/codegen/inductor-combo-tests-native-v2.10.csv"
 
 

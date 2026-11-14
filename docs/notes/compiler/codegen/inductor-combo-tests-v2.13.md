@@ -47,7 +47,9 @@ PASS][all-pass]另存在本轮证据目录。2.10 原生 397 条清单保持不�
 `test_combo_autotune_grouping_by_metadata_fingerprint` 直接调用社区 helper 和模拟 metadata；其 PASS 证明该 helper
 的分组规则，本轮未验收真实 NPU 成员 metadata 到该分组的连接。
 
-[当前 CSV][csv]保持原文件名、116 行顺序及五列，所有行均来自本轮结果。[方法与逐实例报告][jobs]、[完整环境和分片证据][evidence]、[JUnit
+[唯一进展表][csv]保留 116 行顺序，以实际 2.13 报告维护结果、实例统计和当前分析，同表保留用例类型、2.10 源码存在性及直接运行兼容性。
+后续只定向复测最新 FAIL、SKIP 实例，执行 ERROR 也按失败处理；历史 PASS 保留实际验证来源，不重跑全量。
+参数化方法中已 PASS 的实例不随失败参数重复执行。[方法与逐实例报告][jobs]、[完整环境和分片证据][evidence]、[JUnit
 交叉核对][junit]及[Community 范围审计][scope]可追溯当前结论。
 
 <!-- combo-section:validation213:end -->
@@ -1427,7 +1429,7 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 [pass213]:
   ../../../../scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt
 [csv]:
-  inductor-combo-tests-native-v2.13-sync-64dc85c.csv
+  inductor-combo-tests-v2.13.csv
 [jobs]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/jobs.json
 [evidence]:

@@ -1,7 +1,9 @@
 # 2.13 Combo/foreach 执行说明
 
 结果和当前问题分析只更新 [2.13 固定文档](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13.md)。
-运行批次使用独立证据目录，文档文件名不随分支或提交变化。
+用例适配进展统一更新 [2.13 进展表](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13.csv)，
+同表保留用例类型、2.10 源码存在性和直接运行兼容性，结果与分析以实际 2.13 报告为准。
+运行批次使用独立证据目录，表格和文档文件名不随分支或提交变化。
 
 ## 环境与执行范围
 
@@ -12,8 +14,23 @@
 
 `combo_213_all_selected.json` 是源方法清单；`combo_213_table_rows.json` 维护原表行与外层方法的对应关系。
 嵌套函数随外层方法验证，不作为独立 pytest 方法计数。
-问题修复阶段优先从最新 `jobs.json` 中选择报告状态为 FAIL 的 node ID，
-在清单项的 `only_nodes` 中写入准确实例，不重跑同方法已经 PASS 的参数。
+后续只关注最新逐实例报告中的 FAIL、SKIP，执行 ERROR 也按失败处理，不进行全量测试。
+已 PASS 的方法和参数实例保留历史结果；不直接把完整源方法清单交给 runner 执行。
+硬件或平台协议 SKIP 保留明确原因，不能计入 PASS；软件 SKIP 继续定位和适配。
+
+## 生成定向清单
+
+在 `torch-learn` 仓库根目录，使用进展表对应的最新完整结果快照生成清单：
+
+```bash
+python scripts/tests/combo_kernel_210/select_213_table.py \
+  --source /path/to/cases/v2.13.0/inductor_npu \
+  --reference artifacts/<latest-results> \
+  --manifest /path/to/nonpassing-manifest.json --layout /path/to/table-rows.json
+```
+
+脚本核对进展表与快照的方法状态，输出完整表格行映射，并仅为 FAIL、SKIP、ERROR 实例设置 `only_nodes`。
+一个方法同时有 PASS 和 FAIL 参数时，只选失败参数。生成后可以按本次修复涉及的方法进一步缩小清单。
 
 ## 自动执行
 
@@ -23,7 +40,7 @@
 conda activate pta_213_case
 python /path/to/torch-learn/scripts/tests/combo_kernel_210/run_plain_pytest.py \
   --test-root /path/to/cases/v2.13.0/inductor_npu \
-  --manifest /path/to/failed-only-manifest.json \
+  --manifest /path/to/nonpassing-manifest.json --layout /path/to/table-rows.json \
   --output /path/to/new-results --cache-root /path/to/new-cache \
   --test-commit <actual-test-commit> --npu-fix-commit <actual-overlay-commit> \
   --devices 1,2,3 --foreach-functional
@@ -33,38 +50,12 @@ python /path/to/torch-learn/scripts/tests/combo_kernel_210/run_plain_pytest.py \
 `--foreach-functional` 只记录所用测试的功能适配口径，不给测试注入 monkeypatch。
 子进程直接运行 `python -m pytest -vs`，无自定义 pytest 插件。
 
-`--collect-only` 只收集；`--max-instances-per-method 2` 每个方法最多选两个代表参数。
-抽样 PASS 不代表完整泛化范围通过。输出目录必须不存在；默认每方法超时 3600 秒。
+`--collect-only` 只收集；复测通过 `only_nodes` 精确选取，不使用代表参数抽样替代失败实例。
+输出目录必须不存在；默认每方法超时 3600 秒。
 设备异常可以换到获授权的卡重试，功能失败保留真实断言和原报告。
 
-## 2.10 PASS 重合范围的全量复测
-
-当前范围为既定 2.10 适配基线 PASS 的 60 个重合方法，
-不是 2.10 原生 54 方法清单。完整方法 manifest 和 pytest collection 保存在当前结果的证据目录。
-不使用 `--max-instances-per-method` 或 `--reuse`，重新收集并执行所有参数。
 多个进程共用获授权卡时，各进程使用独立的 `TORCHINDUCTOR_CACHE_DIR`、`TRITON_CACHE_DIR` 和输出目录。
-
-分片清单的 `only_nodes` 可以拆分同一方法，但合并时必须覆盖完整 collection，且实例不能重复。
-下载的证据目录包含 `full-collection/`、`results/<shard>/`、`shards.json`
-和记录执行前后测试文件哈希的 `test-source-validation.json` 后，执行：
-
-```bash
-python scripts/tests/combo_kernel_210/merge_full_shards.py --artifact artifacts/<full-run>
-```
-
-合并器拒绝未完成报告、源码变更、不同安装版本、缺失实例或重复实例。
-合并后的 `passed-nodeids.txt` 只包含实际 PASS，SKIP 单独记录。
-[2.13 PASS 清单](combo_native_213_passed_nodeids.txt) 用于 **2.13 NPU 测试目录**。
-2.10 原生清单保留原内容，执行方式见 [2.10 说明](README-native-210.md)。
-
-在 `Community-Use-Case-Testing/v2.13.0/inductor_npu` 中按 PASS 清单执行：
-
-```bash
-mapfile -t cases < /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt
-ASCEND_RT_VISIBLE_DEVICES=1 pytest -vs "${cases[@]}"
-```
-
-单例可在测试目录直接运行：
+单个失败或跳过实例也可在测试目录直接运行：
 
 ```bash
 ASCEND_RT_VISIBLE_DEVICES=3 TORCHINDUCTOR_CACHE_DIR=/path/to/new-cache \
@@ -72,11 +63,12 @@ python -m pytest -vs \
   test_combo_kernels.py::ComboKernelMetadataTests::test_combo_inductor_meta_optimize_mem_false_in_training_forward
 ```
 
-## 合并失败项复测并发布
+## 合并定向复测并发布
 
 `merge_failed_results.py` 按实例更新参考快照，拒绝未完成报告、重复实例和历史 PASS 覆盖。
-合并前验证基础环境与各复测阶段的安装源码一致；每条报告保留实际验证提交。
-历史 PASS 未重跑时，必须在当前文档说明，不能称为最新代码全量验证。
+合并前验证 PyTorch/Triton 基础版本不变、各复测阶段安装源码一致；
+torch_npu 可以更新为修复后的包，每条报告保留实际包提交、测试提交和 Python overlay 提交。
+未重跑的实例保留原结果与验证来源，不能称为最新代码全量验证。
 
 ```bash
 python scripts/tests/combo_kernel_210/merge_failed_results.py \
@@ -84,10 +76,14 @@ python scripts/tests/combo_kernel_210/merge_failed_results.py \
   --output artifacts/<new-merged-run>
 
 python scripts/tests/combo_kernel_210/publish_plain_pytest.py \
-  --local-artifact artifacts/<new-merged-run> --name <new-merged-run> \
-  --table-name inductor-combo-tests-native-v2.13-sync-64dc85c
+  --local-artifact artifacts/<new-merged-run> --name <new-merged-run>
 ```
 
-CSV 保持固定名称和原有行顺序；Markdown 始终更新 `inductor-combo-tests-v2.13.md` 的当前结果章节。
+发布器只更新 `inductor-combo-tests-v2.13.csv`，保留表格行顺序和源码对照列；
+定向结果必须先合并为完整快照，避免覆盖未重跑用例的进展。
+Markdown 始终更新 `inductor-combo-tests-v2.13.md` 的当前结果章节。
 对应问题分析同步在该文档维护，PASS 不保留旧失败原因，正文不累积旧轮次结果。
 `--push` 可提交推送，`--stop-timer <unit>.timer` 可在收尾时停止本地定时检查。
+
+[2.13 PASS 清单](combo_native_213_passed_nodeids.txt) 仅保留为已有通过范围的查询依据。
+2.10 原生清单及结果按 [2.10 说明](README-native-210.md) 单独维护。

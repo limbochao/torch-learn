@@ -102,8 +102,11 @@ def main():
     repo = args.repo.resolve()
     art = repo / "artifacts" / args.artifact
     table = repo / "docs/notes/compiler/codegen/inductor-combo-tests-liulm-v2.10.0-combokernel-dev.csv"
-    originals = load_csv(table.parent / "inductor-combo-tests-v2.13-vs-v2.10.csv")
-    previous = {(r["测试文件"], r["函数名"]): r for r in load_csv(table)}
+    originals = load_csv(table.parent / "inductor-combo-tests-v2.13.csv")
+    previous = load_csv(table)
+    assert [(r["测试文件"], r["函数名"]) for r in originals] == [
+        (r["测试文件"], r["函数名"]) for r in previous
+    ], "The 2.10 snapshot and shared source inventory must have the same row order"
     focused = json.loads((art / "with_fixes/functional_results.json").read_text())["methods"]
     focused_map = {(m["file"], m["name"]): m for m in focused}
     full_path = art / "full/functional_results.json"
@@ -139,20 +142,20 @@ def main():
         latest = list(latest_map.values())
         stamp = "全量快照 + " + retests[-1][0]
     rows = []
-    for original in originals:
+    for original, old in zip(originals, previous):
         key = original["测试文件"], original["函数名"]
-        old = previous.get(key, {})
+        baseline = old["原 e32+F1/F3 结果"]
         row = {"测试文件": key[0], "函数名": key[1], "v2.10.0存在性/实现差异": original["v2.10.0存在性"],
                "执行范围": old.get("执行范围", "未运行"),
-               "原 e32+F1/F3 结果": original["NPU_A5通过情况"],
-               "最新结果": "未运行", "当前分析": original["失败原因分析"]}
+               "原 e32+F1/F3 结果": baseline,
+               "最新结果": "未运行", "当前分析": old["当前分析"]}
         if original["类型"] == "嵌套函数":
-            row.update(执行范围="随外层方法验证", 最新结果=original["NPU_A5通过情况"])
-        elif original["NPU_A5通过情况"] == "未运行":
+            row.update(执行范围="随外层方法验证", 最新结果=baseline)
+        elif baseline == "未运行":
             row["执行范围"] = "未运行"
         else:
             method = latest_map.get(key)
-            fallback = old.get("当前分析", original["失败原因分析"])
+            fallback = old["当前分析"]
             if method:
                 row["最新结果"] = format_result(method)
                 row["当前分析"] = analysis(method, fallback)

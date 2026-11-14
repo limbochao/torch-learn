@@ -17,7 +17,8 @@
 输出包含命令、日志、JUnit、逐实例结果及执行前后源码哈希；每次使用新目录和独立编译缓存。
 
 `publish_native_210.py` 更新 2.10 原生结果 CSV 和固定文档的 `native210` 章节。
-`publish_plain_pytest.py` 更新 2.13 结果 CSV 和固定文档的 `validation213` 章节。
+`publish_plain_pytest.py` 只更新 `inductor-combo-tests-v2.13.csv` 和固定文档的 `validation213` 章节。
+2.13 后续通过 `select_213_table.py` 从最新报告生成 FAIL/SKIP 实例清单，不重跑历史 PASS 或全量。
 `combo_documents.py` 限定文档路径和可替换章节，不按执行批次生成 Markdown，
 也不覆盖同一文档内的其他当前分析。
 
