@@ -13,61 +13,44 @@ published: false
 
 | 范围 | PASS | FAIL | SKIP |
 | --- | ---: | ---: | ---: |
-| 独立源方法 | 77 | 23 | 5 |
-| 参数实例 | 435 | 23 | 6 |
+| 独立源方法 | 80 | 20 | 5 |
+| 参数实例 | 438 | 20 | 6 |
 
-本次仅复测 4 个 FAIL 方法、5 个原失败参数实例，结果为 **5 PASS**。
-其余 459 个实例保留原结果和实际验证来源；[当前逐实例汇总][current-jobs]的 `validation` 字段记录各实例来源。
+本次只调整并复测以下 **3 个原 FAIL 实例，结果为 3 PASS**；每项对应一个用例提交。
+其余 461 个实例保留原结果和实际验证来源，见[合并核对][merge-check]与[当前逐实例汇总][current-jobs]。
 
-随后对三个非独立块问题补充定界，未修改生产实现、用例或容差，结果数保持不变：
-
-| 定位项 | 当前边界 | 后续入口 |
-| --- | --- | --- |
-| D01 多轴 sum | 固定 winner 重放复现 FP32 累加舍入差异；eager、compiled 分别对高精度基准均满足原容差 | 适配用例的数值基准；R01 生成缺陷另行修复 |
-| D03 max_persistent_rblock | 数值通过，失败仅在 HIP 专属资源字段断言；NPU 有自己的 tile/UB/program 预算 | 适配 NPU 资源验收，不移植 HIP 字段 |
-| R26 WRN 峰值 | 并行双节点组全是 extern convolution，被组合资格过滤；没有两个合法成员进入 gate | 调整用例图以覆盖真实拒绝路径 |
-
-[定界摘要][boundary-summary]记录固定输入来源、实际 winner、逐组过滤和判定限制。
-资源 False 与 WRN 的原 pytest 均保持 FAIL；True 历史 PASS 未重跑。
-固定归约重放及 R 分块实验属于补充诊断，不替换原用例的结果或验证来源。
-本轮环境与上文相同，Community 为 `198521f7f9`、NPU Python overlay 为 `9f639af716`；
-北京时间 2026-11-15 20:57 至 21:07 使用物理卡 2、3，用户明确允许共用 1–3 卡。
-两项 pytest 的 588 个安装源码文件执行前后均未变化，未增加正式测试脚本或修改用例分支。
-
-### 用例适配评估与验证
-
-四项失败的观测都采用了 CUDA 专属格式。NPU 的尺寸、分块和 launch 协议不同，可以调整用例检查，保留原功能目标。
-本次仅修改 `Community-Use-Case-Testing` 的 NPU 测试，原输入、编译配置和数值容差均保留。
-
-| 用例 | 本次检查 | 提交 | 实例结果 |
+| 用例 | NPU 适配与保留的验收 | 提交 | 实例结果 |
 | --- | --- | --- | --- |
-| `test_single_combo_kernels` | GridNpu、两个普通 pointwise 定义、无 Combo；保留两种 benchmark 模式的数量检查 | `aea947627c` | 2 PASS |
-| `test_persistent_reduction_size_hint` | 共享尺寸及两个成员的真实 R，完整 persistent 归约 | `d2333556ae` | 1 PASS |
-| `test_combo_kernel_per_config_subkernel_per` | 共享 runtime block/subtile、两个成员完整 R | `1fd419720b` | 1 PASS |
-| `test_combo_kernel_yz_overflow` | 实际 driver grid、profiler 事件和数值 | `198521f7f9` | 1 PASS |
+| `test_combo_kernel_per_config_subkernel_r0_r1` | eager、compiled 分别对同一 CPU FP64 sum 基准检查；保留原 FP32 容差、非连续输入和 kernel 数量 | `7b6f64c` | PASS |
+| `test_combo_max_persistent_rblock_gated_on_per_subkernel`（False） | 检查真实 NPU 候选的驻留 tile/program 预算、两个成员完整 R 和共享 block ABI；保留数值检查 | `0fc6d76` | PASS |
+| `test_combo_kernel_peak_memory_wide_resnet` | NPU 使用宽残差分支图，检查真实 gate 拒绝、Combo 数减少、预热后峰值下降和数值 | `8f5db70` | PASS |
 
-[生成代码核对][case-generated]与[用例修改][case-adaptation]确认：
+资源项只复测 False；True 参数保留历史 PASS，未重跑，也不作为成员独立块 ABI 已实现的证据。
+峰值项的 NPU 路径采用可组合的 pointwise 分支和 extern linear 消费者，产生实际物化的宽中间张量；
+这是对原 WRN 卷积图的测试适配，原图不具备有效 Combo 候选。
 
-- single 的两个参数实例各生成两个普通 pointwise 定义，使用 GridNpu，没有 Combo metadata。
-- size_hint 的共享尺寸为 `x0=1536, r1=32`，成员为 `(768,16)`、`(768,32)`；静态 R subtile 分别为 16、32，未生成归约迭代循环。
-- per_config 的两个成员为 `(1024,64)`、`(1024,512)`，共享 `X0BLOCK`，各自完整 R subtile 为 64、512。
-- yz_overflow 保留原大尺寸 permute/clone 输入。预热后记录一次实际 driver launch，
-  验证 `grid=(Σceildiv(member_split_numel, selected_runtime_block), 1, 1)`，原 runner 原样执行；
-  同时检查 NPU profiler 含对应 kernel 事件，最终数值与 eager 一致。
+[实际门控记录][case-memory]与[生成代码核对][case-generated]一致：
 
-原始 JUnit、命令、日志及[验证摘要][case-summary]保存在[本次定向报告][case-rerun]。
-5 份 wrapper 由 `TORCH_LOGS=output_code` 原日志去除前缀后恢复，保留原代码顺序和缩进；来源日志及行号随核对文件保存。
+| 门控配置 | 拒绝的真实候选 | 生成 Combo 数 | 预热后峰值 |
+| --- | ---: | ---: | ---: |
+| 禁用阈值 | 0 | 1 | 88,408,576 B（84.31 MiB） |
+| 1 MiB 阈值 | 1 | 0 | 71,893,504 B（68.56 MiB） |
+
+两轮使用相同输入，并保留数值检查。候选生成器和 scheduler 的观测包装原样返回原函数结果。
+原始 JUnit、命令、日志、[用例修改][case-adaptation]及[验证摘要][case-summary]保存在[本次定向报告][case-rerun]。
+4 份 wrapper 从 `TORCH_LOGS=output_code` 日志恢复，仅移除日志前缀及脱敏信息，保留生成代码顺序与缩进。
 
 ### 本次验证版本与范围
 
-执行时间：北京时间 2026-11-15 15:29:35 至 15:32:34；NPU_A5 Docker 的 `pta_213_case`，物理卡 2。
-启动前该卡没有运行进程，使用独立 Inductor/Triton 缓存。
-Community 使用 `fix/combo_case`，实际提交 `198521f7f9171ba4a4660dfa4b50b2647ef47e85`。
-仅四个原测试方法及两个源码读取 helper 有变化，测试 decorators/config 保持一致。
+执行时间：北京时间 2026-11-15 21:35:46 至 21:38:29；NPU_A5 Docker 的 `pta_213_case`，物理卡 2。
+启动前检查卡状态；按用户授权共用 1–3 卡，使用独立 Inductor/Triton 缓存。
+Community 使用 `fix/combo_case`，实际提交 `8f5db70d5eee4e4148da0b16943462831cc38fd8`。
+本次只改三个既有测试方法并新增一个峰值测试私有 helper，既有测试名称和 decorators 保持一致。
 
 基础 torch_npu 为 `2.13.0+gitefc05dd`，包提交 `efc05dd90b5fe31717d5f13e51fb3e49035bea30`。
-现有 Python overlay 为 `bugfix/combo_fix_meta` 的 `9f639af716399c15e07dbe341ecb2490a9f36e87`，本次没有修改生产代码。
-安装的 588 个 Inductor Python 文件哈希与前次验证一致，执行前后安装源码和测试源码哈希也一致，见[环境核对记录][case-context]。
+现有 Python overlay 为 `bugfix/combo_fix_meta` 的 `9f639af716399c15e07dbe341ecb2490a9f36e87`。
+生产代码及数值容差未修改；安装的 588 个 Inductor Python 文件哈希与前次验证一致，执行前后安装源码和测试源码均未变化，
+见[环境核对记录][case-context]。
 PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton 为 `3.6.0`。
 未重跑实例保留各自原版本，不能视为全部实例在当前测试提交上重新执行。
 
@@ -81,12 +64,12 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 <!-- combo-section:analysis213:start -->
 ## 当前问题与按根因排序的修复队列
 
-当前共有 **23 FAIL、5 SKIP 方法**。23 个 FAIL 进入根因队列，5 个硬件差异方法保留 SKIP；4 个软件门控已经解除。
+当前共有 **20 FAIL、5 SKIP 方法**。20 个 FAIL 进入根因队列，5 个硬件差异方法保留 SKIP；4 个软件门控已经解除。
 全范围根因表记录生成正确性、真实统计、出口、成员 ABI、调优与功能验收的依赖；同一用例可以覆盖多个根因。
 本次 `bugfix/combo_fix_meta` 的剩余 R09—R12、R17 按修改量、影响范围和依赖安排实施顺序，见下节。
 
-**R 表示已定位的根因/能力或验收缺口，D 保留原数值或原生优化契约的定位编号。**
-当前保留 22 项定位记录；D01、D03 已定界到用例验收，D04 仍需定界。
+**R 表示已定位的根因/能力或验收缺口，D 保留待定界的优化契约编号。**
+当前保留 19 项定位记录，其中 D04 仍需定界。
 16 项 Inductor 实现修复方案仍未实施。软件门控已在 `fix/combo_case` 修改并定向验证，当前状态以本次逐实例汇总为准。
 未实现的软件目标保持 FAIL，硬件差异保留 SKIP；已 PASS 的用例不保留旧失败分析。
 
@@ -97,7 +80,7 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 
 ### FAIL 原因的能力归属
 
-已按当前失败实例、用例配置、实际断言和实现消费链复核当前 **23 个 FAIL 方法、23 个失败实例**。
+已按当前失败实例、用例配置、实际断言和实现消费链复核当前 **20 个 FAIL 方法、20 个失败实例**。
 当前失败分类沿用固定源码复核依据，执行结果采用上文的逐实例实测记录；
 [归因审计][failure-capability-audit]保存剩余失败方法的分类、源码版本及依据。
 
@@ -110,11 +93,8 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 `test_combo_kernel_scalar_store_broadcast` 和 `test_combo_kernel_store_mask`。
 前者保留异构组合缺口；后者还保留动态归约索引缺陷，不能只修独立块就视为完成。
 
-其余 **7 个方法保留各自原因**。追踪和共享输入联合归约分别有自己的消费链；
-Metadata 测试类开启独立块不改变这些字段的归属。
-`max_persistent_rblock` 当前只有 `per_subkernel=False` 实例失败，原因是沿用 HIP 专属资源字段断言；
-`True` 实例仅通过字段不存在断言，继续保留原 PASS，不作为独立块 ABI 已实现的证据。
-eager 内存格式、布局用例的后续 profiler 解析、归约代码生成、FP32 数值基准和峰值覆盖也分别保留当前原因。
+其余 **4 个方法与成员独立块无关**，分别涉及追踪映射、共享输入行列联合归约、多轴归约写回、
+eager 内存格式及该布局用例的后续 profiler 解析。Metadata 测试类开启独立块不改变追踪字段的归属。
 
 <a id="fix-plans213"></a>
 
@@ -125,12 +105,12 @@ eager 内存格式、布局用例的后续 profiler 解析、归约代码生成�
 | 生成正确性，4 项 | R27 索引缓存；R01 归约 store rank；R03 masked 轴；R04 index_expr cast | 指向具体生成规则，写明合法 DSL/索引如何形成。 |
 | 统计、metadata 和追踪，5 项 | R09—R12、R17 | 分开修 producer、逐成员出口和真实 origins。 |
 | NPU Combo 新功能，7 项 | R18—R24 | 成员独立 block/body/grid/runtime ABI、默认拼接、顺序调优、真实分组、坐标下降、异构打包、联合归约。 |
-| 不属于生产 Inductor | R05 eager；R08 布局 profiler；D01 数值基准；D03 HIP 字段；R26 峰值覆盖 | 保留定界与验收入口，本次不提出生产 Inductor 修复。 |
+| 不属于生产 Inductor | R05 eager；R08 布局 profiler | 保留定界与验收入口，本次不提出生产 Inductor 修复。 |
 | 仍待定界 | D04 大 R 优化资格 | 明确下一份证据和判定分支，不给猜测性修复。 |
 
 生成正确性队列先处理 R27 的跨 kernel 状态，再修 rank/dtype/mask。
 统计队列中 R09/R10/R11 的真实 producer 完成后接完整 R12。
-R18 完成成员 ABI 后再接默认配置和调优消费者。D01、D03、R26 按用例适配处理。
+R18 完成成员 ABI 后再接默认配置和调优消费者。
 
 所有“预期生成行为”和“验收计划”都是方案要求，没有修复后的 DSL 或设备 PASS。
 本地 [控制流隔离复核][axis-cache-probe]执行了固定源码的三个索引函数及实际轴使用判断，
@@ -169,15 +149,14 @@ R01、R03/R04、R27 的生成正确性缺陷仍保留独立修复队列，若目
 
 ### 全范围根因及依赖
 
-下表 P0—P3 保留全范围问题的原分类层级；本次 R09—R17 的实际执行顺序以上节为准。
+下表 P0—P2 保留全范围问题的原分类层级；本次 R09—R17 的实际执行顺序以上节为准。
 
 | 问题层级 | 根因/定位项 | 当前判定 | 前置依赖 | 覆盖方法 |
 | --- | --- | --- | --- | ---: |
 | P0 | [R27 LoopBody 的候选索引缓存跨 kernel 复用，导致 x0/y0 轴错配](#root-r27) | 失败 DSL、固定源码及 CPU 控制流隔离复核已定位；未修复 | — | 1 |
-| P0 | [R01 persistent 多轴归约的 store 指针是标量，结果却是 block tensor](#root-r01) | 生成缺陷已实测确认；未修复 | — | 2 |
+| P0 | [R01 persistent 多轴归约的 store 指针是标量，结果却是 block tensor](#root-r01) | 生成缺陷已实测确认；未修复 | — | 1 |
 | P0 | [R03 动态 shape/stride 符号被当成 masked subblock 的迭代轴](#root-r03) | 生成前缺陷已实测及源码确认；未修复 | — | 1 |
 | P0 | [R04 动态整数 index_expr 在实际 cast 前被声明为 FP32](#root-r04) | 生成缺陷已实测及版本源码对照确认；未修复 | — | 1 |
-| P1 | [D01 非连续多轴 FP32 sum 的累加舍入差异](#root-d01) | 固定输入/IR 已定界到数值基准；原 FAIL 保留 | — | 1 |
 | P1 | [R05 eager contiguous(memory_format=channels_last) 被 NPU 公共接口拒绝](#root-r05) | 原 eager 前置失败已确认；未修复 | — | 1 |
 | P1 | [R08 布局用例的 profiler 读取尚未适配 NPU](#root-r08) | 源码确认的后续阻塞；当前先停在 eager | R05 | 1 |
 | P1 | [R09 Native Index 的有效普通/归约 store 没有维护 num_store](#root-r09) | producer 缺口已由源码确认；原用例先停在成员字典缺失 | — | 3 |
@@ -189,15 +168,13 @@ R01、R03/R04、R27 的生成正确性缺陷仍保留独立修复队列，若目
 | P2 | [R19 NPU override 绕过无 benchmark 的默认配置拼接和 carve-out](#root-r19) | 默认配置处理能力缺口已由源码确认；未实现 | R18 | 3 |
 | P2 | [R20 NPU runtime 没有逐成员候选的 Combo 顺序调优消费者](#root-r20) | 独立成员调优能力缺口已由源码确认；未实现 | R18、R12 | 3 |
 | P2 | [R21 真实 NPU 成员 metadata 未接入 fingerprint 调优分组](#root-r21) | 分组输入/消费链缺口已由源码确认；未实现 | R12、R18、R20 | 1 |
-| P2 | [D03 共享块用例沿用 HIP 专属资源字段断言](#root-d03) | False 数值通过；NPU 资源规则已有实现 | 独立模式另需 R18/R20 | 1 |
 | P2 | [D04 RMSNorm add_persistent_rblock 的资格与 native R 候选对应待确认](#root-d04) | 原首失败是 R12；不能认作 persistent 归约整体缺失 | R12、R18、R20 | 1 |
 | P2 | [R22 NPU 有 CoordescTuner 对象和计时缓存，但未执行成员坐标下降](#root-r22) | 成员坐标下降能力缺口已由源码确认；未实现 | R18、R20、R21 | 1 |
 | P2 | [R23 共享 launcher 限制异构成员组合，标量链/向量归约被拆为 singleton](#root-r23) | 特定组合能力缺口已由实际分区及源码确认；未实现 | R18；mean 另需 R03/R04/R27 | 2 |
 | P2 | [R24 NPU 配置与 backend 资格阻断 mixed-order 联合归约入口](#root-r24) | 共享输入行/列联合归约特性未启用，原目标未实现 | — | 1 |
-| P3 | [R26 WideResNet 的并行组只有 extern，未覆盖 memory gate](#root-r26) | 拓扑及过滤已逐组确认；gate 本身已有实现 | — | 1 |
 
 表中覆盖数可以重叠，不能相加当成失败数。R03/R04 对应的 store_mask 已解除门控，当前正式复测为 FAIL。
-P0 记录生成状态与语义；P1 记录前置接口、数值基准、统计和出口；P2 在依赖齐备后验收新功能；P3 补有效峰值拒绝路径。
+P0 记录生成状态与语义；P1 记录前置接口、统计和出口；P2 在依赖齐备后验收新功能。
 
 ```mermaid
 flowchart LR
@@ -229,7 +206,6 @@ flowchart LR
 | `has_loadstore_with_contiguous_rdim` | 是否有真实连续归约维的 load/保留 store，参与归约候选过滤。 | [R11](#root-r11)：Native Index 未维护布局 producer；[R12](#root-r12) 出口也缺。 |
 | `no_x_dim` | 成员 DSL 的非归约维优化，按成员.no_x_dim 导出；与 dispatch 无 split 不同。 | dispatch 的 no_x_dim_i/no_split 已有；[R12](#root-r12) 的完整 per-kernel 字典未导出。 |
 | `tiling_scores` | 各轴 tiling 评价信息，standalone/Combo 的比较需对应 native 候选语义。 | [R12](#root-r12)：未接统一字段出口；不能用空解析作为相同基准。 |
-| `max_persistent_rblock` | 原共享 X/HIP 候选资源限制；NPU 按成员驻留 tile、UB 和 program 预算筛选。 | [D03](#root-d03)：False 应适配 NPU 资源验收；True 的负向字段 PASS 未验实际独立 ABI。 |
 | `add_persistent_rblock` | 资格标志，让候选生成器增加专门的大 R 配置。 | 原首失败是 [R12](#root-r12)；[D04](#root-d04) 尚需对照 native 实际候选，不能说 persistent 归约缺失。 |
 
 四个方法与字段一一对应如下。原方法多为字段存在性/解析比较；“需验真实值”是完整修复验收要求，不冒充原方法已经检查到真实 producer。
@@ -320,8 +296,7 @@ argument cannot be block type if pointer argument is not a block。
 
 证据：NPU triton.py:4021 的 reduction_resize 在 rank=1 时调用 promote_to_tensor；共同 helper:86 把标量提升成 shape=(1,)
 tensor。triton.py:3127 的 store_reduction 只在多 R 且非 persistent 时把指针提升为 block；persistent 路径保留 tl.store(out_ptr0 + (x0),
-tmp4, None) 的标量指针。整组 Combo 校验失败后，npu_combined_scheduling.py:240 回退到普通 kernel，普通 Native Index 也失败，最终 no-linear 执行。D01
-中同类错误是补充观测，不等于数值根因已经定位。
+tmp4, None) 的标量指针。整组 Combo 校验失败后，npu_combined_scheduling.py:240 回退到普通 kernel，普通 Native Index 也失败，最终 no-linear 执行。
 
 **修复方案（未实施）**。责任：torch_npu Inductor 归约结果布局与写回。
 
@@ -346,7 +321,6 @@ tensor 契约。
 
 - 原 test_combo_kernel_per_config_subkernel_red 在原数值容差下生成一个实际 Combo，检查原 X/R 配置目标。
 - 分别检查 persistent/non-persistent、无保留 tiling 轴的标量输出和有保留向量轴的多 R 输出，TTIR 与写回集合一致。
-- D01 的最终 no-linear 数值问题独立保留；本项通过不能替代其精度验收。
 
 原始失败 DSL 关键行（保持生成格式）：
 
@@ -358,9 +332,8 @@ tensor 契约。
 覆盖用例（未复测项沿用原报告）：
 
 - `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_red`：2.10 重合，1 FAIL；原首失败关联。
-- `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1`：范围外，1 FAIL；补充生成缺陷关联；最终精度另属 D01。
 
-证据：[E17][E17]；补充诊断 [reduction-v2][diag-reduction-v2]、[accuracy-v2][diag-accuracy-v2]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
+证据：[E17][E17]；补充诊断 [reduction-v2][diag-reduction-v2]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
 <a id="root-r03"></a>
 
@@ -453,40 +426,6 @@ dtype。
 - `test_torchinductor.py::CommonTemplate::test_combo_kernel_store_mask`：范围外，1 FAIL；数值通过，单 Combo 目标未通过。
 
 证据：[E20][E20]、[E18][E18]；补充诊断 [store-mask-open][diag-store-mask-open]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-d01"></a>
-
-#### D01 非连续多轴 FP32 sum 的累加舍入差异
-
-**P1 · 已定界到用例数值基准；原 FAIL 保留，未修改用例**。失败阶段：accuracy check。
-
-固定补充输入为 shape=(16,32,64)、stride=(64,1024,1)，不是恢复原全量输入。
-使用实际 winner `XBLOCK=2, R0_BLOCK=32, R1_BLOCK=64, compile_mode=simd_simt_template, multibuffer=True`
-绕过 Inductor 直接重放，两个输入的 32 个输出均与旧 compiled 记录逐值相同；输入 1 的第 15 项仍超原容差。
-
-DSL 地址 `r1 + 64*x + 1024*r0` 经 CPU 核对覆盖正确元素；TTIR 与 ttadapter 均保留正确布局、2048 元素 FP32
-加法归约和 16 项写回。未发现索引、归约轴或 dtype 降级错误。该超差可以在独立 Triton kernel 中复现。
-
-第 15 项的高精度基准为 `0.8237894242047332`，eager 为 `0.8237953186035156`，compiled 为
-`0.8237838745117188`：两者分别相差约 `+5.8944e-6`、`-5.5497e-6`，互相比较却相差 `1.144409e-5`。
-全部 32 项的 eager、compiled 分别对 CPU float64/math.fsum 基准比较，均满足原 `atol=1e-5, rtol=1.3e-6`。
-仅改变 R 分块会改变舍入结果和超差位置；`R0_BLOCK=1, R1_BLOCK=64` 对这组输入不再超差。
-两种显式 R 轴求和顺序重写仍得到原输出，不能据此指定某一棵底层加法树。
-
-责任边界：当前证据支持 FP32 累加顺序与抵消造成的舍入差异，优先适配用例的数值基准。
-不据此认定 Triton 编译器错误，也不通过过滤某个 tile 或直接放宽容差掩盖差异。
-R01 的 Native Combo store-rank 缺陷仍单独保留，不由本项数值定界消除。
-
-完整验收：让 eager、compiled 分别对高精度基准满足原容差，保留非连续输入、原编译配置及数量检查。
-固定 winner 的重放继续保留；当前结论只覆盖保存输入，不宣称所有浮点输入或其他编译路径已验证。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_r0_r1`：范围外，1 FAIL；原首失败关联。
-
-证据：[固定重放][boundary-replay]、[R 分块实验][boundary-tiles]、[CPU 元素及高精度核对][boundary-cpu]、
-[生成 TTIR][boundary-ttir]、[ttadapter][boundary-adapter]；[输入来源][diag-accuracy-v2]；
-[原全量 wrapper][accuracy-wrapper]与[来源/布局对应][accuracy-source]；[原方法与断言][test-index]。
 
 <a id="root-r05"></a>
 
@@ -809,7 +748,7 @@ suffix，不做任意字符串替换。
   `test_combo_per_kernel_inductor_meta_matches_standalone`。
 
 R23 的两个异构组合方法间接依赖成员独立 ABI，仍须修复自身的组合/索引缺陷。
-当前共享块布局方法的 eager 失败，以及 `max_persistent_rblock` 的 False 实例失败，分别保留 R05、D03 原因。
+当前共享块布局方法的 eager 失败保留 R05 原因。
 
 证据：[E1][E1]、[E23][E23]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
@@ -945,37 +884,6 @@ torch/_inductor/runtime/triton_heuristics.py::_subkernel_fingerprint/_handle_com
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping`：范围外，1 FAIL；原首失败关联。
 
 证据：[E2][E2]、[E24][E24]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-d03"></a>
-
-#### D03 共享块用例沿用 HIP 专属资源字段断言
-
-**P2 · 已定界到用例适配；False 原断言仍 FAIL**。失败阶段：生成 metadata 的文本断言。
-
-本轮只诊断 False：两个 sum 的数值检查通过，随后仍因缺少 `max_persistent_rblock=1024` 失败。
-共同 runtime `triton_heuristics.py:4352` 仅在 `torch.version.hip` 内消费该字段，限制
-`XBLOCK * max_persistent_rblock <= 4096`，目的是避免 ROCm 大 persistent tile 编译耗时退化。
-这不是 NPU 必须提供的公共 metadata 协议。
-
-NPU `ComboTileGenerator` 按每个成员的完整 persistent R 和 `BLOCK_SUB` 计算最大驻留 tile，
-按成员边界计算总 program；`TileGenerator` 再按 UB、dtype 和指针数预算筛选。
-实际两个成员为 `(32,256)`、`(32,1024)`，FP32；UB 预算为 256 KiB、指针预算为 3，
-驻留元素上限 `21845`，program 上限 `448`。30 个候选的最大估计驻留元素为 `8192`，均在预算内。
-实际 winner 为共享 `X0BLOCK=4, X0BLOCK_SUB=4`，两个分支保留完整 R=256/1024；原数值检查通过。
-
-compiler 返回 `required_ub_bits=0`，本版本未提供有效的静态 UB 测量；`shared=1` 是占位字段。
-不能把这两个值解释为零 UB 占用，也不能把候选预算当成实际编译后占用。
-当前证据足以说明原字段断言不适用于 NPU，没有证据要求生产侧补该 HIP 字段或照搬 4096 阈值。
-
-适配入口：NPU 用例检查完整成员 R、共享 runtime block/subtile、候选预算和真实执行。
-True 历史 PASS 未重跑；其字段不存在断言仍不证明独立 ABI，真实独立模式另需 R18/R20 验收。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_max_persistent_rblock_gated_on_per_subkernel`：范围外，1 FAIL、1 PASS；原首失败关联。
-
-证据：[实际候选与 winner][boundary-resource]、[原生成 wrapper][boundary-resource-wrapper]、
-[固定安装源码片段及哈希][boundary-source]；[原方法与断言][test-index]。
 
 <a id="root-d04"></a>
 
@@ -1141,34 +1049,6 @@ wrapper ATen 后处理的真实 launch，不能把三个定义写成总共三次
 
 证据：[E15][E15]、[E3][E3]；补充诊断 [mixed][diag-mixed]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
-<a id="root-r26"></a>
-
-#### R26 WideResNet 的并行组只有 extern，未覆盖 memory gate
-
-**P3 · 验收前提缺失已实测确认；gate 本身已有实现**。失败阶段：candidate construction / peak-memory test coverage。
-
-本轮保留原 pytest 的输入、config 和峰值断言，disabled/tight 首次执行峰值仍都为 `616101888 B`。
-两轮 schedule 各有 259 个节点：174 个 extern、84 个普通节点和 1 个 fused 节点。
-每轮 `_topological_sort_nodes` 得到 253 组：247 个单节点组、6 个双节点组。
-六个双节点组均为 `ExternKernelSchedulerNode` 的 `aten.convolution.default`，被
-`ForeachKernelSchedulerNode.combinable_nodes` 明确排除；其余 85 个合格组均只有一个成员。
-因此在 `len(members) < 2` 处结束，没有进入 distance window、speedup、partition 或 memory gate。
-两轮 schedule 均未改变，普通 kernel 定义共 168 个。
-
-责任边界：共同 scheduler 已实现 `_try_combo_with_memory_check`，当前 NPU 图没有满足组合前提的候选。
-本项是用例图和验收覆盖问题，不是峰值门控实现缺失。首次执行峰值还包含编译/autotune，不能用于证明 warm 运行收益。
-
-修复入口：先构造会产生正 memory delta 的合法 NPU Combo，观察真实 gate 接受/拒绝；随后让模型验收具备同样前提，并隔离 warm 运行峰值。此项修测试覆盖，不先改生产 gate。
-
-完整验收：有真实候选、正 delta 和实际拒绝事件；相同输入的 warm 运行峰值下降且数值正确。原模型若仍无有效候选，其当前 FAIL 保留，不能仅放宽阈值。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelPeakMemoryTests::test_combo_kernel_peak_memory_wide_resnet`：范围外，1 FAIL；原首失败关联。
-
-证据：[逐组拓扑、依赖和过滤记录][boundary-peak]、[定界摘要][boundary-summary]、
-[共同 scheduler 源码][boundary-source]；[原方法与断言][test-index]。
-
 ### 硬件 SKIP 边界
 
 | 保留 SKIP 的方法 | 明确硬件/平台协议原因 |
@@ -1207,7 +1087,7 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
   --output <diagnostic-workspace>/store-mask-focused --pytest
 ```
 
-该归档 driver 无论测试结果如何都会正常落盘；判断 PASS/FAIL 必须读取 `result.json` 的 `pytest_returncode` 与 JUnit，不用外层 driver 的退出码代替测试结果。[精度输入][accuracy-inputs]、[eager/compiled 输出][accuracy-outputs]、[实际 winner 与 float64 对照][diag-accuracy-v2]和[最终 wrapper][accuracy-diagnostic-wrapper]已固定。生成 Python 均按原始字节保存，未重排或格式化。
+该归档 driver 无论测试结果如何都会正常落盘；判断 PASS/FAIL 必须读取 `result.json` 的 `pytest_returncode` 与 JUnit，不用外层 driver 的退出码代替测试结果。生成 Python 保留原始代码格式，未重排。
 
 <!-- combo-section:analysis213:end -->
 
@@ -1218,19 +1098,23 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 [run213]:
   ../../../../scripts/tests/combo_kernel_210/README-213.md
 [current-jobs]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-198521f-20261115/jobs.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-8f5db70-20261115/jobs.json
 [failure-capability-audit]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-198521f-20261115/failure-capability-audit.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-8f5db70-20261115/failure-capability-audit.json
 [case-rerun]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-observation-198521f-20261115/
+  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/
 [case-generated]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-observation-198521f-20261115/generated-metadata.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/generated-metadata.json
 [case-adaptation]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-observation-198521f-20261115/test-adaptation.diff
+  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/test-adaptation.diff
 [case-summary]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-observation-198521f-20261115/validation-summary.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/validation-summary.json
 [case-context]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-observation-198521f-20261115/validation-context.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/validation-context.json
+[case-memory]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/memory-gate-observations.json
+[merge-check]:
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-8f5db70-20261115/merge-verification.json
 [software-rerun]:
   ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/
 [software-gates-audit]:
@@ -1298,15 +1182,6 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 [root-evidence]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/manifest.json
 
-[accuracy-inputs]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/accuracy-v2/diagnostic-inputs.pt
-
-[accuracy-outputs]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/accuracy-v2/diagnostic-outputs.pt
-
-[accuracy-diagnostic-wrapper]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/accuracy-v2/wrapper-0.py
-
 [E17]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/source/persistent-store-rank.txt
 
@@ -1346,9 +1221,6 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 [diag-mixed]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/mixed/result.json
 
-[diag-accuracy-v2]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/accuracy-v2/result.json
-
 [diag-input-basic-open]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/input-basic-open/result.json
 
@@ -1384,33 +1256,3 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 
 [axis-cache-probe]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/axis-cache-control-flow.json
-
-[boundary-summary]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/summary.json
-
-[boundary-replay]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/fixed-kernel-replay.json
-
-[boundary-tiles]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/tile-sweep.json
-
-[boundary-cpu]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/cpu-summation-orders.json
-
-[boundary-ttir]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/fixed-kernel/original.ttir
-
-[boundary-adapter]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/fixed-kernel/original.ttadapter
-
-[boundary-resource]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/resource-v2/result.json
-
-[boundary-resource-wrapper]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/resource-v2/wrapper-0.py
-
-[boundary-peak]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/peak/result.json
-
-[boundary-source]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-boundaries-9f639af716-20261115/source-evidence.json
