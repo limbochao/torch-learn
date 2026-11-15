@@ -1,0 +1,203 @@
+diff --git a/v2.13.0/inductor_npu/test_combo_kernels.py b/v2.13.0/inductor_npu/test_combo_kernels.py
+index 63626dd..d7cb639 100644
+--- a/v2.13.0/inductor_npu/test_combo_kernels.py
++++ b/v2.13.0/inductor_npu/test_combo_kernels.py
+@@ -10,6 +10,7 @@ import torch_npu.testing
+ 
+ # Owner(s): ["module: inductor"]
+ 
++import ast
+ import contextlib
+ import json
+ import logging
+@@ -57,6 +58,34 @@ except (unittest.SkipTest, ImportError) as e:
+     raise
+ import torch_npu._inductor
+ 
++
++def _triton_kernels(code):
++    kernels = []
++    for node in ast.walk(ast.parse("\n".join(code))):
++        if not (
++            isinstance(node, ast.Call)
++            and isinstance(node.func, ast.Attribute)
++            and isinstance(node.func.value, ast.Name)
++            and node.func.value.id == "async_compile"
++            and node.func.attr == "triton"
++        ):
++            continue
++        source = ast.parse(ast.literal_eval(node.args[1]))
++        for kernel in source.body:
++            if not isinstance(kernel, ast.FunctionDef):
++                continue
++            for decorator in kernel.decorator_list:
++                if isinstance(decorator, ast.Call):
++                    kwargs = {keyword.arg: keyword.value for keyword in decorator.keywords}
++                    if "inductor_meta" in kwargs:
++                        kernels.append((kernel, decorator.func.attr, kwargs))
++    return kernels
++
++
++def _ast_dict_value(node, name):
++    return next(value for key, value in zip(node.keys, node.values) if ast.literal_eval(key) == name)
++
++
+ @instantiate_parametrized_tests
+ class ComboKernelTests(TestCase):
+     check_model_gpu = check_model_gpu
+@@ -238,9 +267,30 @@ class ComboKernelTests(TestCase):
+         out_eager = fn(*inps)
+         fn_c = torch.compile(fn)
+         out_compiled, code = run_and_get_code(fn_c, *inps)
+-        FileCheck().check("triton_heuristics.persistent_reduction").check(
+-            "size_hints={'x': 1024, 'r0_': 32}"
+-        ).run(code[0])
++        (kernel, heuristic, kwargs), = _triton_kernels(code)
++        self.assertEqual(heuristic, "persistent_reduction")
++        # NPU packs the two member X extents and keeps each member's full R.
++        self.assertEqual(ast.literal_eval(kwargs["size_hints"]), {"x0": 1536, "r1": 32})
++        members = _ast_dict_value(kwargs["inductor_meta"], "combo_subkernel_meta").elts
++        self.assertEqual(
++            [ast.literal_eval(_ast_dict_value(member, "size_hints")) for member in members],
++            [{"x0": 768, "r1": 16}, {"x0": 768, "r1": 32}],
++        )
++        self.assertEqual(
++            [ast.literal_eval(_ast_dict_value(member, "persistent_reduction")) for member in members],
++            [True, True],
++        )
++        rblocks = [
++            ast.literal_eval(node.value)
++            for node in ast.walk(kernel)
++            if isinstance(node, ast.AnnAssign) and node.target.id == "R1BLOCK_SUB"
++        ]
++        self.assertEqual(rblocks, [16, 32])
++        self.assertFalse(any(
++            isinstance(node, ast.For) and node.target.id.startswith("loop_r")
++            for node in ast.walk(kernel)
++        ))
++        self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+         self.assertEqual(out_eager, out_compiled)
+ 
+     @requires_cuda_and_triton
+@@ -396,8 +446,9 @@ class ComboKernelTests(TestCase):
+             )
+             # Verify kernels are regular pointwise, not combo kernels
+             FileCheck().check("triton_heuristics.pointwise").check(
+-                "'grid_type': 'Grid1D'"
++                "'grid_type': 'GridNpu'"
+             ).check_not("combo_grid_meta").run(code[0])
++            self.assertEqual(code[0].count(" = async_compile.triton("), 2)
+ 
+     @requires_gpu_and_triton
+     def test_combo_kernel_per_config_subkernel_poi(self):
+@@ -442,9 +493,33 @@ class ComboKernelTests(TestCase):
+                 "R0_BLOCK_1: tl.constexpr = 512"
+             ).run(code[0])
+         else:
+-            FileCheck().check("XBLOCK : tl.constexpr").check_not(
+-                "XBLOCK_0 : tl.constexpr"
+-            ).run(code[0])
++            (kernel, heuristic, kwargs), = _triton_kernels(code)
++            self.assertEqual(heuristic, "persistent_reduction")
++            meta = kwargs["inductor_meta"]
++            # The shared NPU block has a runtime extent and a constexpr subtile.
++            self.assertEqual(
++                ast.literal_eval(_ast_dict_value(meta, "runtime_block_arg_names")),
++                ("X0BLOCK",),
++            )
++            self.assertEqual(
++                [arg.arg for arg in kernel.args.args if "BLOCK" in arg.arg],
++                ["X0BLOCK", "X0BLOCK_SUB"],
++            )
++            members = _ast_dict_value(meta, "combo_subkernel_meta").elts
++            self.assertEqual(
++                [ast.literal_eval(_ast_dict_value(member, "size_hints")) for member in members],
++                [{"x0": 1024, "r1": 64}, {"x0": 1024, "r1": 512}],
++            )
++            self.assertEqual(
++                [ast.literal_eval(_ast_dict_value(member, "persistent_reduction")) for member in members],
++                [True, True],
++            )
++            rblocks = [
++                ast.literal_eval(node.value)
++                for node in ast.walk(kernel)
++                if isinstance(node, ast.AnnAssign) and node.target.id == "R1BLOCK_SUB"
++            ]
++            self.assertEqual(rblocks, [64, 512])
+ 
+     @requires_gpu_and_triton
+     def test_combo_kernel_per_config_subkernel_red_per(self):
+@@ -799,6 +874,7 @@ class ComboKernelTests(TestCase):
+     @unittest.skipIf(not SM90OrLater, "Avoid oom on CI")
+     def test_combo_kernel_yz_overflow(self):
+         from torch.profiler import ProfilerActivity
++        from torch_npu._inductor.runtime.triton_heuristics import NPUCachingAutotuner
+ 
+         def fn(a, b):
+             a_permute = a.permute(0, 2, 1)
+@@ -817,6 +893,33 @@ class ComboKernelTests(TestCase):
+ 
+         out_eager = fn(*inps)
+         fn_c = torch.compile(fn)
++        # Warm up before recording so candidate benchmarks are not counted as
++        # the final launch. NPU profiler events do not carry CUDA's grid field.
++        out_compiled, code = run_and_get_code(fn_c, *inps)
++        self.assertEqual(out_eager, out_compiled)
++        self.assertEqual(len(_triton_kernels(code)), 1)
++        launches = []
++        original_run = NPUCachingAutotuner.run
++
++        def record_run(autotuner, *args, **kwargs):
++            launcher = autotuner.best_launcher
++            self.assertIsNotNone(launcher)
++            combo = autotuner.inductor_meta["combo_grid_meta"]
++            self.assertEqual(combo["num_kernels"], 2)
++            self.assertEqual(len(combo["split_numels"]), 2)
++            self.assertEqual(combo["no_split"], [False, False])
++            blocks = dict(zip(autotuner.runtime_block_arg_names, autotuner.best_runtime_blocks))
++            block = blocks[combo["split_block"]]
++            expected_x = sum((numel + block - 1) // block for numel in combo["split_numels"])
++            runner = launcher.__globals__["runner"]
++
++            def record_launch(*launch_args):
++                launches.append((autotuner.inductor_meta["kernel_name"], tuple(launch_args[:3]), expected_x))
++                return runner(*launch_args)
++
++            # Observe the exact grid passed to the driver and delegate unchanged.
++            with patch.dict(launcher.__globals__, runner=record_launch):
++                return original_run(autotuner, *args, **kwargs)
+ 
+         with tempfile.NamedTemporaryFile(suffix=".json") as trace_file:
+             trace_path = trace_file.name
+@@ -826,23 +929,20 @@ class ComboKernelTests(TestCase):
+                 activities=[activity],
+                 record_shapes=True,
+             ) as prof:
+-                out_compiled, code = run_and_get_code(fn_c, *inps)
++                with patch.object(NPUCachingAutotuner, "run", record_run):
++                    out_compiled = fn_c(*inps)
+ 
+             prof.export_chrome_trace(trace_path)
+ 
+             with open(trace_path) as f:
+                 trace_json = json.load(f)
+ 
+-            triton_events = [
+-                event
+-                for event in trace_json["traceEvents"]
+-                if "triton_poi_fused_0" in event["name"]
+-            ]
+-
+-            if torch._inductor.config.combo_kernel_per_subkernel_blocks:
+-                self.assertEqual([83660, 1, 1], triton_events[0]["args"]["grid"])
+-            else:
+-                self.assertEqual([4, 45260, 2], triton_events[0]["args"]["grid"])
++            events = trace_json if isinstance(trace_json, list) else trace_json["traceEvents"]
++            self.assertEqual(len(launches), 1)
++            kernel_name, grid, expected_x = launches[0]
++            self.assertGreater(expected_x, 0)
++            self.assertEqual(grid, (expected_x, 1, 1))
++            self.assertTrue(any(kernel_name in event.get("name", "") for event in events))
+ 
+         self.assertEqual(out_eager, out_compiled)
+ 
