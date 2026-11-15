@@ -1,0 +1,183 @@
+{
+  "scope": "仅三项与成员独立块无关的未定界/待补证据问题；不修改生产实现或用例，不重跑历史 PASS。",
+  "expected": {
+    "test_commit": "198521f7f9171ba4a4660dfa4b50b2647ef47e85",
+    "test_source_sha256": "1c1c3e0127575de1a1c8de3daaebf0d33ec5cb2a5eebef9d9179dfd65f7257b6",
+    "overlay_commit": "9f639af716399c15e07dbe341ecb2490a9f36e87",
+    "overlay_sha256": {
+      "torch_npu/_inductor/codegen/triton.py": "4e6aceaa8f88d714e7d14df3262d3c09dec9bf0e0370b2773029357ff84654c4",
+      "torch_npu/_inductor/codegen/triton_combo_kernel.py": "1d537b6262b98d3e24605346d59ccbe615060555702e66d1f18762665345b517"
+    }
+  },
+  "torch_git": "cf30153c4c131c8164ee7798e5022d810682e2cb",
+  "torch_npu_git": "efc05dd90b5fe31717d5f13e51fb3e49035bea30",
+  "triton": "3.6.0",
+  "devices": {
+    "fixed_winner_replay": 2,
+    "resource_False": 3,
+    "peak_original": 2,
+    "fixed_input_R_tile_probe": 3
+  },
+  "shared_cards_authorized": "用户明确允许共用物理卡 1–3；启动前分别核对时间、显存和物理卡占用。",
+  "diagnostic_only": true,
+  "canonical_method_counts_unchanged": {
+    "PASS": 77,
+    "FAIL": 23,
+    "SKIP": 5
+  },
+  "canonical_instance_counts_unchanged": {
+    "PASS": 435,
+    "FAIL": 23,
+    "SKIP": 6
+  },
+  "D01": {
+    "boundary": "固定输入上的 FP32 累加顺序/抵消舍入差异；用例直接比较两条 FP32 路径，在近零结果上超过原容差。",
+    "input_provenance": "Fixed supplementary diagnostic inputs from accuracy-v2; not original full-run inputs.",
+    "input_sha256": "dfd0847afe5005835b80875326949d6317c91691dad34625ba6fd44b16e5cd53",
+    "original_winner": {
+      "XBLOCK": 2,
+      "R0_BLOCK": 32,
+      "R1_BLOCK": 64,
+      "compile_mode": "simd_simt_template",
+      "multibuffer": true,
+      "num_warps": 1,
+      "num_stages": 2
+    },
+    "reference_check": "两条 FP32 输出分别按原 atol=1e-5/rtol=1.3e-6 与 CPU float64/math.fsum 基准比较，不放宽容差。",
+    "accuracy": [
+      {
+        "input_index": 0,
+        "address_map_matches_all_elements": true,
+        "eager_reference_mismatch_rows": [],
+        "compiled_reference_mismatch_rows": [],
+        "eager_compiled_mismatch_rows": [],
+        "exact_archived_compiled_matches": 16
+      },
+      {
+        "input_index": 1,
+        "address_map_matches_all_elements": true,
+        "eager_reference_mismatch_rows": [],
+        "compiled_reference_mismatch_rows": [],
+        "eager_compiled_mismatch_rows": [
+          15
+        ],
+        "exact_archived_compiled_matches": 16
+      }
+    ],
+    "input1_row15": {
+      "reference": 0.8237894242047332,
+      "eager": 0.8237953186035156,
+      "compiled": 0.8237838745117188,
+      "absolute_eager_compiled_difference": 1.1444091796875e-05
+    },
+    "tile_probe": {
+      "0": {
+        "original": [],
+        "r0_block16": [
+          0
+        ],
+        "r1_block32": [
+          0
+        ],
+        "r0_block1": []
+      },
+      "1": {
+        "original": [
+          15
+        ],
+        "r0_block16": [],
+        "r1_block32": [],
+        "r0_block1": []
+      }
+    },
+    "next_action": "优先适配数值基准，分别对高精度基准校验 eager/compiled，并保留归约语义和数量检查；R01 的 Native Combo store-rank 缺陷单独保留。",
+    "limit": "本次只证明保存输入与固定 winner 的数值边界，不宣称覆盖全部浮点输入或已修复任何编译器缺陷。"
+  },
+  "D03": {
+    "boundary": "用例硬编码 HIP 防编译耗时退化字段；NPU 使用成员驻留 tile、UB 和 program 预算，不应照搬 max_persistent_rblock 字段。",
+    "pytest_returncode": 1,
+    "failure": "数值通过，仅 max_persistent_rblock=1024 字段断言失败。",
+    "candidates": 30,
+    "ub_size": 262144,
+    "max_numel_threshold": 21845,
+    "max_programs": 448,
+    "maximum_candidate_resident_numel": 8192,
+    "selected_config": {
+      "X0BLOCK": 4,
+      "X0BLOCK_SUB": 4,
+      "R1BLOCK_SUB": 1024,
+      "compile_mode": "simd_simt_template",
+      "multibuffer": false,
+      "split_axis": [
+        0
+      ],
+      "split_blocks": [
+        4
+      ],
+      "num_warps": 1,
+      "num_stages": 2
+    },
+    "compiler_resource_metadata": {
+      "required_ub_bits": 0,
+      "shared": 1,
+      "shared_mem_dynamic_size": 221184
+    },
+    "resource_limit": "本版本 required_ub_bits=0 未提供有效的静态 UB 测量；shared=1 是占位，均不能作为零 UB 占用证据。候选预算是估计，不等于实际驻留字节。",
+    "source_unchanged": true,
+    "source_files": 588,
+    "next_action": "NPU 用例检查完整成员 R、共享 runtime block/subtile、真实候选预算及执行；True 历史 PASS 未重跑，不作为独立块能力通过证据。"
+  },
+  "R26": {
+    "boundary": "WRN 的六个并行双节点组全是 extern convolution，组合资格过滤后均为空，其余组至多一个可组合成员。",
+    "pytest_returncode": 1,
+    "runtime_peaks_bytes": [
+      616101888,
+      616101888
+    ],
+    "waves_per_compile": [
+      {
+        "waves": 253,
+        "sizes": {
+          "1": 247,
+          "2": 6
+        },
+        "parallel_origin_targets": [
+          "aten.convolution.default"
+        ]
+      },
+      {
+        "waves": 253,
+        "sizes": {
+          "1": 247,
+          "2": 6
+        },
+        "parallel_origin_targets": [
+          "aten.convolution.default"
+        ]
+      }
+    ],
+    "filter_input_output_sizes": {
+      "1->0": 324,
+      "1->1": 170,
+      "2->0": 12
+    },
+    "events": {
+      "schedule-before-combo": 2,
+      "topological-waves": 2,
+      "combinable-filter": 506,
+      "schedule-after-combo": 2,
+      "defined-kernel": 168,
+      "index-node-codegen-error": 2
+    },
+    "eligible_multi_member_groups": 0,
+    "source_unchanged": true,
+    "source_files": 588,
+    "next_action": "适配能产生正内存增量并实际触发 gate 拒绝的 NPU 图，再比较预热后峰值；不改生产 gate 的资格过滤。"
+  },
+  "execution_notes": [
+    "原断言、输入生成及 config 均保留。pytest driver 的进程返回 0 不代表用例通过，取内层 pytest_returncode/JUnit。",
+    "第一次资源探针因读取未公开的 launcher.bin 失败，该探针不作为证据；读取 launcher 全局 bin 后重新诊断，失败停在原字段断言。",
+    "峰值记录来自原 JUnit 失败消息；真实 torch.cuda 到 NPU 的适配绑定绕过了额外 peak hook，未伪造 runtime-peak 事件。",
+    "峰值诊断仅在 create_combo_kernel_nodes 等处读取现有分组，未改返回值、候选和过滤规则。"
+  ]
+}
