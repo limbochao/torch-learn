@@ -1,0 +1,63 @@
+diff --git a/v2.13.0/inductor_npu/test_combo_kernels.py b/v2.13.0/inductor_npu/test_combo_kernels.py
+index 0a4533f..2daf3ef 100644
+--- a/v2.13.0/inductor_npu/test_combo_kernels.py
++++ b/v2.13.0/inductor_npu/test_combo_kernels.py
+@@ -560,7 +560,32 @@ class ComboKernelTests(TestCase):
+         out_compiled, code = run_and_get_code(fn_c, *inps)
+         torch.testing.assert_close(out_eager, out_compiled, atol=1e-4, rtol=1e-4)
+         self.assertEqual(torch._inductor.metrics.generated_kernel_count, 1)
+-        if torch._inductor.config.combo_kernel_per_subkernel_blocks:
++        if GPU_TYPE == "npu" and not torch._inductor.config.combo_kernel_per_subkernel_blocks:
++            (kernel, heuristic, kwargs), = _triton_kernels(code)
++            self.assertEqual(heuristic, "persistent_reduction")
++            meta = kwargs["inductor_meta"]
++            self.assertEqual(
++                ast.literal_eval(_ast_dict_value(meta, "runtime_block_arg_names")), ("X0BLOCK",)
++            )
++            self.assertEqual([arg.arg for arg in kernel.args.args if "BLOCK" in arg.arg], ["X0BLOCK"])
++            members = _ast_dict_value(meta, "combo_subkernel_meta").elts
++            self.assertEqual(
++                [ast.literal_eval(_ast_dict_value(member, "size_hints")) for member in members],
++                [{"x0": 64, "r2": 32, "r1": 128}] * 2,
++            )
++            self.assertEqual(
++                [ast.literal_eval(_ast_dict_value(member, "persistent_reduction")) for member in members],
++                [True, True],
++            )
++            rblocks = {
++                (node.target.id, ast.literal_eval(node.value))
++                for node in ast.walk(kernel)
++                if isinstance(node, ast.AnnAssign)
++                and isinstance(node.target, ast.Name)
++                and node.target.id in {"R2BLOCK_SUB", "R1BLOCK_SUB"}
++            }
++            self.assertEqual(rblocks, {("R2BLOCK_SUB", 32), ("R1BLOCK_SUB", 128)})
++        elif torch._inductor.config.combo_kernel_per_subkernel_blocks:
+             FileCheck().check(
+                 " XBLOCK_0 : tl.constexpr, R0_BLOCK_0 : tl.constexpr"
+             ).check("XBLOCK_1 : tl.constexpr, R0_BLOCK_1 : tl.constexpr").run(code[0])
+diff --git a/v2.13.0/inductor_npu/test_provenance_tracing.py b/v2.13.0/inductor_npu/test_provenance_tracing.py
+index 4ed9afd..4708323 100644
+--- a/v2.13.0/inductor_npu/test_provenance_tracing.py
++++ b/v2.13.0/inductor_npu/test_provenance_tracing.py
+@@ -377,7 +377,12 @@ class TestProvenanceTracingArtifact(TestCase):
+             m = re.match(r"WARNING.* debug trace: (.*)", cm.output[0])
+             self.assertTrue(m)
+             filepath = Path(m.group(1)).resolve()
+-            expected_data = {"triton_poi_fused_0:1": ["relu", "sigmoid", "tanh"]}
++            kernel_name = (
++                "triton_poi_fused_relu_sigmoid_tanh_0"
++                if GPU_TYPE == "npu"
++                else "triton_poi_fused_0"
++            )
++            expected_data = {f"{kernel_name}:1": ["relu", "sigmoid", "tanh"]}
+             self._check_provenance_tracing_kernel_to_post_grad(filepath, expected_data)
+ 
+     @requires_gpu_and_triton
+@@ -1042,4 +1047,4 @@ copy_tests(
+ 
+ 
+ if __name__ == "__main__":
+-    run_tests()
+\ No newline at end of file
++    run_tests()

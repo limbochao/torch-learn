@@ -1,0 +1,52 @@
+commit 5db866a16403644c265f3f43d747a856124de8b1
+Author:     luqichao <luqichao1@huawei.com>
+AuthorDate: Sun Nov 15 22:14:09 2026 +0800
+Commit:     luqichao <luqichao1@huawei.com>
+CommitDate: Sun Nov 15 22:14:09 2026 +0800
+
+    Fix scalar pointers for promoted NPU multi-axis reduction stores
+
+diff --git a/torch_npu/_inductor/codegen/triton.py b/torch_npu/_inductor/codegen/triton.py
+index 800656cbfb..d6e666e0c3 100644
+--- a/torch_npu/_inductor/codegen/triton.py
++++ b/torch_npu/_inductor/codegen/triton.py
+@@ -3138,6 +3138,16 @@ class NPUIndexTritonKernel(TritonKernel):
+ 
+         return len(self.tiling_axis)
+ 
++    def _reduction_store_index(self, index_str):
++        # reduction_resize promotes a scalar reduction to a one-element tensor
++        # when the emitted tensor rank is one. Match that block-shaped value
++        # even for persistent reductions whose output index is a scalar loop.
++        if self.numof_reduction_axis() > 1 and (
++            not self.persistent_reduction or self.triton_tensor_ndim() == 1
++        ):
++            return f"{index_str} + tl.arange(0, 1)"
++        return index_str
++
+     #  indexing.mask_str is None , see varmean_test.py
+     def store_reduction(self, name: str, index: sympy.Expr, value: CSEVariable):
+         if not self.inside_reduction:
+@@ -3163,9 +3173,8 @@ class NPUIndexTritonKernel(TritonKernel):
+         else:
+             if not isinstance(indexing, IndexingOptions):
+                 raise RuntimeError("assert isinstance(indexing, IndexingOptions)")
+-            line = f"tl.store({var} + ({indexing.index_str} ), {value}, {indexing.mask_str})"
+-            if self.numof_reduction_axis() > 1 and not self.persistent_reduction:
+-                line = f"tl.store({var} + ({indexing.index_str} + tl.arange(0,1) ), {value}, {indexing.mask_str})"
++            index_str = self._reduction_store_index(indexing.index_str)
++            line = f"tl.store({var} + ({index_str}), {value}, {indexing.mask_str})"
+             self.post_loop_store.writeline(DeferredLine(name, line))
+ 
+     # apply new var in case dim are permuted/broadcast
+@@ -3227,9 +3236,8 @@ class NPUIndexTritonKernel(TritonKernel):
+                 name, selected_indexing, block_ptr, value, other
+             )
+         elif mode is None:
++            index_str = self._reduction_store_index(index_str)
+             line = f"tl.store({var} + ({index_str}), {value_str}, {mask_str})"
+-            if self.numof_reduction_axis() > 1 and not self.persistent_reduction:
+-                line = f"tl.store({var} + ({index_str} + tl.arange(0,1) ), {value_str}, {selected_indexing.mask_str})"
+ 
+         elif mode == "atomic_add":
+             line = f"tl.atomic_add({var} + ({index_str}), {value_str}, {selected_indexing.mask_str})"

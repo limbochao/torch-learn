@@ -7,55 +7,55 @@ published: false
 <a id="validation213"></a>
 
 <!-- combo-section:validation213:start -->
-## 最新执行结果
+## 2.13 当前结果与验证范围
 
-当前 [2.13 进展表][csv]维护 116 行：105 个独立源方法、11 行随外层验证的嵌套函数，共 464 个实例。
+当前唯一进展表为 [2.13 CSV](inductor-combo-tests-v2.13.csv)：116 行记录对应 105 个独立源方法、
+464 个参数化实例。定向修复后的汇总为 **82 PASS、18 FAIL、5 SKIP 方法**；
+实例为 **440 PASS、18 FAIL、6 SKIP**。
 
-| 范围 | PASS | FAIL | SKIP |
-| --- | ---: | ---: | ---: |
-| 独立源方法 | 80 | 20 | 5 |
-| 参数实例 | 438 | 20 | 6 |
+本轮已修复并复测两个确定的 Inductor 问题：Combo 的真实 FX 来源没有登记，多轴归约写回地址
+与结果形状不匹配。两项原 FAIL 都已 PASS；追踪覆盖 Inductor 和 AOTInductor，归约实际生成
+一个含两个成员的 Combo。[定向报告][case-rerun]、[生成代码及追踪校验][fix-proof]。
 
-本次只调整并复测以下 **3 个原 FAIL 实例，结果为 3 PASS**；每项对应一个用例提交。
-其余 461 个实例保留原结果和实际验证来源，见[合并核对][merge-check]与[当前逐实例汇总][current-jobs]。
+按用户本轮明确要求，正在物理卡 1、2、3 上重跑全部 **82 个 PASS 方法的 440 个实例**。
+没有抽样，也不复用历史 PASS。完整回归结束前，上述数字表示定向修复后的当前汇总，
+不能提前视为全部方法在最新修复上通过。未选入本轮的 FAIL/SKIP 保留实际历史结果与验证版本，
+逐实例来源见[当前 jobs][current-jobs]与[合并校验][merge-check]。
 
-| 用例 | NPU 适配与保留的验收 | 提交 | 实例结果 |
-| --- | --- | --- | --- |
-| `test_combo_kernel_per_config_subkernel_r0_r1` | eager、compiled 分别对同一 CPU FP64 sum 基准检查；保留原 FP32 容差、非连续输入和 kernel 数量 | `7b6f64c` | PASS |
-| `test_combo_max_persistent_rblock_gated_on_per_subkernel`（False） | 检查真实 NPU 候选的驻留 tile/program 预算、两个成员完整 R 和共享 block ABI；保留数值检查 | `0fc6d76` | PASS |
-| `test_combo_kernel_peak_memory_wide_resnet` | NPU 使用宽残差分支图，检查真实 gate 拒绝、Combo 数减少、预热后峰值下降和数值 | `8f5db70` | PASS |
+### 执行方式与源码
 
-资源项只复测 False；True 参数保留历史 PASS，未重跑，也不作为成员独立块 ABI 已实现的证据。
-峰值项的 NPU 路径采用可组合的 pointwise 分支和 extern linear 消费者，产生实际物化的宽中间张量；
-这是对原 WRN 卷积图的测试适配，原图不具备有效 Combo 候选。
+使用 NPU_A5 容器内 `pta_213_case`，测试来自 `Community-Use-Case-Testing:fix/combo_case`，
+目录 `v2.13.0/inductor_npu`，提交 `7332db7c9fc5a5d10da2f17ec29e22866d38154a`。
+通过[原生 pytest 执行脚本](../../../../scripts/tests/combo_kernel_210/README-213.md)按方法收集全部参数，
+三个 worker 分别设置 `ASCEND_RT_VISIBLE_DEVICES=1/2/3`；没有自定义 pytest 插件。
 
-[实际门控记录][case-memory]与[生成代码核对][case-generated]一致：
+PyTorch 为 `2.13.0+cpu`（`cf30153c4c131c8164ee7798e5022d810682e2cb`），Triton 为 `3.6.0`。
+基础 torch_npu 为 `2.13.0+gitefc05dd`（`efc05dd90b5fe31717d5f13e51fb3e49035bea30`），
+安装的 Python 文件叠加 `pytorch_new:bugfix/combo_fix_meta` 提交
+`5db866a16403644c265f3f43d747a856124de8b1`；实际修复版本以文件哈希为准。
+[安装与测试源码检查][fix-context]记录定向执行前后源码一致。
 
-| 门控配置 | 拒绝的真实候选 | 生成 Combo 数 | 预热后峰值 |
-| --- | ---: | ---: | ---: |
-| 禁用阈值 | 0 | 1 | 88,408,576 B（84.31 MiB） |
-| 1 MiB 阈值 | 1 | 0 | 71,893,504 B（68.56 MiB） |
+foreach 的 NPU 功能适配保留数值、原地更新及梯度检查；NPU 分支没有使用 CUDA 专属 kernel 数量
+和 foreach DSL 断言。其功能 PASS 不等于已经实现独立成员分组融合。
 
-两轮使用相同输入，并保留数值检查。候选生成器和 scheduler 的观测包装原样返回原函数结果。
-原始 JUnit、命令、日志、[用例修改][case-adaptation]及[验证摘要][case-summary]保存在[本次定向报告][case-rerun]。
-4 份 wrapper 从 `TORCH_LOGS=output_code` 日志恢复，仅移除日志前缀及脱敏信息，保留生成代码顺序与缩进。
+### 六项 torch_npu 修复说明
 
-### 本次验证版本与范围
+每项生产修复各有独立提交和说明，按实际代码解释问题、修复原因及处理逻辑。
 
-执行时间：北京时间 2026-11-15 21:35:46 至 21:38:29；NPU_A5 Docker 的 `pta_213_case`，物理卡 2。
-启动前检查卡状态；按用户授权共用 1–3 卡，使用独立 Inductor/Triton 缓存。
-Community 使用 `fix/combo_case`，实际提交 `8f5db70d5eee4e4148da0b16943462831cc38fd8`。
-本次只改三个既有测试方法并新增一个峰值测试私有 helper，既有测试名称和 decorators 保持一致。
+| 修复 | 提交 | 说明 |
+| --- | --- | --- |
+| 按当前图区分 optimize_mem 策略 | `43c727fb81` | [图状态如何传给运行时](npu-combo-optimize-mem-fix.md) |
+| 统一访存量、FLOP 与 benchmark 成本 | `72b1727020` | [成本从哪里来、如何汇总](npu-combo-cost-metadata-fix.md) |
+| 统一 arg 归约真实索引与 CSE 类型 | `0503095a63` | [为什么索引类型必须一致](npu-arg-reduction-index-dtype-fix.md) |
+| 传递共同 Triton 编译 metadata | `9f639af716` | [字段如何从共同入口传入](npu-triton-common-metadata-fix.md) |
+| 按真实分区登记 FX 追踪 | `0dfe37f3ca` | [为什么不能把 Combo 外壳交给追踪](npu-combo-provenance-fix.md) |
+| 规范多轴归约写回地址的形状 | `5db866a164` | [标量地址如何配套单元素结果](npu-multiaxis-reduction-store-fix.md) |
 
-基础 torch_npu 为 `2.13.0+gitefc05dd`，包提交 `efc05dd90b5fe31717d5f13e51fb3e49035bea30`。
-现有 Python overlay 为 `bugfix/combo_fix_meta` 的 `9f639af716399c15e07dbe341ecb2490a9f36e87`。
-生产代码及数值容差未修改；安装的 588 个 Inductor Python 文件哈希与前次验证一致，执行前后安装源码和测试源码均未变化，
-见[环境核对记录][case-context]。
-PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；Triton 为 `3.6.0`。
-未重跑实例保留各自原版本，不能视为全部实例在当前测试提交上重新执行。
-
-表格只维护 2.13 的类型、已上线、最新结果、实例统计和简短原因。
-“已上线”以[上线清单][pass213]为准，当前 PASS 不自动上线；后续仍只复测最新 FAIL、SKIP/ERROR 实例，见[执行说明][run213]。
+CSV 新增“修复方案”列，已验证修复写明已有方案、责任仓库、简短原因、提交和说明/证据。
+“当前分析”仅写剩余问题的简短原因，PASS 保持“—”。
+“已上线”仍逐实例对照[上线清单](../../../../scripts/tests/combo_kernel_210/combo_native_213_passed_nodeids.txt)，
+当前 PASS 不自动算上线；嵌套函数随外层方法验证，不重复计为独立 pytest 方法。
+本轮完整 PASS 回归是用户指定的额外验证；后续默认仍只复测 FAIL、SKIP/ERROR。
 
 <!-- combo-section:validation213:end -->
 
@@ -64,13 +64,13 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 <!-- combo-section:analysis213:start -->
 ## 当前问题与按根因排序的修复队列
 
-当前共有 **20 FAIL、5 SKIP 方法**。20 个 FAIL 进入根因队列，5 个硬件差异方法保留 SKIP；4 个软件门控已经解除。
+当前共有 **18 FAIL、5 SKIP 方法**。18 个 FAIL 进入根因队列，5 个硬件差异方法保留 SKIP；4 个软件门控已经解除。
 全范围根因表记录生成正确性、真实统计、出口、成员 ABI、调优与功能验收的依赖；同一用例可以覆盖多个根因。
-本次 `bugfix/combo_fix_meta` 的剩余 R09—R12、R17 按修改量、影响范围和依赖安排实施顺序，见下节。
+本次 `bugfix/combo_fix_meta` 的剩余 R09—R12 按修改量、影响范围和依赖安排实施顺序，见下节。
 
 **R 表示已定位的根因/能力或验收缺口，D 保留待定界的优化契约编号。**
-当前保留 19 项定位记录，其中 D04 仍需定界。
-16 项 Inductor 实现修复方案仍未实施。软件门控已在 `fix/combo_case` 修改并定向验证，当前状态以本次逐实例汇总为准。
+当前保留 17 项定位记录，其中 D04 仍需定界。
+14 项 Inductor 实现修复方案仍未实施。软件门控已在 `fix/combo_case` 修改并定向验证，当前状态以本次逐实例汇总为准。
 未实现的软件目标保持 FAIL，硬件差异保留 SKIP；已 PASS 的用例不保留旧失败分析。
 
 根因源码与原始诊断固定在各自实际安装的 Torch/NPU 提交，见 [原根因审计][root-queue]和[固定补充证据][root-evidence]。
@@ -80,7 +80,7 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 
 ### FAIL 原因的能力归属
 
-已按当前失败实例、用例配置、实际断言和实现消费链复核当前 **20 个 FAIL 方法、20 个失败实例**。
+已按当前失败实例、用例配置、实际断言和实现消费链复核当前 **18 个 FAIL 方法、18 个失败实例**。
 当前失败分类沿用固定源码复核依据，执行结果采用上文的逐实例实测记录；
 [归因审计][failure-capability-audit]保存剩余失败方法的分类、源码版本及依据。
 
@@ -93,8 +93,8 @@ PyTorch 为 `2.13.0+cpu`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`；T
 `test_combo_kernel_scalar_store_broadcast` 和 `test_combo_kernel_store_mask`。
 前者保留异构组合缺口；后者还保留动态归约索引缺陷，不能只修独立块就视为完成。
 
-其余 **4 个方法与成员独立块无关**，分别涉及追踪映射、共享输入行列联合归约、多轴归约写回、
-eager 内存格式及该布局用例的后续 profiler 解析。Metadata 测试类开启独立块不改变追踪字段的归属。
+其余 **2 个方法与成员独立块无关**：布局方法当前阻塞在 eager 的 channels_last 转换，
+另一方法缺少共享输入行列联合归约功能。前者另有后续 profiler 用例适配，后者按功能需求排期。
 
 <a id="fix-plans213"></a>
 
@@ -102,8 +102,8 @@ eager 内存格式及该布局用例的后续 profiler 解析。Metadata 测试�
 
 | 责任与类型 | 具体根因 | 本次提供的方案 |
 | --- | --- | --- |
-| 生成正确性，4 项 | R27 索引缓存；R01 归约 store rank；R03 masked 轴；R04 index_expr cast | 指向具体生成规则，写明合法 DSL/索引如何形成。 |
-| 统计、metadata 和追踪，5 项 | R09—R12、R17 | 分开修 producer、逐成员出口和真实 origins。 |
+| 生成正确性，3 项 | R27 索引缓存；R03 masked 轴；R04 index_expr cast | 指向具体生成规则，写明合法 DSL/索引如何形成。 |
+| 统计和 metadata，4 项 | R09—R12 | 分开修 producer 和逐成员出口。 |
 | NPU Combo 新功能，7 项 | R18—R24 | 成员独立 block/body/grid/runtime ABI、默认拼接、顺序调优、真实分组、坐标下降、异构打包、联合归约。 |
 | 不属于生产 Inductor | R05 eager；R08 布局 profiler | 保留定界与验收入口，本次不提出生产 Inductor 修复。 |
 | 仍待定界 | D04 大 R 优化资格 | 明确下一份证据和判定分支，不给猜测性修复。 |
@@ -118,7 +118,7 @@ R18 完成成员 ABI 后再接默认配置和调优消费者。
 
 ### 本次分支的实施优先级
 
-排期已核对本地 `pytorch_new:bugfix/combo_fix_meta`，提交 `9f639af716399c15e07dbe341ecb2490a9f36e87`。
+排期已核对本地 `pytorch_new:bugfix/combo_fix_meta`，提交 `5db866a16403644c265f3f43d747a856124de8b1`。
 以下是剩余项按当前入口评估的修改范围；各实例的实际验证版本见上文及逐实例报告。
 
 先补入口集中的真实状态和已有消费者的接入，再处理归约布局和完整成员 metadata。
@@ -128,13 +128,11 @@ R18 完成成员 ABI 后再接默认配置和调优消费者。
 | --- | ---: | --- | --- | --- |
 | 高 | 1 | [R09](#root-r09) `num_store` | 极小；1 文件、2 个计数入口 | Native Index 有效写回计数，沿用已有缓存和移除规则。 |
 | 高 | 2 | [R10](#root-r10) `atomic_add_found` | 极小；1 文件、atomic 分支状态 | 只在真实生成原子写回时置位；普通 pointwise 保持 False。 |
-| 高 | 3 | [R17](#root-r17) provenance | 小；1 文件、分区节点展开与接入 | Combo 定义和追踪使用实际分区叶子，需核对缓存复用时的映射。 |
-| 后 | 4 | [R11](#root-r11) 连续归约维状态 | 中至大；轴、stride、load/store 状态 | 涉及 Native Index 方向替代、动态证明和候选输入，范围大于补字段。 |
-| 后 | 5 | [R12](#root-r12) 完整逐成员 metadata | 中；至少 2 文件、统一来源和成员出口 | 依赖 R09/R10/R11；跨 standalone/Combo，需拆开 CUDA 专属资格计算。 |
+| 后 | 3 | [R11](#root-r11) 连续归约维状态 | 中至大；轴、stride、load/store 状态 | 涉及 Native Index 方向替代、动态证明和候选输入，范围大于补字段。 |
+| 后 | 4 | [R12](#root-r12) 完整逐成员 metadata | 中；至少 2 文件、统一来源和成员出口 | 依赖 R09/R10/R11；跨 standalone/Combo，需拆开 CUDA 专属资格计算。 |
 
-建议按三个独立批次实施：**R09＋R10 → R17 → R11＋R12**。
+建议按两个独立批次实施：**R09＋R10 → R11＋R12**。
 R09/R10 是 R12 的真实状态前置，先补状态本身不意味着缺成员字典的原 FAIL 已通过。
-R17 可单独提交。
 
 R11 的真实布局统计合理；先补可证明的状态，再核对 native 候选消费者。
 候选策略的修改有条件后置，CUDA 的归约过滤规则需单独证明等价后再接入。
@@ -142,19 +140,18 @@ R12 的基础计数和统一序列化可先补；完整逐成员协议验收还�
 `tiling_scores`、`add_persistent_rblock` 和 HIP 的资源字段按真实 NPU producer/consumer 判断，缺字段本身不构成照搬理由。
 
 R18—R24 的成员 block/body/grid/runtime ABI、调优和联合归约涉及多层行为，安排在这批之后。
-R01、R03/R04、R27 的生成正确性缺陷仍保留独立修复队列，若目标 FAIL 在这些位置受阻，就保留其阻塞关系。
+R03/R04、R27 的生成正确性缺陷仍保留独立修复队列，若目标 FAIL 在这些位置受阻，就保留其阻塞关系。
 每批只定向复验最新 FAIL、SKIP/ERROR 实例，并合并回唯一进展表；历史 PASS 及其验证来源继续保留。
 
-以上判断的 producer 和追踪证据分别见 [R09/R10/R11 源码][E22]和 [provenance 调用链][E6]。
+以上判断的 producer 证据见 [R09/R10/R11 源码][E22]。
 
 ### 全范围根因及依赖
 
-下表 P0—P2 保留全范围问题的原分类层级；本次 R09—R17 的实际执行顺序以上节为准。
+下表 P0—P2 保留全范围问题的原分类层级；本次 R09—R12 的实际执行顺序以上节为准。
 
 | 问题层级 | 根因/定位项 | 当前判定 | 前置依赖 | 覆盖方法 |
 | --- | --- | --- | --- | ---: |
 | P0 | [R27 LoopBody 的候选索引缓存跨 kernel 复用，导致 x0/y0 轴错配](#root-r27) | 失败 DSL、固定源码及 CPU 控制流隔离复核已定位；未修复 | — | 1 |
-| P0 | [R01 persistent 多轴归约的 store 指针是标量，结果却是 block tensor](#root-r01) | 生成缺陷已实测确认；未修复 | — | 1 |
 | P0 | [R03 动态 shape/stride 符号被当成 masked subblock 的迭代轴](#root-r03) | 生成前缺陷已实测及源码确认；未修复 | — | 1 |
 | P0 | [R04 动态整数 index_expr 在实际 cast 前被声明为 FP32](#root-r04) | 生成缺陷已实测及版本源码对照确认；未修复 | — | 1 |
 | P1 | [R05 eager contiguous(memory_format=channels_last) 被 NPU 公共接口拒绝](#root-r05) | 原 eager 前置失败已确认；未修复 | — | 1 |
@@ -163,7 +160,6 @@ R01、R03/R04、R27 的生成正确性缺陷仍保留独立修复队列，若目
 | P1 | [R10 Native Index 发出 atomic_add，却没有设置 atomic_add_found](#root-r10) | producer 缺口已由源码确认；相关原图未触发原子加验收 | — | 2 |
 | P1 | [R11 Native Index load/store 未维护连续归约维布局状态](#root-r11) | producer 缺口已由源码确认；原用例先停在成员字典缺失 | — | 1 |
 | P1 | [R12 统一逐成员统计出口缺失](#root-r12) | 独立块配套 metadata 缺失 | 统计：R09/R10/R11；完整验收：R18 | 7 |
-| P1 | [R17 provenance 接收 node=None 的 Combo 外壳，真实分区 origins 被跳过](#root-r17) | 追踪映射缺口已由原产物和源码确认；未修复 | — | 1 |
 | P2 | [R18 成员独立块开关与 body/grid ABI 未贯通](#root-r18) | 基础能力缺失，阻塞配套协议验收 | R27 | 14；另 2 项间接依赖 |
 | P2 | [R19 NPU override 绕过无 benchmark 的默认配置拼接和 carve-out](#root-r19) | 默认配置处理能力缺口已由源码确认；未实现 | R18 | 3 |
 | P2 | [R20 NPU runtime 没有逐成员候选的 Combo 顺序调优消费者](#root-r20) | 独立成员调优能力缺口已由源码确认；未实现 | R18、R12 | 3 |
@@ -282,58 +278,6 @@ y0，也不无条件补所有轴定义。
 
 证据：[E26][E26]、[E21][E21]；[CPU 控制流隔离复核][axis-cache-probe]；补充诊断
 [store-mask-open][diag-store-mask-open]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-r01"></a>
-
-#### R01 persistent 多轴归约的 store 指针是标量，结果却是 block tensor
-
-**P0 · 生成缺陷已实测确认；未修复**。失败阶段：Native Index DSL → TTIR check → fallback。
-
-实测/原首失败：per_config_subkernel_red 原数值通过，单 Combo 目标期望 1、实际 2。诊断确认两个成员已进入同一分区 [['op0','op1']]，没有被分区拒绝；首个 TTIR 错误是 Value
-argument cannot be block type if pointer argument is not a block。
-
-根因与代码方案源码依据：[E17][E17]。
-
-证据：NPU triton.py:4021 的 reduction_resize 在 rank=1 时调用 promote_to_tensor；共同 helper:86 把标量提升成 shape=(1,)
-tensor。triton.py:3127 的 store_reduction 只在多 R 且非 persistent 时把指针提升为 block；persistent 路径保留 tl.store(out_ptr0 + (x0),
-tmp4, None) 的标量指针。整组 Combo 校验失败后，npu_combined_scheduling.py:240 回退到普通 kernel，普通 Native Index 也失败，最终 no-linear 执行。
-
-**修复方案（未实施）**。责任：torch_npu Inductor 归约结果布局与写回。
-
-拟修改入口：NPU torch_npu/_inductor/codegen/triton.py::triton_tensor_ndim/reduction_resize（3116、4021）；NPU
-torch_npu/_inductor/codegen/triton.py::store_reduction/store（3127、3157）；共同 triton_helpers.promote_to_tensor。
-
-1. 由真正保留的输出轴和其 tiling/标量循环状态定义归约后的布局，reduction_resize 和最终 CSE shape 都采用这个布局。当前非连续多轴归约每次标量外循环得到 shape=(1,) 的结果，继续保留该单元素
-tensor 契约。
-2. 在 store_reduction 和 store 的保留写回路径共用布局归一化：该单元素结果配套把 scalar pointer 提升成同形状 block pointer；非空 mask
-同步到输出布局。已有向量输出按其真实地址形状处理，不把同一个标量地址广播到多个有效输出元素。
-3. 以 pointer/value/mask 的实际布局决定归一化，移除仅依据 non-persistent 才追加 tl.arange(0,1) 的分叉。persistent、循环归约及 deferred store
-都在归约完成的正确层级写回一次。
-
-预期生成行为：已保存的 tmp4=promote_to_tensor(tl.sum(...)) 对应单元素 block pointer；TTIR 不再报 block value/scalar pointer
-不兼容；保留轴向量化时每个有效输出元素仍对应不同地址，不引入多 lane 重复写同一标量。
-
-影响范围：Native Index 多轴归约的结果布局与最终写回；单轴、普通 pointwise 及已合法的 block pointer 继续按已有布局生成。
-
-方案风险：不能只删除 promote_to_tensor：后续融合运算依赖 tensor 布局。不能仅按当前 CSE 声称的 rank 广播指针，必须先校正结果的实际输出布局。
-
-**验收计划（尚未执行）**：
-
-- 原 test_combo_kernel_per_config_subkernel_red 在原数值容差下生成一个实际 Combo，检查原 X/R 配置目标。
-- 分别检查 persistent/non-persistent、无保留 tiling 轴的标量输出和有保留向量轴的多 R 输出，TTIR 与写回集合一致。
-
-原始失败 DSL 关键行（保持生成格式）：
-
-```python
-                tmp4 = triton_helpers.promote_to_tensor(tl.sum(tmp3, 0))
-                tl.store(out_ptr0 + (x0 ), tmp4, None)
-```
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_combo_kernels.py::ComboKernelTests::test_combo_kernel_per_config_subkernel_red`：2.10 重合，1 FAIL；原首失败关联。
-
-证据：[E17][E17]；补充诊断 [reduction-v2][diag-reduction-v2]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
 <a id="root-r03"></a>
 
@@ -457,7 +401,7 @@ dtype。
 
 当前 `test_combo_kernel_per_config_subkernel_block_size` 先被 channels_last contiguous 的 eager 错误阻塞，见 R05。
 其后续读取仍固定使用 `trace_json["traceEvents"]` 和 CUDA grid 字段，尚未验证 NPU 事件容器及真实 launch。
-本次四个方法的用例适配没有修改这个布局方法。
+本次修复没有修改这个布局方法。
 
 修复入口：先解除 R05，再读取 NPU 实际事件格式，并核对最终执行的 launcher grid 与分块。
 保留原八种布局转换、数值及分块/grid 目标，排除 autotune 测量 launch。
@@ -648,46 +592,6 @@ INNER、列 OUTER 的原目标完整执行。
 - `test_combo_kernels.py::ComboKernelTestsMaxAutotune::test_combo_autotune_grouping`：范围外，1 FAIL；相关/后续覆盖。
 
 证据：[E2][E2]、[E4][E4]、[E11][E11]、[E22][E22]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
-
-<a id="root-r17"></a>
-
-#### R17 provenance 接收 node=None 的 Combo 外壳，真实分区 origins 被跳过
-
-**P1 · 追踪映射缺口已由原产物和源码确认；未修复**。失败阶段：define_kernel/comment → post-grad provenance。
-
-实测/原首失败：Inductor 执行和 debug trace 已完成，Combo 到 post-grad 映射为空，原目标是一项；第二个 AOTInductor 子场景尚未开始。
-
-根因与代码方案源码依据：[E6][E6]、[E23][E23]。
-
-证据：NPU scheduling.py:500/501 把 [combo_kernel_node] 传给 define_kernel/codegen_comment。该外壳 node=None，共同 provenance
-追踪跳过它；实际 kernel 分区 node_group 的真实叶子节点/origins 没有展开传递。
-
-**修复方案（未实施）**。责任：torch_npu Inductor 实际分区到 FX 节点追踪。
-
-拟修改入口：NPU torch_npu/_inductor/codegen/scheduling.py::codegen_combo_kernel/define_kernel/codegen_comment（500、593）；TORCH
-torch/_inductor/debug.py 与共同 provenance metadata 消费。
-
-1. 对每个 kernel_code_list 中的 node_group 按调度顺序展开真实成员的 get_nodes()，去除重复叶子和 reduction sentinel，作为这个 kernel 的 provenance 节点集合。
-2. 把该集合传给 define_kernel 与 codegen_comment，使 get_kernel_metadata/post-grad 追踪读取真实 node.data.origins；仍使用实际生成 kernel 名和
-source cache，缓存命中时也记录本次图的对应关系。
-3. singleton、多个 ABI 分区及 no-bench carve-out 各用自己的节点集合，不把外层 Combo 的全部 origins 复制到所有 kernel。原 AOTInductor 子场景按同一语义链检查。
-
-预期生成行为：kernel 到实际 post-grad FX 的映射非空，并且只包含该分区实际执行的节点。
-
-影响范围：NPU Combo 的定义/注释与 provenance 连接，不改变 fusion 或计算。
-
-方案风险：source cache 可以复用 kernel，但当前图的 origins 仍需要建立；不能仅在日志打印节点名称。
-
-**验收计划（尚未执行）**：
-
-- 原 tracing 方法依次完成 Inductor 和 AOTInductor 两个子场景。
-- 单 Combo、singleton、多分区/carve-out 和缓存复用分别检查不存在跨分区误归属。
-
-覆盖用例（未复测项沿用原报告）：
-
-- `test_provenance_tracing.py::TestProvenanceTracingArtifact::test_triton_kernel_to_post_grad_tracing_combo_kernel`：范围外，1 FAIL；原首失败关联。
-
-证据：[E6][E6]、[E23][E23]；[原方法与断言][test-index]；[原逐实例报告][jobs]。
 
 <a id="root-r18"></a>
 
@@ -1098,23 +1002,23 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 [run213]:
   ../../../../scripts/tests/combo_kernel_210/README-213.md
 [current-jobs]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-8f5db70-20261115/jobs.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-5db866a164-20261115/jobs.json
 [failure-capability-audit]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-8f5db70-20261115/failure-capability-audit.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-5db866a164-20261115/failure-capability-audit.json
 [case-rerun]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/
+  ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/
 [case-generated]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/generated-metadata.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/generated-metadata.json
 [case-adaptation]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/test-adaptation.diff
+  ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/test-adaptation.diff
 [case-summary]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/validation-summary.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/validation-summary.json
 [case-context]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/validation-context.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/fix-validation-context.json
 [case-memory]:
   ../../../../artifacts/inductor-combo-tests-v2.13-case-adaptation-8f5db70-20261115/memory-gate-observations.json
 [merge-check]:
-  ../../../../artifacts/inductor-combo-tests-v2.13-current-cases-8f5db70-20261115/merge-verification.json
+  ../../../../artifacts/inductor-combo-tests-v2.13-current-5db866a164-20261115/merge-verification.json
 [software-rerun]:
   ../../../../artifacts/inductor-combo-tests-v2.13-software-skips-9a86e68-20261114/
 [software-gates-audit]:
@@ -1256,3 +1160,6 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 
 [axis-cache-probe]:
   ../../../../artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-diagnostics/axis-cache-control-flow.json
+
+[fix-proof]: ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/validation-summary.json
+[fix-context]: ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/fix-validation-context.json
