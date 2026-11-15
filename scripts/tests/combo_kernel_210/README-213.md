@@ -2,7 +2,8 @@
 
 结果和当前问题分析只更新 [2.13 固定文档](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13.md)。
 用例适配进展统一更新 [2.13 进展表](../../../docs/notes/compiler/codegen/inductor-combo-tests-v2.13.csv)，
-只维护 2.13 的用例类型、上线状态、最新结果、实例统计和当前分析。
+维护 2.13 的用例类型、上线状态、最新结果、实例统计、当前分析和修复方案。
+已验证修复注明责任仓库、简短原因、提交及说明或证据。
 “已上线”以 [上线清单](combo_native_213_passed_nodeids.txt) 为准，全部实例在清单中标“是”，
 部分实例在清单中标“部分（已上线数/总数）”，均不在清单中标“否”；嵌套函数随外层方法。
 当前 PASS 不自动视为已上线，结果与分析以实际 2.13 报告为准。
@@ -53,6 +54,10 @@ python /path/to/torch-learn/scripts/tests/combo_kernel_210/run_plain_pytest.py \
 不使用 overlay 时省略 `--npu-fix-commit`。选卡必须遵循本轮授权，示例不授予卡使用权限。
 `--foreach-functional` 只记录所用测试的功能适配口径，不给测试注入 monkeypatch。
 子进程直接运行 `python -m pytest -vs`，无自定义 pytest 插件。
+
+SNode 统计用例依赖 `inductor_metrics`。若全局设置 `TORCH_LOGS`，应使用
+`TORCH_LOGS=output_code,inductor_metrics`；也可取消该变量，让用例自己的 `set_logs` 生效。
+单独设置 `output_code` 会覆盖用例的日志设置，导致调度节点统计为空。
 
 `--collect-only` 只收集；复测通过 `only_nodes` 精确选取，不使用代表参数抽样替代失败实例。
 输出目录必须不存在；默认每方法超时 3600 秒。

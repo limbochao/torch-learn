@@ -10,22 +10,36 @@ published: false
 ## 2.13 当前结果与验证范围
 
 当前唯一进展表为 [2.13 CSV](inductor-combo-tests-v2.13.csv)：116 行记录对应 105 个独立源方法、
-464 个参数化实例。定向修复后的汇总为 **82 PASS、18 FAIL、5 SKIP 方法**；
+464 个参数化实例。最新逐实例汇总为 **82 PASS、18 FAIL、5 SKIP 方法**；
 实例为 **440 PASS、18 FAIL、6 SKIP**。
 
 本轮已修复并复测两个确定的 Inductor 问题：Combo 的真实 FX 来源没有登记，多轴归约写回地址
 与结果形状不匹配。两项原 FAIL 都已 PASS；追踪覆盖 Inductor 和 AOTInductor，归约实际生成
 一个含两个成员的 Combo。[定向报告][case-rerun]、[生成代码及追踪校验][fix-proof]。
 
-按用户本轮明确要求，正在物理卡 1、2、3 上重跑全部 **82 个 PASS 方法的 440 个实例**。
-没有抽样，也不复用历史 PASS。完整回归结束前，上述数字表示定向修复后的当前汇总，
-不能提前视为全部方法在最新修复上通过。未选入本轮的 FAIL/SKIP 保留实际历史结果与验证版本，
-逐实例来源见[当前 jobs][current-jobs]与[合并校验][merge-check]。
+按用户本轮明确要求，在物理卡 1、2、3 上完整重跑 **82 个 PASS 方法的 440 个实例**，
+没有抽样、没有复用旧 PASS。[全量 JUnit 校验][pass-regression]确认全部预定实例均有报告。
+初跑报告为 **437 PASS、3 FAIL**；三个失败的处理如下：
+
+- pointwise 原输入的 1024 倍尺寸差触发现有 NPU 分区策略。保留原输入并检查两个普通 kernel，
+  另加中等尺寸差场景，严格检查一个真实共享 block Combo 的数量、成员尺寸和 runtime ABI。
+- `r0_r1` 在写回修复后已能生成一个合法 Combo；更新 NPU 数量与共享 ABI 断言，保留原输入和 FP64 对照。
+- 全局 `TORCH_LOGS=output_code` 覆盖了 SNode 用例的 metrics 设置。改用
+  `TORCH_LOGS=output_code,inductor_metrics` 复测两个 SNode 方法，并补验 basic，排除空循环 PASS。
+
+上述 **4 个方法、4 个实例复测全部 PASS**；两个 SNode 方法各实际收集到两个调度节点，
+[复测与生成代码][case-followup]、[非空节点及依赖深度][snode-metrics-proof]均已校验。
+最终这 **82 个方法的全部 440 个实例均已通过**；未改动 torch_npu 生产修复。
+
+本轮没有重跑剩余 **18 FAIL、5 SKIP 方法的 24 个实例**，保留其实际历史报告与验证版本。
+[合并校验][merge-check]确认这些报告逐项不变；[当前 jobs][current-jobs]保留每个实例的执行来源。
 
 ### 执行方式与源码
 
 使用 NPU_A5 容器内 `pta_213_case`，测试来自 `Community-Use-Case-Testing:fix/combo_case`，
-目录 `v2.13.0/inductor_npu`，提交 `7332db7c9fc5a5d10da2f17ec29e22866d38154a`。
+目录 `v2.13.0/inductor_npu`。全量执行提交为 `7332db7c9fc5a5d10da2f17ec29e22866d38154a`，
+4 项复测提交为 `023fd814784896f3e2a11186787fc40b2ebc60c7`。
+只修改两个结构断言方法，其他方法、fixture 和 SNode 源码保持一致，见[源码核对][followup-source-check]。
 通过[原生 pytest 执行脚本](../../../../scripts/tests/combo_kernel_210/README-213.md)按方法收集全部参数，
 三个 worker 分别设置 `ASCEND_RT_VISIBLE_DEVICES=1/2/3`；没有自定义 pytest 插件。
 
@@ -33,7 +47,8 @@ PyTorch 为 `2.13.0+cpu`（`cf30153c4c131c8164ee7798e5022d810682e2cb`），Trito
 基础 torch_npu 为 `2.13.0+gitefc05dd`（`efc05dd90b5fe31717d5f13e51fb3e49035bea30`），
 安装的 Python 文件叠加 `pytorch_new:bugfix/combo_fix_meta` 提交
 `5db866a16403644c265f3f43d747a856124de8b1`；实际修复版本以文件哈希为准。
-[安装与测试源码检查][fix-context]记录定向执行前后源码一致。
+[定向源码检查][fix-context]、[全量检查][full-regression-context]和[复测检查][followup-source-check]
+确认执行前后源码一致；两个阶段的 588 个已安装 Inductor Python 文件哈希相同。
 
 foreach 的 NPU 功能适配保留数值、原地更新及梯度检查；NPU 分支没有使用 CUDA 专属 kernel 数量
 和 foreach DSL 断言。其功能 PASS 不等于已经实现独立成员分组融合。
@@ -1163,3 +1178,13 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 
 [fix-proof]: ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/validation-summary.json
 [fix-context]: ../../../../artifacts/inductor-combo-tests-v2.13-fixes-5db866a164-20261115/fix-validation-context.json
+
+[pass-regression]: ../../../../artifacts/inductor-combo-tests-v2.13-pass-regression-5db866a164-20261115/verification.json
+
+[case-followup]: ../../../../artifacts/inductor-combo-tests-v2.13-case-followup-023fd81-20261115/validation-summary.json
+
+[snode-metrics-proof]: ../../../../artifacts/inductor-combo-tests-v2.13-case-followup-023fd81-20261115/snode-metrics-proof.json
+
+[followup-source-check]: ../../../../artifacts/inductor-combo-tests-v2.13-case-followup-023fd81-20261115/followup-validation-context.json
+
+[full-regression-context]: ../../../../artifacts/inductor-combo-tests-v2.13-pass-regression-5db866a164-20261115/pass-validation-context.json

@@ -42,7 +42,7 @@ self._kernel_num_gb = sum(meta.get("kernel_num_gb") or 0 for meta in sub_metas)
 
 ## 再把同一个数交给 benchmark
 
-[Combo benchmark 生成入口](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton_combo_kernel.py#L548)
+[Combo benchmark 生成入口](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton_combo_kernel.py#L550)
 从 `num_gb=0` 改为 `num_gb=self._kernel_num_gb`。
 普通 kernel 的 benchmark 也直接读取刚生成的 `inductor_meta["kernel_num_gb"]`，
 不再另外维护一份容易不同步的局部变量。
@@ -71,3 +71,6 @@ self._kernel_num_gb = sum(meta.get("kernel_num_gb") or 0 for meta in sub_metas)
 验证通过 Python overlay 加载修复文件；不能把包版本字符串当成实际修复版本。
 PyTorch 为 `2.13.0+cpu`（`cf30153c4c131c8164ee7798e5022d810682e2cb`），Triton 为 `3.6.0`。
 完整运行命令、文件哈希和逐实例结果见[最新验证汇总](inductor-combo-tests-v2.13.md#validation213)。
+
+本轮完整 PASS 回归及必要的定向复测再次覆盖本说明的 3 个方法、3 个实例，均 PASS。
+实际版本、全部参数报告和执行来源见[完整回归与合并校验](inductor-combo-tests-v2.13.md#validation213)。

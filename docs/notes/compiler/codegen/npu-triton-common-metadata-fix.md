@@ -20,8 +20,8 @@ published: false
 ## 对照代码看修改
 
 两个入口分别是
-[普通 kernel](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton.py#L2485) 和
-[Combo](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton_combo_kernel.py#L271)。修改使用相同写法：
+[普通 kernel](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton.py#L2490) 和
+[Combo](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton_combo_kernel.py#L279)。修改使用相同写法：
 
 ```python
 triton_meta = {
@@ -58,3 +58,6 @@ triton_meta = {
 验证通过 Python overlay 加载修复文件；不能把包版本字符串当成实际修复版本。
 PyTorch 为 `2.13.0+cpu`（`cf30153c4c131c8164ee7798e5022d810682e2cb`），Triton 为 `3.6.0`。
 完整运行命令、文件哈希和逐实例结果见[最新验证汇总](inductor-combo-tests-v2.13.md#validation213)。
+
+本轮完整 PASS 回归及必要的定向复测再次覆盖本说明的 1 个方法、2 个实例，均 PASS。
+实际版本、全部参数报告和执行来源见[完整回归与合并校验](inductor-combo-tests-v2.13.md#validation213)。

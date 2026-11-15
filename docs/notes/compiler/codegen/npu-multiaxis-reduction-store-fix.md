@@ -25,7 +25,7 @@ TTIR 是 Triton 编译检查的中间表示，这个错误发生在设备执行�
 
 ## 为什么不能只删除结果的提升
 
-[reduction_resize](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton.py#L4043) 在
+[reduction_resize](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton.py#L4044) 在
 `triton_tensor_ndim() == 1` 时明确使用 `promote_to_tensor`，后续融合运算沿用这个 tensor 布局。
 问题出在写回地址没有配套跟上，直接改掉结果布局会同时改变后续运算所依赖的约定。
 
@@ -83,6 +83,14 @@ NPU 用例提交 `7332db7` 另将后续 CUDA 参数名断言适配为真实 NPU 
 两个成员各有完整 `R2BLOCK_SUB=32`、`R1BLOCK_SUB=128`。
 输入、归约维度、数值容差和单 Combo 目标全部保留，不能用放宽数量目标代替生产修复。
 
+全量回归中的 `test_combo_kernel_per_config_subkernel_r0_r1` 也受到这项修复影响。
+其原输入保留维为 16，归约维为 32、64；原先退回两个普通 kernel，旧数量断言因此通过。
+现在两条归约已合法合为一个 persistent Combo，旧断言仍要求两个，于是在数量检查失败。
+用例提交 `023fd81` 改为检查一个真实 Combo、两个完整成员和共享 `X0BLOCK`；
+原非连续输入及 eager/compiled 分别对相同 FP64 基准的数值检查保留。
+[定向复测生成代码](../../../../artifacts/inductor-combo-tests-v2.13-case-followup-023fd81-20261115/generated-metadata.json)
+确认两个写回地址也都按本修复规范化，复测 PASS。
+
 ## 验证版本与复现
 
 责任仓库为 `Ascend/pytorch` 的 `torch_npu`，本地仓库名 `pytorch_new`，分支
@@ -97,3 +105,6 @@ NPU 用例提交 `7332db7` 另将后续 CUDA 参数名断言适配为真实 NPU 
 使用独立 Inductor/Triton 缓存后执行上述 node ID。
 安装文件和测试源码的校验结果、逐实例报告及完整 PASS 回归见
 [最新执行结果](inductor-combo-tests-v2.13.md#validation213)。
+
+本轮完整 PASS 回归及必要的定向复测再次覆盖本说明的 2 个方法、2 个实例，均 PASS。
+实际版本、全部参数报告和执行来源见[完整回归与合并校验](inductor-combo-tests-v2.13.md#validation213)。

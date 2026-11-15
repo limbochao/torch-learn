@@ -27,7 +27,7 @@ self.codegen_comment([combo_kernel_node], kernel_name)
 ## 对照代码看修复逻辑
 
 修复位于
-[NPUTritonScheduling.codegen_combo_kernel](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/scheduling.py#L491)：
+[NPUTritonScheduling.codegen_combo_kernel](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/scheduling.py#L502)：
 
 ```python
 for src_code, kernel, node_group in kernel_code_list:
@@ -83,3 +83,6 @@ python -m pytest -v test_provenance_tracing.py::TestProvenanceTracingArtifact::t
 使用独立 Inductor/Triton 缓存后执行上述 node ID。
 安装文件和测试源码的校验结果、逐实例报告及完整 PASS 回归见
 [最新执行结果](inductor-combo-tests-v2.13.md#validation213)。
+
+本轮完整 PASS 回归及必要的定向复测再次覆盖本说明的 1 个方法、1 个实例，均 PASS。
+实际版本、全部参数报告和执行来源见[完整回归与合并校验](inductor-combo-tests-v2.13.md#validation213)。
