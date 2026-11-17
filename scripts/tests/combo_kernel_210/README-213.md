@@ -23,9 +23,32 @@
 
 `combo_213_all_selected.json` 是源方法清单；`combo_213_table_rows.json` 维护原表行与外层方法的对应关系。
 嵌套函数随外层方法验证，不作为独立 pytest 方法计数。
-后续只关注最新逐实例报告中的 FAIL、SKIP，执行 ERROR 也按失败处理，不进行全量测试。
+问题定位与适配复测只关注最新逐实例报告中的 FAIL、SKIP，执行 ERROR 也按失败处理，不进行全量测试。
 已 PASS 的方法和参数实例保留历史结果；不直接把完整源方法清单交给 runner 执行。
 硬件或平台协议 SKIP 保留明确原因，不能计入 PASS；软件 SKIP 继续定位和适配。
+
+## 日常看护
+
+[日常看护清单](combo_native_213_daily_nodeids.txt) 从上线清单和无需修改的新增 PASS 清单中精选 28 个参数实例，
+每行一个完整 pytest nodeid，按字典序排列。优先覆盖以下路径：
+
+- Combo 点算子、原地更新、归约及 persistent 归约、二维非连续布局和三维分区边界。
+- 融合数量上限、pointwise-only 开关、动态 shape/grid、有调优及无调优路径。
+- foreach 与 foreach_map 调度融合、广播、类型提升、别名、原地更新后的依赖及参数数量上限拆分。
+- sort 的 persistent 要求、浮点重写精确结果、同一流内融合、随机数确定性及由 nonzero 输出长度决定的符号尺寸。
+
+foreach 选择代表算子参数；保留能检查数值及实际生成或执行行为的用例。
+日常看护显式使用这份 PASS 清单；适配复测使用下文生成的 FAIL/SKIP 定向清单。
+在上述环境和用例分支中，按选卡约定进入用例目录执行：
+
+```bash
+cd /path/to/cases/v2.13.0/inductor_npu
+mapfile -t combo_daily_nodes < /path/to/torch-learn/scripts/tests/combo_kernel_210/combo_native_213_daily_nodeids.txt
+ASCEND_RT_VISIBLE_DEVICES=3 \
+  TORCHINDUCTOR_CACHE_DIR=/path/to/new-cache \
+  TRITON_CACHE_DIR=/path/to/new-triton-cache \
+  python -m pytest -vs -ra "${combo_daily_nodes[@]}"
+```
 
 ## 生成定向清单
 
