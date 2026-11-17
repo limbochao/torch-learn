@@ -1,0 +1,20 @@
+diff --git a/torch_npu/_inductor/codegen/scheduling.py b/torch_npu/_inductor/codegen/scheduling.py
+index 0f62a44bb6..131b0e6624 100644
+--- a/torch_npu/_inductor/codegen/scheduling.py
++++ b/torch_npu/_inductor/codegen/scheduling.py
+@@ -545,13 +545,8 @@ class NPUTritonScheduling(TritonScheduling):
+                         snode.mark_run()
+                 V.graph.removed_buffers |= subkernel.removed_buffers
+                 V.graph.inplaced_to_remove |= subkernel.inplaced_to_remove
+-            # The Combo shell has no IR node or FX origins.  Attribute this
+-            # kernel only to the real leaves of its own generated partition.
+-            node_schedule = list(OrderedSet(
+-                snode for node in node_group for snode in node.get_nodes()
+-            ))
+-            kernel_name, _ = self.define_kernel(src_code, node_schedule, kernel, None)
+-            self.codegen_comment(node_schedule, kernel_name)
++            kernel_name, _ = self.define_kernel(src_code, [combo_kernel_node], kernel, None)
++            self.codegen_comment(combo_kernel_node.snodes, kernel_name)
+             log.debug("ComboKernels: generated kernel %s.", kernel_name)
+             kernel.call_kernel(kernel_name)
+ 

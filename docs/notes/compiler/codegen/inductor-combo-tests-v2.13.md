@@ -17,6 +17,13 @@ published: false
 与结果形状不匹配。两项原 FAIL 都已 PASS；追踪覆盖 Inductor 和 AOTInductor，归约实际生成
 一个含两个成员的 Combo。[定向报告][case-rerun]、[生成代码及追踪校验][fix-proof]。
 
+2026-11-17 将 Combo 追踪修复对齐上游：定义 kernel 时传外壳，追踪时传 `.snodes` 成员列表。
+仅复测原追踪方法，Inductor 与 AOTInductor 都通过，完整映射为
+`triton_poi_fused_0:1 -> [relu, sigmoid, tanh]`。撤回用例中的 NPU 专属名称预期，
+来源列表和 debug handle 断言保留。[本次报告][upstream-tracing-validation]、
+[版本与哈希][upstream-tracing-context]及[合并校验][upstream-tracing-merge]确认：
+其余 104 个方法的报告逐项不变，汇总仍为 440 PASS、18 FAIL、6 SKIP 实例。
+
 按用户本轮明确要求，在物理卡 1、2、3 上完整重跑 **82 个 PASS 方法的 440 个实例**，
 没有抽样、没有复用旧 PASS。[全量 JUnit 校验][pass-regression]确认全部预定实例均有报告。
 初跑报告为 **437 PASS、3 FAIL**；三个失败的处理如下：
@@ -55,8 +62,8 @@ foreach 的 NPU 功能适配保留数值、原地更新及梯度检查；NPU 分
 
 ### 六项 torch_npu 修复说明
 
-每项生产修复各有独立提交和说明，分别记录现象、上游来源、术语解释及生成代码的变化。
-下表提交对应实际 NPU 验证版本；迁入 master 后的新提交在各说明中单独列出。
+下表记录六项生产修复的现象、上游来源、术语解释及生成代码变化。
+提交对应实际 NPU 验证版本；追踪项使用本次对齐上游后的 PR 提交，其他项保留原验证提交。
 
 | 修复 | 原验证提交 | 上游来源 | 说明 |
 | --- | --- | --- | --- |
@@ -64,14 +71,15 @@ foreach 的 NPU 功能适配保留数值、原地更新及梯度检查；NPU 分
 | 统一访存量、FLOP 与 benchmark 成本 | `72b1727020` | [#180813](https://github.com/pytorch/pytorch/pull/180813) | [成本从哪里来、如何汇总](npu-combo-cost-metadata-fix.md) |
 | 统一 arg 归约真实索引与 CSE 类型 | `0503095a63` | [#183938](https://github.com/pytorch/pytorch/pull/183938) 的索引类型部分 | [为什么索引类型必须一致](npu-arg-reduction-index-dtype-fix.md) |
 | 传递共同 Triton 编译 metadata | `9f639af716` | [#180789](https://github.com/pytorch/pytorch/pull/180789) | [开关为什么会漏传](npu-triton-common-metadata-fix.md) |
-| 按真实分区登记 FX 追踪 | `0dfe37f3ca` | NPU 接入修复；参考 [#163378](https://github.com/pytorch/pytorch/pull/163378) 的调用约定 | [为什么不能把 Combo 外壳交给追踪](npu-combo-provenance-fix.md) |
+| 对齐上游 Combo FX 追踪 | `0239de8824` | 对齐 [#163378](https://github.com/pytorch/pytorch/pull/163378) 的追踪调用方式 | [外壳与成员列表的区别及复测](npu-combo-provenance-fix.md) |
 | 规范多轴归约写回地址的形状 | `5db866a164` | NPU 独立修复，无对应同步 PR | [标量地址如何配套单元素结果](npu-multiaxis-reduction-store-fix.md) |
 
 `optimize_mem` 当前只补齐上游 metadata 规则，已检查的 NPU 调优路径没有调用 CPU 备份逻辑，
 不能将字段验证 PASS 解释成 NPU 已实现内存节省。
 六项修改已基于 master `b706240181` 迁入 `bugfix/combo_fix_meta_master_20261117`，
 对应 [PR !49793](https://gitcode.com/Ascend/pytorch/merge_requests/49793)
-及 [Issue #6157](https://gitcode.com/Ascend/pytorch/issues/6157)。新基线只做了本地静态核对，未重跑 NPU 测试。
+及 [Issue #6157](https://gitcode.com/Ascend/pytorch/issues/6157)。新 master 基线的完整回归尚未执行；
+本次仅用 PR 提交的 `scheduling.py` 覆盖安装文件，完成上述追踪单项的 NPU 定向复测。
 
 CSV 新增“修复方案”列，已验证修复写明已有方案、责任仓库、简短原因、提交和说明/证据。
 “当前分析”仅写剩余问题的简短原因，PASS 保持“—”。
@@ -1195,3 +1203,7 @@ python <repo>/artifacts/inductor-combo-tests-v2.13-full-a3cfe56-20261113/root-di
 [followup-source-check]: ../../../../artifacts/inductor-combo-tests-v2.13-case-followup-023fd81-20261115/followup-validation-context.json
 
 [full-regression-context]: ../../../../artifacts/inductor-combo-tests-v2.13-pass-regression-5db866a164-20261115/pass-validation-context.json
+
+[upstream-tracing-validation]: ../../../../artifacts/inductor-combo-tests-v2.13-provenance-upstream-0239de8824-20261117/validation-summary.json
+[upstream-tracing-context]: ../../../../artifacts/inductor-combo-tests-v2.13-provenance-upstream-0239de8824-20261117/run-context.json
+[upstream-tracing-merge]: ../../../../artifacts/inductor-combo-tests-v2.13-provenance-upstream-0239de8824-20261117/merge-verification.json
