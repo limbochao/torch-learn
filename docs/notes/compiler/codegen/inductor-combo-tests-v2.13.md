@@ -55,16 +55,23 @@ foreach 的 NPU 功能适配保留数值、原地更新及梯度检查；NPU 分
 
 ### 六项 torch_npu 修复说明
 
-每项生产修复各有独立提交和说明，按实际代码解释问题、修复原因及处理逻辑。
+每项生产修复各有独立提交和说明，分别记录现象、上游来源、术语解释及生成代码的变化。
+下表提交对应实际 NPU 验证版本；迁入 master 后的新提交在各说明中单独列出。
 
-| 修复 | 提交 | 说明 |
-| --- | --- | --- |
-| 按当前图区分 optimize_mem 策略 | `43c727fb81` | [图状态如何传给运行时](npu-combo-optimize-mem-fix.md) |
-| 统一访存量、FLOP 与 benchmark 成本 | `72b1727020` | [成本从哪里来、如何汇总](npu-combo-cost-metadata-fix.md) |
-| 统一 arg 归约真实索引与 CSE 类型 | `0503095a63` | [为什么索引类型必须一致](npu-arg-reduction-index-dtype-fix.md) |
-| 传递共同 Triton 编译 metadata | `9f639af716` | [字段如何从共同入口传入](npu-triton-common-metadata-fix.md) |
-| 按真实分区登记 FX 追踪 | `0dfe37f3ca` | [为什么不能把 Combo 外壳交给追踪](npu-combo-provenance-fix.md) |
-| 规范多轴归约写回地址的形状 | `5db866a164` | [标量地址如何配套单元素结果](npu-multiaxis-reduction-store-fix.md) |
+| 修复 | 原验证提交 | 上游来源 | 说明 |
+| --- | --- | --- | --- |
+| 补齐 optimize_mem 图阶段字段 | `43c727fb81` | [#180790](https://github.com/pytorch/pytorch/pull/180790) | [上游作用与当前 NPU 的区别](npu-combo-optimize-mem-fix.md) |
+| 统一访存量、FLOP 与 benchmark 成本 | `72b1727020` | [#180813](https://github.com/pytorch/pytorch/pull/180813) | [成本从哪里来、如何汇总](npu-combo-cost-metadata-fix.md) |
+| 统一 arg 归约真实索引与 CSE 类型 | `0503095a63` | [#183938](https://github.com/pytorch/pytorch/pull/183938) 的索引类型部分 | [为什么索引类型必须一致](npu-arg-reduction-index-dtype-fix.md) |
+| 传递共同 Triton 编译 metadata | `9f639af716` | [#180789](https://github.com/pytorch/pytorch/pull/180789) | [开关为什么会漏传](npu-triton-common-metadata-fix.md) |
+| 按真实分区登记 FX 追踪 | `0dfe37f3ca` | NPU 接入修复；参考 [#163378](https://github.com/pytorch/pytorch/pull/163378) 的调用约定 | [为什么不能把 Combo 外壳交给追踪](npu-combo-provenance-fix.md) |
+| 规范多轴归约写回地址的形状 | `5db866a164` | NPU 独立修复，无对应同步 PR | [标量地址如何配套单元素结果](npu-multiaxis-reduction-store-fix.md) |
+
+`optimize_mem` 当前只补齐上游 metadata 规则，已检查的 NPU 调优路径没有调用 CPU 备份逻辑，
+不能将字段验证 PASS 解释成 NPU 已实现内存节省。
+六项修改已基于 master `b706240181` 迁入 `bugfix/combo_fix_meta_master_20261117`，
+对应 [PR !49793](https://gitcode.com/Ascend/pytorch/merge_requests/49793)
+及 [Issue #6157](https://gitcode.com/Ascend/pytorch/issues/6157)。新基线只做了本地静态核对，未重跑 NPU 测试。
 
 CSV 新增“修复方案”列，已验证修复写明已有方案、责任仓库、简短原因、提交和说明/证据。
 “当前分析”仅写剩余问题的简短原因，PASS 保持“—”。

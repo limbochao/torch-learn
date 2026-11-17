@@ -4,12 +4,40 @@ published: false
 
 # NPU 多轴归约为什么写不回，以及标量地址如何匹配单元素结果
 
-修复提交：`5db866a16403644c265f3f43d747a856124de8b1`。两个多轴 sum 本来应生成一个 Combo，
-实际却因为生成代码不合法而退回两个普通 kernel。最终数值能通过，不代表原 Combo 生成成功。
+## 问题现象
+
+两个多轴 sum 本来应生成一个 Combo，实际却因为生成代码不合法而退回两个普通 kernel。
+所以原测试的数值检查可以通过，随后“一共只生成一个 kernel”的断言却失败。
+这不是求和结果算错，而是预期的组合程序没有编译成功，被回退路径掩盖了。
+
+把保存的原失败 Triton 程序单独重放，可以直接看到编译错误：
+`Value argument cannot be block type if pointer argument is not a block`。
+大白话就是“要写的是一组元素，给出的地址却只是一个标量地址”。
+
+## 是否同步上游 CUDA 修复
+
+**不是。本次是 NPU 自有多轴索引与写回生成逻辑的修复，没有对应的上游同步 PR。**
+修改入口是 NPU 的 `NPUIndexTritonKernel.store_reduction` 和 `store`，
+解决 NPU 将保留维放入标量循环后产生的地址形状问题。
+上游同样有[将标量归约结果转成 tensor 的公共规则][upstream-resize]，
+但共用这一规则不等于本补丁来自某个 CUDA PR，也不能据此断言 CUDA 同输入一定有或没有此问题。
+
+NPU 原修复提交为 `5db866a164`，移植到 master 后为 `528e87d566`。
+
+## 先把几个词说清楚
+
+归约是把多份数值合成更少结果；多轴归约就是一次沿几个维度求和等。
+kernel 是交给设备执行的小程序，Combo 把几条独立分支放进同一个程序。
+DSL 是这里生成的 Triton 程序，store 是将结果写回内存，pointer 是要写入的地址。
+
+scalar 是单个值；block tensor 是一组带形状的元素，即使只有一个元素，它仍带有 `(1,)` 这样的形状。
+`rank` 表示维数：这里判断的是生成程序内部 tensor 的维数，不是原 PyTorch 输入的维数。
+例如输入可以是三维，归约中间值经展平后内部 rank 仍可能为 1。
+这里的 block 是 Triton 类型 / 形状概念，与“成员独立块调优”功能不是一回事。
 
 ## 用一行 DSL 看清问题
 
-输入是两个 FP32 tensor，shape 都为 `(32, 64, 128)`，对第 0、2 维求和，
+输入是两个 FP32（32 位浮点）tensor，shape 都为 `(32, 64, 128)`，对第 0、2 维求和，
 每个输入保留中间 64 个输出。当前 Native Index 生成把保留维放在标量循环里，每次计算一个输出：
 
 ```python
@@ -30,8 +58,9 @@ TTIR 是 Triton 编译检查的中间表示，这个错误发生在设备执行�
 问题出在写回地址没有配套跟上，直接改掉结果布局会同时改变后续运算所依赖的约定。
 
 旧写回代码只在“多归约轴且非 persistent”时加 `tl.arange(0, 1)`，
-遗漏了同样产生单元素结果的 persistent 路径。persistent 表示一个 program 覆盖完整归约范围，
-并不意味着其结果一定是标量类型。
+遗漏了同样产生单元素结果的 persistent 路径。
+persistent reduction 表示一次程序实例覆盖完整归约范围，减少分段归约循环；
+它描述如何完成归约，不保证最终结果是标量类型。
 
 ## 对照代码看修复逻辑
 
@@ -57,7 +86,8 @@ return index_str
 tl.store(out_ptr0 + (x0 + tl.arange(0, 1)), tmp4, None)
 ```
 
-只有一个 lane，因此不会把一个输出地址广播成多个有效写入。
+`tl.arange(0, 1)` 的内容只有 `[0]`，所以它只把地址变成单元素数组，不会多写一个位置。
+lane 指 block 中的一个元素位置；mask 是限制哪些元素允许读写的条件。
 普通保留维向量地址加这个零也不会改变元素集合；标量 mask 可以按 Triton 原规则广播到单元素 block。
 
 [store_reduction](https://gitcode.com/luqichao/pytorch_new/blob/5db866a16403644c265f3f43d747a856124de8b1/torch_npu/_inductor/codegen/triton.py#L3176) 与
@@ -66,10 +96,26 @@ tl.store(out_ptr0 + (x0 + tl.arange(0, 1)), tmp4, None)
 block pointer、atomic 写回、单归约轴及 persistent 的更高 rank 输出继续走原有生成规则；
 没有更改累加精度、归约元素范围或延迟写回时机。
 
+这里 block pointer 指用整块描述方式访问内存，atomic 指多个执行者可安全累加同一地址的原子写回。
+上述新增判断只用于普通指针写回，范围如下：
+
+| 普通指针写回条件 | 本次行为变化 |
+| --- | --- |
+| 单归约轴 | 无 |
+| 多归约轴、非 persistent | 保留原先增加单元素零偏移的行为 |
+| 多归约轴、persistent、内部 rank = 1 | 新增单元素零偏移，使标量地址匹配单元素结果 |
+| 多归约轴、persistent、内部 rank > 1 | 无，不属于本次补齐条件 |
+
+最后一行只说明没有改这条路径，不代表已穷举证明所有高 rank 布局都不会发生形状问题。
+普通 kernel 和 Combo 成员共用这个生成器，所以影响范围不限于 Combo。
+恢复 Combo 后，测试场景从两个回退 kernel 变成一次组合启动，执行安排会变化；
+没有做性能 A/B 测量，不能据地址数值不变就保证整体性能不变。
+
 ## 怎么证明是真修复
 
 先对保存的原失败 DSL 做独立重放：同一组输入、同一配置，原地址编译失败，
-只规范化两处写回地址后编译、执行及原 `atol=rtol=1e-4` 数值检查通过。
+只规范化两处写回地址后编译、执行及原 `atol=rtol=1e-4` 数值检查通过，
+其中 `atol`、`rtol` 分别表示绝对和相对误差容差。
 重放使用 `X0BLOCK=7`，64 个输出还覆盖了最后一个不满 block 的循环边界。
 
 再执行原 pytest：
@@ -79,7 +125,7 @@ python -m pytest -v test_combo_kernels.py::ComboKernelTests::test_combo_kernel_p
 ```
 
 原数值检查和“一共一个生成 kernel”目标均通过；实际生成是含两个成员的 persistent Combo。
-NPU 用例提交 `7332db7` 另将后续 CUDA 参数名断言适配为真实 NPU ABI：共享 `X0BLOCK`，
+NPU 用例提交 `7332db7` 另将后续 CUDA 参数名断言适配为实际 NPU 调用参数：共享 `X0BLOCK`，
 两个成员各有完整 `R2BLOCK_SUB=32`、`R1BLOCK_SUB=128`。
 输入、归约维度、数值容差和单 Combo 目标全部保留，不能用放宽数量目标代替生产修复。
 
@@ -94,17 +140,25 @@ NPU 用例提交 `7332db7` 另将后续 CUDA 参数名断言适配为真实 NPU 
 ## 验证版本与复现
 
 责任仓库为 `Ascend/pytorch` 的 `torch_npu`，本地仓库名 `pytorch_new`，分支
-`bugfix/combo_fix_meta`；包含两个修复的 Python overlay 提交为
+`bugfix/combo_fix_meta`；包含六项修复的 Python overlay 提交为
 `5db866a16403644c265f3f43d747a856124de8b1`。
+overlay 指用修复后的 Python 文件覆盖已安装包中的对应文件。
 基础包为 `2.13.0+gitefc05dd`，PyTorch 为 `2.13.0+cpu`
 （`cf30153c4c131c8164ee7798e5022d810682e2cb`），Triton 为 `3.6.0`。
 
 用例来自 `Community-Use-Case-Testing` 的 `fix/combo_case`，实际提交
 `7332db7c9fc5a5d10da2f17ec29e22866d38154a`，目录为 `v2.13.0/inductor_npu`。
-在 NPU 容器工作目录激活 `pta_213_case`，设置 `ASCEND_RT_VISIBLE_DEVICES` 为获准物理卡，
+在 NPU 工作目录加载上述版本环境，设置 `ASCEND_RT_VISIBLE_DEVICES` 为获准物理卡，
 使用独立 Inductor/Triton 缓存后执行上述 node ID。
 安装文件和测试源码的校验结果、逐实例报告及完整 PASS 回归见
 [最新执行结果](inductor-combo-tests-v2.13.md#validation213)。
 
-本轮完整 PASS 回归及必要的定向复测再次覆盖本说明的 2 个方法、2 个实例，均 PASS。
+2026-11-15 的已通过用例集合回归及必要定向补测覆盖本说明的 2 个方法、2 个实例，均 PASS。
 实际版本、全部参数报告和执行来源见[完整回归与合并校验](inductor-combo-tests-v2.13.md#validation213)。
+
+六项修改已迁入 master 基线分支，对应 [PR !49793][npu-pr] 和 [Issue #6157][npu-issue]。
+移植后只做了本地静态核对，以上 NPU 结果仍属于原修复分支。
+
+[upstream-resize]: https://github.com/pytorch/pytorch/blob/cf30153c4c13/torch/_inductor/codegen/triton.py#L4523
+[npu-pr]: https://gitcode.com/Ascend/pytorch/merge_requests/49793
+[npu-issue]: https://gitcode.com/Ascend/pytorch/issues/6157
