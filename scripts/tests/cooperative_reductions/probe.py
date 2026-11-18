@@ -173,11 +173,13 @@ def compile_probes(args, out):
             case = out / f"{kernel.__name__}-{mode}"
             case.mkdir(exist_ok=True)
             record = {"kernel": kernel.__name__, "target": args.arch, "compile_mode": mode,
-                      "signature": signature, "constexprs": constants, "launched": False}
+                      "signature": signature, "constexprs": constants, "num_warps": args.num_warps,
+                      "launched": False}
             try:
                 compiled = triton.compile(
                     ASTSource(kernel, signature=signature, constexprs=constants),
-                    target=GPUTarget("npu", args.arch, 0), options={"compile_mode": mode, "debug": True},
+                    target=GPUTarget("npu", args.arch, 0),
+                    options={"compile_mode": mode, "num_warps": args.num_warps, "debug": True},
                 )
                 for name, value in compiled.asm.items():
                     if isinstance(value, str):
@@ -374,6 +376,7 @@ def main():
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--arch", default="Ascend950")
     parser.add_argument("--compile-modes", default="simd,simd_simt_template,simt_only")
+    parser.add_argument("--num-warps", type=int, default=4, help="Fixed warp count for compile-only probes")
     parser.add_argument("--inductor-modes", default="baseline,enabled,forced")
     parser.add_argument("--shapes", default="1x1048576")
     parser.add_argument("--dtype", choices=("float16", "float32"), default="float32")
