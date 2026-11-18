@@ -16,7 +16,7 @@ title: 需求设计
 
 ## 已归档设计
 
-- [NPU Cooperative Reductions 需求调研（PyTorch 2.13）](npu-cooperative-reductions-research.md)
+- [NPU Cooperative Reductions 需求调研与初步方案（PyTorch 2.13）](npu-cooperative-reductions-research.md)
 - [Symbolic Grouped Autotune 增加 Elementwise Workload 设计](symbolic-group/inductor-symbolic-group-elementwise-workload.md)
 - [Elementwise Workload 实现说明](symbolic-group/inductor-symbolic-group-elementwise-workload-detail.md)
 - [Range/Memory-Aware Symbolic Group 分组设计草案](symbolic-group/inductor-symbolic-group-range-memory-aware.md)（未实现、未验证）
