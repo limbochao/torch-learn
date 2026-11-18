@@ -21,6 +21,8 @@ SOURCES = {
     "torch/_inductor/codegen/triton.py": ["def init_cooperative_reduction", "def get_backend_features"],
     "torch_npu/_inductor/ir.py": ["def num_splits"],
     "torch_npu/_inductor/codegen/scheduling.py": ["class NPUTritonScheduling", "def create_kernel_choices"],
+    "torch_npu/_inductor/codegen/npu_combined_scheduling.py": ["def codegen_node", "def benchmark_fused_nodes"],
+    "torch_npu/_inductor/compile_options.py": ["def register_npu_backend"],
     "torch_npu/_inductor/codegen/triton.py": ["def _get_heuristic", "def codegen_kernel"],
     "torch_npu/_inductor/codegen/split_tiling.py": ["def select_split_axis"],
     "torch_npu/_inductor/runtime/triton_heuristics.py": ["class GridNpu", "def reduction("],
@@ -301,6 +303,8 @@ def inductor_probes(args, out):
     torch, _ = init_device(args, out)
     from torch._inductor import config, metrics
     from torch._inductor.utils import run_and_get_code
+    from torch._inductor.graph import GraphLowering
+    from unittest import mock
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
     from autotune_tiling import BestTilingRecorder
@@ -340,7 +344,10 @@ def inductor_probes(args, out):
                             next_data = torch.randn((rows, next_r), device="npu", dtype=data.dtype)
                             next_other = torch.randn_like(next_data)
                             before = metrics.generated_kernel_count
-                            actual, next_sources = run_and_get_code(compiled, next_data, next_other)
+                            next_sources = []
+                            # run_and_get_code resets Dynamo; reuse must call the original callable directly.
+                            with mock.patch.object(GraphLowering, "save_output_code", next_sources.append):
+                                actual = compiled(next_data, next_other)
                             torch.testing.assert_close(actual.cpu(), (next_data + next_other).sum(-1).cpu(),
                                                        atol=2e-2, rtol=2e-4)
                             for index, source in enumerate(next_sources):
