@@ -1,7 +1,7 @@
 # Cooperative reduction 调研探针
 
 `probe.py` 用于 A5 上的定向研究，结果解释见
-[需求调研](../../../docs/requirements-design/npu-cooperative-reductions-research.md)。
+[需求分析](../../../docs/requirements-design/cooperative-reduction/requirements.md)。
 不修改已安装的 PyTorch、torch_npu 或 Triton。
 
 在 Docker 工作目录激活 `pta_213_case`，按物理卡限制和占用情况设置

@@ -1,6 +1,6 @@
 # NPU cooperative reduction 调研证据
 
-对应[需求调研](../../docs/requirements-design/npu-cooperative-reductions-research.md)，
+对应[需求分析](../../docs/requirements-design/cooperative-reduction/requirements.md)，
 执行入口为 [probe.py](../../scripts/tests/cooperative_reductions/probe.py)。
 以下是实验原始产物和派生的版本核对信息，不作为独立可执行脚本维护。
 generated Python、TTIR 和 adapter 未做格式重排。
