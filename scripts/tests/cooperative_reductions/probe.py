@@ -150,8 +150,14 @@ def compile_probes(args, out):
     import triton
     from triton.backends.compiler import GPUTarget
     from triton.compiler import ASTSource
+    from triton.backends.ascend.utils import _get_npucompiler_path
 
     os.environ.setdefault("TRITON_KERNEL_DUMP", "1")
+    compiler, compiler_env = _get_npucompiler_path()
+    version = subprocess.run([compiler, "--version"], env=compiler_env,
+                             capture_output=True, text=True, timeout=30)
+    write_json(out / "actual-npuir-compiler.json", {"compiler": compiler,
+                                                   "version": version.stdout + version.stderr})
     _, _, cooperative_sum, native_visibility, cuda_barrier = define_kernels()
     probes = [
         (cooperative_sum, {"A": "*fp32", "W": "*fp32", "Y": "*fp32"},
@@ -211,6 +217,9 @@ def event_time(torch, fn, *, graph=False):
         fn = graph_obj.replay
         denominator = batch * 10
         launches = 10
+        for _ in range(3):
+            fn()
+        torch.npu.synchronize()
     else:
         denominator = batch
         launches = batch
@@ -325,6 +334,19 @@ def inductor_probes(args, out):
                     torch.testing.assert_close(result.cpu(), reference, atol=2e-2, rtol=2e-4)
                     for index, source in enumerate(sources):
                         (case / f"output_code_{index}.py").write_text(source)
+                    if args.dynamic and args.reuse_r:
+                        record["dynamic_reuse"] = []
+                        for next_r in map(int, args.reuse_r.split(",")):
+                            next_data = torch.randn((rows, next_r), device="npu", dtype=data.dtype)
+                            next_other = torch.randn_like(next_data)
+                            before = metrics.generated_kernel_count
+                            actual, next_sources = run_and_get_code(compiled, next_data, next_other)
+                            torch.testing.assert_close(actual.cpu(), (next_data + next_other).sum(-1).cpu(),
+                                                       atol=2e-2, rtol=2e-4)
+                            for index, source in enumerate(next_sources):
+                                (case / f"reuse_r{next_r}_code_{index}.py").write_text(source)
+                            record["dynamic_reuse"].append({"R": next_r, "correct": True,
+                                                           "new_kernels": metrics.generated_kernel_count - before})
                     record.update(status="PASS", generated_kernel_count=metrics.generated_kernel_count,
                                   **event_time(torch, lambda: compiled(data, other), graph=args.graph))
             except Exception:
@@ -350,6 +372,7 @@ def main():
     parser.add_argument("--dtype", choices=("float16", "float32"), default="float32")
     parser.add_argument("--splits", type=int, default=0)
     parser.add_argument("--dynamic", action="store_true")
+    parser.add_argument("--reuse-r", default="", help="Additional R values for the same dynamic compiled callable")
     parser.add_argument("--graph", action="store_true")
     args = parser.parse_args()
     args.out = args.out.resolve()

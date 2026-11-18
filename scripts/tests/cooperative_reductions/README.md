@@ -18,9 +18,10 @@ python scripts/tests/cooperative_reductions/probe.py compile --out ../cooperativ
 python scripts/tests/cooperative_reductions/probe.py inductor \
   --shapes 1x1048576 --out ../cooperative-results/inductor
 
-# 动态 shape 独立编译。每个 shape 单独创建 compiled callable，不宣称验证跨 shape 复用。
+# 动态 shape 编译，并在同一个 callable 上验证缩小 R 和非整除尾块。
 python scripts/tests/cooperative_reductions/probe.py inductor --dynamic \
   --shapes 1x1048576 --inductor-modes baseline,enabled,forced \
+  --reuse-r 32768,1048593 \
   --out ../cooperative-results/dynamic
 
 # 手写 SIMD 原型：GM 可见性与重复屏障检查，然后比较三种策略。
@@ -36,6 +37,7 @@ python scripts/tests/cooperative_reductions/probe.py bench --graph \
 前再次同步，覆盖 8 个阶段。没有自动运行可能永久等待的 CUDA semaphore 协议。
 
 性能结果保留五组原始样本；`--graph` 在 NPU Graph 内捕获 32 次调用，计时 10 次 replay，
-以 320 次调用归一化。未指定 `--graph` 时记录事件加 Python enqueue 时间，不能直接混比。
+先预热三次 replay，以 320 次调用归一化。
+未指定 `--graph` 时记录事件加 Python enqueue 时间，不能直接混比。
 原型固定 `B=1024`、SIMD，没有 autotune；默认拆分数取 core 数与 X 的比例并限制为 64。
 因此结果只用于判断收益区间，不能作为最终触发阈值。
