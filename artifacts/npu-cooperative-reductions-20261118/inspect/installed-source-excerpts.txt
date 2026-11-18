@@ -1,0 +1,1679 @@
+
+===== torch/_inductor/choices.py =====
+...
+388: 
+389:     @staticmethod
+390:     def should_use_cooperative_reduction(
+391:         device: torch.device, numel: sympy.Expr, reduction_numel: sympy.Expr
+392:     ) -> bool:
+393:         """Heuristic to decide if a cooperative reduction should be used."""
+394:         if config.triton.force_cooperative_reductions:
+395:             return True
+396:         if not config.triton.cooperative_reductions or device.type == "cpu":
+397:             return False
+398: 
+399:         xhint = V.graph.sizevars.optimization_hint(numel, fallback=2)
+400:         if xhint <= 8:
+401:             threshold = 32768 * xhint
+402:         elif xhint <= 16:
+403:             threshold = 2097152
+404:         else:
+405:             return False
+406:         # TODO(jansel): should this default on for dynamic shapes?
+407:         # TODO(laith) What if hint(reduction_numel) >= threshold ?
+408:         # shall we compare hints instead
+409:         return V.graph.sizevars.statically_known_geq(reduction_numel, threshold)
+410: 
+411:     @staticmethod
+412:     def should_use_persistent_reduction(
+413:         features: SIMDKernelFeatures, cooperative_reduction: bool
+414:     ) -> bool:
+415:         """
+416:         Heuristic to decide if a persistent reduction should be used.
+417:         """
+418:         if not config.triton.persistent_reductions:
+419:             return False
+420:         threshold = {
+421:             ReductionHint.INNER: 1024,
+422:         }.get(features.get_reduction_hint(), 64)
+423: 
+424:         if features.get_reduction_hint() not in (
+425:             ReductionHint.INNER,
+426:             ReductionHint.OUTER_TINY,
+427:         ):
+428:             bounds = bound_sympy(features.reduction_numel)
+429:             lower = bounds.lower
+430:             upper = bounds.upper
+431: 
+432:             if not all(
+433:                 (
+434:                     (isinstance(bound, int) or bound.is_constant())
+435:                     and not torch.utils._sympy.numbers.is_infinite(bound)
+436:                 )
+437:                 for bound in (lower, upper)
+438:             ):
+439:                 return False
+440: 
+441:             lower = next_power_of_2(int(lower))
+442:             upper = next_power_of_2(int(upper))
+443: 
+444:             # If we are coalescing on xblock (not ReductionHint.INNER) and this is not a tiny kernel
+445:             # (not ReductionHint.OUTER_TINY), do not use persistent reduction if it induces tile
+446:             # quantization. Persistent reduction forces rblock == rnumel, if the bounds between lower
+447:             # and upper are large, for the lower values we will be masking off large % of read/writes,
+448:             # when we could expand the coalescing xblock instead.
+449:             if lower != upper:
+450:                 return False
+451: 
+452:         if cooperative_reduction:
+453:             # The RSPLIT of cooperative reductions means each thread block is operating on fewer elements
+454:             # The default fallback will be used if optimizations hint is not provided. The default fallback
+455:             # is >> 32.
+456:             threshold *= 32 // min(
+457:                 V.graph.sizevars.optimization_hint(features.numel), 32
+458:             )
+459: 
+460:         # If multi_kernel is enabled, we do more aggressive persistent reduction.
+461:         # This may result in some persistent reductions slower than the
+462:         # corresponding non-persistent reductions. MultiKernel will do benchmarking
+463:         # to pick the faster one.
+464:         if config.triton.multi_kernel:
+465:             threshold *= 16
+466: 
+467:         return V.graph.sizevars.statically_known_leq(
+468:             features.reduction_numel, threshold
+469:         )  # type: ignore[arg-types]
+470: 
+471:     @staticmethod
+472:     def reduction_split_factor(
+473:         device: torch.device,
+474:         reduction_numel_hint: int,
+475:         numel_hint: int,
+476:         inner_reduction: bool,
+477:     ) -> int:
+478:         """Heuristic to decide the RSPLIT used for split reductions.
+479:         When a reduction has a small number of outputs there is not enough parallelism,
+480:         so we will do the reduction in two phases."""
+481:         props = DeviceProperties.create(device)
+482:         num_sm = props.multi_processor_count
+483:         warp_size = props.warp_size_or_default
+484:         max_threads_per_sm = (
+485:             props.max_threads_per_multi_processor
+486:             if props.max_threads_per_multi_processor is not None
+487:             else 2048
+488:         )
+489:         min_elements_per_thread = warp_size
+
+===== torch/_inductor/codegen/triton.py =====
+...
+3227:         )
+3228: 
+3229:     def init_cooperative_reduction(self):
+3230:         """One time setup code for cooperative reductions."""
+3231:         assert self.cooperative_reduction
+3232: 
+3233:         # shift all the grids over since tl.program_id(0) is for rsplit
+3234:         for tree in self.range_trees:
+3235:             if tree.grid_dim is not None:
+3236:                 tree.grid_dim += 1
+3237: 
+3238:         sem_count = self.numels["x"]
+3239:         if self.fixed_config:
+3240:             sem_count = CeilDiv(sem_count, self.fixed_config["XBLOCK"])
+3241:         self.semaphores_name = self.args.semaphores(sem_count)
+3242:         self.cooperative_reduction_workspace_cache = CooperativeReductionWorkspaceCache(
+3243:             self.args
+3244:         )
+3245:         self.body.splice(
+3246:             """\
+3247:             RSPLIT_NEXT_POWER_OF_2: tl.constexpr = triton_helpers.constexpr_next_power_of_2(RSPLIT)
+3248:             RSPLIT_IS_POWER_OF_2: tl.constexpr = RSPLIT == RSPLIT_NEXT_POWER_OF_2
+3249:             HAS_RSPLIT: tl.constexpr = RSPLIT > 1
+3250:             rsplit_id = tl.program_id(0)
+3251:             num_rblocks = (rnumel + RBLOCK - 1) // RBLOCK
+3252:             rsplit_chunk = (num_rblocks + RSPLIT - 1) // RSPLIT * RBLOCK
+3253:             rsplit_start = rsplit_chunk * rsplit_id
+3254:             rsplit_end = rsplit_chunk * (rsplit_id + 1)
+3255:             """,
+3256:         )
+3257:         if any(
+3258:             not self._has_constant_mask(tree)
+3259:             for tree in self.range_trees
+3260:             if tree.is_reduction
+3261:         ):
+3262:             self.body.writeline(
+3263:                 "rsplit_end = tl.where(rsplit_end < rnumel, rsplit_end, rnumel)"
+3264:             )
+3265: 
+3266:     def init_cooperative_reduction_mask(self):
+3267:         rsplit_arange = "tl.arange(0, RSPLIT_NEXT_POWER_OF_2)"
+3268:         if not self.no_x_dim:
+3269:             rsplit_arange = f"{rsplit_arange}[None, :]"
+3270:         self.body.writeline(f"rsplit_arange = {rsplit_arange}")
+3271: 
+3272:         if self._has_constant_xmask():
+3273:             self.body.splice(
+3274:                 """\
+3275:                 if RSPLIT_IS_POWER_OF_2:
+3276:                     rsplit_mask: tl.constexpr = None
+3277:                 else:
+3278:                     rsplit_mask = rsplit_arange < RSPLIT
+3279:                 """
+3280:             )
+3281:         else:
+3282:             assert not self.no_x_dim
+3283:             self.body.writeline(
+3284:                 "rsplit_mask = xmask if RSPLIT_IS_POWER_OF_2 else ((rsplit_arange < RSPLIT) & xmask)"
+3285:             )
+3286: 
+3287:     def codegen_range_tree(self):
+3288:         for tree in self.range_trees:
+3289:             # reduction indexing goes inside a loop
+3290:             if not tree.is_loop:
+3291:                 self.iteration_ranges_codegen_header(tree, self.body)
+3292:             elif self.inside_reduction:
+3293:                 # workaround for this issue:
+3294:                 # https://gist.github.com/jansel/6527126f781559095c5531f98a4235a7
+3295:                 self.body.writeline(
+3296:                     f"{tree.prefix}base = {self.iteration_ranges_ranges_code(tree)}"
+3297:                 )
+3298: 
+3299:         if self.inside_reduction:
+3300:             if any(tree.is_loop for tree in self.range_trees):
+3301:                 # If the kernel contains loops, compute rbase.
+3302:                 rn_bases = self._get_reduction_symbols(
+3303:                     "base", integer=True, nonnegative=True
+3304:                 )
+3305:                 rbase = self._flatten_reduction_indices(rn_bases)
+3306:                 self.body.splice(f"rbase = {self.index_to_str(rbase)}")
+3307:             else:
+3308:                 # For looped reductions, indexing is deferred to the innermost loop.
+3309:                 self.codegen_reduction_indices(self.body)
+3310: 
+3311:     def need_numel_args(self):
+3312:         """
+3313:         Indicate whether we need provide numel as arguments for the generated
+3314:         kernel calls in the benchmark.
+3315: 
+3316:         Should be true for pointwise/reduction kernels but false for triton
+3317:         matmul kernels.
+3318:         """
+3319:         return True
+3320: 
+3321:     def should_use_persistent_reduction(self) -> bool:
+3322:         return self.inside_reduction and V.choices.should_use_persistent_reduction(
+3323:             self.features, self.cooperative_reduction
+3324:         )
+3325: 
+3326:     def want_no_x_dim(self):
+3327:         return (
+3328:             self.persistent_reduction
+3329:             and len(self.numels) == self.num_reduction_dims + 1
+3330:             and self.fixed_config
+3331:             and self.fixed_config["XBLOCK"] == 1
+3332:         )
+3333: 
+3334:     @property
+3335:     def assert_function(self) -> str:
+3336:         return "tl.device_assert"
+3337: 
+3338:     def indexing(
+3339:         self,
+3340:         index: sympy.Expr,
+3341:         *,
+3342:         copy_shape: str | tuple[str] | None = None,
+3343:         dense_indexing=False,
+3344:         override_mask=None,
+3345:         block_ptr=False,
+3346:         tma_compatibility_checker: TMACompatibilityChecker | None = None,
+3347:         mask_constant_index=False,
+3348:     ):
+3349:         """
+3350:         Compute the index and mask to pass to tl.load() or tl.store()
+3351:         """
+3352:         index = self.prepare_indexing(index)
+3353:         index_vars = index.free_symbols
+3354:         has_rindex = False
+3355: 
+3356:         mask_vars: OrderedSet[str] = OrderedSet()
+3357:         for var in sorted(index_vars, key=operator.attrgetter("name")):
+3358:             assert isinstance(var, sympy.Symbol)
+3359:             has_rindex = has_rindex or TritonSymbols.is_reduction_index_symbol(
+3360:                 self, var
+3361:             )
+3362:             if override_mask:
+3363:                 pass
+3364:             elif symbol_is_type(var, SymT.TMP):
+3365:                 # indirect indexing
+...
+7177: 
+7178:     @classmethod
+7179:     def get_backend_features(cls, device: torch.device):
+7180:         if (
+7181:             config.triton.cooperative_reductions
+7182:             or config.triton.force_cooperative_reductions
+7183:         ):
+7184:             return OrderedSet(
+7185:                 [*cls.backend_features, BackendFeature.REDUCE_TO_SINGLE_ELEMENT]
+7186:             )
+7187:         return cls.backend_features
+7188: 
+7189:     def codegen_comment(self, node_schedule, kernel_name=None):
+7190:         wrapper = V.graph.wrapper_code
+7191:         origins, _detailed_origins = get_kernel_metadata(node_schedule, wrapper)
+7192:         if origins:
+7193:             wrapper.make_comment(origins)
+7194: 
+7195:         if config.debug_fusion:
+7196:             from torch._inductor.scheduler import (
+7197:                 BaseSchedulerNode,
+7198:                 ForeachKernelSchedulerNode,
+7199:             )
+7200: 
+7201:             if not any(
+7202:                 isinstance(n, ForeachKernelSchedulerNode) for n in node_schedule
+7203:             ):
+7204:                 # We probably should look what are the nodes inside a foreach
+7205:                 # schedule node
+7206:                 node_names = [
+7207:                     n.get_name()
+7208:                     for n in node_schedule
+7209:                     if isinstance(n, BaseSchedulerNode)
+7210:                 ]
+7211:                 wrapper.make_comment(
+7212:                     f"{wrapper.comment} Fused node name list: {', '.join(node_names)}"
+7213:                 )
+7214: 
+7215:         if kernel_name:
+7216:             debug_handle = set_kernel_post_grad_provenance_tracing(
+7217:                 node_schedule,  # type: ignore[arg-type]
+7218:                 kernel_name,
+7219:             )
+7220:             wrapper.write_provenance_debug_handle(kernel_name, debug_handle)
+7221: 
+7222:     def _emit_kernel_to_wrapper(
+7223:         self,
+7224:         wrapper,
+7225:         kernel,
+7226:         src_code,
+7227:         kernel_name,
+7228:         subs_name,
+7229:         node_schedule,
+7230:         kernel_path,
+7231:         get_kernel_metadata,
+7232:     ):
+7233:         """Emit kernel to wrapper, with support for external template handlers."""
+7234:         # External template handlers (e.g. Helion) can override kernel emission
+7235:         if kernel.emit_kernel_override(
+7236:             wrapper,
+7237:             src_code,
+7238:             kernel_name,
+7239:             node_schedule,
+7240:             kernel_path,
+7241:             get_kernel_metadata,
+7242:         ):
+7243:             return  # External handler handled it
+7244: 
+7245:         compile_wrapper = IndentedBuffer()
+7246: 
+7247:         if async_compile.use_process_pool():
+7248:             # The process pool is warm, we can shell out to workers right away. This
+7249:             # allows us to save the result in async_compile.CompiledTritonKernels,
+7250:             # so that the second time we call async_compile.triton, we do no work.
+7251:             async_compile.triton(subs_name, src_code)
+7252: 
+7253:         compile_wrapper.writeline(f"async_compile.triton({subs_name!r}, '''")
+7254: 
+7255:         compile_wrapper.splice(src_code, strip=True)
+7256:         current_device = V.graph.get_current_device_or_throw()
+7257:         compile_wrapper.writeline(f"''', device_str='{current_device.type}')")
+7258: 
+7259:         metadata_comment = f"# kernel path: {kernel_path}"
+7260:         origins, detailed_origins = get_kernel_metadata(node_schedule, wrapper)
+7261:         metadata_comment += "\n" + origins + "\n" + detailed_origins
+7262:         wrapper.define_kernel(kernel_name, compile_wrapper.getvalue(), metadata_comment)
+7263: 
+7264:     def define_kernel(self, src_code, node_schedule, kernel):
+7265:         wrapper = V.graph.wrapper_code
+7266:         if src_code in wrapper.src_to_kernel:
+7267:             kernel_name = wrapper.src_to_kernel[src_code]
+7268:         else:
+7269:             fused_name = (
+7270:                 get_fused_kernel_name(node_schedule, config.triton.descriptive_names)
+7271:                 if config.triton.descriptive_names
+7272:                 else ""
+7273:             )
+7274:             if fused_name:
+7275:                 fused_name = V.choices.customize_fused_kernel_name(fused_name, src_code)
+7276:             kernel_category = get_kernel_category_by_source_code(src_code)[:3]
+7277:             kernel_name = "_".join(
+7278:                 ["triton", kernel_category, fused_name, wrapper.next_kernel_suffix()]
+
+===== torch_npu/_inductor/ir.py =====
+...
+78:     return min(ranges)
+79: 
+80: def num_splits(
+81:     device,
+82:     dst_dtype,
+83:     src_dtype,
+84:     inner_fn,
+85:     ranges,
+86:     reduction_ranges,
+87:     reduction_type,
+88:     reduction_numel,
+89:     input_node=None,
+90: ):
+91:     def _is_static(x: object) -> bool:
+92:         return isinstance(x, (int, Integer))
+93: 
+94:     reduction_numel_hint = V.graph.sizevars.optimization_hint(reduction_numel)
+95:     numel_hint = V.graph.sizevars.optimization_hint(sympy_product(ranges))
+96:     if not (_is_static(reduction_numel_hint) and _is_static(numel_hint)):
+97:         # We don't support unbacked symints
+98:         return ReductionHint.DEFAULT, 1
+99: 
+100:     if reduction_type == "scan" and device.type == "npu":
+101:         # Upstream SplitScan uses CUDA look-back workspace/atomics. NPU scan
+102:         # currently carries prefixes between tiles inside a single program.
+103:         return (ReductionHint.INNER if numel_hint == 1 else ReductionHint.DEFAULT), 1
+104: 
+105:     should_split = reduction_type == "scan" or (
+106:         not V.graph.has_feature(device, BackendFeature.REDUCE_TO_SINGLE_ELEMENT)
+107:         and reduction_type
+108:         not in (
+109:             "argmax",
+110:             "argmin",
+111:             "argmax_value",
+112:             "argmin_value",
+113:             "argmax_with_value",
+114:             "argmin_with_value",
+115:         )
+116:         and config.split_reductions
+117:     )
+118: 
+119:     if should_split:
+120:         inner_reduction_splits = reduction_split_factor
+121:     else:
+122: 
+123:         def inner_reduction_splits(reduction_ranges):
+124:             return 1
+125: 
+126:     if numel_hint == 1:
+127:         # A reduction whose reduction group has exactly ONE dynamic axis (any other
+128:         # reduction axes static): keep a single Reduction node (split==1) instead of
+129:         # a degenerate multilayer split; grid is forced to 1 in select_split_axis so
+130:         # it loops the runtime numel with a tail mask. Covers pure 1D
+131:         # (reduction_ranges == [n]) and full reduce with extra static reduction dims
+132:         # (e.g. [n, 1024] -> reduction_ranges == [n, 1024]).
+133:         num_dynamic_reduction = sum(1 for r in reduction_ranges if not _is_static(r))
+134:         if num_dynamic_reduction == 1:
+135:             return ReductionHint.INNER, 1
+136:         split = inner_reduction_splits(reduction_ranges)
+137:         return ReductionHint.INNER, split
+138:     return ReductionHint.DEFAULT, 1
+139: 
+140: def patch_num_splits():
+141:     Reduction.num_splits = num_splits
+
+===== torch_npu/_inductor/codegen/scheduling.py =====
+...
+188:         return _generate_npu_node_schedule(self, nodes, numel, rnumel)
+189: 
+190: class NPUTritonScheduling(TritonScheduling):
+191:     kernel_type = NPUIndexTritonKernel
+192:     backend_features = OrderedSet(
+193:         [
+194:             BackendFeature.BUCKETIZE,
+195:             BackendFeature.INPLACE_BUFFERS,
+196:             BackendFeature.MASKED_SCATTER_WITH_INDEX,
+197:             BackendFeature.SCAN,
+198:             BackendFeature.SORT,
+199:             BackendFeature.TRITON_TEMPLATES,
+200:             BackendFeature.TUPLE_REDUCTION,
+201:         ]
+202:     )
+203: 
+204:     def generate_node_schedule(self, nodes, numel, rnumel):
+205:         if not npu_config.enable_welford:
+206:             return super().generate_node_schedule(nodes, numel, rnumel)
+207:         from ..choices import contains_welford_group
+208:         if not contains_welford_group(nodes):
+209:             # Kernels without Welford reductions keep the baseline (upstream)
+210:             # scheduling so unrelated fusion decisions stay unchanged.  The
+211:             # caller may have canonicalized numel/rnumel; recompute the raw
+212:             # group extents so the default scheduler's equality checks match
+213:             # the (uncanonicalized) node groups exactly as in the baseline.
+214:             _, (numel, rnumel) = max(nodes, key=lambda x: int(x.is_reduction())).group
+215:             return super().generate_node_schedule(nodes, numel, rnumel)
+216:         return _generate_npu_node_schedule(self, nodes, numel, rnumel)
+217: 
+218:     def group_fn(self, sizes):
+219:         groups = list()
+220:         for s in sizes:
+221:             if not s:
+222:                 groups.append(1)
+223:             elif isinstance(s, list):
+224:                 group = flatten(s)
+225:                 groups.append(NumelList(tuple(group)) if isinstance(group, list) else group)
+226:             else:
+227:                 groups.append(s)
+228:         return tuple(groups)
+229: 
+230:     @classmethod
+231:     def create_tiling(
+232:             cls, pw_tiling: Sequence[sympy.Expr], reduction_tiling: Sequence[sympy.Expr]
+233:     ) -> dict[str, sympy.Expr]:
+234:         """
+235:         Create a tiling dict from pointwise and reduction splits.
+236:         """
+237: 
+238:         pw_tiling = flatten_groups(pw_tiling)
+239:         pw_prefixes = ["w", "v", "t", "z", "y", "x"][-len(pw_tiling):]
+240:         if len(reduction_tiling) == 0:
+241:             reduction_prefixes = []
+242:         else:
+243:             reduction_tiling = flatten_groups(reduction_tiling)
+244:             reduction_tiling = [NumelList(reduction_tiling).numels()]
+245:             reduction_prefixes = ["r"][: len(reduction_tiling)]
+246:         tiling = immutable_dict(
+247:             list(zip(pw_prefixes, pw_tiling))
+248:             + list(zip(reduction_prefixes, reduction_tiling)))
+249:         return tiling
+250: 
+251:     def create_kernel_choices(
+252:             self, kernel_features: SIMDKernelFeatures, kernel_args, kernel_kwargs
+253:     ) -> List[SIMDKernel]:
+254: 
+255:         if kernel_features.contains_op("scan"):
+256:             kernel_kwargs = dict(kernel_kwargs)
+257:             kernel_kwargs["override_cooperative_reduction"] = False
+258: 
+259:         return [self.kernel_type(*kernel_args, **kernel_kwargs)]
+260: 
+261:     def make_ttir_for_check(self, src_code):
+262:         # 1. use triton_ as tmp kernel name
+263:         checker_src_code = src_code.replace(str(Placeholder.KERNEL_NAME),
+264:                                             "triton_")
+265:         # 2. find inductor_meta str
+266:         inductor_meta_str = next(
+267:             (line for line in checker_src_code.splitlines()
+268:                 if "inductor_meta" in line),
+269:             None,
+270:         )
+271:         inductor_meta = eval(inductor_meta_str.strip().split("=", 1)[1].rstrip(','))
+272:         # 3. disable cache and limit configs count for precompile
+273:         inductor_meta["force_disable_caches"] = True
+274:         checker_src_code = checker_src_code.replace(
+275:             inductor_meta_str, f"    inductor_meta={inductor_meta},")
+276:         mod = PyCodeCache.load(checker_src_code)
+277:         # 4. precompile for dsl check
+278:         mod.triton_._triton_make_ttir()
+279:         # 5. remove tmp compile cache
+280:         try:
+281:             assert mod.__file__
+282:             os.remove(mod.__file__)
+283:         except FileNotFoundError:
+284:             pass
+285: 
+286:     # transform indexing before call codegen_node_schedule_with_kernel
+287:     def codegen_node_schedule(self, kernel_features: SIMDKernelFeatures, nodes, origin_node=None):
+288:         node_schedule = kernel_features.node_schedule
+289:         tiling = self.select_tiling(
+290:             node_schedule, kernel_features.numel, kernel_features.reduction_numel
+291:         )
+292: 
+293:         kernels = self.create_kernel_choices(
+294:             kernel_features, [tiling], {"features": kernel_features}
+295:         )
+296: 
+297:         for kernel in kernels:
+298:             self.codegen_node_schedule_with_kernel(node_schedule, kernel)
+299: 
+300:         MultiKernel.merge_workspaces_inplace(kernels)
+301:         for kernel in kernels:
+302:             with V.set_kernel_handler(kernel):
+303:                 src_code = kernel.codegen_kernel()
+304:                 self.make_ttir_for_check(src_code)
+305: 
+306:             V.graph.removed_buffers |= kernel.removed_buffers
+307:             V.graph.inplaced_to_remove |= kernel.inplaced_to_remove
+308: 
+309:             traced_graph_hash = None
+310:             kernel_graph_hash = None
+311:             if npu_config.dump_fx_graph:
+312:                 if not npu_config.traced_fx_graph_cache:
+313:                     npu_config.traced_fx_graph_cache = os.path.join(os.getenv("TORCHINDUCTOR_CACHE_DIR"),
+314:                                                                     'traced_fx_graph_cache')
+315:                 os.makedirs(npu_config.traced_fx_graph_cache, exist_ok=True)
+316:                 traced_graph, fx_call_args, fx_args, compile_kwargs = create_fx_from_snodes_by_traced_graph(nodes)
+317:                 if traced_graph is None:
+318:                     log.warning("For nodes %s, could not gen fx graph while dump-graph.", nodes)
+319:                 else:
+320:                     fx_arg_shapes_str = str([getattr(a, "shape", a) for a in fx_args])
+321:                     traced_graph_hash = code_hash(src_code + traced_graph.code + fx_arg_shapes_str)
+322:                     kernel_graph_hash = code_hash(src_code + traced_graph.code)
+323: 
+324:             kernel_name, src_code = self.define_kernel(src_code, node_schedule, kernel, traced_graph_hash, kernel_graph_hash)
+325: 
+326:             kernel.kernel_name = kernel_name
+327:             kernel.code_hash = code_hash(src_code)
+328:         del kernel
+329: 
+330:         final_kernel: Union[SIMDKernel, MultiKernel]
+331:         if len(kernels) > 1:
+332:             final_kernel = MultiKernel(kernels)
+333:         else:
+334:             (final_kernel,) = kernels
+335: 
+336:         with V.set_kernel_handler(final_kernel):
+337:             for node in kernel_features.scheduler_nodes():
+338:                 node.mark_run()
+339: 
+340:         self.codegen_comment(node_schedule, final_kernel.kernel_name)
+341:         if is_multi_stream():
+342:             final_kernel.call_kernel(name=final_kernel.kernel_name, origin_node=origin_node)
+343:         else:
+344:             final_kernel.call_kernel(name=final_kernel.kernel_name, origin_node=None)
+345: 
+346:         if npu_config.dump_fx_graph and traced_graph is not None:
+347:             new_compile_kwargs = create_compile_kwargs(final_kernel, fx_call_args, fx_args)
+348:             if new_compile_kwargs:
+349:                 compile_kwargs |= new_compile_kwargs
+350:                 fx_dump_path = os.path.join(npu_config.traced_fx_graph_cache, traced_graph_hash)
+
+===== torch_npu/_inductor/codegen/npu_combined_scheduling.py =====
+...
+179:             scheduler.completed_operations.update(group.get_operation_names())
+180: 
+181:     def codegen_node(self, node: FusedSchedulerNode | SchedulerNode):
+182:         removed_buffers = V.graph.removed_buffers.copy()
+183:         inplaced_to_remove = V.graph.inplaced_to_remove.copy()
+184:         kernel_count = metrics.generated_kernel_count
+185:         try:
+186:             return self._triton_scheduling.codegen_node(node)
+187:         except Exception:
+188:             metrics.generated_kernel_count = kernel_count
+189:             log.debug(
+190:                 "index codegen for node %s failed, falling back to no-linear codegen",
+191:                 node,
+192:                 exc_info=True,
+193:             )
+194:         # A failed fused kernel may have marked intermediates as kernel-local.
+195:         # Split fallback kernels need those buffers to be materialized again.
+196:         V.graph.removed_buffers.clear()
+197:         V.graph.removed_buffers.update(removed_buffers)
+198:         V.graph.inplaced_to_remove.clear()
+199:         V.graph.inplaced_to_remove.update(inplaced_to_remove)
+200:         snodes = self._regroup_for_nolinear([node])
+201:         groups = self._split_nolinear_nodes(snodes)
+202:         return self._codegen_nolinear_groups(node, groups)
+203: 
+204:     def benchmark_fused_nodes(self, nodes):
+205:         try:
+206:             return self._triton_scheduling.benchmark_fused_nodes(nodes)
+207:         except Exception:
+208:             log.debug(
+209:                 "linear benchmark_fused_nodes for nodes %s raise error, fallback to origin benchmark_fused_nodes",
+210:                 {n.get_name() for n in nodes},
+211:                 exc_info=True,
+212:             )
+213:         snodes = list(dict.fromkeys(snode for node in nodes for snode in node.get_nodes()))
+214:         original_groups = [(snode, snode.group) for snode in snodes]
+215:         try:
+216:             self._regroup_for_nolinear(nodes)
+217:             groups = self._split_nolinear_nodes(snodes)
+218:             if len(groups) != 1:
+219:                 # A split kernel is not the fused candidate being benchmarked.
+220:                 return float("inf"), ""
+221:             return self._nolinear_triton_scheduling.benchmark_fused_nodes(groups[0].get_nodes())
+222:         finally:
+223:             for snode, group in original_groups:
+224:                 snode.group = group
+225: 
+226:     def benchmark_codegened_module(self, module):
+227:         if isinstance(module, FusedCATLASSBenchmarkRequest):
+228:             return module.benchmark()
+229:         return self._triton_scheduling.benchmark_codegened_module(module)
+230: 
+231:     def generate_kernel_code_from_nodes(self, nodes, benchmark_kernel=False, hint_override=None):
+232:         if self._catlass_scheduling.is_catlass_template(nodes[0]):
+233:             return self._catlass_scheduling.generate_kernel_code_from_nodes(
+234:                 nodes, benchmark_kernel, hint_override
+235:             )
+236:         return self._triton_scheduling.generate_kernel_code_from_nodes(
+237:             nodes, benchmark_kernel, hint_override
+238:         )
+239: 
+240:     def codegen_combo_kernel(self, node) -> None:
+241:         subkernel_nodes = node.get_subkernel_nodes()
+242:         # The 2.13 scheduler always attempts index codegen first; the legacy
+243:         # linear-mode configuration and its predicate no longer exist.
+244:         kernel_count = metrics.generated_kernel_count
+245:         original_groups = [
+246:             (snode, snode.group)
+247:             for subkernel_node in subkernel_nodes
+248:             for snode in subkernel_node.get_nodes()
+249:         ]
+250:         original_groups.extend(
+251:             (subkernel_node, subkernel_node.group)
+252:             for subkernel_node in subkernel_nodes
+253:         )
+254:         try:
+255:             group_fn = self._nolinear_triton_scheduling.group_fn
+256:             for subkernel_node in subkernel_nodes:
+257:                 # get_nodes() is flattened, whereas get_subkernel_nodes()
+258:                 # contains fused groups. Zipping them assigns later groups
+259:                 # the dimensions of an unrelated node as soon as one
+260:                 # subkernel has multiple nodes.
+261:                 subnodes = subkernel_node.get_nodes()
+262:                 for snode in subnodes:
+263:                     snode.group = (snode.group[0], group_fn(snode._sizes))
+264:                 subkernel_node.group = max(
+265:                     subnodes, key=lambda snode: int(snode.is_reduction())
+266:                 ).group
+267:             return self._triton_scheduling.codegen_combo_kernel(node)
+268:         except Exception:
+269:             metrics.generated_kernel_count = kernel_count
+270:             for snode, group in original_groups:
+271:                 snode.group = group
+272:             log.debug(
+273:                 "linear combo codegen for node %s raise error, "
+274:                 "fallback to individual kernels",
+275:                 node,
+276:                 exc_info=True,
+277:             )
+278: 
+279:         # Recompute lifetimes at the ordinary kernel boundaries, just as the
+280:         # no-linear fallback does. Restoring the whole combo's pending frees
+281:         # after that fallback would emit a second del for graph inputs.
+282:         scheduler = self.scheduler
+283:         future_used_buffers = OrderedSet(
+284:             scheduler.mutation_real_name.get(name, name)
+285:             for name in node.used_or_aliased_buffer_names()
+286:         ) - node.last_usage
+287:         for subkernel_node in reversed(subkernel_nodes):
+288:             subkernel_node.set_last_usage(future_used_buffers, scheduler.mutation_real_name)
+289:             future_used_buffers.update(subkernel_node.last_usage)
+290:         scheduler.buffer_names_to_free.difference_update(node.last_usage)
+291:         for subkernel_node in subkernel_nodes:
+292:             scheduler.buffer_names_to_free.update(subkernel_node.last_usage)
+293:             self.codegen_node(subkernel_node)
+
+===== torch_npu/_inductor/compile_options.py =====
+...
+22: 
+23: 
+24: def register_npu_backend(
+25:     scheduling, wrapper_codegen, cpp_wrapper_codegen=None, backend_config=None
+26: ):
+27:     """Register the npu codegen backend and its device config.
+28: 
+29:     backend_config: a backend's own ConfigModule (e.g. triton_experimental's
+30:     ncfg). On torch without pytorch#194998 it keeps the device config slot,
+31:     so its values stay in the FX graph cache key exactly as before. On torch
+32:     with pytorch#194998 this module owns the slot for the "npu.*" option
+33:     routing, and backend_config is registered under its own module name so
+34:     the FX cache key snapshot and the out-of-process config transport (both
+35:     per-module upstream) keep covering it.
+36:     """
+37:     # import inside the function: install_config_module above moves
+38:     # module-level values of config types into _config, which would delete
+39:     # the name from this module's globals.
+40:     from torch._inductor.codegen.common import (
+41:         custom_backend_codegen_configs,
+42:         register_backend_for_device,
+43:     )
+44:     from torch_npu._compat.inductor import namespaced_compile_options
+45: 
+46:     if namespaced_compile_options():
+47:         device_custom_config = sys.modules[__name__]
+48:         if backend_config is not None and backend_config is not sys.modules[__name__]:
+49:             # keeps the backend config in the registry under its own module
+50:             # name: upstream collects and restores these per module
+51:             custom_backend_codegen_configs[backend_config.__name__] = backend_config
+52:     else:
+53:         device_custom_config = backend_config
+54:     register_backend_for_device(
+55:         "npu",
+56:         scheduling,
+57:         wrapper_codegen,
+58:         cpp_wrapper_codegen,
+59:         device_custom_config=device_custom_config,
+60:     )
+
+===== torch_npu/_inductor/codegen/triton.py =====
+...
+975:         return inductor_meta
+976: 
+977:     def codegen_kernel(self, name=None):
+978:         """
+979:         codegen triton kernel without linear and loop
+980:         """
+981: 
+982:         kernel_src = super().codegen_kernel()
+983:         # 2. find inductor_meta str
+984:         inductor_meta_str = next(
+985:             (line for line in kernel_src.splitlines() if "inductor_meta" in line),
+986:             None,
+987:         )
+988:         inductor_meta = eval(inductor_meta_str.strip().split("=", 1)[1].rstrip(","))
+989:         new_inductor_meta = self.add_npu_inductor_meta(inductor_meta)
+990:         patched_kernel = kernel_src.replace(
+991:             inductor_meta_str, f"    inductor_meta={new_inductor_meta},"
+992:         )
+993:         return patched_kernel
+994: 
+995: 
+996: class NPUIndexTritonKernel(TritonKernel):
+997:     """
+998:     NPU triton kernel with linear and block_sub loop
+999:     """
+1000: 
+1001:     kexpr = npu_texpr
+1002:     overrides = NPUTritonKernelOverrides
+1003: 
+1004:     @classmethod
+1005:     @functools.lru_cache(None)
+1006:     def gen_common_triton_imports(cls) -> str:
+1007:         imports = IndentedBuffer()
+1008:         imports.splice(super().gen_common_triton_imports())
+1009:         imports.splice(
+1010:             """
+1011:             import torch
+1012:             import torch_npu
+1013:             if not torch_npu.npu.is_initialized() and torch_npu.npu._is_in_bad_fork():
+1014:                 torch_npu.npu._initialized = True
+1015:             from torch_npu._inductor.runtime import triton_heuristics as triton_heuristics
+1016:             from torch_npu._inductor.runtime import triton_helpers
+1017:             from torch_npu._inductor.runtime.triton_helpers import libdevice, extension, math as tl_math
+1018:             """
+1019:         )
+1020:         return imports.getvalue()
+1021: 
+1022:     def __init__(
+1023:         self,
+1024:         tiling: dict[str, sympy.Expr],
+1025:         min_elem_per_thread=0,
+1026:         optimize_mask=True,
+1027:         fixed_config: FixedTritonConfig | None = None,
+1028:         allow_grouped_autotune: bool = True,
+1029:         **kwargs,
+1030:     ):
+1031:         # Set before construction selects split axes and builds grouped plans.
+1032:         self.allow_grouped_autotune = allow_grouped_autotune
+1033:         super().__init__(
+1034:             tiling=tiling,
+1035:             min_elem_per_thread=min_elem_per_thread,
+1036:             optimize_mask=optimize_mask,
+1037:             fixed_config=fixed_config,
+1038:             **kwargs,
+1039:         )
+1040:         self.first_node = True
+1041:         self.inside_high_order_reduction = False
+1042:         self.low_dims = set()  # noqa: set_linter
+1043:         self.split_axis = []
+1044:         self.tiling_axis = []
+1045:         self.range_tree_nodes_removed: dict[sympy.Symbol, IterationRangesEntry] = {}
+1046:         self.range_tree_nodes_substituted = {}
+1047:         self.expr_substituted = {}
+1048:         self.axioms_index_map = {}
+1049:         self.dim_symbol_index_map = {}
+1050:         self.dim_up_temp = set()
+1051:         self.symbol_range_map = {}
+1052:         self.sorted_axis = []
+1053:         self.prefix: IndentedBuffer = IndentedBuffer()
+1054:         self.index_analysis = {}  # var_list -> indexAnalysis
+1055:         self.golden_var_list = None
+1056:         self.reduce_analysis = None
+1057:         self.load_store_indexing = None
+1058:         if npu_config.is_ascend950:
+1059:             self.npu_kernel_type = NPUKernelType.SIMT_TEMPLATE
+1060:         else:
+1061:             self.npu_kernel_type = NPUKernelType.SIMD
+1062:         self.current_subblock_axis = set()  # noqa: set_linter
+1063:         self.node_schedule = self.features.node_schedule
+1064:         # Independent set to track only genuine reduction result variables,
+1065:         # avoiding pollution from outside_loop_vars (see upstream store() L2296)
+1066:         self.reduction_result_vars: OrderedSet[Any] = OrderedSet()
+1067:         # Keep buffer liveness until final rendering, including combo codegen.
+1068:         # A list keeps indentation deferred without losing dead-store filtering.
+1069:         self._deferred_reduction_stores: list[DeferredLine] = []
+1070:         self.permute_continous_reduction = False
+1071:         self.post_reduction_loads: IndentedBuffer = IndentedBuffer()
+1072:         self.post_reduction_compute: IndentedBuffer = IndentedBuffer()
+1073:         self.post_reduction_stores: IndentedBuffer = IndentedBuffer()
+1074:         self._original_loads_buf: IndentedBuffer | None = None
+1075:         self._original_compute_buf: IndentedBuffer | None = None
+1076:         self._original_stores_buf: IndentedBuffer | None = None
+...
+2445:         }
+2446: 
+2447:     def _get_heuristic(self):
+2448:         # not support fixed config and cooperative_reduction yet
+2449:         if self.persistent_reduction:
+2450:             if not self.inside_reduction:
+2451:                 raise RuntimeError("assert self.inside_reduction to be true")
+2452:             return "persistent_reduction"
+2453:         elif self.inside_reduction:
+2454:             return "reduction"
+2455:         return "pointwise"
+2456: 
+2457:     # modify triton_meta, inductor_meta , etc.
+2458:     def codegen_kernel(self, name=None):
+2459:         """
+2460:         codegen triton kernel with linear and loop
+2461:         """
+2462: 
+2463:         code = IndentedBuffer()
+2464:         size_hints = self.get_size_hints()
+2465:         heuristics = self._get_heuristic()
+2466:         if name is None:
+2467:             code.splice(self.gen_common_triton_imports())
+2468: 
+2469:             if config.benchmark_kernel:
+2470:                 code.splice(self.imports_for_benchmark_kernel())
+2471: 
+2472:         argdefs, _, signature, _ = self.args.python_argdefs()
+2473: 
+2474:         for i, arg in enumerate(signature):
+2475:             if isinstance(arg, SizeArg):
+2476:                 symbol = cast(sympy.Symbol, arg.expr)
+2477:                 if symbol in V.graph.sizevars.inv_precomputed_replacements:
+2478:                     signature[i] = SizeArg(
+2479:                         arg.name, V.graph.sizevars.inv_precomputed_replacements[symbol]
+2480:                     )
+2481: 
+2482:         triton_meta_signature = signature_to_meta(
+2483:             signature, size_dtype=self.index_dtype, argdefs=argdefs
+2484:         )
+2485: 
+2486:         triton_meta = {
+2487:             "signature": triton_meta_signature,
+2488:             "device": DeviceProperties.create(V.graph.get_current_device_or_throw()),
+2489:             "constants": {},
+2490:             **TritonKernel.triton_meta_common(),
+2491:             # special config for NPU, specify compile target
+2492:             "mix_mode": "aiv",
+2493:         }
+2494: 
+2495:         inductor_meta = self.create_inductor_meta()
+2496:         # Keep equal-to-one arguments consistent with their specialized signature,
+2497:         # including when the checker compiles TTIR before a runtime launch.
+2498:         for arg_num in equal_1_arg_indices(signature):
+2499:             triton_meta["constants"][signature[arg_num].name] = 1
+2500:         self.triton_meta = triton_meta
+2501:         self.inductor_meta = inductor_meta
+2502:         self._disable_grouped_autotune_if_unsupported(inductor_meta)
+2503:         inductor_meta.update(self._kernel_cost_meta())
+2504: 
+2505:         self.gen_numel_args(signature, triton_meta, triton_meta_signature, argdefs)
+2506: 
+2507:         triton_meta["configs"] = [config_of(signature)]
+2508: 
+2509:         if inductor_meta.get("group_enabled", False):
+2510:             try:
+2511:                 inductor_meta.update(
+2512:                     self.build_grouped_benchmark_arg_specs(argdefs, signature)
+2513:                 )
+2514:                 inductor_meta.setdefault("extra_launcher_arg_specs", ())
+2515:                 self._disable_grouped_autotune_if_benchmark_too_large(
+2516:                     inductor_meta,
+2517:                     V.graph.get_current_device_or_throw(),
+2518:                 )
+2519:             except RuntimeError as exc:
+2520:                 self._disable_grouped_autotune(inductor_meta, str(exc))
+2521: 
+2522:         self._record_legacy_auto_blockify_for_grouped_fallback(inductor_meta)
+2523: 
+2524:         # add in tiling args
+2525:         self.add_autotune_args(argdefs, signature, triton_meta_signature)
+2526:         # for scalar codegen
+2527:         if len(self.range_tree_nodes) == 0:
+2528:             self.write_scalar()
+2529:         else:
+2530:             self.codegen_body()
+2531: 
+2532:         for helper in self.helper_functions:
+2533:             code.writeline("")
+2534:             code.splice(helper)
+2535: 
+2536:         # Note: override original triton_heuristics
+2537:         if self.inside_reduction:
+2538:             reduction_hint = self.features.get_reduction_hint()
+2539:             heuristics_line = f"""
+2540:                 @triton_heuristics.{heuristics}(
+2541:                     size_hints={size_hints},
+2542:                     reduction_hint={reduction_hint},
+2543:                     filename=__file__,
+2544:                     triton_meta={triton_meta!r},
+2545:                     inductor_meta={inductor_meta!r}
+2546:                 )
+2547:                 @triton.jit
+2548:             """
+2549:         else:
+2550:             tile_hint = ""
+2551:             if len(size_hints) == 2:
+2552:                 if len(signature) == 4:  # input, output and 2 args
+2553:                     tile_hint = "tile_hint=TileHint.SQUARE,"
+2554:                 else:
+2555:                     tile_hint = "tile_hint=TileHint.DEFAULT,"
+2556:             heuristics_line = f"""
+2557:                 @triton_heuristics.{heuristics}(
+
+===== torch_npu/_inductor/codegen/split_tiling.py =====
+...
+101:     # Split 原则4 ：切分轴的总numel 要超过 aicore总数。切分轴的数量最好不要超过3个(triton 最多支持三维发射）， 因此 如果一点要超， 需要维度合并。
+102:     # Split 原则5 ：Kernel如果包含cat算子，尾轴不做切分。
+103:     def select_split_axis(self):
+104:         self.kernel.split_axis.clear()
+105: 
+106:         # total numel exceed aicore or total split axis exceed 3
+107:         def has_dynamic_split_axis():
+108:             return any(
+109:                 not isinstance(axis.length, sympy.Integer)
+110:                 for axis in self.kernel.split_axis
+111:             )
+112: 
+113:         def is_reduction_kernel():
+114:             return any(axis.prefix == "r" for axis in self.kernel.sorted_axis)
+115: 
+116:         def only_low_dim_candidates_remain():
+117:             for axis in self.kernel.sorted_axis:
+118:                 if axis.prefix == "r" or axis in self.kernel.split_axis:
+119:                     continue
+120:                 if axis.sorted_order not in self.kernel.low_dims:
+121:                     return False
+122:             return True
+123: 
+124:         def meet_stop_condition():
+125:             sv = V.graph.sizevars
+126:             current_numels = self.total_split_numels(self.kernel.split_axis)
+127:             if (
+128:                 npu_config.enable_symbolic_shape_group_autotune
+129:                 and getattr(self.kernel, "allow_grouped_autotune", True)
+130:                 and self.kernel.split_axis
+131:                 and is_reduction_kernel()
+132:                 and has_dynamic_split_axis()
+133:                 and only_low_dim_candidates_remain()
+134:             ):
+135:                 return True
+136:             try:
+137:                 val = sv.optimization_hint(current_numels)
+138:             except TypeError:
+139:                 if len(self.kernel.sorted_axis) <= 2:
+140:                     return len(self.kernel.split_axis) >= 1
+141:                 else:
+142:                     return len(self.kernel.split_axis) >= 2
+143:             vector_core = _num_vector_core()
+144:             if (
+145:                 val >= vector_core
+146:                 and val // ((val + vector_core - 1) // vector_core) > vector_core * 0.8
+147:             ):
+148:                 return True
+149:             if len(self.kernel.split_axis) == 3:
+150:                 return True
+151:             return False
+152: 
+153:         def select_one_split_axis(not_reduction=True, not_low_dims=True):
+154:             for axis in self.kernel.sorted_axis:
+155:                 if not_reduction and axis.prefix == "r":
+156:                     continue
+157:                 if not_low_dims and axis.sorted_order in self.kernel.low_dims:
+158:                     continue
+159:                 if axis in self.kernel.split_axis:
+160:                     continue
+161:                 axis.is_split_axis = True
+162:                 return axis
+163:             return None
+164: 
+165:         count = 0
+166:         while not meet_stop_condition():
+167:             count += 1
+168:             axis = select_one_split_axis(not_reduction=True, not_low_dims=True)
+169:             if axis is not None:
+170:                 self.kernel.split_axis.append(axis)
+171:                 continue
+172:             axis = select_one_split_axis(not_reduction=True, not_low_dims=False)
+173:             if axis is not None:
+174:                 self.kernel.split_axis.append(axis)
+175:                 continue
+176:             if count > 10:
+177:                 break
+178: 
+179:         if not self.kernel.split_axis and self.kernel.sorted_axis:
+180:             only_axis = self.kernel.sorted_axis[0]
+181:             # A dynamic full reduction (every axis is a reduction axis, at least one
+182:             # dynamic) must keep grid==1: making a reduction axis a grid split axis
+183:             # gives grid>1 with no cross-core combine (A5), which overwrites the
+184:             # scalar output. Leave split_axis empty (loop the runtime numel with a
+185:             # tail mask). Covers pure 1D ([n]) and full reduce with extra static
+186:             # reduction dims ([n, 1024]).
+187:             all_reduction = all(
+188:                 axis.prefix == "r" for axis in self.kernel.sorted_axis
+189:             )
+190:             any_dynamic = any(
+191:                 not isinstance(axis.length, sympy.Integer)
+192:                 for axis in self.kernel.sorted_axis
+193:             )
+194:             is_dynamic_full_reduction = all_reduction and any_dynamic
+195:             if not is_dynamic_full_reduction:
+196:                 self.kernel.split_axis.append(only_axis)
+197:                 only_axis.is_split_axis = True
+198: 
+199:         self.kernel.split_axis.sort(reverse=True, key=self.key)
+200:         for i, x in enumerate(self.kernel.split_axis):
+201:             x.split_order = i
+202: 
+
+===== torch_npu/_inductor/runtime/triton_heuristics.py =====
+...
+270: 
+271: @dataclasses.dataclass
+272: class GridNpu(GridExpr):
+273:     numels: List[str] = None
+274:     mode: Literal["python", "cpp"] = "python"
+275: 
+276:     def generate(self, meta: dict[str, int]) -> None:
+277:         numel_args = []
+278:         split_axis = meta.get("split_axis", None)
+279:         split_blocks = meta.get("split_blocks", None)
+280:         if split_axis is None or split_blocks is None:
+281:             raise RuntimeError(
+282:                 f"Could not get split_axis or split_blocks from meta {meta}."
+283:             )
+284: 
+285:         def grid_fn(i):
+286:             if i >= len(split_axis):
+287:                 return "1"
+288:             axis = split_axis[i]
+289:             block = split_blocks[i]
+290:             if block is None or block == 1:
+291:                 return self.numels[axis]
+292:             if self.mode == "python":
+293:                 return f"({self.numels[axis]} + {block} - 1) // {block}"
+294:             else:
+295:                 return f"(({self.numels[axis]} + ({block} - 1)) / ({block}))"
+296: 
+297:         self.x_grid = grid_fn(0)
+298:         self.y_grid = grid_fn(1)
+299:         self.z_grid = grid_fn(2)
+300: 
+301: def is_namedtuple_isinstance(obj):
+302:     return (
+303:         isinstance(obj, tuple) and
+304:         hasattr(obj, '_fields') and
+305:         hasattr(obj, '_asdict') and
+306:         callable(obj._asdict)
+307:     )
+308: 
+309: class GridExprNpu(GridExpr):
+310:     @staticmethod
+311:     def from_meta_and_set_numel(
+312:         inductor_meta: dict[str, Any],
+313:         cfg: Union[Config, dict[str, int]],
+314:         numels: List[str],
+315:         mode: Literal["python", "cpp"] = "python",
+316:     ) -> GridExpr:
+317:         grid_type = inductor_meta["grid_type"]
+318: 
+319:         grid_cls = globals().get(grid_type)
+320:         if grid_cls is None:
+321:             return GridExpr.from_meta(inductor_meta, cfg, mode)
+322:         if not issubclass(grid_cls, GridNpu):
+323:             grid = grid_cls(inductor_meta=inductor_meta, mode=mode)
+324:             if isinstance(cfg, Config):
+325:                 cfg = config_to_dict(cfg)
+326:             grid.generate(cfg)
+327:             return grid
+328: 
+329:         grid = grid_cls(inductor_meta=inductor_meta, mode=mode, numels=numels)
+330:         runtime_block_names = tuple(inductor_meta.get("runtime_block_arg_names", ()))
+331:         if runtime_block_names:
+332:             axis_names = tuple(inductor_meta.get("axis_names", ()))
+333:             runtime_axes = []
+334:             for block_name in runtime_block_names:
+335:                 axis_name = block_name.removesuffix("BLOCK").lower()
+336:                 if axis_name not in axis_names:
+337:                     raise RuntimeError(
+338:                         f"runtime block grid path could not resolve runtime block axis {axis_name}"
+339:                     )
+340:                 runtime_axes.append(axis_names.index(axis_name))
+341: 
+342:             def runtime_grid_fn(i):
+343:                 if i >= len(runtime_axes):
+344:                     return "1"
+345:                 axis = runtime_axes[i]
+346:                 block = runtime_block_names[i]
+347:                 if block is None or block == 1:
+348:                     return numels[axis]
+349:                 if mode == "python":
+350:                     return f"({numels[axis]} + {block} - 1) // {block}"
+351:                 return f"(({numels[axis]} + ({block} - 1)) / ({block}))"
+352: 
+353:             grid.x_grid = runtime_grid_fn(0)
+354:             grid.y_grid = runtime_grid_fn(1)
+355:             grid.z_grid = runtime_grid_fn(2)
+356:             return grid
+357: 
+358:         if isinstance(cfg, Config):
+359:             cfg = config_to_dict(cfg)
+360:         grid.generate(cfg)
+361:         return grid
+362: 
+363:     @staticmethod
+364:     def from_grouped_meta_and_numel(
+365:         inductor_meta: dict[str, Any],
+366:         cfg: Union[Config, dict[str, int]],
+367:         numels: List[str],
+368:         runtime_block_names: tuple[str, ...],
+369:         mode: Literal["python", "cpp"] = "python",
+370:     ) -> GridExpr:
+371:         grid_type = inductor_meta["grid_type"]
+...
+4134:     )
+4135: 
+4136: def reduction(
+4137:     size_hints,
+4138:     reduction_hint=False,
+4139:     triton_meta=None,
+4140:     filename=None,
+4141:     inductor_meta=None,
+4142: ):
+4143:     """args to @triton.heuristics()"""
+4144:     inductor_meta = {} if inductor_meta is None else inductor_meta
+4145:     inductor_meta["reduction_hint"] = reduction_hint
+4146:     if triton_meta is None:
+4147:         raise RuntimeError("assert triton_meta is not None")
+4148: 
+4149:     configs = triton_config_npu_index(
+4150:         size_hints,
+4151:         inductor_meta=inductor_meta,
+4152:         triton_meta=triton_meta,
+4153:         is_reduction=True,
+4154:     )
+4155: 
+4156:     return cached_autotune(
+4157:         size_hints,
+4158:         [
+4159:             *configs,
+4160:         ],
+4161:         triton_meta=triton_meta,
+4162:         inductor_meta=inductor_meta,
+4163:         filename=filename,
+4164:         heuristic_type=HeuristicType.REDUCTION,
+4165:     )
+4166: 
+4167: def persistent_reduction(
+4168:     size_hints,
+4169:     reduction_hint=False,
+4170:     triton_meta=None,
+4171:     filename=None,
+4172:     inductor_meta=None,
+4173: ):
+4174:     inductor_meta = {} if inductor_meta is None else inductor_meta
+4175:     inductor_meta["reduction_hint"] = reduction_hint
+4176: 
+4177:     configs = triton_config_npu_index(
+4178:         size_hints,
+4179:         inductor_meta=inductor_meta,
+4180:         is_reduction=True,
+4181:         triton_meta=triton_meta,
+4182:         is_persistent_reduction=True,
+4183:     )
+4184: 
+4185:     return cached_autotune(
+4186:         size_hints,
+4187:         configs,
+4188:         triton_meta=triton_meta,
+4189:         inductor_meta=inductor_meta,
+4190:         filename=filename,
+4191:         heuristic_type=HeuristicType.PERSISTENT_REDUCTION,
+4192:     )
+4193: 
+4194: 
+4195: def template(
+4196:     num_stages,
+4197:     num_warps,
+4198:     triton_meta,
+4199:     num_consumer_groups=0,
+4200:     num_buffers_warp_spec=0,
+4201:     filename=None,
+4202:     inductor_meta=None,
+4203:     **kwargs,
+4204: ):
+4205:     """
+4206:     Compile a triton template
+4207:     """
+4208:     # Prepare the base configuration
+4209:     config_args = {
+4210:         "num_stages": num_stages,
+4211:         "num_warps": num_warps,
+4212:     }
+4213: 
+4214:     return cached_autotune(
+4215:         None,
+4216:         [triton.Config({}, **config_args)],
+4217:         triton_meta=triton_meta,
+4218:         inductor_meta=inductor_meta,
+4219:         heuristic_type=HeuristicType.TEMPLATE,
+4220:         filename=filename,
+4221:     )
+4222: 
+4223: 
+4224: def foreach(size_hints, triton_meta, num_warps, filename=None, inductor_meta=None):
+4225:     """
+4226:     Compile a triton foreach kernel
+4227:     """
+4228:     inductor_meta = {} if inductor_meta is None else inductor_meta
+4229: 
+4230:     configs = triton_config_npu_index(
+4231:         size_hints,
+4232:         inductor_meta=inductor_meta,
+4233:         is_reduction=True,
+4234:         triton_meta=triton_meta,
+4235:         is_persistent_reduction=True,
+
+===== torch_npu/_inductor/runtime/triton_helpers.py =====
+...
+129: 
+130: @triton.jit
+131: def welford(mean, m2, weight, dim):
+132:     """Override upstream welford to avoid tl.reduce with 3 source operands.
+133: 
+134:     NPU's Triton compiler (TritonOpConverter.cpp) asserts srcs.size() <= 2,
+135:     but upstream welford uses tl.reduce((mean,m2,weight), dim, welford_combine)
+136:     with 3 operands. This version decomposes into 3 single-operand reduces.
+137:     """
+138:     sum_x = weight * mean
+139:     sum_x2 = m2 + weight * mean * mean
+140:     total_sum_x = tl.reduce(sum_x, dim, _welford_sum_combine)
+141:     total_sum_x2 = tl.reduce(sum_x2, dim, _welford_sum_combine)
+142:     total_weight = tl.reduce(weight, dim, _welford_sum_combine)
+143:     new_mean = tl.where(total_weight == 0.0, 0.0, total_sum_x / total_weight)
+144:     new_m2 = total_sum_x2 - total_weight * new_mean * new_mean
+145:     return new_mean, new_m2, total_weight
+
+===== triton/backends/ascend/compiler.py =====
+...
+1263: 
+1264: @dataclass(frozen=True)
+1265: class NPUOptions:
+1266:     debug: bool = False
+1267:     sanitize_overflow: bool = True
+1268:     # Backend-only construction input.  AscendBackend.parse_options injects
+1269:     # GPUTarget.arch and never forwards a user-supplied compile option.
+1270:     arch: InitVar[str] = ""
+1271:     rule_mask: InitVar[int] = DEFAULT_GRAPH_OPTIMIZATION_RULE_MASK
+1272:     # This becomes compiler metadata, so its name must also be valid for the
+1273:     # namedtuple constructed by CompiledKernel on Python 3.10.
+1274:     target_arch: str = field(init=False, repr=False)
+1275: 
+1276:     cluster_dims: tuple = (1, 1, 1)
+1277:     num_warps: int = 32
+1278:     num_ctas: int = 1
+1279:     # Keep an omitted stage count distinct from an explicit mode.
+1280:     num_stages: Optional[int] = None
+1281:     # Ascend threads-per-warp is a backend capability, not a compile option.
+1282:     warp_size: int = field(default=32, init=False)
+1283:     ir_override: Optional[str] = None  # filename of a user-defined IR (*.{ttir|ttadapter|npubin})
+1284: 
+1285:     # Deprecated constructor-only compatibility input.  The supplied value is
+1286:     # ignored and replaced with the lowering selector derived from GPUTarget.arch.
+1287:     compile_on_910_95: Optional[bool] = field(default=None, repr=False, kw_only=True)
+1288:     enable_warp_specialization: bool = False
+1289:     enable_persistent: bool = False
+1290:     optimize_epilogue: bool = False
+1291:     enable_fp_fusion: bool = True
+1292:     launch_cooperative_grid: bool = False
+1293:     backend_name: str = 'cann'
+1294:     instrumentation_mode: str = ""
+1295:     # Proton profile scratch bytes per block; 0 (default) keeps the
+1296:     # driver-side profile scratch path inert.
+1297:     profile_scratch_size: int = 0
+1298:     enable_graph_optimize: bool = True
+1299:     supported_fp8_dtypes: Tuple[str] = ("fp8e5", "fp8e4b15", "fp8e4nv", "fp8e4b8", "fp8e5b16")
+1300:     deprecated_fp8_dtypes: Tuple[str] = ()
+1301:     deprecated_fp8_dot_operand_dtypes: Tuple[str] = ()
+1302:     vf_merge_level: int = 1
+1303:     default_dot_input_precision: str = "ieee"
+1304:     allowed_dot_input_precisions: Tuple[str] = ("ieee", "hf32")
+1305:     max_num_imprecise_acc_default: int = 0
+1306:     extern_libs: dict = None
+1307:     # Backend-managed BiSheng arguments. Keep the name discoverable so legacy
+1308:     # launch keywords are accepted, but never forward a user-supplied value.
+1309:     bisheng_options: Optional[str] = field(default=None, init=False)
+1310:     multibuffer: bool = True
+1311:     # Public dictionaries are stored as sorted pairs for hashing and JSON caches.
+1312:     multibuffer_mode: Optional[Union[Dict[str, int], Tuple[Tuple[str, int], ...]]] = None
+1313:     vf_fusion_mode: str = None
+1314:     enable_ubuf_saving: bool = None
+1315:     disable_size_align_for_cast: bool = None
+1316:     enable_preload: bool = None
+1317:     enable_auto_bind_sub_block: bool = None
+1318:     disable_tightly_coupled_buffer_reuse: bool = False
+1319:     enable_hivm_auto_cv_balance: bool = None
+1320:     # Temporary 910_95 switch; the NPU compiler plans to make this default in Q4.
+1321:     enable_hivm_batch_matmul: bool = False
+1322:     # Only takes effect on the Ascend 950 non-pure-SIMT BiShengIR compilation path.
+1323:     enable_vf_stack_limit: bool = False
+1324:     sync_solver: bool = None
+1325:     unit_flag: bool = None
+1326:     enable_flatten: bool = None
+1327:     enable_auto_vectorize_v2: bool = None
+1328:     auto_vectorize_v2_max_fused_ops_num: int = None
+1329:     prevec_max_fused_ops_num: int = None
+1330:     inject_barrier_all: bool = None
+1331:     inject_block_all: bool = None
+1332:     limit_auto_multi_buffer_only_for_local_buffer: bool = None
+1333:     limit_auto_multi_buffer_of_local_buffer: str = None
+1334:     limit_auto_multi_buffer_buffer: str = None
+1335:     set_workspace_multibuffer: int = None
+1336:     tile_mix_vector_loop: int = None
+1337:     tile_mix_cube_loop: int = None
+1338:     disable_auto_inject_block_sync: bool = None
+1339:     enable_mixed_cv: bool = None
+1340:     enable_dynamic_cv_pipeline: bool = None
+1341:     enable_tla_mode: bool = field(default=False, init=False)
+1342:     enable_cube_block_merge: bool = False
+1343:     hfusion_enable_multiple_consumer_fusion: bool = None
+1344:     buf_slot_num_of_veccore: int = None
+1345:     buf_slot_num_of_crosscore: int = None
+1346:     buf_slot_num_of_gm: int = None
+1347: 
+1348:     # plan memory strategy: "default" (default) or "largest-first"
+1349:     plan_memory_strategy: str = None
+1350:     # Internal launch metadata.  The mode is initially derived from
+1351:     # compile_mode, then replaced with the mode emitted by TritonToLinalg.
+1352:     parallel_mode: str = field(default="simd", init=False)
+1353:     # Internal pure-SIMT state, derived from the effective lowering mode.
+1354:     is_pure_simt: bool = field(default=False, init=False)
+1355:     # Only takes effect on the pure-SIMT path.
+1356:     shared_mem_dynamic_size: int = None
+1357:     # Ascend 950 pure-SIMT-only option passed as -simt-optimization-mode
+1358:     # to bishengir-compile. Its value grammar belongs to the toolchain.
+1359:     # Individual digits are passed to various passes to control behavior,
+1360:     # and are parsed right-to-left.
+1361:     # For example, a value of 101 is interpreted as 0000101.
+1362:     # If left as 0, bishengir-compile sets this to 900101
+1363:     simt_optimization_mode: int = 0000000
+1364:     # Canonical modes: SIMD (D), SIMD with template-SIMT (P), and pure-SIMT
+...
+1654:             self.binary_ext = "npubin"
+1655: 
+1656:     def parse_options(self, opts) -> Any:
+1657:         # TODO: get available targets when building options?
+1658:         if self.target.backend == "npu":
+1659:             _warn_deprecated_ascend_env_vars()
+1660:             option_names = {
+1661:                 name
+1662:                 for name, option_field in NPUOptions.__dataclass_fields__.items()
+1663:                 if option_field.init and name not in {"arch", "compile_on_910_95"}
+1664:             }
+1665:             # Serialized NPUOptions include backend-only derived fields.  Use
+1666:             # those provenance markers instead of depending on every public
+1667:             # field being present, which changes whenever the dataclass evolves.
+1668:             internal_options = _is_internal_npu_options(opts, self.target.arch)
+1669:             # Normalize a copy, except for the legacy launch keyword below.
+1670:             # NPUOptions retains compatibility defaults for legacy names so
+1671:             # JIT and Inductor can still recognize them as compile options.
+1672:             normalized_opts = opts if internal_options else _remove_deprecated_npu_options(opts)
+1673:             frontend_kind = normalized_opts.get("_frontend_kind")
+1674:             if frontend_kind not in (None, "triton", "tla"):
+1675:                 raise ValueError(f"unsupported Ascend frontend kind: {frontend_kind!r}")
+1676:             args = {k: normalized_opts[k] for k in option_names if k in normalized_opts}
+1677:             options = NPUOptions(arch=self.target.arch, **args)
+1678:             # Frontend identity comes from the source.
+1679:             # A launch keyword alone cannot select TLA.
+1680:             object.__setattr__(options, "enable_tla_mode", frontend_kind == "tla")
+1681:             # DynamicCV is A5-only. A6 remains register-based but must not
+1682:             # enter the DynamicCV lowering or pass its compiler flags.
+1683:             if not _is_a5_target_arch(self.target.arch):
+1684:                 object.__setattr__(options, "enable_dynamic_cv_pipeline", False)
+1685:             elif options.enable_dynamic_cv_pipeline is None:
+1686:                 object.__setattr__(options, "enable_dynamic_cv_pipeline", options.compile_on_910_95)
+1687:             if not internal_options:
+1688:                 _normalize_bishengir_simt_optimization_for_context(options, normalized_opts)
+1689:                 # Community JIT rejects the legacy launch keyword "stream"
+1690:                 # even when options.__dict__ recognizes it. Consume it at
+1691:                 # the Ascend boundary; the returned compatibility field stays
+1692:                 # None and the runtime still selects the current stream.
+1693:                 opts.pop("stream", None)
+1694:         else:
+1695:             raise NotImplementedError(f"Backend '{self.target.backend}' is not supported. "
+1696:                                       "Please ensure the target backend is set to 'npu'.")
+1697:         return options
+1698: 
+1699:     def pack_metadata(self, metadata):
+1700:         # collect necessary metadata to launch kernels
+1701:         # TORCHINDUCTOR_UNIQUE_KERNEL_NAMES=1 could set unique name.
+1702:         # Get this name as the kernel_name to CANN runtime.
+1703:         # kernel_name is unique to Ascend backend and should not be public.
+1704:         # CANN runtime limits the length of kernel name <= 50.
+1705:         # Considering '\n' is appended, thus the real kernel name <= 49.
+1706:         KERNEL_NAME_MAX_LEN = 49
+1707:         kernel_name_orig = metadata.kernel_name
+1708:         if len(kernel_name_orig) > KERNEL_NAME_MAX_LEN:
+1709:             kernel_name = kernel_name_orig[-KERNEL_NAME_MAX_LEN:]
+1710:         else:
+1711:             kernel_name = kernel_name_orig
+1712:         return {
+1713:             "kernel_name": kernel_name,
+1714:             "hash": metadata.hash,
+1715:             "debug": metadata.debug,
+1716:             "tensor_kinds": metadata.tensor_kinds,
+1717:             "profile_scratch_size": getattr(metadata, "profile_scratch_size", 0),
+1718:             "num_warps": getattr(metadata, "num_warps", 0),
+1719:         }
+1720: 
+1721:     def get_codegen_implementation(self, options):
+1722:         # Note: a dict of functions is required to generate vendor-specific code piecies
+1723:         #       e.g. convert custom types like fp8e4b15
+1724:         codegen_fns = {"min_dot_size": min_dot_size(self.target)}
+1725:         return codegen_fns
+1726: 
+1727:     def load_dialects(self, ctx):
+1728:         from triton._C.libtriton import buffer_ir
+1729:         from triton._C.libtriton.ascend import ir as ascend_ir
+1730:         if distributed is not None:
+1731:             distributed.ir.load_dialects(ctx)
+1732:         buffer_ir.load_dialects(ctx)
+1733:         ascend_ir.load_dialects(ctx)
+1734:         ascend.load_dialects(ctx)
+1735:         if AscendBackend.instrumentation:
+1736:             AscendBackend.instrumentation.load_dialects(ctx)
+1737: 
+1738:     def add_stages(self, stages, options, language):
+1739:         if self.target.backend == "npu":
+1740:             if options.enable_tla_mode:
+1741:                 stages["ttir"] = lambda src, metadata: make_tla_ttir(src, metadata, options)
+1742:                 stages["ttadapter"] = lambda src, metadata: tla_to_ttadapter(src, metadata, options)
+1743:             else:
+1744:                 stages["ttir"] = lambda src, metadata: make_ttir(src, metadata, options)
+1745:                 if options.is_pure_simt:
+1746:                     stages["npubin"] = (lambda src, metadata: ttir_to_npubin(src, metadata, options))
+1747:                     return
+1748:                 stages["ttadapter"] = lambda src, metadata: ttir_to_linalg(src, metadata, options)
+1749:             if options.compile_on_910_95:
+1750:                 stages["npubin"] = (
+1751:                     lambda src, metadata: linalg_to_bin_enable_npu_compile_910_95(src, metadata, options))
+1752:             else:
+1753:                 stages["npubin"] = (
+1754:                     lambda src, metadata: linalg_to_bin_enable_npu_compile_A2_A3(src, metadata, options))
+1755:             stages["npubin"] = _with_debug_line(stages["npubin"], options)
+1756:         else:
+1757:             raise NotImplementedError(f"Backend '{self.target.backend}' is not supported. "
+1758:                                       "Please ensure the target backend is set to 'npu'.")
+1759: 
+1760:     @functools.lru_cache()
+1761:     def hash(self):
+1762:         # TODO fetch compiler version
+1763:         version_key = (self.target, _get_libdevice_compile_state())
+1764:         return str(version_key)
+1765: 
+1766:     def get_module_map(self) -> Dict[str, ModuleType]:
+1767:         from triton.language.extra.cann import libdevice
+1768: 
+1769:         return {"triton.language.extra.libdevice": libdevice}
+
+===== triton/backends/ascend/driver.py =====
+...
+305:         return ty_to_cpp(ty)
+306: 
+307:     def get_current_target(self):
+308:         backend = "npu"
+309:         arch = self.utils.get_arch()
+310:         warp_size = 0
+311:         return GPUTarget(backend, arch, warp_size)
+312: 
+313:     def get_current_device(self):
+314:         """
+315:         Get current device
+316:         """
+317:         import torch
+318:         return torch.npu.current_device()
+319: 
+320:     def get_active_torch_device(self):
+321:         import torch
+322:         return torch.device("npu", self.get_current_device())
+323: 
+324:     def set_current_device(self, device):
+325:         """
+326:         Set current device as the given device
+327:         """
+328:         import torch
+329:         return torch.npu.set_device(device)
+330: 
+331:     def get_current_stream(self, device: Optional[int] = None) -> int:
+332:         """
+333:         Get stream for current device
+334:         """
+335:         import torch
+336:         import torch_npu
+337:         if device is None:
+338:             device = torch.npu.current_device()
+339:         if hasattr(torch_npu._C, "_npu_getCurrentRawStreamNoWait"):
+340:             from torch_npu._C import _npu_getCurrentRawStreamNoWait
+341:             return _npu_getCurrentRawStreamNoWait(device)
+342:         else:
+343:             from torch_npu._C import _npu_getCurrentRawStream
+344:             return _npu_getCurrentRawStream(device)
+345: 
+346:     def get_benchmarker(self):
+347:         from triton.testing import do_bench
+348:         return do_bench
+349: 
+350:     def get_device_interface(self):
+351:         return get_backend_func("get_device_interface")
+352: 
+353:     def get_empty_cache_for_benchmark(self):
+354:         cache_size = 192 * 1024 * 1024
+355:         return get_backend_func("get_empty_tensor", cache_size // 4)
+356: 
+357:     def clear_cache(self, cache):
+358:         cache.zero_()
+
+===== triton/language/extra/cann/extension/core.py =====
+...
+326: 
+327: @builtin
+328: def sync_block_all(mode, event_id, _semantic=None):
+329:     """Performs global synchronization across all cores of a specified type.
+330: 
+331:     Inserts a sync barrier to resolve RAW, WAR, and WAW data hazards on shared global
+332:     memory across Cube cores, Vector cores, or both. Also supports sub-vector-level
+333:     synchronization within Vector cores.
+334: 
+335:     :param mode: Synchronization scope. One of:
+336:         ``"all_cube"`` — sync all Cube cores;
+337:         ``"all_vector"`` — sync all Vector cores;
+338:         ``"all"`` — sync all Cube and Vector cores;
+339:         ``"all_sub_vector"`` — sync between Vector sub-blocks.
+340:     :type mode: str
+341:     :param event_id: Event marker ID in range [0, 15].
+342:     :type event_id: int
+343:     """
+344:     mode = _unwrap_if_constexpr(mode)
+345:     event_id = _unwrap_if_constexpr(event_id)
+346:     assert isinstance(mode, str), f"mode: {mode} is not string"
+347:     assert isinstance(event_id, int) and (event_id >= 0) and (event_id < 16), f"event_id: {event_id} should be 0 ~ 15"
+348:     assert mode in ("all_cube", "all_vector", "all",
+349:                     "all_sub_vector"), f"ERROR: mode = {mode}, only supports all_cube/all_vector/all/all_sub_vector"
+350:     _semantic.builder.sync_block_all(mode, event_id)
+351: 
+352: 
+353: class FixpipeDMAMode(enum.Enum):
+354:     NZ2DN = ascend_ir.FixpipeDMAMode.NZ2DN
+355:     NZ2ND = ascend_ir.FixpipeDMAMode.NZ2ND
+356:     NZ2NZ = ascend_ir.FixpipeDMAMode.NZ2NZ
+357: 
+358: 
+359: class FixpipeDualDstMode(enum.Enum):
+360:     NO_DUAL = ascend_ir.FixpipeDualDstMode.NO_DUAL
+361:     COLUMN_SPLIT = ascend_ir.FixpipeDualDstMode.COLUMN_SPLIT
+362:     ROW_SPLIT = ascend_ir.FixpipeDualDstMode.ROW_SPLIT
+363: 
+364: 
+365: class FixpipePreQuantMode(enum.Enum):
+366:     NO_QUANT = ascend_ir.FixpipePreQuantMode.NO_QUANT
+367:     F322BF16 = ascend_ir.FixpipePreQuantMode.F322BF16
+368:     F322F16 = ascend_ir.FixpipePreQuantMode.F322F16
+369:     S322I8 = ascend_ir.FixpipePreQuantMode.S322I8
+370: 
+371: 
+372: class FixpipePreReluMode(enum.Enum):
+373:     LEAKY_RELU = ascend_ir.FixpipePreReluMode.LEAKY_RELU
+374:     NO_RELU = ascend_ir.FixpipePreReluMode.NO_RELU
+375:     NORMAL_RELU = ascend_ir.FixpipePreReluMode.NORMAL_RELU
+376:     P_RELU = ascend_ir.FixpipePreReluMode.P_RELU
+377: 
+378: 
+379: @builtin
+380: def fixpipe(
+381:     src: tl.tensor,
+382:     dst: Union[None, bl.buffer] = None,
+383:     dma_mode: FixpipeDMAMode = FixpipeDMAMode.NZ2ND,
+384:     dual_dst_mode: FixpipeDualDstMode = FixpipeDualDstMode.NO_DUAL,
+385:     _semantic=None,
+386: ) -> Union[None, tl.tensor]:
+387:     """
+388:     Directly store a tensor on L0C to a local buffer via fixpipe.
+389:     Fixpipe is pipeline that performing data movement from L0C to other memory hierarchies.
+390:     Currently support:
+391:         - L0C to UB (for Ascend910_95 sereies)
+392: 
+393:     :param src: the source tensor, Must be located in the l0C memory region.
+394:     :type src: tl.tensor
+395:     :param dst: The destination buffer in UB. If None, an empty tensor will be created.
+396:                 Must be buffer type in UB if provided.
+397:     :type dst: bl.buffer | None
+398:     :param dma_mode: DMA transfer mode, "nz2nd" enables NZ to ND layout transformation
+399:     :type dma_mode: FixpipeDMAMode
+400:     :param dual_dst_mode: Dual destination mode for split operations
+401:     :type dual_dst_mode: FixpipeDualDstMode
+402:     :return: If dst is None, returns the created tensor; otherwise returns None.
+403:     :rtype: tl.tensor | None
+404:     """
+405:     if not is_register_based_arch(_semantic.builder.options.arch):
+406:         raise RuntimeError("this feature is only supported on Ascend910_95 and Ascend960")
+407:     if not isinstance(src, tl.tensor):
+408:         raise TypeError("src is not of tensor type")
+409: 
+410:     if dst is not None:
+411:         if not isinstance(dst, bl.buffer):
+412:             raise TypeError("dst must be buffer type or None")
+413:         if dst.space != ascend_address_space.UB:
+414:             raise TypeError("dst's AddressSpace must be UB")
+415:         if len(dst.shape) == 2 and (dst.type.element_ty == tl.float32 or dst.type.element_ty == tl.int32):
+416:             N = dst.shape[1]
+417:             if N % 8 != 0:
+418:                 raise ValueError("32b Fixpipe last dim must be aligned to 8")
+419:             if (dma_mode != FixpipeDMAMode.NZ2ND) and (N % 16 != 0):
+420:                 raise ValueError("32b non-NZ2ND Fixpipe last dim must be aligned to 16")
+421:             if (dual_dst_mode == FixpipeDualDstMode.COLUMN_SPLIT) and (N % 32 != 0):
+422:                 raise ValueError("32b Column split dual Fixpipe last dim must be aligned to 32")
+423:             M = dst.shape[0]
+424:             if (dma_mode == FixpipeDMAMode.NZ2DN) and (M % 8 != 0):
+425:                 raise ValueError("32b NZ2DN Fixpipe first dim must be aligned to 8")
+426:         dst16bits = (dst.type.element_ty == tl.float16 or dst.type.element_ty == tl.int16
+427:                      or dst.type.element_ty == tl.bfloat16)

@@ -1,0 +1,91 @@
+
+FILE utils.py SHA256 f5d1e0e923ef765d2e4508a6a0b8c64a858d1b64bd8637947fed25a6e6f91f08
+580:     return _get_tool_path("triton-opt")
+581: 
+582: 
+583: def _get_npucompiler_path() -> str:
+584:     ascend_dir = os.path.dirname(os.path.abspath(__file__))
+585:     env = os.environ.copy()
+586:     npu_compiler_path = os.path.join(ascend_dir, "bishengir", "bin", "bishengir-compile")
+587:     if os.path.exists(npu_compiler_path):
+588:         npuir_env_path = os.path.dirname(npu_compiler_path)
+589:         env["PATH"] = npuir_env_path + ":" + env["PATH"]
+590:     else:
+591:         npu_compiler_path = shutil.which("bishengir-compile")
+592:         if npu_compiler_path is None:
+593:             npu_compiler_root = knobs.ascend.npu_compiler_path
+594:             if npu_compiler_root is None:
+595:                 raise EnvironmentError("Couldn't find executable bishengir-compile or TRITON_NPU_COMPILER_PATH.")
+596:             npu_compiler_path = os.path.join(npu_compiler_root, "npuc")
+
+FILE compiler.py SHA256 ded62b0c287515b9b615031635f9abd2aadde5cb14046c90ac3539ee51ccd9be
+534:     try:
+535:         __get_metadata_attr_by_callback(lib, "_infer_task_type_function", metadata, "bs_task_type")
+536:         __get_metadata_attr_by_callback(lib, "_infer_workspace_shape_function", metadata, "workspace_size")
+537:         __get_metadata_attr_by_callback(lib, "_infer_sync_block_lock_num_function", metadata, "sync_block_lock_layout")
+538:         __get_metadata_attr_by_callback(lib, "_infer_sync_block_lock_init_function", metadata, "lock_init_val")
+539:     finally:
+540:         handle, lib._handle = lib._handle, None
+541:         try:
+542:             _ctypes.dlclose(handle)
+543:         except (AttributeError, OSError) as exc:
+544:             # Unloading is an optimisation, so a platform without dlclose or a
+545:             # failing dlclose must not turn a successful compilation into an error.
+546:             warnings.warn(f"could not unload {callback_path}: {exc}")
+547: 
+548: 
+549: def _parse_linalg_metadata(linalg: str, metadata: dict):
+550:     """
+606:         # choosing and one ticket cache line per participant. Each cache line is
+607:         # 8 i64. This fallback is for one lock; the bishengir callback supplies
+608:         # the exact total after lowering.
+609:         metadata["sync_block_lock_layout"] = 1 << 32
+610:         metadata["lock_init_val"] = 0
+611:     # the mix mode is also encoded into metadata['name'] for runtime to distinguish
+612:     metadata["mix_mode"] = re.search(MIX_MODE_REGEX, linalg).group(1)
+613:     metadata["parallel_mode"] = re.search(PARALLEL_MODE_REGEX, linalg).group(1)
+614:     metadata["kernel_name"] = re.search(KERNEL_NAME_REGEX, linalg).group(1)
+615:     # Check the function load_binary in npu_driver.py.
+616:     metadata["name"] = metadata["kernel_name"]
+617:     # Parse all tensor kinds from arguments
+618:     metadata["tensor_kinds"] = [int(kind) for _, kind in re.findall(TENSOR_KIND_REGEX, linalg)]
+619:     # init the ub bits of triton kernel for inductor autotune using
+620:     metadata["required_ub_bits"] = 0
+621: 
+622:     # Parse all bitcode paths
+1289:     enable_persistent: bool = False
+1290:     optimize_epilogue: bool = False
+1291:     enable_fp_fusion: bool = True
+1292:     launch_cooperative_grid: bool = False
+1293:     backend_name: str = 'cann'
+1294:     instrumentation_mode: str = ""
+1295:     # Proton profile scratch bytes per block; 0 (default) keeps the
+1296:     # driver-side profile scratch path inert.
+1297:     profile_scratch_size: int = 0
+1298:     enable_graph_optimize: bool = True
+1299:     supported_fp8_dtypes: Tuple[str] = ("fp8e5", "fp8e4b15", "fp8e4nv", "fp8e4b8", "fp8e5b16")
+1300:     deprecated_fp8_dtypes: Tuple[str] = ()
+1301:     deprecated_fp8_dot_operand_dtypes: Tuple[str] = ()
+1302:     vf_merge_level: int = 1
+1303:     default_dot_input_precision: str = "ieee"
+1304:     allowed_dot_input_precisions: Tuple[str] = ("ieee", "hf32")
+1305:     max_num_imprecise_acc_default: int = 0
+
+FILE launcher.py SHA256 c084a745994a51a0ab021e941ee4b74ab80618f859c969d069ff996d610de91c
+187:     enable_simt = "simt" in metadata.parallel_mode or metadata.is_pure_simt
+188:     if metadata.compile_on_910_95 and enable_simt:
+189:         flags |= DYNAMIC_SHARED
+190:     locks = int(getattr(metadata, "sync_block_lock_layout", 0))
+191:     ordered, unordered = locks & 0xFFFFFFFF, (locks >> 32) & 0xFFFFFFFF
+192:     factor = 2 if unordered and metadata.mix_mode == "mix" and getattr(metadata, "auto_tile_and_bind_subblock",
+193:                                                                        False) else 1
+194:     task_type = 1 if metadata.mix_mode == "aiv" else 2
+195:     encoded = int(getattr(metadata, "bs_task_type", 0))
+196:     mix_ratio = 0
+197:     if encoded:
+198:         candidate, mix_ratio = divmod(encoded, 10)
+199:         if candidate in (1, 2, 3, 4):
+200:             task_type = candidate
+201:     physical = npu_utils.get_aivector_core_num() if metadata.mix_mode == "aiv" else npu_utils.get_aicore_num()
+202:     return LaunchSpec(
+203:         profile_scratch_size=int(getattr(metadata, "profile_scratch_size", 0) or 0),
