@@ -6,7 +6,7 @@ title: NPU Cooperative Reduction 初步方案（PyTorch 2.13）
 
 状态：方案草案，待评审。目标、支持范围与验收条件见[需求分析](requirements.md)。
 下述 A5 SIMD、Index、静态 fp32 sum 与 owner-only 是候选实现路线，尚未确认为产品首期范围。
-本版保留既有方案内容与流程图；性能缺口 G1～G7 的定义及证据见[需求分析第 3.4 节](requirements.md#34-性能缺口)。
+本版保留既有方案内容与流程图；性能缺口 G1～G8 的定义及证据见[需求分析第 3.4 节](requirements.md#34-性能缺口)。
 
 ## 1. 候选实现路线
 
@@ -49,6 +49,11 @@ IR 与 schedule 共用同一套能力和必要条件判断，但 IR 阶段无法
 schedule 仍需复核。复核不通过时清除 cooperative 状态、workspace/候选及失败尝试的副作用，
 构造当前普通归约；不要求本轮引入新的全图规划系统。
 Force 在本方案中只绕过收益判断，不绕过 SoC、mode、算子、参与者或内存安全条件。
+
+11 月 19 日补充的同步实现对照支持优先评估 TA 原生同步：同一手写长 sum 使用原始
+`x_grid_barrier` 约为 537.085 µs，使用原生同步约为 7.720 µs。该结果是固定 SIMD 原型的
+整段 sum 调用耗时，尚未替代上述接入方案的同图验收；条件与边界见
+[需求分析第 6.1 节](requirements.md#61-已有性能证据及边界)。
 
 ### 1.2 最少需要传递的计划信息
 
@@ -130,7 +135,7 @@ Python wrapper 和 NPU Graph 作为首期运行验收，C++/AOT、多 stream 并
 | D2：GM/event 契约 | 屏障保证 partial 可见；明确重排、event 分配/重用与自动同步的约束 | TA 同步依赖 + NPUIR lowering | 是；受限运行通过后仍需明确边界 |
 | D3：owner-only 控制流 | 屏障后 owner 分支读/合并/输出，其他参与者完成；屏障不移入分支 | TA 控制流 + NPUIR 优化 | 是；功能与 G3 优化共同依赖 |
 | D4：资源与 ABI | 区分 UB 用量/容量/unknown；返回同步 scratch/lock，保持缓存/Graph ABI | NPUIR metadata → TA → runtime | ABI 影响功能；用量影响配置 |
-| D5：同步与小 partial 成本 | 定界 G1/G2/G4/G7：pipe 等待、冗余同步、小事务、转换/合并 | NPUIR 主导，TA 提供固定对照 | 不阻塞原型；影响性能结论与默认启用 |
+| D5：同步与小 partial 成本 | 定界 G1/G2/G4/G7/G8：等待、小事务、转换、合并及协议差异 | NPUIR 主导，TA 提供固定对照 | 不阻塞原型；影响性能结论与默认启用 |
 | D6：模式与流水 | 验收 SIMD multibuffer/访存优化；后续补齐 pure SIMT 同步 | TA options + NPUIR pipeline | SIMD 组合需验收；pure SIMT 不阻塞首期 |
 | D7：分组同步或更轻的归约交换 | 若全 Grid phase 在多输出/多 phase 形态中成为瓶颈，再评估分组或其他交换方式 | TA API/IR + NPUIR 同步实现 | 不阻塞首期；仅作为后续按证据提出的优化 |
 
@@ -244,7 +249,7 @@ metadata 与阶段实验限定结论。TA/NPUIR 提供等价原生参考实现�
 | --- | --- | --- |
 | P0：能力契约 | A5 SIMD，同步参与者/GM/映射/锁契约；pure SIMT 明确排除 | 原生屏障、重复 phase、合法/非法 Grid、缓存与并发约束记录 |
 | P1：静态最小接入 | Index、静态单 `R`、fp32 sum、非 persistent、owner-only、简单融合；no-linear 回退 | 分核、精度、协议、命中与回退均验证 |
-| P2：性能缺口与选择 | `S/B` 联合选择；普通/cooperative 同图比较，拆分协议成本 | 完成 G1～G7 的归因/范围记录，冷热缓存、Graph 开关、winner 与有效核数齐全 |
+| P2：性能缺口与选择 | `S/B` 联合选择；普通/cooperative 同图比较，拆分协议成本 | 完成 G1～G8 的归因/范围记录，冷热缓存、Graph 开关、winner 与有效核数齐全 |
 | P3：融合与算子 | 连续归约/softmax、极值、类型提升、Welford 等逐项扩展 | tail、NaN/Inf、tie、空片、各 phase 空间与精度验收 |
 | P4：动态 | backed dynamic R，再到有安全上界的 X 和 grouped autotune | 同一 callable 跨阈值/尾块复用；Grid、空间与回退合法，记录重编译 |
 | P5：完整运行时 | C++ wrapper/AOT、Graph、多 stream、persistent、其他编译模式 | 打包重载与并发回放；能力矩阵与默认回退测试 |

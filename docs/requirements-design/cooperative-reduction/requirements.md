@@ -5,7 +5,7 @@ title: NPU Cooperative Reduction 需求分析（PyTorch 2.13）
 # NPU Cooperative Reduction 需求分析（PyTorch 2.13）
 
 状态：需求分析草案。上游源码版本为 PyTorch `v2.13.0` tag，提交
-`cf30153c4c131c8164ee7798e5022d810682e2cb`；NPU 实验记录来自 2026-11-18 的 NPU_A5。
+`cf30153c4c131c8164ee7798e5022d810682e2cb`；NPU 实验记录来自 2026-11-18/19 的 NPU_A5。
 本文说明需求价值、能力差距、目标范围与验收条件；具体实现见[方案草案](design.md)。
 文中的分期优先级为评审建议，首期能力清单和性能数值目标仍需确认。
 
@@ -245,6 +245,10 @@ program，而不是无条件等待整个 kernel 的所有输出组。
 NPU 的核数、局部资源、编译模式与同步成本不同，需要分别建立对应依据；CUDA 的数值阈值
 不直接作为 NPU 需求指标。
 
+这里的 `x_grid_barrier` 是 **CUDA 上游采用的同步实现**。NPU 可以评估直接复用其 semaphore
+协议，也可以由 TA 原生同步实现同一归约所需的结果交换；选用哪种方式需要功能与性能证据。
+第 6.1 节分别给出原生同步原型的收益区间，以及原始 `x_grid_barrier` 与原生同步的同配置性能对照。
+
 ### 2.3 上游覆盖的算子
 
 上游 [GPU test_reduction_fns][U14] 与指定的 [NPU 适配用例][C1] 输入均为两份
@@ -327,6 +331,9 @@ assert not self.cooperative_reduction, "TODO"
 
 ### 3.1 现有实现
 
+本节的完整 Inductor 路径实验执行于 2026-11-18。11 月 19 日补充的是绕过 Inductor 的同步
+探针与手写 sum 对照，且 torch_npu 安装版本已变化；后者不作为完整 Inductor 路径的复测。
+
 当前 NPU 默认 Triton 路径有两类代码生成：
 
 - `NPUTritonScheduling / NPUIndexTritonKernel`：采用 NPU 的多轴分析、`BLOCK_SUB` 循环和 tiling。
@@ -385,7 +392,7 @@ cooperative heuristic。由此需要贯通选择、代码生成与 runtime，补
 | 选择策略 | 已有 `X/R` predicate、分片选择及能力交互 | 继承部分上游逻辑，NPU IR 判断与逐归约选择不完全一致 | 需要 NPU 能力、合法性与收益的一致判断 |
 | 代码生成 | 已有分片索引、workspace、phase flush、合并和输出归属 | Index 覆盖大量方法，继承初始化出现轴假设不匹配 | 不是补一个 decorator 即可接通 |
 | runtime/autotune | 已有 cooperative heuristic、Grid 和候选计时 | 缺少对应 heuristic，tiling 另有配置格式 | 候选与运行配置尚未协同 |
-| 同步 | CUDA semaphore 协议和 cooperative launch | helper 继承 CUDA 实现；TA 另有原生同步，受限原型运行通过 | 需要确认适合 NPU 的同步与参与者契约 |
+| 同步 | semaphore 协议和 cooperative launch | 受测 SIMD 中两种实现均通过；原始 helper 明显更慢 | 需确认 NPU 同步契约和性能 |
 | 动态 shape | 未启用 force 时需证明下界，运行还受 Grid/workspace 约束 | 普通动态归约可复用；force cooperative 仍失败 | 未验证 NPU cooperative 动态支持 |
 | 资源与模式 | SM、warp、寄存器/共享内存模型 | AIV、UB、SIMD/template/pure SIMT 及后端映射 | CUDA 阈值与资源假设不能直接复用 |
 
@@ -404,7 +411,7 @@ feature 会因 cooperative 开关加入该能力；NPU IR 缺少上游“本次�
 `all_sub_vector`，event ID 为 0～15。原型调用 `ext.sync_block_all("all_vector", 0)`，在写出
 partial 后等待参与者，再读取同组结果；接口本身没有按输出 row/program group 分组的参数。
 
-固定 `num_warps=4` 的编译结果与另行取得的运行证据如下。原生 sum、可见性探针和 CUDA
+2026-11-18 固定 `num_warps=4` 的编译结果与当日另行取得的运行证据如下。原生 sum、可见性探针和 CUDA
 helper 探针合计 9 个编译配置，其中 6 个通过、3 个失败。
 
 | 编译模式 | 原生 sum / 可见性探针编译 | CUDA barrier 探针编译 | 已有运行证据 |
@@ -420,15 +427,32 @@ Pure SIMT 的两个关键错误摘要为：
 CUDA helper：fatal error: error in backend: MaxThreads out of range!
 ```
 
-按实际型号 `Ascend950PR_9579` 复核后，错误类型一致。原生同步的 pure SIMT lowering 是当前
-安装栈的明确功能缺口；CUDA helper 的线程数错误尚未进一步归因。上表中的 CUDA helper
-均未发射执行，atomic 旧值、release/acquire 等运行语义仍未验证。
+按实际型号 `Ascend950PR_9579` 复核后，错误类型一致。原生同步的 pure SIMT lowering 是
+11 月 18 日安装栈的明确功能缺口；CUDA helper 的线程数错误尚未进一步归因。该轮 CUDA
+helper 均未发射执行，不能从编译通过推断运行正确。
+
+2026-11-19 在 SIMD、`num_warps=4`、`launch_cooperative_grid=True` 下，新增以下运行检查：
+
+| 检查对象 | 做法 | 结果 |
+| --- | --- | --- |
+| 返回旧值的 atomic | 1/2/8/32 个 program 共享计数器，分别用三种内存序加 1，每项重复 8 次 | 12 项、96 次均通过计数与旧值检查 |
+| 有限轮询诊断版 | 为上游协议加 4096 次轮询上限，检查同组写入、同步、读取及空间重用 | `(X,S)=(1,1)/(1,2)/(1,8)/(1,32)/(4,8)`，每项 8 轮，全部通过 |
+| 原始 `x_grid_barrier` | 直接调用安装包 helper，未替换成原生同步，复核上述交换过程 | 同样 5 项、每项 8 轮，全部通过 |
+| TA 原生 `all_vector` | 以相同交换过程作为对照 | 同样 5 项、每项 8 轮，全部通过 |
+
+atomic 检查使用 release/acquire/acq_rel 三种参数，返回旧值要求恰好覆盖 `0..N-1`。
+交换检查每轮先写局部值，同步后由每个分片读取本组全部值，再次同步后才覆盖临时空间。
+原始 helper 源码与本文固定的上游版本一致。它在这些配置下通过了返回值、数据可见性、
+重复同步与多组检查，不能再将 SIMD 路径整体记作“尚未运行”。这不等于已证明所有映射、
+模式、超出物理并行度的 Grid 或完整 CUDA launch 契约；template 与 pure SIMT 本轮未运行。
+有限轮询版本只用于诊断，性能表使用原始 helper。完整记录见
+[atomic 检查结果][E17]、[同步交换检查结果][E18]和[本轮配置与版本][E16]。
 
 | 仍需确认的能力 | 当前基础与未决边界 |
 | --- | --- |
 | 同步参与者与分组 | 原生 API 提供全 Vector 等 scope，不能直接等同 CUDA 的按组 semaphore；是否需分组能力取决于场景 |
 | GM 可见性与多 phase | 受测 SIMD 的写→同步→读通过；每轮读者完成后再覆盖空间，任意映射与控制流仍需确认 |
-| atomic 旧值与内存序 | TTIR 有相关属性，adapter 表达有转换；尚未证明满足 CUDA semaphore 协议 |
+| atomic 旧值与内存序 | 受测 SIMD 计数器和原始协议检查通过；其他映射、模式及正式内存序契约仍需确认 |
 | workspace、scratch/lock 与调用 ABI | compiler 已有 workspace/lock 回调，launcher 和 C++ wrapper 已有处理基础；完整生命周期仍需验收 |
 
 第 3.1 节的失败发生在 kernel 初始化与 module load；本节的 pure SIMT 问题则由绕过 Inductor
@@ -450,9 +474,16 @@ CUDA helper：fatal error: error in backend: MaxThreads out of range!
 | G5 | 实际资源用量反馈的可解释性不足 | 成功配置 `required_ub_bits` 均为 0；compiler 将其初始化为 0 | 区分用量、容量和 unknown，支持可靠的资源判断 |
 | G6 | 分片、tile、模式与 multibuffer 未联合评估 | 原型固定 SIMD、`B=1024`；普通 Inductor 配置不同 | 区分策略、算法和模式的收益与下层编译影响 |
 | G7 | 隐式初始化/运行成本未定界 | 有 lock ABI，native 探针未返回显式锁布局；未采集对应设备任务 | 分别评估 kernel 和完整调用，不预设 native 必用软件锁 |
+| G8 | 直接复用 CUDA 同步协议性能差距明显 | 同轮长 sum：原始 helper 537.085 µs，原生同步 7.720 µs | 同步实现需单独评估性能与成本来源 |
 
 G1 的 `R=4096,B=1024,S=32` 只有 4 个非空分片，其余 28 个仍参加协议；`R=32768` 没有
 这种空片仍出现退化。这同时提示分片策略和协议成本需要评估，差值不能直接记为 barrier 延迟。
+
+G8 来自 11 月 19 日 `(1,1048576),S=32` 的同配置对照，表中为整段 sum 调用耗时，
+详见第 6.1 节（4）。两种协作实现的局部计算、分片数、workspace 读写及合并方式相同。
+编译元数据中，原始 helper 版本的 `auto_blockify_enabled` 为 false，原生同步版本为 true；
+前者还返回 `sync_block_lock_layout=8589934592`。
+这些是已观察到的编译差异，尚不足以把全部耗时归因于某个 pass 或锁操作。
 
 G2 的 adapter 关键行如下，省略了源码位置 metadata。它显示同步覆盖全 Vector scope，相关
 pipe 均为 `PIPE_ALL`；是否限制流水重叠，还需设备代码与 profiling 定界。
@@ -620,13 +651,18 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 
 ### 6.1 已有性能证据及边界
 
-**这组数据来自调研时手写的 Triton kernel，用于验证跨 program 协作的可行性与收益区间。**
+**本节数据来自调研时手写的 Triton kernel，用于验证跨 program 协作的可行性与收益区间。**
 计算均为单输入 fp32 `sum(a, dim=-1)`，直接调用 Triton-Ascend 编译和运行，固定 SIMD、
 `B=1024`，没有经过 `torch.compile` 的图优化、schedule 或 autotune。
+（1）～（3）为 11 月 18 日的原生同步原型实验；（4）为 11 月 19 日补充的原始
+`x_grid_barrier` 与原生同步对照。两轮结果分开列出，不跨轮计算加速比。
 
 “原生”指协作 kernel 使用 TA 已有的 `ext.sync_block_all("all_vector", 0)` 同步接口，
 不是指 NPU Inductor 已实现了 cooperative reduction，也不是某个现成 sum 算子的性能。
 下文将它明确称为“TA 原生同步的手写协作原型”。
+
+**（3）的原生同步数据不能代表 `x_grid_barrier` 的性能。** 对上游协议的评估需先检查其
+atomic 返回值、内存可见性、重复同步与参与者运行条件，再做同一算法的性能对照；新增结果见（4）。
 
 #### （1）性能表中的两个原型分别做什么
 
@@ -712,6 +748,79 @@ ASCEND_RT_VISIBLE_DEVICES=2 python torch-learn/scripts/tests/cooperative_reducti
 调用开销或模型级收益的充分证据，不据此发布加速承诺或生产阈值。
 完整信息：[计时记录与五组样本][E4]、[设备映射确认][E8]。
 
+#### （4）原始 `x_grid_barrier` 的同配置性能对照
+
+为回答“直接复用上游同步是否合适”，2026-11-19 在同一 `pta_213_case` 环境、经授权共享的
+物理卡 1 上，重新比较不分片、上游 helper 和 TA 原生同步三种 sum 实现。通过 CANN API
+确认逻辑设备 0 对应物理卡 1，型号仍为 Ascend950PR_9579、56 个 Vector core。
+
+本轮安装版本为 `torch=2.13.0+cpu`、`torch_npu=2.13.0+git93d7d01`、
+`triton-ascend=3.6.0+dev20261112182052`；实际编译器为包内 BiShengIR 2.0.0，
+AscendNPU-IR `395c9c5646f9`。torch_npu 版本与 11 月 18 日不同，因此本表使用同轮重新测量
+的对照，原始版本信息与执行参数见[本轮 manifest][E16]。
+
+脚本来自 `torch-learn` 提交 `b8839c73636f22ea6e199dbd9c2c904e0383b2f8`，执行命令如下：
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=1 python torch-learn/scripts/tests/cooperative_reductions/barrier_bench.py \
+  --physical-device 1 --out cooperative-results/xgrid-20261119
+```
+
+第 3.3 节的功能检查全部通过后，才对 sum 计时。性能路径直接调用
+`torch._inductor.runtime.triton_helpers.x_grid_barrier`，没有使用有限轮询诊断版替代它。
+与原生同步版本的唯一 DSL 分支差别为以下调用，其他协作计算相同：
+
+```python
+if KIND == 1:
+    x_grid_barrier(Sem.to(tl.pointer_type(tl.uint32)) + row)
+else:
+    ext.sync_block_all("all_vector", 0)
+```
+
+两个协作版本均固定 SIMD、`num_warps=4`、`launch_cooperative_grid=True`、`B=1024`，
+分片数和局部循环相同；所有分片读取本组 partial 并合并，仅分片 0 写最终输出。
+每个 shape 的三种实现使用同一输入，对照 eager sum，`atol=0.02, rtol=0.0002` 均通过。
+计时沿用（2）的 Graph + Event 方法，五组各 320 次调用，取中位数。
+
+| `X × R` | 协作 `S` | 不分片（µs） | 原始 `x_grid_barrier`（µs） | TA 原生同步（µs） |
+| --- | --- | --- | --- | --- |
+| `1 × 4096` | 32 | 1.028 | 524.823 | 4.851 |
+| `1 × 32768` | 32 | 3.439 | 525.022 | 5.018 |
+| `1 × 1048576` | 32 | 90.741 | 537.085 | 7.720 |
+| `8 × 1048576` | 4 | 93.617 | 483.031 | 28.091 |
+| `1 × 1048593` | 32 | 90.946 | 522.833 | 7.689 |
+
+表中各列均为**整段手写 sum 的调用耗时**，包含局部归约、同步、结果交换和合并，未单独
+剥离 launcher 的隐式状态处理；不分片列实际 `S=1`。`(1,1048576)` 中，原始 helper 版本
+约为原生同步版本的 69.6 倍，也慢于本轮不分片原型；这已构成当前栈直接复用该协议的
+性能问题，不能仅记录“编译可通过”。
+
+这个差值仍不能直接称为“barrier 延迟”。除 atomic 与轮询本身，原始 helper 版本还出现了
+编译器隐式锁布局、关闭自动 blockify 等变化。以 `(1,1048576)` 的产物为例：
+
+| 元数据 | 原始 helper | TA 原生同步 |
+| --- | --- | --- |
+| `auto_blockify_enabled` | false | true |
+| `has_auto_blockify_blacklist_op` | true | false |
+| `sync_block_lock_layout` | `8589934592` | 无此字段 |
+
+自动 blockify 是 TA 的 program 分块/映射相关优化；本轮编译器给出以下提示，摘录如下：
+
+```text
+AutoBlockify disabled for kernel 'reduction'. Unsafe ops: atomic operations.
+```
+
+这些字段和提示能说明两条路径经过了不同的编译处理，尚无法量化各项差异的性能占比。
+原始 helper 的 adapter 仍可见 atomic store 和轮询控制流，原生路径则使用 `ALL_VECTOR`
+同步操作。下一步成本归因需要结合最终设备代码、同步微基准或 profiling，区分返回旧值的
+atomic、竞争/等待、隐式状态处理和编译优化影响，不能只凭总耗时指定根因。
+
+因此，需求应同时评估**所选同步实现的正确性和性能**。NPU 可采用满足同一归约语义的原生
+同步实现；若要求直接复用上游 helper，则当前安装栈的性能差距需要解决。该结论限定于受测
+A5 SIMD 配置、共享卡、固定分片和热数据，尚不能推广到其他模式或作为集成后的收益阈值。
+完整信息：[对照源码][P5]、[五组原始计时][E19]、[原始 helper 源码][E20]、
+[编译元数据与 IR][E21]。
+
 ### 6.2 性能验收原则
 
 | 要求 | 判定依据 |
@@ -720,10 +829,11 @@ ASCEND_RT_VISIBLE_DEVICES=2 python torch-learn/scripts/tests/cooperative_reducti
 | 目标负载有可复现收益 | 完整图执行时间改善超出测量噪声，不能只报告分片内计算的加速 |
 | 不适用负载不产生协议退化 | 小 `R`、输出并行度充分、无实际协作收益等形态应保持普通路径 |
 | 区分 device 与完整调用开销 | 同时关注 kernel、临时空间/初始化，以及 Graph 开关对结果的影响 |
+| 同步实现与性能证据对应 | 分别记录 `x_grid_barrier` 与 TA 原生同步；先通过功能验证，再固定分片、tile、合并方式和模式做对照 |
 | 编译/调优与内存成本可控 | 记录候选数量、首编译/调优时间、临时空间及缓存恢复情况 |
 | 下层性能问题可归因 | 固定算法、分片、tile 与编译模式做阶段对照，结合设备证据区分策略、codegen、TA 与 NPUIR 的影响 |
 
-G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认项。对于尚无设备证据的项目，
+G1～G8 应在验收记录中有定位结论、影响范围或明确的待确认项。对于尚无设备证据的项目，
 不能以一个总耗时差值断言是某条同步指令或 NPUIR pass 的问题。
 
 ### 6.3 需在默认启用前量化的指标
@@ -763,12 +873,13 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 | D2：同步与可见性 | 所选协议的 GM 可见性、执行前进性、event/状态复用及编译重排约束 | TA 扩展/IR 依赖与 NPUIR 同步 lowering | 功能依赖，受限运行成功仍需明确契约 |
 | D3：数据交换与控制流 | 支持归约结果交换及消费者所需控制流；优化不破坏同步顺序 | TA lowering 与 NPUIR 优化 | 功能与性能共同依赖，不预先指定合并方式 |
 | D4：资源和调用契约 | 区分用量、容量与 unknown；明确 scratch/lock 和调用要求 | NPUIR metadata → TA → NPU runtime | ABI 影响功能，资源反馈影响性能选择 |
-| D5：同步/小 partial 性能 | 定界同步、等待、小事务、合并和初始化成本 | NPUIR 主导归因，TA 提供固定 DSL/IR 对照 | 对应 G2/G4/G5/G7，按证据决定优化 |
+| D5：同步/小 partial 性能 | 定界同步、等待、小事务、合并和初始化成本 | NPUIR 主导归因，TA 提供固定 DSL/IR 对照 | 对应 G2/G4/G5/G7/G8，按证据决定优化 |
 | D6：模式与流水优化组合 | 明确各 mode 与 multibuffer 等优化的正确性和性能边界 | TA 选项与 NPUIR pass pipeline | 模式扩展依赖；pure SIMT 当前有缺口 |
 
 这些依赖包含已有能力的契约确认、产品接入和可能的性能优化，并不表示全部都要新增下层 API。
 例如 A5 原生同步已存在，是否需要更细的同步或新的结果交换能力，取决于最终支持场景和性能证据。
-若方案选择 CUDA 风格 semaphore，则还需单独证明对应 atomic/内存序契约，不能默认复用成功。
+若方案选择 CUDA 风格 semaphore，则需在受测 SIMD 检查之外确认完整 atomic/内存序契约，
+并解决第 6.1 节对照中暴露的性能差距。
 
 ### 7.3 主要风险与限制
 
@@ -805,7 +916,7 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 | 首期支持哪些 SoC、mode、算子与 dtype | A5、fp32 静态 sum 证据最完整，但产品能力范围未单独确认 | 评审形成明确支持矩阵和交付优先级 |
 | 动态与多 phase 在哪一阶段交付 | 普通动态复用通过，cooperative 动态和 softmax 集成未验证 | 确定阶段边界，补充对应集成用例 |
 | 原生同步的物理参与者和 GM 保证 | 受限 SIMD 原型通过，完整映射/运行契约仍需明确 | TA/NPUIR 确认支持组合并提供可复现证据 |
-| G2/G4/G7 的真实性能占比 | 当前仅有中间 IR 和总时间 | 固定算法的阶段实验、最终设备代码或 profiling 定界 |
+| G2/G4/G7/G8 的真实性能占比 | 已有原始 helper 与原生同步的同算法对照，尚无各阶段占比 | 同步微基准、最终设备代码或 profiling 定界 |
 | 资源用量字段是否可直接用于选择 | 当前 `required_ub_bits=0`，与容量字段含义不同 | 明确单位、有效性与 unknown 处理 |
 | 默认启用的收益阈值、精度和成本预算 | 原型数据不足以确定生产数值 | 完成第 6.3 节的同图校准与评审 |
 
@@ -817,9 +928,10 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 
 ## 附录：版本与证据
 
-当前记录来自 2026-11-18，NPU_A5 Docker 内 `pta_213_case`，工作目录
-`<workspace>/PTA_213`。经授权共享物理卡 2，CANN API 确认可见逻辑设备 0 对应物理 2，
-见[设备映射记录][E8]。本版复用既有实验，没有新增设备测试。
+记录来自 NPU_A5 Docker 内 `pta_213_case`，工作目录 `<workspace>/PTA_213`。
+2026-11-18 经授权共享物理卡 2，2026-11-19 的 atomic、同步与性能探针使用物理卡 1；
+均核对了可见逻辑设备 0 的映射。下面保留 11 月 18 日的完整分析基线，新增实验的版本差异
+另列其后，不将两轮结果视作同一安装状态。
 
 | 项目 | 分析/实测基线 |
 | --- | --- |
@@ -842,12 +954,18 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 2026-11-19；分支位置可能变化，因此正文以固定 tag/提交为准。
 完整信息：[安装版本与文件 SHA256][E1]、[实际 compiler 路径与版本][E2]、[源码 hash 对照][E1c]。
 
+11 月 19 日新增实验中，torch_npu metadata 与 `__version__` 均为 `2.13.0+git93d7d01`；
+PyTorch、Triton、Triton-Ascend 的包版本字符串和实际包内 NPUIR 版本与上表相同。已保存脚本 SHA256、
+helper SHA256、明确源码提交、编译选项、设备映射和每项产物。完整信息见
+[新增实验说明][E21]和[实际运行 manifest][E16]；完整 Inductor 路径未在该新版本上重测。
+
 关键证据入口：
 
 - [上游 GPU 用例][U14]、[NPU 适配用例][C1]、[cooperative 选择规则][U1]、[代码生成][U2]、[runtime 候选][U3]。
 - [静态 Inductor 结果][E5]、[动态复用结果][E6]、[Index 到 no-linear 的失败记录][E7]。
 - [固定配置编译矩阵][E3]、[实际型号 pure SIMT 复核][E12]、[原型计时与样本][E4]。
 - [安装源码片段][E1a]、[后端调用契约片段][E1b]、[原型 adapter IR][E13]。
+- [原始 helper 的功能检查][E18]、[同轮同步实现性能对照][E19]、[本轮版本与编译产物][E21]。
 
 [UVersion]: https://github.com/pytorch/pytorch/tree/cf30153c4c131c8164ee7798e5022d810682e2cb
 [U0]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/config.py#L1997
@@ -905,3 +1023,10 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 [E13]: ../../../artifacts/npu-cooperative-reductions-20261118/compile-fixed/cooperative_sum-simd/kernel.ttadapter
 [E14]: ../../../artifacts/npu-cooperative-reductions-20261118/inductor/baseline-1x1048576-dynamic0/output_code_0.py
 [E15]: ../../../artifacts/npu-cooperative-reductions-20261118/bench-warm/command.json
+[P5]: https://github.com/limbochao/torch-learn/blob/b8839c73636f22ea6e199dbd9c2c904e0383b2f8/scripts/tests/cooperative_reductions/barrier_bench.py#L94
+[E16]: ../../../artifacts/npu-cooperative-reductions-20261119-xgrid/barrier/manifest.json
+[E17]: ../../../artifacts/npu-cooperative-reductions-20261119-xgrid/atomic/results.json
+[E18]: ../../../artifacts/npu-cooperative-reductions-20261119-xgrid/barrier/visibility.json
+[E19]: ../../../artifacts/npu-cooperative-reductions-20261119-xgrid/barrier/bench.json
+[E20]: ../../../artifacts/npu-cooperative-reductions-20261119-xgrid/barrier/x_grid_barrier.py
+[E21]: ../../../artifacts/npu-cooperative-reductions-20261119-xgrid/README.md

@@ -34,10 +34,37 @@ python scripts/tests/cooperative_reductions/probe.py bench --graph \
 `launched: false`。`bench` 只运行原生 `all_vector` 屏障，且要求 `X * S` 不超过 vector core 数。
 它验证的是手写原型，不是已适配的 Inductor cooperative reduction。
 `native_visibility` 在每一阶段写新值、全核同步、读其他 program 的值，并在覆盖 workspace
-前再次同步，覆盖 8 个阶段。没有自动运行可能永久等待的 CUDA semaphore 协议。
+前再次同步，覆盖 8 个阶段。`probe.py bench` 不运行 CUDA semaphore 协议。
 
 性能结果保留五组原始样本；`--graph` 在 NPU Graph 内捕获 32 次调用，计时 10 次 replay，
 先预热三次 replay，以 320 次调用归一化。
 未指定 `--graph` 时记录事件加 Python enqueue 时间，不能直接混比。
 原型固定 `B=1024`、SIMD，没有 autotune；默认拆分数取 core 数与 X 的比例并限制为 64。
 因此结果只用于判断收益区间，不能作为最终触发阈值。
+
+## x_grid_barrier 与原生同步的对照
+
+`atomic_ticket_probe.py` 先检查返回旧值的 atomic：多个 program 对同一个计数器加 1，
+要求计数结果正确，且返回值恰好覆盖 `0..N-1`。测试没有自旋等待。
+
+`barrier_bench.py` 按下面的顺序执行，不修改安装包：
+
+1. 使用增加了轮询次数上限的诊断版协议，检查 1/2/8/32 个 program、多个输出组与 8 轮数据交换。
+2. 上一步全部通过后，调用安装包中的原始 `x_grid_barrier` 复核相同的交换过程。
+3. 对同一个 sum 算法比较不分片、`x_grid_barrier` 与原生 `all_vector` 三种实现。
+   两种协作实现保持相同分片、`B=1024`、peer 合并和输出归属，固定 SIMD、4 warps、
+   `launch_cooperative_grid=True`；沿用 `event_time` 的 Graph + Event 五组中位数方法。
+
+以下命令以可见物理卡 1 为例，执行前按当前任务的选卡约定设置。脚本通过 CANN API 核对
+`--physical-device` 与逻辑设备 0 的映射，并要求 program 数不超过 Vector core 数。
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=1 python scripts/tests/cooperative_reductions/atomic_ticket_probe.py \
+  --out ../cooperative-results/atomic-ticket
+ASCEND_RT_VISIBLE_DEVICES=1 python scripts/tests/cooperative_reductions/barrier_bench.py \
+  --physical-device 1 --out ../cooperative-results/xgrid
+```
+
+有限轮询版本只用于功能诊断，不用于性能统计。输出的 `visibility.json` 记录三种协议的
+交换结果，`bench.json` 只记录原始 helper 和原生同步等实际 kernel 的耗时；功能检查失败
+会停止计时。manifest、原始 helper 源码、编译 metadata 与中间 IR 保留在输出目录。
