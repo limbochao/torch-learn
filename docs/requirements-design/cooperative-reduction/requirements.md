@@ -620,11 +620,78 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 
 ### 6.1 已有性能证据及边界
 
-以下是手写 fp32 `sum(a)` 原型，固定 SIMD、`B=1024`，没有搜索最优 tiling。
-Graph 内捕获 32 次调用，预热 3 次 replay，再计时 10 次 replay；5 组样本取中位数。
-所有结果通过原型的 `atol=0.02, rtol=0.0002` 检查。
+**这组数据来自调研时手写的 Triton kernel，用于验证跨 program 协作的可行性与收益区间。**
+计算均为单输入 fp32 `sum(a, dim=-1)`，直接调用 Triton-Ascend 编译和运行，固定 SIMD、
+`B=1024`，没有经过 `torch.compile` 的图优化、schedule 或 autotune。
 
-| `X × R` | 分片数 `S` | 普通原型（µs） | 原生 cooperative 原型（µs） |
+“原生”指协作 kernel 使用 TA 已有的 `ext.sync_block_all("all_vector", 0)` 同步接口，
+不是指 NPU Inductor 已实现了 cooperative reduction，也不是某个现成 sum 算子的性能。
+下文将它明确称为“TA 原生同步的手写协作原型”。
+
+#### （1）性能表中的两个原型分别做什么
+
+| 记录中的策略名 | 手写 kernel 的执行方式 |
+| --- | --- |
+| `single`：不分片原型 | 调用 `partial_sum`，实际传入 `S=1`；每行一个 program，以 1024 个元素为一块循环完成整行求和 |
+| `native_cooperative`：协作原型 | 调用 `cooperative_sum`；每行由 `S` 个 program 分担，写出局部和、跨 program 同步，再合并结果 |
+
+协作原型中，所有分片都会读取本行的局部和并做最终合并，仅 `shard==0` 的分片写输出。
+因此计时包含局部计算、workspace 读写、同步和合并，不能将两列的差值直接解释成 barrier 成本。
+两列也都不是当前 Inductor 普通归约的自动生成代码。
+kernel 定义见[实测提交中的原型源码][P2]，两种调用方式见[实测 benchmark 入口][P4]。
+
+例如 `(1,1048576)`、`S=32`：协作原型每片处理 32768 个输入，再合并 32 个局部和；
+不分片原型由一个 program 处理全部 1048576 个输入。两者的局部循环块大小均为 1024。
+
+分片数来自手写脚本的固定策略：取不超过 `Vector core 数 // X` 的最大 2 的幂，上限为 64，
+并要求 `X*S` 不超过 Vector core 数。受测设备有 56 个 Vector core，因此 `X=1/8/32` 时，
+分别使用 `S=32/4/1`。它没有搜索最优分片数。下表的 `S` 只描述协作列；`single` 调用始终
+传入 `S=1`，原始 JSON 的 `splits` 字段则保存该 shape 共用的协作配置值。
+
+#### （2）在哪运行，如何计时
+
+测试于 2026-11-18 在 NPU_A5 Docker 的 `pta_213_case` 环境执行，使用共享物理卡 2，型号
+Ascend950PR_9579。逻辑设备 0 到物理卡 2 的映射已确认。脚本来自 `torch-learn` 提交
+`1b18319b15d27bfb9ce64b9151b5585414c1e631`，计时结果保存在 `bench-warm/bench.json`。
+当时的工作目录为 `/home/l30023782/PTA_213`，命令如下；dtype 默认是 float32：
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=2 python torch-learn/scripts/tests/cooperative_reductions/probe.py bench \
+  --graph \
+  --shapes 1x4096,1x32768,1x1048576,1x16777216,8x1048576,32x1048576,1x1048593 \
+  --out cooperative-results/bench-warm
+```
+
+每个 shape 使用同一份随机输入和预分配的输出、workspace，按下面的步骤测试：
+
+1. 先运行并与 `data.float().sum(-1)` 的结果对照，使用 `atol=0.02, rtol=0.0002`。
+2. 计时函数先额外调用 5 次并同步，使首编译等工作在正式计时前完成。
+3. 在 NPU Graph 内捕获 32 次调用，预热 3 次 Graph replay，再同步。
+4. 用一对 NPU Event 测量 10 次 replay，结束事件同步后读取耗时。每组覆盖 `32*10=320`
+   次调用，按下式换算每次调用的平均耗时。
+5. 重复采集 5 组，取这 5 个平均耗时的中位数，作为表中的结果。
+
+```text
+每组样本（µs/次） = Event 测得的总时间（ms） × 1000 / (32 × 10)
+表中结果 = 五组样本的中位数
+```
+
+因此这里测量的是 Graph replay 中每次原型调用的平均设备耗时。输入、workspace 和输出分配、
+结果回传及校验不在这段计时内；它也不代表包含 Python 调用与编译成本的端到端时间。
+实际实现见[计时函数][P3]，运行参数见[当时的命令记录][E15]。
+
+#### （3）样本与汇总结果
+
+以 `(1,1048576)` 为例，协作原型的五组样本如下，单位均为 µs/次，显示到小数点后六位：
+
+```text
+7.532162, 7.528194, 7.533143, 7.526209, 7.531063
+```
+
+其中位数为 7.531063，表中保留三位小数后为 **7.531 µs**；不分片原型的对应中位数为
+90.667337，表中为 **90.667 µs**。完整样本见[原始计时记录][E4]。
+
+| `X × R` | 协作分片数 `S` | 手写不分片原型（µs） | TA 原生同步的手写协作原型（µs） |
 | --- | --- | --- | --- |
 | `1 × 4096` | 32 | 1.013 | 4.683 |
 | `1 × 32768` | 32 | 3.533 | 4.881 |
@@ -634,11 +701,13 @@ Graph 内捕获 32 次调用，预热 3 次 replay，再计时 10 次 replay；5
 | `32 × 1048576` | 1 | 255.201 | 258.221 |
 | `1 × 1048593` | 32 | 90.832 | 7.539 |
 
-数据支持“部分长归约值得接入”“小工作量不能照搬 CUDA 阈值”这两个判断。
+这些数据表明，在受测固定配置下，部分长归约可以从分片协作中获益，小归约则可能退化。
 它不是 Inductor 集成后的收益，不能直接与两输入 `(a+b).sum` 相比；也没有证明真实 softmax
-或模型收益。原型误差容限仅描述本次实验，不直接作为所有算子/dtype 的产品精度标准。
+或模型收益。对照组同样固定 `B=1024` 且没有 autotune，最终应按第 6.2 节，与同一计算图中
+实际 Inductor 普通归约选中的配置比较。原型误差容限仅描述本次实验，不直接作为所有
+算子/dtype 的产品精度标准。
 
-实验使用经授权共享的物理卡 2。跨轮 `X=32` 普通原型中位数曾约为 96～255 µs，且多数输入
+实验使用经授权共享的物理卡 2。跨轮 `X=32` 不分片原型中位数曾约为 96～255 µs，且多数输入
 不超过本卡 128 MiB L2，Graph 重放属于热数据。当前没有独占卡、冷数据、最优 tiling、完整
 调用开销或模型级收益的充分证据，不据此发布加速承诺或生产阈值。
 完整信息：[计时记录与五组样本][E4]、[设备映射确认][E8]。
@@ -815,6 +884,9 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 [N8]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/runtime/tile_generator.py#L109
 [C1]: https://github.com/limbochao/Community-Use-Case-Testing/blob/51830b03317074409a04c0ff167ee0d7ad6c897c/v2.13.0/inductor_npu/test_cooperative_reductions.py
 [P1]: ../../../scripts/tests/cooperative_reductions/README.md
+[P2]: https://github.com/limbochao/torch-learn/blob/1b18319b15d27bfb9ce64b9151b5585414c1e631/scripts/tests/cooperative_reductions/probe.py#L85
+[P3]: https://github.com/limbochao/torch-learn/blob/1b18319b15d27bfb9ce64b9151b5585414c1e631/scripts/tests/cooperative_reductions/probe.py#L207
+[P4]: https://github.com/limbochao/torch-learn/blob/1b18319b15d27bfb9ce64b9151b5585414c1e631/scripts/tests/cooperative_reductions/probe.py#L244
 [E1]: ../../../artifacts/npu-cooperative-reductions-20261118/inspect/stack.json
 [E1a]: ../../../artifacts/npu-cooperative-reductions-20261118/inspect/installed-source-excerpts.txt
 [E1b]: ../../../artifacts/npu-cooperative-reductions-20261118/inspect/installed-backend-contracts.txt
@@ -832,3 +904,4 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 [E12]: ../../../artifacts/npu-cooperative-reductions-20261118/compile-simt-exact/compile.json
 [E13]: ../../../artifacts/npu-cooperative-reductions-20261118/compile-fixed/cooperative_sum-simd/kernel.ttadapter
 [E14]: ../../../artifacts/npu-cooperative-reductions-20261118/inductor/baseline-1x1048576-dynamic0/output_code_0.py
+[E15]: ../../../artifacts/npu-cooperative-reductions-20261118/bench-warm/command.json
