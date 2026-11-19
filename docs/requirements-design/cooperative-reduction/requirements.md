@@ -41,15 +41,86 @@ Cooperative reduction 让多个 program 在**同一个 kernel 内**共同完成�
 例如 `(1, 1048576)` 的 sum 使用 32 个分片时，每片约处理 32768 个输入，归约方向可以形成
 额外并行度。收益需要覆盖 partial 存取、同步、最终合并及资源开销，不能只因归约很长就启用。
 
-| 目标场景 | 当前关注的问题 | 预期价值 |
-| --- | --- | --- |
-| 小输出、长轴归约 | 输出方向并行度不足，少数 program 执行很长的局部循环 | 缩短归约关键路径，提高有效核利用率 |
-| pointwise prologue → reduction → 小输出 epilogue | 归约值还需要参与融合计算 | 在同一 kernel 内完成协作和消费者计算，保留融合机会 |
-| softmax、连续归约与广播 | 多个阶段需要交换完整归约结果 | 为多阶段融合提供归约结果交换能力；收益尚需真实图验证 |
-| 动态长归约 | shape 改变时并行度与同步约束随之变化 | 在合法 shape 范围内延续优化，范围外保持正确回退 |
+**核心适用负载是“小输出、长归约轴”，依据是上游按输出数 `X` 和归约长度 `R` 选择的规则。**
+例如 `X <= 8` 时，普通选择要求可证明 `R >= 32768 * X`；完整条件见第 2.2 节。
+这个 predicate 不按“前后逐元素计算”“softmax”或“动态 shape”分别选择，源码见[选择函数][U1]。
 
-需求目标是在上述适用负载中缩短归约关键路径，并保持算子语义与融合机会。能否获益还取决于
-每片工作量、数据交换、同步和资源开销，因此需要针对 NPU 建立选择条件与支持范围。
+围绕这一负载，需求还需评估两类组合能力，二者可以同时出现在同一个计算图中：
+
+- **融合计算：** 归约前后可能还有逐元素计算，归约结果也可能被整行数据继续使用。
+  上游测试覆盖了 `(x+y)` 后归约、归约值相加，以及重复 softmax；第 1.3 节给出具体例子。
+  纳入需求是为了保留这些图形态的融合机会，不代表它们有各自独立的性能选择策略。
+- **动态 shape：** 同一计算的行数或行长会变化，需另外检查选择条件、执行合法性和收益。
+  它是第 5.3 节的正交能力要求，不是另一类独立优化负载；上游的静态下界检查也不代表所有
+  动态输入都能命中，更不代表当前 NPU 已支持。
+
+因此，本需求围绕核心负载评估融合与动态能力，具体交付范围见第 4 节。目标是缩短归约关键
+路径，并保持算子语义与融合机会；是否获益仍需针对 NPU 的每片工作量、数据交换、同步和
+资源开销建立判断依据。
+
+### 1.3 融合计算的具体例子与上游依据
+
+#### （1）归约前做逐元素计算，归约后只生成少量输出
+
+下面是说明计算依赖的语义示例，`a`、`b` 的 shape 均为 `(1, R)`，`R` 可以是一百万：
+
+```python
+z = a + b                 # (1, R)：每个位置各自相加
+s = z.sum(dim=-1)         # (1,)：整行相加，得到一个数
+y = s * 0.5 + 1           # (1,)：用最终的整行和计算输出
+```
+
+这里的 `a+b` 就是归约前的逐元素计算（pointwise prologue）；`s*0.5+1` 是归约后的逐元素
+计算（epilogue）。“小输出”指后续只计算一个或少量值，例如本例的 `y`，而不是再处理整行。
+多个分片可以分别完成自己的加法与局部求和，合并得到整行和后，再计算最终的 `y`。
+在融合条件满足时，这些计算可以保留在同一个 kernel 内。
+
+例如用较短数据说明依赖：若 `a+b = [2, 3, 4, 5]`，两片局部和是 5、9，合并得到 14，
+最终 `y = 14*0.5+1 = 8`。这个小例子只解释计算关系，不表示长度为 4 时会启用 cooperative。
+
+上游对这类组合的覆盖依据是：[GPU 测试文件][U14]中的
+`test_reduction_fns` 计算 `reduction_fn(x+y, dim=-1)`，覆盖归约前加法；
+`test_non_power_of_2` 返回 `x.mean(), x.std()+x.min()`，覆盖归约结果之间的后续加法。
+
+#### （2）归约结果还要被整行使用：softmax 与重复归约
+
+Softmax 将一行中的每个数转换为归一化结果。下面用常见的稳定计算形式展示依赖，输入
+`x` 的 shape 为 `(4, R)`，表示 4 行长向量；示例省略 dtype 转换：
+
+```python
+m = x.amax(dim=-1, keepdim=True)      # (4, 1)：每行的最大值
+e = torch.exp(x - m)                 # (4, R)：整行共用该行的 m
+d = e.sum(dim=-1, keepdim=True)       # (4, 1)：每行指数值的总和
+y = e / d                           # (4, R)：整行共用该行的 d
+```
+
+“广播”指将每行同一个 `m` 或 `d` 用到该行每个位置，例如第一行的所有元素都减去
+第一行的最大值。这是张量的计算语义，涉及 `(4,1)` 与 `(4,R)` 的运算。
+此处“小输出”指每次归约只产生 4 个行统计量；softmax 最终仍输出 `(4,R)`，并不要求最终
+结果也只有 4 个元素。计算形式可对照[上游 softmax 分解][U15]。
+
+如果同一行分给多个 program，每片不能只用本片最大值、分母完成 softmax：它需要获得整行
+统计量，再处理自己负责的元素。因此这里需要让各分片都能使用完整归约结果；前一个例子则
+只需生成最终的小输出。这个差异决定了后续融合需要的结果交换能力，不能只用“各片求和，
+一个分片写结果”概括所有融合场景。
+
+这里的“连续归约”指**前一轮结果会影响下一轮计算**。上述普通 softmax 先求 max，再用
+减 max 后的指数值求 sum；上游还直接测试了下面的 8 轮计算：
+
+```python
+for _ in range(8):
+    x = x + torch.softmax(x, dim=1)
+```
+
+每轮都基于更新后的 `x` 重新归约，不能提前独立计算下一轮。上游 `test_chained_reductions`
+使用 `(4,100000)` 输入覆盖这一形态，见[GPU 测试][U14]。上游也有合并 max/sum 状态的
+online softmax 实现，因此上面的依赖展示不要求实际 kernel 固定执行两轮同步，见
+[online softmax 合并分支][U8]。
+
+**上述 GPU 测试类显式开启了 `force_cooperative_reductions=True`。** 它们说明上游覆盖哪些
+计算组合，不能作为普通性能规则必然选中这些输入的依据。例如 `X=4,R=100000` 小于普通
+选择要求的 `R >= 131072`，但仍可用于强制路径的功能测试。NPU 是否支持、何时有收益，
+仍需按第 4～6 节的范围与条件确定。
 
 ## 2. 特性说明与上游能力
 
@@ -99,7 +170,8 @@ semaphore、返回旧值的 atomic、release/acquire 和 cooperative launch 约�
 
 ### 2.3 上游覆盖的算子
 
-指定用例 [test_reduction_fns][C1] 的输入为两份 `(1, 1024**2)` 张量，计算
+上游 [GPU test_reduction_fns][U14] 与指定的 [NPU 适配用例][C1] 输入均为两份
+`(1, 1024**2)` 张量，计算
 `reduction_fn(x+y, dim=-1)`，覆盖 `sum`、`mean`、`prod`、`amin`、`amax`、`min`、`max`、
 `var_mean`、`std`、`softmax`，dtype 为 fp16/fp32/fp64。其他用例包含布尔归约、非整除 shape、
 连续归约，以及 persistent/multi-kernel 的变体。
@@ -352,7 +424,7 @@ G4 当前没有最终设备指令证明多余拷贝或 spill；G2/G4/G7 的最�
 | 基础必需 | 至少一组已声明支持的目标/模式，实现小输出长归约的 cooperative 路径 | 静态 fp32 sum 及 `(a+b).sum` 是现有证据充分的验收入口，具体首期清单待评审 |
 | 基础必需 | 普通路径兼容、合法性检查、精度、autotune/cache 一致性及重复调用 | 不能因打开开关使未命中或不支持场景编译失败 |
 | 扩展目标 | mean、prod、极值、布尔及带 index/复合结果的归约，更多 dtype | 按 combine、dtype 和硬件能力逐项验收；不将所有算子视为相同实现 |
-| 扩展目标 | reduction/pointwise/reduction、softmax 等融合 | 结果交换与多 phase 语义需要独立验收 |
+| 扩展目标 | softmax、归约结果广播后再归约等融合，见第 1.3 节 | 结果交换与多 phase 语义需要独立验收 |
 | 扩展目标 | 动态 `R`、动态 `X`、symbolic grouped autotune | 纳入总体目标，首期未支持时必须安全回退 |
 | 扩展目标 | persistent、更多编译模式、C++/AOT、并发执行 | 分别给出支持状态与验收记录 |
 
@@ -393,7 +465,7 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 
 | 组合 | 验收要求 | 当前证据/交付定位 |
 | --- | --- | --- |
-| 静态 shape、简单 prologue/epilogue | 支持范围内正确分片、完整合并且没有重复输出冲突 | 基础入口；Inductor cooperative 当前未接通 |
+| 静态 shape、归约前后简单逐元素计算，见第 1.3 节 | 支持范围内正确分片、完整合并且没有重复输出冲突 | 基础入口；Inductor cooperative 当前未接通 |
 | 非整除 `R`、输出尾块、空分片 | 输入覆盖无遗漏/重复，identity 与最终结果正确 | 原型部分通过，集成路径仍需验收 |
 | 动态 `R` | 真实值改变后仍满足输入覆盖、资源和同步约束；范围外有正确行为 | 普通归约复用通过；cooperative 未验证 |
 | 动态 `X`、unbacked SymInt | 输出数、参与者和临时空间均有合法运行时依据 | 扩展项；未知大小不能仅凭样本 hint 准入 |
@@ -623,7 +695,7 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 
 关键证据入口：
 
-- [上游用例][C1]、[cooperative 选择规则][U1]、[代码生成][U2]、[runtime 候选][U3]。
+- [上游 GPU 用例][U14]、[NPU 适配用例][C1]、[cooperative 选择规则][U1]、[代码生成][U2]、[runtime 候选][U3]。
 - [静态 Inductor 结果][E5]、[动态复用结果][E6]、[Index 到 no-linear 的失败记录][E7]。
 - [固定配置编译矩阵][E3]、[实际型号 pure SIMT 复核][E12]、[原型计时与样本][E4]。
 - [安装源码片段][E1a]、[后端调用契约片段][E1b]、[原型 adapter IR][E13]。
@@ -642,6 +714,8 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 [U11]: https://github.com/pytorch/pytorch/blob/02ca6332b1e15b2f1750fc020cadfda50103e928/torch/_inductor/lowering.py#L7774
 [U12]: https://github.com/pytorch/pytorch/blob/c3c68bfddc7c2b144a795abf2efdfa80e3e6e81d/docs/source/notes/numerical_accuracy.md#L5
 [U13]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L5715
+[U14]: https://github.com/pytorch/pytorch/blob/b57a5dd58e0993f9e55e6d4e081cb21413bca189/test/inductor/test_cooperative_reductions.py#L132
+[U15]: https://github.com/pytorch/pytorch/blob/dd2a081e0f8e952bd5a56a77e846a19a877c8725/torch/_decomp/decompositions.py#L1297
 [N0]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/__init__.py
 [N1]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/codegen/npu_combined_scheduling.py
 [N2]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/codegen/scheduling.py#L173
