@@ -14,8 +14,11 @@ title: NPU Cooperative Reduction 需求分析（PyTorch 2.13）
 
 **输出元素少、归约轴长时，仅按输出方向安排任务，可能无法充分利用 NPU 的并行计算资源。**
 
-下面用“将两个长向量相加，再求总和”说明这一问题。这是一个小输出、长归约轴的举例，
-用于解释需求来源；2026-11-18 的 A5 实验验证了该例的生成行为。
+这类场景中，输入数据很多，但最终只得到一个或少量输出。如果每个输出由一个 program
+独立完成，输出方向能够提供的并行任务数就很少，归约轴上的大量计算集中在少数 program 内。
+Cooperative reduction 通过让多个 program 分担同一个输出的归约工作，增加这类负载的并行度。
+
+例如，将两个长向量相加后求和：
 
 ```python
 def f(a, b):
@@ -24,30 +27,9 @@ def f(a, b):
 
 `a`、`b` 均为连续 fp32 张量，shape 为 `(1, 1048576)`。计算先逐元素相加，再沿最后一维
 求和，最终输出 shape 为 `(1,)`：只保留 1 个输出，但这个输出要归约 1048576 个元素。
-实验使用 NPU 默认 Inductor 后端，关闭 cooperative，执行 `torch.compile(f, fullgraph=True)`。
-
-| 观察项 | 实验结果 | 对这个例子的含义 |
-| --- | --- | --- |
-| 生成的 kernel | 1 个，融合 `add` 与 `sum` | 已完成算子融合，仍需看 kernel 内如何安排任务 |
-| 逻辑 Grid | 1 个 program | 只有一个逻辑任务处理整个输出，没有增加归约方向的协作分片 |
-| 选中配置 | `R0BLOCK=1048576`，`R0BLOCK_SUB=8192` | 同一个 program 分 128 个子块循环处理长归约轴 |
-| 编译模式 | `simd_simt_template` | 这是当前普通路径的实际配置，后续性能对照应保留该基线 |
-| 设备并行资源 | Inductor 与 Triton 均查询到 56 个 Vector core | 输出方向的一个 program 无法提供跨 program 的核间并行 |
-
-生成代码中，决定循环长度的原始语句如下；省略了 load/add/归约与写回部分：
-
-```python
-    loops_r0 = (R0BLOCK + R0BLOCK_SUB - 1) // R0BLOCK_SUB
-    _tmp4 = tl.full([R0BLOCK_SUB], 0, tl.float32)
-    for loop_r0 in range(loops_r0):
-```
-
-**这个例子暴露的现象是：融合后的长归约仍集中在一个 program 内循环，归约轴没有提供额外的
-核间并行度。** 因此需求要解决的是这种执行方式的性能局限，并保留归约前后计算的融合机会。
-kernel 数量和 program 数量回答不同的问题，不能仅凭“只有一个 kernel”判断已经充分分核。
-这里的并行度判断来自生成代码与配置，实验未直接采集物理核利用率。
-
-完整信息：[生成代码][E14]、[实际选中配置与执行结果][E5]、[Vector core 查询结果][E11]。
+现有 NPU 普通路径由一个 program 循环处理该长轴；cooperative 可以将同一条归约轴分给多个
+program，各自计算局部结果，再合并为最终输出。这个例子用于说明小输出、长轴负载的优化动机，
+当前实现与实验配置见第 3.1 节。
 
 ### 1.2 需求作用
 
@@ -66,8 +48,8 @@ Cooperative reduction 让多个 program 在**同一个 kernel 内**共同完成�
 | softmax、连续归约与广播 | 多个阶段需要交换完整归约结果 | 为多阶段融合提供归约结果交换能力；收益尚需真实图验证 |
 | 动态长归约 | shape 改变时并行度与同步约束随之变化 | 在合法 shape 范围内延续优化，范围外保持正确回退 |
 
-本次手写原型已表明部分长归约有优化空间；尚无接通 Inductor cooperative 后的模型级收益证据。
-验收应分别证明“路径实际命中”“结果正确”“相对当前普通归约有收益”。
+需求目标是在上述适用负载中缩短归约关键路径，并保持算子语义与融合机会。能否获益还取决于
+每片工作量、数据交换、同步和资源开销，因此需要针对 NPU 建立选择条件与支持范围。
 
 ## 2. 特性说明与上游能力
 
@@ -115,16 +97,82 @@ semaphore、返回旧值的 atomic、release/acquire 和 cooperative launch 约�
 这些是 CUDA 现有行为，用于对照。NPU 的核数、局部资源、编译模式和同步成本不同，需要
 自己的准入和收益依据；CUDA 的数值阈值不直接作为 NPU 需求指标。
 
-### 2.3 上游回归入口
+### 2.3 上游覆盖的算子
 
 指定用例 [test_reduction_fns][C1] 的输入为两份 `(1, 1024**2)` 张量，计算
 `reduction_fn(x+y, dim=-1)`，覆盖 `sum`、`mean`、`prod`、`amin`、`amax`、`min`、`max`、
 `var_mean`、`std`、`softmax`，dtype 为 fp16/fp32/fp64。其他用例包含布尔归约、非整除 shape、
 连续归约，以及 persistent/multi-kernel 的变体。
 
-这些用例提供能力对照和回归种子。NPU 应按硬件与编译栈能力确定支持矩阵，分别判断基础
-dtype 支持与 cooperative 支持；CUDA decorator、helper 名称、屏障次数和 launch 方式不直接
-作为 NPU 的验收条件。
+这些用例提供上游能力范围的参照。NPU 需要结合硬件、dtype 和实际 lowering 形态，形成自己的
+支持清单。下面说明各类算子为什么能够协作合并，以及当前实现有哪些边界。
+
+### 2.4 各类归约如何合并
+
+**上游支持 mean 等多种归约，但每类归约需要正确的中间状态与合并规则。** 数学上可分片、
+CUDA 已有实现和 NPU 当前可用是三个不同层面的能力。下表依据 CUDA 源码与用例；本次 NPU
+手写原型仅验证了 fp32 sum，其他算子尚需接入与验证。
+
+| 算子/场景 | 分片间交换与合并的内容 | 需要保留的语义 |
+| --- | --- | --- |
+| `sum` | 各片的局部和，再求和 | 累加类型、mask、空片单位元 0 |
+| `mean` | 各片的局部和，合并后除以全局元素数 | 尾片/空片不能改变全局分母 |
+| `prod` | 各片的局部乘积，再求积 | 空片单位元 1，以及乘法的上溢/下溢 |
+| `amin` / `amax` | 各片的极值，再求全局极值 | NaN、特殊值与空片单位元 |
+| 带索引的 `min/max`、`argmin/argmax` | 同时合并 value 与全局 index | 并列值的索引规则，不能只合并 value |
+| `any` / `all` | 布尔状态合并；`all` 可由取反与 `any` 表达 | 布尔语义，无浮点累加误差 |
+| `var` / `std` / `var_mean` | Welford 路径合并 `(mean, M2, count)` | 分片间均值差、有效权重和 `correction` |
+| softmax 等融合 | 交换全局 max/sum，或合并 online softmax 状态 | 归一化基于整条轴，不能各片独立 softmax 后拼接 |
+
+其中 `M2` 表示相对均值的偏差平方和。上游 cooperative 分支会分别交换 Welford 的三个状态，
+以及极值归约的 value/index；online softmax 则交换 max/sum 状态。这些算子需要各自的 combine，
+不能全部套用 sum 的合并代码。源码见[cooperative 状态合并分支][U8]与[Welford 合并函数][U9]。
+
+对非空输入的 mean，设第 `i` 片的实际元素数为 `n_i`、局部和为 `s_i`、局部均值为 `m_i`，则：
+
+```text
+全局元素数 N = Σ n_i
+整体 mean = (Σ s_i) / N = (Σ n_i × m_i) / N
+```
+
+例如分成 `[0, 0]` 与 `[9]`，片均值分别为 0、9。直接将片均值平均得到 4.5；整体均值应为
+`(0+0+9)/3 = 3`。分片不等长时，等权平均片均值是合并规则错误，即使使用精确算术也不成立。
+等长分片的片均值再平均，在实数运算中等价；在浮点计算中，额外的除法或提前转低精度仍可能
+引入不同的舍入误差。上游 mean lowering 保留的是 sum 后除以全局元素数的计算关系。
+
+上游 `mean()` 的关键原始语句如下，中间省略分母张量的构造与广播：
+
+```python
+    sum_result = sum_(x, axis, keepdim)
+    denom = sympy_product(size[i] for i in axis)
+    # ...
+    return to_dtype(div(sum_result, denom), output_dtype)
+```
+
+当 sum 选中 cooperative 时，先跨片合并，再按原始归约轴长度做全局除法。fp16/bf16 的 mean
+会先提升到 fp32 计算，最后转回输出 dtype；分片 partial 的交换也应保持相应累加精度。
+完整源码见[mean lowering][U7]。正确合并后的浮点精度问题另见第 5.4 节。
+
+### 2.5 当前不直接支持的路径
+
+**当前 cooperative reduction 不是所有“沿某个维度处理数据”的操作都能使用的通用路径。**
+
+| 操作/条件 | 当前边界 | 需求中的处理 |
+| --- | --- | --- |
+| scan，如前缀和/前缀积 | `TritonKernel.scan()` 明确禁止 cooperative，需维护各位置的前缀状态 | 保持已有 scan 路径 |
+| sort 及基于排序的归约 | `TritonKernel.sort()` 同样明确禁止 cooperative | 保持已有排序路径；不列入本次归约扩展 |
+| median | 此基线 lowering 使用 ATen fallback，或分解为 sort 后取中间值 | 当前不直接使用这里的 cooperative 合并路径 |
+| 缺少相应状态/combine 的归约形态 | 仅有局部标量不足以推出完整结果，或当前 codegen 未接入 | 明确排除或补齐专属合并后再声明支持 |
+| 硬件/dtype/编译模式不支持 | 数学上可合并也不能替代后端能力 | 按支持矩阵准入，保留原有能力边界 |
+
+scan 和 sort 两个生成函数均有以下显式限制：
+
+```python
+assert not self.cooperative_reduction, "TODO"
+```
+
+这是当前实现边界；scan、sort 和 median 本身仍可有各自的并行算法。
+代码对照：[scan 限制][U10]、[sort 限制][U13]、[median lowering][U11]。
 
 ## 3. NPU 现状与差距
 
@@ -139,13 +187,25 @@ dtype 支持与 cooperative 支持；CUDA decorator、helper 名称、屏障次�
 候选选择和运行基础；尚未接通的是同一输出在多个 program 之间协作的完整链路。
 源码入口：[路径选择与回退][N1]、[schedule][N2]、[两类 kernel 实现][N3]。
 
+第 1.1 节例子的普通路径配置如下。实验关闭 cooperative，执行
+`torch.compile(f, fullgraph=True)`，输入为连续 fp32 的 `(1, 1048576)` 张量。
+
+| 项目 | 当前结果 |
+| --- | --- |
+| 归约执行 | Grid=1，同一个 program 循环处理整条归约轴 |
+| 局部配置 | `R0BLOCK=1048576`、`R0BLOCK_SUB=8192`，共 128 个子块 |
+| 编译模式 | `simd_simt_template`，`multibuffer=True` |
+| 设备资源 | Inductor 与 Triton 均查询到 56 个 Vector core |
+
+完整信息：[生成代码][E14]、[实际选中配置][E5]、[Vector core 查询结果][E11]。
+
 对第 1.1 节的 `(a+b).sum(-1)`，将输入扩展到 32 行并切换开关，静态结果摘要如下。
 `X` 表示输出数，所有行的归约长度均为 `R=1048576`。
 
 | cooperative 设置 | `X=1` | `X=32` | 说明 |
 | --- | --- | --- | --- |
 | 关闭 | PASS，普通路径，Grid=1 | PASS，普通路径，Grid=32 | 输出数增加后可沿输出方向分核 |
-| 开启，按条件选择 | FAIL，回退产物加载失败 | PASS，no-linear 普通路径，Grid=32 | 开关开启后的 PASS 不代表使用 cooperative |
+| 开启，按条件选择 | FAIL，回退产物加载失败 | PASS，no-linear 普通路径，Grid=32 | `X=32` 实际执行普通归约 |
 | 强制选择 | FAIL | FAIL | 当前没有成功执行的 Inductor cooperative 产物 |
 
 定向诊断进一步记录了强制 `X=1` 时的两个断点。下面按调用关系整理，省略了无关栈帧与环境路径：
@@ -314,8 +374,8 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 
 | 编号 | 要求 | 可观察的结果 |
 | --- | --- | --- |
-| FR1 | 在声明支持的归约中，多个 program 对同一输出协作，保持单 kernel 内完成 | 生成代码与实际配置能确认分片、结果交换、同步和最终输出，而不只检查 kernel 数 |
-| FR2 | 保持 ATen 语义，正确处理分片、尾块、identity、索引、dtype promotion 和特殊值 | 与同图 eager 结果对比；空输入和退化形状遵循对应算子语义 |
+| FR1 | 在声明支持的归约中，多个 program 对同一输出协作，保持单 kernel 内完成 | 正确完成分片、结果交换、同步与最终输出 |
+| FR2 | 保持 ATen 语义，正确处理有效计数、尾块、identity、索引、dtype promotion 和特殊值 | 合并规则正确，数值误差符合算子/dtype 标准；空输入遵循算子语义 |
 | FR3 | 区分后端能力、执行合法性和性能选择 | 不支持/不合法时走普通路径；force 不得绕过正确性与资源限制 |
 | FR4 | IR、schedule、codegen 与最终运行策略一致 | 开关改变不应留下无法执行的半成品方案，失败尝试不污染后续普通路径 |
 | FR5 | 候选预运行、winner、cache hit 使用一致的策略和资源需求 | 重复编译/调用与缓存恢复后，Grid、参数、workspace 及结果仍一致 |
@@ -373,6 +433,39 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 
 强制 cooperative 的动态组仍失败。由此只能确认普通动态归约的复用，不能据此宣称 cooperative
 动态支持已完成。完整信息：[动态开关、实际配置与复用结果][E6]。
+
+### 5.4 合并语义与浮点精度要求
+
+**支持某个算子，需要同时保证合并公式正确和浮点误差符合要求。** 第 2.4 节 mean 的分片
+计数错误属于语义错误；改用更高精度也无法修正错误的权重。方差同样需要保留分片间的均值差：
+例如 `[0,0]` 与 `[2,2]` 各自的方差均为 0，合并后的整体方差在 `correction=0` 时却为 1，
+因此不能直接平均局部方差。Welford 的 `(mean, M2, count)` 状态用于保留这些信息。
+
+合并公式正确后，浮点加法和乘法仍不满足结合律。Cooperative 改变了求和树与中间结果的舍入
+位置，结果可能更接近或更偏离高精度参考；不能据此承诺与原执行方式逐位相同。
+下面只作算术示意，每一步加法都按 fp32 舍入，并非某个 GPU/NPU kernel 的实测输出：
+
+```text
+输入：[1e8, -1e8, 1]
+(1e8 + (-1e8)) + 1 → 1
+1e8 + ((-1e8) + 1) → 0
+```
+
+对应 mean 分别约为 `1/3` 和 `0`。这说明输入存在严重抵消时，误差可能影响有效结果，
+不能一概视为无关紧要的末位差异。PyTorch 的[数值精度说明][U12]也明确指出，数学等价的
+浮点计算不保证逐位相同。fp16/bf16 提升到 fp32 能降低低精度累加风险，仍需检查上述顺序影响。
+
+| 类别 | NPU 适配需要满足的数值要求 |
+| --- | --- |
+| `sum` / `mean` | 保持约定累加精度与 partial 存储精度；mean 使用实际全局元素数，padding 不计入分母 |
+| `prod` | 检查分片后乘法顺序对上溢、下溢、0/Inf/NaN 的影响 |
+| `var` / `std` | 正确合并状态与 `correction`；覆盖大均值、小方差等敏感输入 |
+| 极值、索引与布尔归约 | 保持特殊值、全局索引、并列值规则与布尔结果，分别判断其语义 |
+| 尾片、空片与空输入 | 按算子语义处理有效计数与单位元，不能让无效元素改变结果 |
+
+误差验收需要覆盖常规输入与抵消、极端值等敏感输入，对照同图 eager，并在条件允许时使用
+高精度参考区分误差来源。各算子/dtype 的容限和可复现要求需单独确定，不能将原型 sum 的
+容限直接推广到所有归约，也不能以浮点非结合性为由接受超出约定的误差。
 
 ## 6. 性能要求
 
@@ -467,7 +560,7 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 - 性能：原型固定配置、共享卡和热缓存不能代表集成效果；粗粒度同步、重复工作和资源反馈需继续定界。
 - 兼容性：单模式或 Python wrapper 的成功不能直接推广到其他模式、动态、AOT 或并发。
 
-风险应通过支持矩阵、验收证据和明确回退来收敛，不以“全部用例能编译”代替功能与性能结论。
+风险通过支持矩阵、验收证据和明确回退来收敛，分别记录功能支持、精度与性能结论。
 
 ## 8. 验收标准与未决问题
 
@@ -476,7 +569,7 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 | 类别 | 必须覆盖的内容 | 通过条件 |
 | --- | --- | --- |
 | 路径命中 | 声明支持的静态长归约和融合入口 | 实际生成并运行 cooperative；有真实协作证据 |
-| 语义正确性 | 不同 `X/R`、尾块、空片、特殊值、输出结构和支持 dtype | 与对应 eager 图比较，符合约定精度及索引规则 |
+| 语义与精度 | 不同 `X/R`、尾块、空片、mean 权重、方差敏感输入、特殊值与支持 dtype | 合并规则与输出结构正确，符合约定精度及索引规则 |
 | 准入/回退 | 开关关闭、未命中、不支持的算子/模式/shape、候选失败 | 现有普通能力保持，无残留 cooperative 状态；基础硬件不支持项单列 |
 | 重复执行与状态 | 多次调用、临时空间重用、候选预运行和 cache hit | 结果与参数一致，不依赖上次调用留下的状态 |
 | 正交组合 | 每个声明支持的第 5.2 节组合 | 有独立正确性和路径记录，未支持项记录回退 |
@@ -542,6 +635,13 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 [U4]: https://github.com/pytorch/pytorch/blob/ac6173be20bb4214950e667e2bb7a75ea47c293c/torch/_inductor/runtime/triton_helpers.py#L824
 [U5]: https://github.com/pytorch/pytorch/blob/98b772f8ab86176b8e0b572d88f4e09510c1b587/torch/_inductor/ir.py#L1387
 [U6]: https://github.com/pytorch/pytorch/blob/d18f5dcab258c3cc62901e3bf8996ad7bc86abc9/torch/_inductor/codegen/simd.py#L787
+[U7]: https://github.com/pytorch/pytorch/blob/02ca6332b1e15b2f1750fc020cadfda50103e928/torch/_inductor/lowering.py#L7037
+[U8]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L5066
+[U9]: https://github.com/pytorch/pytorch/blob/ac6173be20bb4214950e667e2bb7a75ea47c293c/torch/_inductor/runtime/triton_helpers.py#L300
+[U10]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L5590
+[U11]: https://github.com/pytorch/pytorch/blob/02ca6332b1e15b2f1750fc020cadfda50103e928/torch/_inductor/lowering.py#L7774
+[U12]: https://github.com/pytorch/pytorch/blob/c3c68bfddc7c2b144a795abf2efdfa80e3e6e81d/docs/source/notes/numerical_accuracy.md#L5
+[U13]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L5715
 [N0]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/__init__.py
 [N1]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/codegen/npu_combined_scheduling.py
 [N2]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/codegen/scheduling.py#L173
