@@ -4,7 +4,8 @@ title: NPU Cooperative Reduction 需求分析（PyTorch 2.13）
 
 # NPU Cooperative Reduction 需求分析（PyTorch 2.13）
 
-状态：需求分析草案。事实依据为 PyTorch 2.13 源码及 2026-11-18 的 NPU_A5 实验。
+状态：需求分析草案。上游源码版本为 PyTorch `v2.13.0` tag，提交
+`cf30153c4c131c8164ee7798e5022d810682e2cb`；NPU 实验记录来自 2026-11-18 的 NPU_A5。
 本文说明需求价值、能力差距、目标范围与验收条件；具体实现见[方案草案](design.md)。
 文中的分期优先级为评审建议，首期能力清单和性能数值目标仍需确认。
 
@@ -42,7 +43,7 @@ Cooperative reduction 让多个 program 在**同一个 kernel 内**共同完成�
 额外并行度。收益需要覆盖 partial 存取、同步、最终合并及资源开销，不能只因归约很长就启用。
 
 **核心适用负载是“小输出、长归约轴”，依据是上游按输出数 `X` 和归约长度 `R` 选择的规则。**
-例如 `X <= 8` 时，普通选择要求可证明 `R >= 32768 * X`；完整条件见第 2.2 节。
+例如未启用 force 时，`X <= 8` 要求可证明 `R >= 32768 * X`；完整条件见第 2.2 节。
 这个 predicate 不按“前后逐元素计算”“softmax”或“动态 shape”分别选择，源码见[选择函数][U1]。
 
 围绕这一负载，需求还需评估两类组合能力，二者可以同时出现在同一个计算图中：
@@ -118,8 +119,8 @@ online softmax 实现，因此上面的依赖展示不要求实际 kernel 固定
 [online softmax 合并分支][U8]。
 
 **上述 GPU 测试类显式开启了 `force_cooperative_reductions=True`。** 它们说明上游覆盖哪些
-计算组合，不能作为普通性能规则必然选中这些输入的依据。例如 `X=4,R=100000` 小于普通
-选择要求的 `R >= 131072`，但仍可用于强制路径的功能测试。NPU 是否支持、何时有收益，
+计算组合，不能作为未启用 force 时必然选中这些输入的依据。例如 `X=4,R=100000` 不满足
+此时要求的 `R >= 131072`，但仍可用于强制路径的功能测试。NPU 是否支持、何时有收益，
 仍需按第 4～6 节的范围与条件确定。
 
 ## 2. 特性说明与上游能力
@@ -146,27 +147,103 @@ online softmax 实现，因此上面的依赖展示不要求实际 kernel 固定
 
 ### 2.2 CUDA 上游如何选择
 
-本次上游基线中，`triton.cooperative_reductions` 默认关闭，可通过环境变量
-`TORCHINDUCTOR_COOPERATIVE_REDUCTIONS=1` 或 config patch 开启，见[配置定义][U0]。
+本节分析的是 `pytorch/pytorch` 的 **`v2.13.0` tag**，对应提交
+[`cf30153c4c131c8164ee7798e5022d810682e2cb`][UVersion]。以下代码链接均固定到该提交。
 
-`InductorChoices.should_use_cooperative_reduction()` 的[普通选择规则][U1]为：
+#### （1）什么情况下生成 cooperative 候选
 
-| `X` 的 optimization hint | 要求可静态证明的 `R` 下界 |
+对于 CUDA Triton 归约 kernel，未启用调试用 force 开关时，需要依次满足以下条件：
+
+1. 当前 kernel 包含归约。纯逐元素 kernel 不会因开启本特性而变成 cooperative reduction。
+2. `triton.cooperative_reductions=True`。`v2.13.0` 默认值是 False，可在启动 Python 前设置
+   `TORCHINDUCTOR_COOPERATIVE_REDUCTIONS=1`，或通过 config patch 开启。
+3. 输出数量与归约长度满足下表。`Xh` 是编译器对输出数 `X` 取得的代表值；静态 shape 下
+   就是实际 `X`。`R` 的条件需要编译器能够证明，不能只凭某次输入的样本值判断。
+
+| 输出数代表值 `Xh` | 进入条件 |
 | --- | --- |
-| `X <= 8` | `32768 * X` |
-| `8 < X <= 16` | `2097152` |
-| `X > 16` | 不选 cooperative |
+| `Xh <= 8` | 可证明 `R >= 32768 * Xh` |
+| `8 < Xh <= 16` | 可证明 `R >= 2097152` |
+| `Xh > 16` | 不生成 cooperative 候选 |
 
-Force 开关绕过上述性能 predicate，不代表后端一定具备执行能力。
-动态 shape 即使某次输入很大，也不等于编译器已经证明 `R` 的下界满足条件。
+例如，在开关已开启、静态 shape 且代码生成支持的前提下：
 
-CUDA runtime 按 SM 数、`X` hint 和 `TRITON_MAX_RSPLIT=64` 选择分片数；当前给各局部归约
-候选加入相同的 `RSPLIT`，并没有默认搜索多个分片数。同步使用 `x_grid_barrier`，依赖
-semaphore、返回旧值的 atomic、release/acquire 和 cooperative launch 约束。
-实现对照：[分片配置与 Grid][U3]、[barrier 协议][U4]。
+| 归约输入形状 | `X` / `R` | 形状条件的判断结果 |
+| --- | --- | --- |
+| `(1, 1048576)` 沿最后一维归约 | `X=1`，`R=1048576` | 满足 `R >= 32768` |
+| `(4, 100000)` 沿最后一维归约 | `X=4`，`R=100000` | 不满足 `R >= 131072` |
+| `(32, 1048576)` 沿最后一维归约 | `X=32`，`R=1048576` | `X > 16`，不选 |
 
-这些是 CUDA 现有行为，用于对照。NPU 的核数、局部资源、编译模式和同步成本不同，需要
-自己的准入和收益依据；CUDA 的数值阈值不直接作为 NPU 需求指标。
+对应代码是[开关定义][U0]、[归约 kernel 入口][U19]与
+[`InductorChoices.should_use_cooperative_reduction()`][U1]。该函数在未启用 force 时也排除 CPU。
+
+**force 是另一条用于调试和测试的入口。** 设置 `triton.force_cooperative_reductions=True`
+时，上述选择函数在最开始直接返回 True，跳过特性开关、设备类型与 `X/R` 检查。因此上游测试
+可以强制覆盖较短的归约；这不代表强制后任意算子、设备或配置都能执行。scan、sort 等仍受
+代码生成限制，见第 2.5 节；force 的原始用途见[配置注释][U0]。
+
+如果另外开启 `triton.multi_kernel`，还可能比较 cooperative 与其他 kernel 变体。例如可证明
+`R <= 65536` 时，代码可以追加非 cooperative 候选。因此“满足形状条件”说明会生成候选，
+不能在开启这种比较时直接等同于最终运行了它，见[多 kernel 候选生成][U18]。
+
+#### （2）拆成多少片：当前是否对分片数做 autotune
+
+`RSPLIT` 表示同一个输出的归约由多少个 program 分担。分片数越多，每片工作可能越少，
+但交换中间结果和同步的成本也会增加。
+
+`v2.13.0` 的 runtime **先按公式算出一个 `RSPLIT`，再把它用于所有局部归约配置候选**。
+下面 `Xsize/Rsize` 指 runtime 收到的 shape 代表值，`M` 是 GPU 的 SM 数；SM 是 GPU 的硬件
+计算单元。与前述选择函数不同，传给 runtime 的代表值会向上取整到 2 的幂，例如 5 对应 8，
+见[shape 代表值生成][U20]。
+
+```text
+target = 不超过 M 的最大 2 的幂
+RSPLIT = max(1, min(Rsize, target // Xsize, 64))
+```
+
+例如假设 GPU 有 120 个 SM，runtime 的 `Xsize=4`、`Rsize=1048576`，则 `target=64`，
+`RSPLIT=16`。每个输出由 16 个 program 协作；若每个 program 负责一行，则 4 行共 64 个
+program。实际输出分组还取决于每个 program 处理多少个输出。
+
+autotune 会在生成的局部归约配置之间做选择，例如比较不同的局部块大小；这些候选都带着
+相同的 `RSPLIT=16`。**它没有在这里把 `RSPLIT=8、16、32` 都加入候选再逐个计时比较。**
+所以“搜索多个分片数”确实是指把分片数也作为 autotune 的调优参数；`v2.13.0` 的这个函数
+尚未这样做，即使打开 `max_autotune`，也没有在此增加多个 `RSPLIT`。公式和候选赋值见
+[runtime 分片配置][U3]，上限 64 见[分片数常量][U16]。
+
+#### （3）分片之间如何同步：每项机制起什么作用
+
+以 sum 为例，每片先把局部和写到全局临时空间，再调用 `x_grid_barrier` 等待同组其他分片，
+确认所有局部和已经写好后，才读取并合并完整结果。同组指处理同一输出组、仅分片编号不同的
+program，而不是无条件等待整个 kernel 的所有输出组。
+
+`x_grid_barrier` 是通过共享状态和 atomic 实现的同步函数。相关机制承担不同职责：
+
+| 机制 | 在这条同步路径中的作用 |
+| --- | --- |
+| semaphore（同步状态字） | 全局存储中的一个 32 位状态，记录本组分片到达和同步轮次；不同输出组使用不同位置 |
+| `atomic_add` 的原子更新 | 多片同时登记到达时，更新不会互相覆盖，避免漏记参与者 |
+| atomic 返回更新前的旧值 | 每片据此记录本轮的起始状态，等待代表本轮完成的最高位翻转；支持区分连续多轮同步 |
+| `sem="release"` | 登记到达时发布本片之前的写入，保证其他分片看到到达信号时，相关局部结果也已按协议发布 |
+| `sem="acquire"` | 等待方读取完成状态后，按内存序约束读取其他分片已发布的结果，避免只看到状态而读到旧数据 |
+| cooperative launch（协作启动） | 在发射侧满足跨 program 等待所需的驻留条件，避免正在等待的 program 占满资源，其他参与者无法运行 |
+
+代码中的到达登记是 `tl.atomic_add(sem, nb, sem="release")`，等待时使用
+`tl.atomic_add(sem, 0, sem="acquire")` 读取状态，不增加计数；比较旧值与当前值的最高位是否
+变化来判断本轮完成。这里 `nb` 包含特殊的轮次编码，并非所有分片都简单加 1。
+函数前后还有 `tl.debug_barrier()` 组织 program 内的线程同步。完整实现见
+[`x_grid_barrier` 源码][U4]，atomic 的返回值与内存序参数见[Triton API 定义][D0]。
+
+协作启动解决的是另一个问题：**所有被等待的分片都必须有机会执行到同步点。** 例如某种配置
+只能同时驻留 64 个 program，却启动 128 个相互等待的参与者，先运行的 64 个可能一直等待
+后 64 个，而后者又没有资源启动，形成死锁。因此上游按 SM 数限制 program 数，并在生成
+元数据时设置 `launch_cooperative_grid=True`，见[协作启动标记][U17]。CUDA 的协作启动要求
+设备具备相应能力，且总 block 数不超过该 kernel 的同时驻留容量；它受每个 block 的资源用量
+影响，详见[CUDA 协作启动约束][D1]。
+
+这三部分分别回答“是否生成 cooperative 候选”“用多少分片”“如何保证分片能正确交换结果”。
+NPU 的核数、局部资源、编译模式与同步成本不同，需要分别建立对应依据；CUDA 的数值阈值
+不直接作为 NPU 需求指标。
 
 ### 2.3 上游覆盖的算子
 
@@ -233,7 +310,7 @@ CUDA 已有实现和 NPU 当前可用是三个不同层面的能力。下表依�
 | --- | --- | --- |
 | scan，如前缀和/前缀积 | `TritonKernel.scan()` 明确禁止 cooperative，需维护各位置的前缀状态 | 保持已有 scan 路径 |
 | sort 及基于排序的归约 | `TritonKernel.sort()` 同样明确禁止 cooperative | 保持已有排序路径；不列入本次归约扩展 |
-| median | 此基线 lowering 使用 ATen fallback，或分解为 sort 后取中间值 | 当前不直接使用这里的 cooperative 合并路径 |
+| median | `v2.13.0` lowering 使用 ATen fallback，或分解为 sort 后取中间值 | 当前不直接使用这里的 cooperative 合并路径 |
 | 缺少相应状态/combine 的归约形态 | 仅有局部标量不足以推出完整结果，或当前 codegen 未接入 | 明确排除或补齐专属合并后再声明支持 |
 | 硬件/dtype/编译模式不支持 | 数学上可合并也不能替代后端能力 | 按支持矩阵准入，保留原有能力边界 |
 
@@ -309,7 +386,7 @@ cooperative heuristic。由此需要贯通选择、代码生成与 runtime，补
 | 代码生成 | 已有分片索引、workspace、phase flush、合并和输出归属 | Index 覆盖大量方法，继承初始化出现轴假设不匹配 | 不是补一个 decorator 即可接通 |
 | runtime/autotune | 已有 cooperative heuristic、Grid 和候选计时 | 缺少对应 heuristic，tiling 另有配置格式 | 候选与运行配置尚未协同 |
 | 同步 | CUDA semaphore 协议和 cooperative launch | helper 继承 CUDA 实现；TA 另有原生同步，受限原型运行通过 | 需要确认适合 NPU 的同步与参与者契约 |
-| 动态 shape | 普通选择需要静态证明下界，运行还受 Grid/workspace 约束 | 普通动态归约可复用；force cooperative 仍失败 | 未验证 NPU cooperative 动态支持 |
+| 动态 shape | 未启用 force 时需证明下界，运行还受 Grid/workspace 约束 | 普通动态归约可复用；force cooperative 仍失败 | 未验证 NPU cooperative 动态支持 |
 | 资源与模式 | SM、warp、寄存器/共享内存模型 | AIV、UB、SIMD/template/pure SIMT 及后端映射 | CUDA 阈值与资源假设不能直接复用 |
 
 NPU `num_splits()` 判断使用 `BackendFeature.REDUCE_TO_SINGLE_ELEMENT`，继承的 backend
@@ -683,14 +760,17 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 | Triton / Triton-Ascend | `3.6.0` / `3.6.0+dev20261112182052` |
 | 实际设备编译器 | Triton 包内 BiShengIR 2.0.0，AscendNPU-IR `395c9c5646f9`，2026-11-12 |
 | CANN | `cann-9.1.0`；PATH 上的 BiShengIR 1.2.0 不是本次实际编译器 |
-| 本地 CUDA 源码 | `887a5ee68a445193f44f2ed9efd1d87e4d7a4242` |
+| 上游 PyTorch 源码 | `v2.13.0` tag，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb` |
+| 本地 CUDA 分析 checkout | `test/cuda-device-perf` 分支，提交 `887a5ee68a445193f44f2ed9efd1d87e4d7a4242` |
 | 本地 NPU 源码 | `961b95d9acb79551c52a77e991db9dd2613d6d86` |
 | 用例源码 | `51830b03317074409a04c0ff167ee0d7ad6c897c` |
 
 这里记录版本差异，是因为包信息不能单独代表实际执行内容：torch_npu 的 metadata 和
 `version.py` 标识不同，部分 scheduling 文件的安装内容与本地源码 hash 不同；Triton 实际调用
 包内 BiShengIR 2.0.0，PATH 上的 1.2.0 未参与本次编译。因此运行结论采用安装源码片段和
-实际生成代码。CUDA 链接采用各文件最近修改的公开提交，其内容与本次本地分析基线相同。
+实际生成代码。上游 PyTorch 链接统一固定到 `v2.13.0` 对应提交；已核对文中引用的源文件与
+本地分析 checkout 内容一致。本地 `origin/release/2.13` 当前也指向该 tag 的提交，复核日期为
+2026-11-19；分支位置可能变化，因此正文以固定 tag/提交为准。
 完整信息：[安装版本与文件 SHA256][E1]、[实际 compiler 路径与版本][E2]、[源码 hash 对照][E1c]。
 
 关键证据入口：
@@ -700,22 +780,30 @@ G1～G7 应在验收记录中有定位结论、影响范围或明确的待确认
 - [固定配置编译矩阵][E3]、[实际型号 pure SIMT 复核][E12]、[原型计时与样本][E4]。
 - [安装源码片段][E1a]、[后端调用契约片段][E1b]、[原型 adapter IR][E13]。
 
-[U0]: https://github.com/pytorch/pytorch/blob/e3966c93e0ae877c1150f9fceaab6055109ce1c8/torch/_inductor/config.py#L1997
-[U1]: https://github.com/pytorch/pytorch/blob/521f9d784733cb2f4571804b0f6e4687fb7a91be/torch/_inductor/choices.py#L390
-[U2]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L3229
-[U3]: https://github.com/pytorch/pytorch/blob/521f9d784733cb2f4571804b0f6e4687fb7a91be/torch/_inductor/runtime/triton_heuristics.py#L4632
-[U4]: https://github.com/pytorch/pytorch/blob/ac6173be20bb4214950e667e2bb7a75ea47c293c/torch/_inductor/runtime/triton_helpers.py#L824
-[U5]: https://github.com/pytorch/pytorch/blob/98b772f8ab86176b8e0b572d88f4e09510c1b587/torch/_inductor/ir.py#L1387
-[U6]: https://github.com/pytorch/pytorch/blob/d18f5dcab258c3cc62901e3bf8996ad7bc86abc9/torch/_inductor/codegen/simd.py#L787
-[U7]: https://github.com/pytorch/pytorch/blob/02ca6332b1e15b2f1750fc020cadfda50103e928/torch/_inductor/lowering.py#L7037
-[U8]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L5066
-[U9]: https://github.com/pytorch/pytorch/blob/ac6173be20bb4214950e667e2bb7a75ea47c293c/torch/_inductor/runtime/triton_helpers.py#L300
-[U10]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L5590
-[U11]: https://github.com/pytorch/pytorch/blob/02ca6332b1e15b2f1750fc020cadfda50103e928/torch/_inductor/lowering.py#L7774
-[U12]: https://github.com/pytorch/pytorch/blob/c3c68bfddc7c2b144a795abf2efdfa80e3e6e81d/docs/source/notes/numerical_accuracy.md#L5
-[U13]: https://github.com/pytorch/pytorch/blob/1b62beb3a54792e6d6ee0c7ac4f1af46a097e231/torch/_inductor/codegen/triton.py#L5715
-[U14]: https://github.com/pytorch/pytorch/blob/b57a5dd58e0993f9e55e6d4e081cb21413bca189/test/inductor/test_cooperative_reductions.py#L132
-[U15]: https://github.com/pytorch/pytorch/blob/dd2a081e0f8e952bd5a56a77e846a19a877c8725/torch/_decomp/decompositions.py#L1297
+[UVersion]: https://github.com/pytorch/pytorch/tree/cf30153c4c131c8164ee7798e5022d810682e2cb
+[U0]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/config.py#L1997
+[U1]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/choices.py#L390
+[U2]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L3229
+[U3]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/runtime/triton_heuristics.py#L4632
+[U4]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/runtime/triton_helpers.py#L824
+[U5]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/ir.py#L1387
+[U6]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/simd.py#L787
+[U7]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/lowering.py#L7037
+[U8]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L5066
+[U9]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/runtime/triton_helpers.py#L300
+[U10]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L5590
+[U11]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/lowering.py#L7774
+[U12]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/docs/source/notes/numerical_accuracy.md#L5
+[U13]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L5715
+[U14]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/test/inductor/test_cooperative_reductions.py#L132
+[U15]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_decomp/decompositions.py#L1297
+[U16]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/runtime/hints.py#L22
+[U17]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L6461
+[U18]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L7448
+[U19]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L3222
+[U20]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L6344
+[D0]: https://triton-lang.org/main/python-api/generated/triton.language.atomic_add.html
+[D1]: https://docs.nvidia.com/cuda/cuda-driver-api/cuda_driver_api/group__CUDA__EXEC.html
 [N0]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/__init__.py
 [N1]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/codegen/npu_combined_scheduling.py
 [N2]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/codegen/scheduling.py#L173
