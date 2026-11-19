@@ -9,9 +9,9 @@
 当前 PASS 不自动视为已上线，结果与分析以实际 2.13 报告为准。
 运行批次使用独立证据目录，表格和文档文件名不随分支或提交变化。
 
-[无需修改的新增 PASS 清单](combo_native_213_passed_unmodified_nodeids.txt)
-记录当前 PASS、尚未上线且无需修改用例或 torch_npu 的参数实例，每行一个 pytest nodeid，按字典序排列。
-筛选依据为进展表及对应逐实例报告；上线状态由上述上线清单维护。
+[无需修改的 PASS 清单](combo_native_213_passed_unmodified_nodeids.txt)
+记录当前 PASS、无需修改用例或 torch_npu 的参数实例，每行一个 pytest nodeid，按字典序排列。
+筛选依据为进展表及对应逐实例报告；已确认上线的实例同步到上述上线清单，由其统一维护上线状态。
 
 ## 环境与执行范围
 
