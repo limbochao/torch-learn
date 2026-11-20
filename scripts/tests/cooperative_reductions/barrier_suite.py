@@ -416,6 +416,8 @@ def concurrency_worker(config, rank, ready):
             invoke, output, expected, keepalive = make_reduction(
                 args, kernels[1], args.concurrent_rows, args.concurrent_r, args.concurrent_s, kind,
                 seed=100 * rank + index)
+            # Initialization uses the default stream; make it visible before another stream launches.
+            api.synchronize()
             with api.stream(stream):
                 compiled = invoke()
             tasks.append((stream, invoke, output, expected, keepalive))
