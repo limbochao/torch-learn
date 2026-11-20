@@ -578,7 +578,7 @@ def main():
     parser.add_argument("--concurrent-rows", type=int, default=1)
     parser.add_argument("--concurrent-r", type=int, default=1048593)
     parser.add_argument("--process-timeout", type=int, default=360)
-    parser.add_argument("--grid", default="64,1,1", help="One isolated mapping diagnostic; may exceed core count")
+    parser.add_argument("--grid", default="8,1,1", help="One isolated mapping diagnostic; may exceed core count")
     args = parser.parse_args()
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=True)

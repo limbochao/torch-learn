@@ -150,12 +150,14 @@ msopprof --kernel-name=reduction --launch-count=1 \
 
 - `bench`：小整数数据交换和 `(a.float()+b.float()).sum(-1)`，扫描分片数。
   统一 all-read 合并算法、`BLOCK=1024`、4 warps，完整 kernel 以 Graph + device Event 计时。
-  每点计时前后都检查结果，保存全部样本、中位数、精度误差及编译 metadata。
+  同一性能点的 helper 复用相同设备缓冲区，校验前重置。计时前后都检查结果，保存全部样本、
+  中位数、精度误差、缓冲区地址及编译 metadata。
 - `check`：多输出组与三维 Grid、非二次幂分片、空片、尾块、分片耗时不均、重复 epoch/phase；
   另测 fp32/fp16/bf16 输入的 sum/mean/amax。Prologue 和累加为 fp32，参考为 CPU fp64；输出为 fp32。
 - `mapping`：在单独进程中运行一个指定 Grid，观察默认/关闭自动分核的差别，也可诊断超过核数的 Grid。
 - `concurrency`：spawn 独立进程，预热后统一起跑；各进程通过独立线程向多个 stream 提交，
-  每个 stream 独立持有 workspace/semaphore，保留每次输出。提交并发不直接等同设备指令并发。
+  每个 stream 独立持有 workspace/semaphore，保留每次输出。每轮交替执行浮点归约与两 phase
+  整数交换，epoch 随进程、流、轮次变化。提交并发不直接等同设备指令并发。
 
 下面的 NPU 命令仅示例物理卡 2，实际运行前确认其仍符合时段限制及选卡约定。
 三类命令使用不同结果目录，共享编译缓存以减少重复编译。
@@ -178,3 +180,12 @@ CUDA 在指定容器内按 UUID 选择物理 GPU 6，使用 `--backend cuda --ph
 并发运行还有进程级期限，不修改安装包或设备全局配置。
 
 这些是 helper 与手写协作算法的验证，不代表已实现 Inductor 自动选择，也不证明按组屏障可通用替换。
+
+`mapping --mapping off` 的诊断使用单独的 `TRITON_CACHE_DIR`，检查输出 metadata 的
+`auto_blockify_enabled` 确认实际开关，避免复用另一种映射的编译缓存。
+`mapping` 在校验失败时也保留已执行的 IR、metadata 与首末 phase 输出。
+超核诊断单独运行并设置进程期限，不将其加入普通性能扫描。
+
+`plot_barrier_suite.py` 使用 Matplotlib 3.8 及以上版本，读取两端 `bench.json`，
+导出 SVG/PNG 折线图及 CSV。结果与示例图见
+[同步验证文档](../../../docs/requirements-design/cooperative-reduction/barrier-comparison.md)。

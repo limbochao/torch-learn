@@ -62,6 +62,11 @@ Force 在本方案中只绕过收益判断，不绕过 SoC、mode、算子、参
 semaphore 协议还依赖 TA/NPUIR 解决这条路径的性能；首期原生同步路线继续按参与者统一、
 单 phase 的约束验收。初始化与锁体的占比尚未分别量化，详细证据仍以需求分析为准。
 
+11 月 21 日新增的[三种 helper 与 GPU 对照](barrier-comparison.md)使用同一算法和相同设备
+输入地址扫描 S。`X=1,R=1048576,S=32` 时，NPU 原始协议、直接 all_vector、两侧加本核
+屏障分别为 534.695、8.216、8.219 µs，CUDA 原始协议为 7.584 µs，均为完整 kernel 耗时。
+这支持继续评估原生同步；自动分核边界和按组同步的差异仍需作为准入条件，不能全局替换 helper。
+
 ### 1.2 最少需要传递的计划信息
 
 沿用已有 choices、kernel kwargs、`inductor_meta` 和配置对象，不新增独立框架。
@@ -85,6 +90,12 @@ cache hit 后恢复同样的 Grid、workspace stride 与 compile options；不�
 设输出 program 数为 `Q=X`，Grid 为 `(S, Q, 1)`。首期仅接 TA 确认的单轮映射，要求
 `Q*S` 不超过有效 AIV 数，并确认没有额外 program 循环或 sub-block 改写参与者。
 数量检查是必要条件，**不代替后端对物理映射与屏障参与者的确认**。
+
+11 月 21 日已实测：默认 AutoBlockify 将 112 个 program 映射到 56 核时，两种 all_vector
+helper 均产生 1736/1792 个错误整数结果；增加两侧本核屏障不能修正。实际编译产物按步长 56
+循环执行完整 program，第一批屏障返回时后一批尚未写入 partial，见
+[分核边界及产物](barrier-comparison.md#62-分核边界)。接入时必须在预运行/autotune 前校验
+并拒绝这类映射，force 也不绕过；不能只因 TA 支持该同步 API 就放开任意 Grid。
 
 保留上游调用形式的 NPU helper 原型可以写为：
 
@@ -141,7 +152,8 @@ call @load_gm_to_ubuf_1d_float_nocache(...)
 LLVM IR 中也保留了 `llvm.hivm.BARRIER`、`llvm.hivm.SET.CROSS.CORE` 与
 `llvm.hivm.WAIT.FLAG.DEV.PIPE.IMM`，不是只有 adapter 上的抽象 `PIPE_ALL` 字段。
 完整证据见[后端 MLIR][native-mlir]、[LLVM IR][native-llvm]与[仅编译记录][native-compile]。
-本次未新增运行或计时；前述数据交换检查为运行侧证据，不能将仅编译导出算成一次新的功能验证。
+上述导出仅做编译；数据交换检查提供运行侧证据。11 月 21 日新增的三版本运行、精度及
+性能检查见[同步验证](barrier-comparison.md)，不能将仅编译导出算成一次新的功能验证。
 
 `tl.debug_barrier()` 的 Triton 接口语义是同步一个 block 内的线程，见[接口定义][debug-barrier]；
 它不是唯一能表达本核同步的方式，也不能单独同步其他 block。

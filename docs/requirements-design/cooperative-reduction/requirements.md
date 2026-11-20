@@ -5,7 +5,7 @@ title: NPU Cooperative Reduction 需求分析（PyTorch 2.13）
 # NPU Cooperative Reduction 需求分析（PyTorch 2.13）
 
 状态：需求分析草案。上游源码版本为 PyTorch `v2.13.0` tag，提交
-`cf30153c4c131c8164ee7798e5022d810682e2cb`；NPU 实验记录来自 2026-11-18～20 的 NPU_A5。
+`cf30153c4c131c8164ee7798e5022d810682e2cb`；NPU 实验记录来自 2026-11-18～21 的 NPU_A5。
 本文说明需求价值、能力差距、目标范围与验收条件；具体实现见[方案草案](design.md)。
 文中的分期优先级为评审建议，首期能力清单和性能数值目标仍需确认。
 
@@ -587,15 +587,15 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 | 动态 `R` | 真实值改变后仍满足输入覆盖、资源和同步约束；范围外有正确行为 | 普通归约复用通过；cooperative 未验证 |
 | 动态 `X`、unbacked SymInt | 输出数、参与者和临时空间均有合法运行时依据 | 扩展项；未知大小不能仅凭样本 hint 准入 |
 | 多逻辑归约轴和非连续 stride | 按原索引覆盖正确的元素集合；不能为复现方便改成连续输入后宣称兼容 | 分别确定支持范围，未准入时回退 |
-| fp16/fp32/bf16、整数/布尔及 fp64 | 明确硬件与算子支持清单、累加类型和误差标准 | 当前原型只验证 fp32；其他 dtype 不自动视为已支持 |
+| fp16/fp32/bf16、整数/布尔及 fp64 | 明确硬件与算子支持清单、累加类型和误差标准 | fp32 累加的三类浮点输入探针通过；完整 ATen/Inductor 待验收 |
 | min/max index、argmin/argmax | 保持全局索引、tie-breaking、NaN 和返回结构 | 扩展项，不能只验证局部 value |
 | var/std/var_mean | 复合归约、空片权重和精度符合算子语义 | 扩展项，不能把多个 partial 简单等权平均 |
-| 多 phase、softmax、广播消费者 | 每轮结果可见，旧读者完成后才能重用空间 | 扩展项，需要超出单 sum 的专门用例 |
+| 多 phase、softmax、广播消费者 | 每轮结果可见，旧读者完成后才能重用空间 | 多 phase 整数交换通过；softmax 与融合路径待验收 |
 | persistent、max_autotune、symbolic group、multi_kernel | 每种实际候选及 group 都满足能力、资源与正确性要求 | 按组合交付；现有 autotuner 不自动补齐完整策略 |
 | SIMD/template/pure SIMT | 支持矩阵区分编译通过和运行通过 | SIMD 有受限运行证据；template 仅有编译证据；pure SIMT native sync 失败 |
 | NDDMA、multibuffer 等访存/流水优化 | 不破坏同步和相关 GM 读写依赖 | 需要对齐实际选中配置验证 |
 | deterministic | 遵守已承诺的配置选择与可复现规则 | 浮点树变化的误差与复现要求分别评审 |
-| NPU Graph、多个 stream | capture/replay、状态初始化和存储生命周期正确 | 原型 Graph 通过；完整 Inductor/并发未验证 |
+| NPU Graph、多个 stream | capture/replay、状态初始化和存储生命周期正确 | 手写 Graph 与并发提交通过；设备真重叠和完整 Inductor 待验收 |
 | C++ wrapper、AOTInductor | 打包重载后仍使用合法参数、资源和执行策略 | 不能以 Python wrapper 成功代替验收 |
 | scan、sort、combo/foreach、mix-order | 未接入 cooperative 的组合继续正确走已有路径 | 不因开关开启而破坏；不要求首期扩展到这些组合 |
 
@@ -659,6 +659,16 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 ## 6. 性能要求
 
 ### 6.1 已有性能证据及边界
+
+**11 月 21 日新增三种 helper 与 GPU 的同算法分片扫描，详细结果见
+[A5 与 RTX 4090 同步验证](barrier-comparison.md)。** 同一性能点复用相同设备输入和输出地址，
+比较原始 semaphore 协议、直接 all_vector 及两侧增加本核屏障的 all_vector。
+在 fp32 `(a+b).sum(-1)`、`X=1,R=1048576,S=32` 上，三种 NPU 完整 kernel 耗时依次为
+534.695、8.216、8.219 µs，CUDA 原始协议为 7.584 µs。GPU 为共享卡，这些数据不直接作为生产阈值。
+
+该轮还验证重复同步、尾块、空分片、mean/amax 和多进程多流提交，并单独检查自动分核边界。
+这类手写 helper 的功能证据用于明确 TA/NPUIR 契约，不能替代 Inductor 集成验收。
+下文保留此前单输入 sum 和 atomic 分量实验，用于解释不同原型及原始协议的性能缺口。
 
 **本节数据来自调研时手写的 Triton kernel，用于验证跨 program 协作的可行性与收益区间。**
 （1）～（4）及（6）的计算均为单输入 fp32 `sum(a, dim=-1)`，固定 SIMD、`B=1024`；
