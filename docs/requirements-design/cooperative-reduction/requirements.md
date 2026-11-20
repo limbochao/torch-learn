@@ -468,7 +468,7 @@ atomic 检查使用 release/acquire/acq_rel 三种参数，返回旧值要求恰
 | 编号 | 性能问题 | 证据状态 | 需求上的影响 |
 | --- | --- | --- | --- |
 | G1 | 小工作量下 cooperative 原型退化 | `R=4096`：普通 1.013 µs、协作 4.683 µs；`R=32768` 也退化 | 按分片工作量和协议成本选择，不能只检查输出少 |
-| G2 | 同步范围/pipe 粒度成本未定界 | IR 为 `ALL_VECTOR`、`PIPE_ALL`；流水影响未 profile | 明确语义和成本，再评估更细粒度优化 |
+| G2 | 同步范围/pipe 粒度成本未定界 | 最终 lowering 含 `PIPE_ALL` 本核屏障与 MTE3 跨核 set/wait；流水影响未 profile | 明确语义和成本，再评估更细粒度优化 |
 | G3 | 终结归约存在重复 peer 读取和合并 | 所有分片均读取同组 partial，只有最终 store 判断分片归属 | 识别消费者是否需要每片获得完整结果，评估重复工作的成本 |
 | G4 | 小 partial 编译效率缺少基线 | adapter 有 materialize/copy/to-tensor/reduce；尚无最终指令归因 | 对齐等价算法，检查小事务、转换和合并效率 |
 | G5 | 实际资源用量反馈的可解释性不足 | 成功配置 `required_ub_bits` 均为 0；compiler 将其初始化为 0 | 区分用量、容量和 unknown，支持可靠的资源判断 |
@@ -486,7 +486,10 @@ G8 最初由 11 月 19 日 `(1,1048576),S=32` 的同算法对照发现：整段 
 表中 atomic 数字为完整探针调用耗时；软件锁初始化、锁体与缓存维护的各自耗时尚未拆分。
 
 G2 的 adapter 关键行如下，省略了源码位置 metadata。它显示同步覆盖全 Vector scope，相关
-pipe 均为 `PIPE_ALL`；是否限制流水重叠，还需设备代码与 profiling 定界。
+pipe 均为 `PIPE_ALL`。进一步对改写版实际 adapter 导出后端 MLIR 与 LLVM IR，已确认 partial
+搬出之后存在 `pipe_barrier[PIPE_ALL]`，随后执行绑定 MTE3 的跨核 set/wait，再执行 peer load。
+因此受测路径确实包含本核写回完成的等待，不需要仅凭 adapter 字段推断，具体代码和解释见
+[方案中的写回与同步协议](design.md#13-kernel-内协议与运行流程)。流水重叠的性能影响仍需 profiling 定界。
 
 ```text
 hivm.hir.sync_block[<ALL_VECTOR>, 0 : index] tvector_pipe = <PIPE_ALL> vector_pipe = <PIPE_ALL>

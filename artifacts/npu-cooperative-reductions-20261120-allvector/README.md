@@ -42,6 +42,20 @@ NPU helper 改写版。改写版在写后读、读完再覆盖两个位置都调
 两种原生调用方式的 metadata 除 hash 外一致；复测亦用于确认首次波动不能解释为封装带来加速。
 复测保存 JSON metadata 和时间/占用记录，不重复归档相同源码下的 IR。
 
+## 本核写回与跨核等待的后端产物
+
+`final-native/` 使用本目录已归档的改写版 `(1,1048576),S=32` adapter 和 metadata，
+通过仓库现有 `dump_adapter.py` 在同一环境仅编译导出；没有启动 kernel，没有新增性能样本。
+编译器为 NPUIR `395c9c5646f94119a591794a02961b5801f057c0`、LLVM 19.1.7。
+
+- [后端 MLIR](final-native/module.hivm.opt.mlir)：partial store 后生成 `pipe_barrier[PIPE_ALL]`，
+  随后为 MTE3 生产流水的跨核 set/wait，再执行 nocache peer load。
+- [LLVM IR](final-native/kernel.ll)：保留 `llvm.hivm.BARRIER`、`llvm.hivm.SET.CROSS.CORE`
+  和 `llvm.hivm.WAIT.FLAG.DEV.PIPE.IMM`；这是降低后的 IR，不是最终机器码反汇编。
+- [编译 manifest](final-native/manifest.json)：`launched=false`；记录输入 adapter、metadata
+  和 `dump_adapter.py` 的 SHA256，均已与归档输入及仓库脚本核对。
+- [编译日志](final-native/compile.log)、[编译器版本](final-native/compiler-version.txt)：保留原始输出。
+
 [requirements]: ../../docs/requirements-design/cooperative-reduction/requirements.md#61-已有性能证据及边界
 [design]: ../../docs/requirements-design/cooperative-reduction/design.md#13-kernel-内协议与运行流程
 [scripts]: ../../scripts/tests/cooperative_reductions/README.md

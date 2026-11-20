@@ -103,6 +103,50 @@ def x_grid_barrier(sem):
 该改写要求所有参与者按相同顺序、相同次数执行屏障，并将事件 0 留给此协议。
 同一事件编号的连续复用由专门的数据交换探针验证，不能仅根据单次 sum 成功推定。
 
+**本核 partial 的写回如何完成。** `tl.store` 发出写回操作，不代表异步搬出已完成；
+这里仍需要本核流水完成与跨核会合两层同步。A5 SIMD 的本次实际产物已包含这两层，
+因此 DSL 无需再单独写一个 `tl.debug_barrier()` 来补充本核等待。
+
+对已验证的 `(1,1048576),S=32` 改写版 adapter 和 metadata 进行仅编译导出，
+使用受测 NPUIR 提交 `395c9c5646f94119a591794a02961b5801f057c0`。
+以下是 partial store 与 peer load 之间的实际关键 IR，仅省略地址、类型和部分属性：
+
+```text
+call @store_ubuf_to_gm_1d_float(...)
+hivm.hir.set_flag[<PIPE_MTE3>, <PIPE_MTE2>, <EVENT_ID0>]
+hivm.hir.pipe_barrier[<PIPE_ALL>]
+hivm.hir.sync_block_set[<VECTOR>, <PIPE_MTE3>, <PIPE_S>] flag = 0
+hivm.hir.sync_block_wait[<VECTOR>, <PIPE_MTE3>, <PIPE_S>] flag = 0
+hivm.hir.wait_flag[<PIPE_MTE3>, <PIPE_MTE2>, <EVENT_ID0>]
+call @load_gm_to_ubuf_1d_float_nocache(...)
+```
+
+| 操作 | 本次产物中的作用 |
+| --- | --- |
+| `store_ubuf_to_gm` | 通过 MTE3 将本片结果从核内 UB 搬到其他核可读取的 GM；发出与完成是两件事 |
+| `pipe_barrier[PIPE_ALL]` | 约束本核所有流水的前序读写完成，包括前面的 MTE3 搬出；不是等待其他核 |
+| `sync_block_set`，生产流水为 MTE3 | 本核前序 MTE3 任务完成后才上报到达，不能只根据标量指令执行位置上报 |
+| `sync_block_wait` | 等待所有参与 Vector 核上报完成，之后才允许本核继续下发后续指令 |
+| MTE3→MTE2 的 `set_flag/wait_flag` | 维护本核搬出与后续搬入的依赖；这一对本核事件不能单独代替跨核会合 |
+| `load_gm_to_ubuf_nocache` | 本次实际生成的 peer 读取路径；随后再同步 MTE2 与 Vector 合并计算 |
+
+流水异步执行：V 负责向量计算，MTE3 负责 UB→GM，MTE2 负责 GM→UB，S 负责标量控制。
+标量已经发出 store 时，MTE3 仍可能在搬运，故不能用源码中的先后顺序证明数据已就绪。
+`PIPE_ALL` 的本核等待和绑定 MTE3 的跨核通知一起保证“写回完成后才上报”；
+全体等待再保证“所有分片上报后才读取”。例如核 0 已写完、核 1 仍在搬出时，
+核 0 必须停在跨核 wait，不能因为自己的本核屏障已完成就读取核 1 的 partial。
+相关硬件语义见[流水与同步说明][sync-overview]、[PipeBarrier 参数说明][pipe-barrier]和
+[CrossCoreSetFlag/WaitFlag 说明][cross-core-sync]。
+
+LLVM IR 中也保留了 `llvm.hivm.BARRIER`、`llvm.hivm.SET.CROSS.CORE` 与
+`llvm.hivm.WAIT.FLAG.DEV.PIPE.IMM`，不是只有 adapter 上的抽象 `PIPE_ALL` 字段。
+完整证据见[后端 MLIR][native-mlir]、[LLVM IR][native-llvm]与[仅编译记录][native-compile]。
+本次未新增运行或计时；前述数据交换检查为运行侧证据，不能将仅编译导出算成一次新的功能验证。
+
+`tl.debug_barrier()` 的 Triton 接口语义是同步一个 block 内的线程，见[接口定义][debug-barrier]；
+它不是唯一能表达本核同步的方式，也不能单独同步其他 block。
+当前结论限定于已检查的 A5 SIMD 生成路径，不推导其他编译模式具有相同 lowering。
+
 例如 `Q=4,S=8` 时，上游四个八分片组可以独立同步；改写后 32 个参与者一起等待。
 各组都执行同样八轮交换时可以验证结果等价；若一组提前退出或少执行一轮，全体同步条件
 就不再成立。因此这是受约束的 NPU 实现原型，完整接入仍需 schedule/codegen 保证调用条件。
@@ -312,3 +356,10 @@ unsupported 算子/模式回退、同一 kernel 多次调用与 workspace 重用
 [E3]: ../../../artifacts/npu-cooperative-reductions-20261118/compile-fixed/compile.json
 [E7]: ../../../artifacts/npu-cooperative-reductions-20261118/index-fallback.log
 [E13]: ../../../artifacts/npu-cooperative-reductions-20261118/compile-fixed/cooperative_sum-simd/kernel.ttadapter
+[native-mlir]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/final-native/module.hivm.opt.mlir
+[native-llvm]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/final-native/kernel.ll
+[native-compile]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/final-native/manifest.json
+[sync-overview]: https://www.hiascend.com/doc_center/source/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0179.html
+[pipe-barrier]: https://www.hiascend.com/doc_center/source/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0271.html
+[cross-core-sync]: https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreSetFlag_ISASI.html
+[debug-barrier]: https://triton-lang.org/main/python-api/generated/triton.language.debug_barrier.html
