@@ -141,3 +141,40 @@ msopprof --kernel-name=reduction --launch-count=1 \
 当前调研尚未实际执行这些时间线采集命令。参数与支持范围见
 [MindStudio 工具指南](https://github.com/Ascend/msopprof/blob/master/docs/zh/user_guide/msopprof_user_guide.md)
 和[TA 性能分析方法](https://triton-ascend.readthedocs.io/zh-cn/latest/debug_guide/profiling.html)。
+
+## 三种 helper 的分片扫描与并发验证
+
+`barrier_suite.py` 提供 CUDA/NPU 共用的工作负载，`--kinds` 的三个值为：
+`original`（安装包原始协议）、`native`（只调用 all_vector）及 `debug`（两侧各加一次
+`tl.debug_barrier` 的 all_vector）。CUDA 只执行 `original`，另两种依赖 CANN。
+
+- `bench`：小整数数据交换和 `(a.float()+b.float()).sum(-1)`，扫描分片数。
+  统一 all-read 合并算法、`BLOCK=1024`、4 warps，完整 kernel 以 Graph + device Event 计时。
+  每点计时前后都检查结果，保存全部样本、中位数、精度误差及编译 metadata。
+- `check`：多输出组与三维 Grid、非二次幂分片、空片、尾块、分片耗时不均、重复 epoch/phase；
+  另测 fp32/fp16/bf16 输入的 sum/mean/amax。Prologue 和累加为 fp32，参考为 CPU fp64；输出为 fp32。
+- `mapping`：在单独进程中运行一个指定 Grid，观察默认/关闭自动分核的差别，也可诊断超过核数的 Grid。
+- `concurrency`：spawn 独立进程，预热后统一起跑；各进程通过独立线程向多个 stream 提交，
+  每个 stream 独立持有 workspace/semaphore，保留每次输出。提交并发不直接等同设备指令并发。
+
+下面的 NPU 命令仅示例物理卡 2，实际运行前确认其仍符合时段限制及选卡约定。
+三类命令使用不同结果目录，共享编译缓存以减少重复编译。
+
+```bash
+export ASCEND_RT_VISIBLE_DEVICES=2
+export TRITON_CACHE_DIR=/home/l30023782/PTA_213/cooperative-results/barrier-suite-cache
+python scripts/tests/cooperative_reductions/barrier_suite.py --backend npu --phase bench \
+  --physical-device 2 --out ../cooperative-results/barrier-suite/bench
+python scripts/tests/cooperative_reductions/barrier_suite.py --backend npu --phase check \
+  --physical-device 2 --out ../cooperative-results/barrier-suite/check
+python scripts/tests/cooperative_reductions/barrier_suite.py --backend npu --phase concurrency \
+  --physical-device 2 --kinds native --workers 2 --streams 2 \
+  --out ../cooperative-results/barrier-suite/concurrent-native
+```
+
+CUDA 在指定容器内按 UUID 选择物理 GPU 6，使用 `--backend cuda --physical-device 6 --kinds original`。
+`--splits` 可显式扩展，常规 bench/check 排除 program 数超过计算核数的配置；超核分核通过独立
+`mapping` 命令验证，不把此类配置混入性能图。NPU 设置单算子超时，单项失败保留错误及配置；
+并发运行还有进程级期限，不修改安装包或设备全局配置。
+
+这些是 helper 与手写协作算法的验证，不代表已实现 Inductor 自动选择，也不证明按组屏障可通用替换。
