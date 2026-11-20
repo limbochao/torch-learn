@@ -261,6 +261,14 @@ def verify_exchange(args, api, kernel, splits, y, z, kind, phases=1, epoch=0, sk
     api.synchronize()
     actual = output.cpu()
     expected = exchange_expected(splits, y * z, phases, epoch, skew)
+    if args.phase == "mapping":
+        # Keep the launched IR and observed values even when the numerical assertion fails.
+        save_kernel(args, compiled, "mapping")
+        write_json(args.out / "mapping-observations.json", {
+            "grid": [splits, y, z], "metadata": metadata_dict(compiled),
+            "mismatched_values": int((actual != expected).sum()), "checked_values": actual.numel(),
+            "first_phase_observed": actual[0].tolist(), "first_phase_expected": expected[0].tolist(),
+            "last_phase_observed": actual[-1].tolist(), "last_phase_expected": expected[-1].tolist()})
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     if kind != "original":
         assert bool((sem.cpu() == 123).all()), "Native helper unexpectedly modified the semaphore"
