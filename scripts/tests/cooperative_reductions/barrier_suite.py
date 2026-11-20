@@ -416,14 +416,20 @@ def concurrency_worker(config, rank, ready):
             invoke, output, expected, keepalive = make_reduction(
                 args, kernels[1], args.concurrent_rows, args.concurrent_r, args.concurrent_s, kind,
                 seed=100 * rank + index)
+            epoch_base = 10000 + rank * 1000 + index * 100
+            exchange_invoke, exchange_output, exchange_sem, exchange_buffers = make_exchange(
+                args, kernels[0], args.concurrent_s, args.concurrent_rows, 1, kind,
+                phases=2, epoch=epoch_base + 3, skew=True)
             # Initialization uses the default stream; make it visible before another stream launches.
             api.synchronize()
             with api.stream(stream):
                 compiled = invoke()
-            tasks.append((stream, invoke, output, expected, keepalive))
+                exchange_invoke()
+            tasks.append((stream, output, expected, keepalive, exchange_output,
+                          exchange_sem, exchange_buffers, epoch_base))
         api.synchronize()
-        for stream, invoke, output, expected, keepalive in tasks:
-            check_reduction(output, expected, "sum")
+        for task in tasks:
+            check_reduction(task[1], task[2], "sum")
         ready.wait(timeout=240)
         # Separate output tensors preserve every result; each stream owns its workspace and semaphore.
         results = []
@@ -431,9 +437,11 @@ def concurrency_worker(config, rank, ready):
         failures = []
 
         def run_stream(index):
-            stream, invoke, output, expected, keepalive = tasks[index]
+            (stream, output, expected, keepalive, exchange_output,
+             exchange_sem, exchange_buffers, epoch_base) = tasks[index]
             left, right, workspace, sem = keepalive
             observations = []
+            exchanges = []
             try:
                 with api.stream(stream):
                     launch_gate.wait(timeout=60)
@@ -445,10 +453,23 @@ def concurrency_worker(config, rank, ready):
                             Y=args.concurrent_rows,
                             BLOCK=args.block, KIND=KINDS[kind], OP=0, **args.options)
                         observations.append(target)
+                        # Every launch has different integer data, exposing stale workspace reads.
+                        epoch = epoch_base + 2 * iteration + 3
+                        exchanged = torch.empty_like(exchange_output)
+                        kernels[0][(args.concurrent_s, args.concurrent_rows, 1)](
+                            exchange_buffers[0], exchanged, exchange_sem, epoch,
+                            S=args.concurrent_s, P=triton.next_power_of_2(args.concurrent_s),
+                            Y=args.concurrent_rows, Z=1, PHASES=2, KIND=KINDS[kind], SKEW=True, **args.options)
+                        exchanges.append((exchanged, epoch))
                 stream.synchronize()
                 accuracy = [check_reduction(value, expected, "sum") for value in observations]
+                for value, epoch in exchanges:
+                    reference = exchange_expected(args.concurrent_s, args.concurrent_rows, 2, epoch, True)
+                    torch.testing.assert_close(value.cpu(), reference, rtol=0, atol=0)
                 results.append({"stream_index": index, "stream_id": stream.npu_stream if args.backend == "npu"
-                                else stream.cuda_stream, "iterations": len(accuracy), "accuracy": accuracy})
+                                else stream.cuda_stream, "iterations": len(accuracy), "accuracy": accuracy,
+                                "integer_exchange_launches": len(exchanges), "integer_exchange_error": 0,
+                                "first_epoch": exchanges[0][1], "last_epoch": exchanges[-1][1]})
             except Exception:
                 failures.append(traceback.format_exc())
 
