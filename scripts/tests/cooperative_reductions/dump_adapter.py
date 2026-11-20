@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
 
 
 def main():
@@ -19,14 +18,15 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     os.environ["TRITON_DUMP_DIR"] = str(args.out.resolve())
 
-    from triton.backends.ascend.compiler import linalg_to_bin_enable_npu_compile_910_95
+    from triton.backends.ascend.compiler import NPUOptions, linalg_to_bin_enable_npu_compile_910_95
     from triton.backends.compiler import GPUTarget
 
     adapter = args.adapter.read_text()
     metadata = json.loads(args.metadata.read_text())
     metadata["target"] = GPUTarget("npu", metadata["target_arch"], 0)
     metadata["hash"] = hashlib.sha256((adapter + str(args.out)).encode()).hexdigest()
-    options = SimpleNamespace(debug=True, is_pure_simt=metadata["is_pure_simt"])
+    options = NPUOptions(debug=True, arch=metadata["target_arch"],
+                         compile_mode=metadata["compile_mode"], num_warps=metadata["num_warps"])
     # Compile only. debug saves intermediate files and the generated object;
     # it does not add device instrumentation to the existing adapter.
     binary = linalg_to_bin_enable_npu_compile_910_95(adapter, metadata, options)
