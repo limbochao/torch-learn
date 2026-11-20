@@ -50,9 +50,10 @@ python scripts/tests/cooperative_reductions/probe.py bench --graph \
 `barrier_bench.py` 按下面的顺序执行，不修改安装包：
 
 1. 使用增加了轮询次数上限的诊断版协议，检查 1/2/8/32 个 program、多个输出组与 8 轮数据交换。
-2. 上一步全部通过后，调用安装包中的原始 `x_grid_barrier` 复核相同的交换过程。
-3. 对同一个 sum 算法比较不分片、`x_grid_barrier` 与原生 `all_vector` 三种实现。
-   两种协作实现保持相同分片、`B=1024`、peer 合并和输出归属，固定 SIMD、4 warps、
+2. 上一步全部通过后，依次调用安装包原始 `x_grid_barrier`、原生 `all_vector` 及 NPU helper 改写版复核交换。
+   每项连续运行三次、每次八轮交换；不同调用使用不同输入值，避免旧 workspace 恰好通过检查。
+3. 对同一个 sum 算法比较不分片、`x_grid_barrier`、原生 `all_vector` 与 NPU helper 改写版。
+   各协作实现保持相同分片、`B=1024`、peer 合并和输出归属，固定 SIMD、4 warps、
    `launch_cooperative_grid=True`；沿用 `event_time` 的 Graph + Event 五组中位数方法。
 
 以下命令以可见物理卡 1 为例，执行前按当前任务的选卡约定设置。脚本通过 CANN API 核对
@@ -65,9 +66,21 @@ ASCEND_RT_VISIBLE_DEVICES=1 python scripts/tests/cooperative_reductions/barrier_
   --physical-device 1 --out ../cooperative-results/xgrid
 ```
 
-有限轮询版本只用于功能诊断，不用于性能统计。输出的 `visibility.json` 记录三种协议的
-交换结果，`bench.json` 只记录原始 helper 和原生同步等实际 kernel 的耗时；功能检查失败
+有限轮询版本只用于功能诊断，不用于性能统计。输出的 `visibility.json` 记录各协议的
+交换结果，`bench.json` 只记录原始 helper、原生同步和改写版等实际 kernel 的耗时；功能检查失败
 会停止计时。manifest、原始 helper 源码、编译 metadata 与中间 IR 保留在输出目录。
+
+### all_vector 改写版 helper
+
+`npu_triton_helpers.py` 提供 `x_grid_barrier(sem)` 原型，函数体为
+`extension.sync_block_all("all_vector", 0)`。保留 `sem` 参数便于替换调用，既不读取也不更新其内容。
+它同步整个参与的 Vector 集合；调用者须保证所有参与者按相同顺序、相同次数到达每次屏障，
+满足模式/映射约束，并将事件 0 留给该协议。
+例如四组各八个 program 统一执行八轮屏障可以作为验证对象；不能让其中一组提前退出或少执行一轮。
+
+改写版的可见性检查将 semaphore 初始化为 123，检查它保持不变；同一 helper 的事件 0
+既用于“写后读”，也用于“读完再覆盖”，覆盖同一编号的连续复用。
+这是 A5 SIMD 的调研原型；完整 Inductor 接入仍需在选择和 codegen 阶段满足上述调用条件。
 
 ## 同步慢例的分量分析
 

@@ -86,6 +86,27 @@ cache hit 后恢复同样的 Grid、workspace stride 与 compile options；不�
 `Q*S` 不超过有效 AIV 数，并确认没有额外 program 循环或 sub-block 改写参与者。
 数量检查是必要条件，**不代替后端对物理映射与屏障参与者的确认**。
 
+保留上游调用形式的 NPU helper 原型可以写为：
+
+```python
+import triton
+from triton.language.extra.cann import extension
+
+
+@triton.jit
+def x_grid_barrier(sem):
+    extension.sync_block_all("all_vector", 0)
+```
+
+`sem` 在此仅用于兼容调用签名，不读写同步状态；到达登记、atomic 返回旧值和轮询均被
+原生全 Vector 屏障替代。完整原型见[NPU helper](../../../scripts/tests/cooperative_reductions/npu_triton_helpers.py)。
+该改写要求所有参与者按相同顺序、相同次数执行屏障，并将事件 0 留给此协议。
+同一事件编号的连续复用由专门的数据交换探针验证，不能仅根据单次 sum 成功推定。
+
+例如 `Q=4,S=8` 时，上游四个八分片组可以独立同步；改写后 32 个参与者一起等待。
+各组都执行同样八轮交换时可以验证结果等价；若一组提前退出或少执行一轮，全体同步条件
+就不再成立。因此这是受约束的 NPU 实现原型，完整接入仍需 schedule/codegen 保证调用条件。
+
 ![cooperative 单 phase 运行流程](assets/kernel-flow.svg)
 
 <details markdown="1">

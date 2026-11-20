@@ -1,0 +1,104 @@
+module attributes {hacc.target = #hacc.target<"Ascend950PR_9579">, ssbuffer.insertionOptimization} {
+  func.func @visibility(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32> {tt.tensor_kind = 2 : i32}, %arg3: memref<?xf32> {tt.tensor_kind = 1 : i32}, %arg4: memref<?xi32> {tt.tensor_kind = 2 : i32}, %arg5: memref<?xi32> {tt.tensor_kind = 1 : i32}, %arg6: i32, %arg7: i32, %arg8: i32, %arg9: i32, %arg10: i32, %arg11: i32, %arg12: i32) attributes {SyncBlockLockArgIdx = 0 : i64, WorkspaceArgIdx = 1 : i64, global_kernel = "local", mix_mode = "aiv", parallel_mode = "simd"} {
+    %cst = arith.constant 0.000000e+00 : f32
+    %c-2147483648_i32 = arith.constant -2147483648 : i32
+    %true = arith.constant true
+    %false = arith.constant false
+    %c-2147483647_i32 = arith.constant -2147483647 : i32
+    %c8_i32 = arith.constant 8 : i32
+    %c0 = arith.constant 0 : index
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %0 = tensor.empty() : tensor<1xi32>
+    %1 = linalg.fill ins(%c1_i32 : i32) outs(%0 : tensor<1xi32>) -> tensor<1xi32>
+    %2 = linalg.fill ins(%c0_i32 : i32) outs(%0 : tensor<1xi32>) -> tensor<1xi32>
+    %3 = arith.muli %arg11, %c8_i32 : i32
+    %4 = arith.index_cast %3 : i32 to index
+    %5 = arith.addi %arg10, %c1_i32 : i32
+    %6 = arith.cmpi eq, %arg10, %c0_i32 : i32
+    %7 = scf.if %6 -> (i32) {
+      %8 = arith.subi %c-2147483647_i32, %arg7 : i32
+      scf.yield %8 : i32
+    } else {
+      scf.yield %c1_i32 : i32
+    }
+    %reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%4], sizes: [8], strides: [1] : memref<?xf32> to memref<8xf32, strided<[1], offset: ?>>
+    scf.for %arg13 = %c0_i32 to %c8_i32 step %c1_i32  : i32 {
+      %8 = arith.addi %5, %arg13 : i32
+      %9 = arith.addi %8, %arg6 : i32
+      %10 = arith.sitofp %9 : i32 to f32
+      %11 = tensor.empty() : tensor<1xf32>
+      %inserted = tensor.insert %10 into %11[%c0] : tensor<1xf32>
+      %12 = arith.index_cast %arg10 : i32 to index
+      %13 = arith.addi %4, %12 : index
+      %reinterpret_cast_0 = memref.reinterpret_cast %arg2 to offset: [%13], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>>
+      bufferization.materialize_in_destination %inserted in writable %reinterpret_cast_0 : (tensor<1xf32>, memref<1xf32, strided<[1], offset: ?>>) -> ()
+      gpu.barrier
+      %inserted_1 = tensor.insert %7 into %0[%c0] : tensor<1xi32>
+      %14 = arith.index_cast %arg11 : i32 to index
+      %reinterpret_cast_2 = memref.reinterpret_cast %arg4 to offset: [%14], sizes: [1], strides: [1] : memref<?xi32> to memref<1xi32, strided<[1], offset: ?>>
+      %alloc = memref.alloc() : memref<1xi32>
+      memref.copy %reinterpret_cast_2, %alloc : memref<1xi32, strided<[1], offset: ?>> to memref<1xi32>
+      %15 = bufferization.to_tensor %alloc restrict writable : memref<1xi32>
+      hivm.hir.store ins(%inserted_1 : tensor<1xi32>) outs(%reinterpret_cast_2 : memref<1xi32, strided<[1], offset: ?>>) atomic = <add>
+      %extracted = tensor.extract %15[%c0] : tensor<1xi32>
+      scf.while (%arg14 = %false) : (i1) -> () {
+        %24 = arith.xori %arg14, %true : i1
+        scf.condition(%24)
+      } do {
+        %alloc_10 = memref.alloc() : memref<1xi32>
+        memref.copy %reinterpret_cast_2, %alloc_10 : memref<1xi32, strided<[1], offset: ?>> to memref<1xi32>
+        %24 = bufferization.to_tensor %alloc_10 restrict writable : memref<1xi32>
+        hivm.hir.store ins(%2 : tensor<1xi32>) outs(%reinterpret_cast_2 : memref<1xi32, strided<[1], offset: ?>>) atomic = <add>
+        %extracted_11 = tensor.extract %24[%c0] : tensor<1xi32>
+        %25 = arith.xori %extracted, %extracted_11 : i32
+        %26 = arith.andi %25, %c-2147483648_i32 : i32
+        %27 = arith.cmpi ne, %26, %c0_i32 : i32
+        scf.yield %27 : i1
+      }
+      gpu.barrier
+      %alloc_3 = memref.alloc() : memref<8xf32>
+      memref.copy %reinterpret_cast, %alloc_3 : memref<8xf32, strided<[1], offset: ?>> to memref<8xf32>
+      %16 = bufferization.to_tensor %alloc_3 restrict writable : memref<8xf32>
+      %17 = arith.addi %arg13, %arg11 : i32
+      %18 = arith.muli %17, %c8_i32 : i32
+      %19 = arith.addi %18, %arg10 : i32
+      %20 = bufferization.alloc_tensor() : tensor<f32>
+      %21 = linalg.fill ins(%cst : f32) outs(%20 : tensor<f32>) -> tensor<f32>
+      %reduced = linalg.reduce ins(%16 : tensor<8xf32>) outs(%21 : tensor<f32>) dimensions = [0] 
+        (%in: f32, %init: f32) {
+          %24 = arith.addf %in, %init : f32
+          linalg.yield %24 : f32
+        }
+      %extracted_4 = tensor.extract %reduced[] : tensor<f32>
+      %inserted_5 = tensor.insert %extracted_4 into %11[%c0] : tensor<1xf32>
+      %22 = arith.index_cast %19 : i32 to index
+      %reinterpret_cast_6 = memref.reinterpret_cast %arg3 to offset: [%22], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>>
+      bufferization.materialize_in_destination %inserted_5 in writable %reinterpret_cast_6 : (tensor<1xf32>, memref<1xf32, strided<[1], offset: ?>>) -> ()
+      %reinterpret_cast_7 = memref.reinterpret_cast %arg5 to offset: [%22], sizes: [1], strides: [1] : memref<?xi32> to memref<1xi32, strided<[1], offset: ?>>
+      bufferization.materialize_in_destination %1 in writable %reinterpret_cast_7 : (tensor<1xi32>, memref<1xi32, strided<[1], offset: ?>>) -> ()
+      gpu.barrier
+      %alloc_8 = memref.alloc() : memref<1xi32>
+      memref.copy %reinterpret_cast_2, %alloc_8 : memref<1xi32, strided<[1], offset: ?>> to memref<1xi32>
+      %23 = bufferization.to_tensor %alloc_8 restrict writable : memref<1xi32>
+      hivm.hir.store ins(%inserted_1 : tensor<1xi32>) outs(%reinterpret_cast_2 : memref<1xi32, strided<[1], offset: ?>>) atomic = <add>
+      %extracted_9 = tensor.extract %23[%c0] : tensor<1xi32>
+      scf.while (%arg14 = %false) : (i1) -> () {
+        %24 = arith.xori %arg14, %true : i1
+        scf.condition(%24)
+      } do {
+        %alloc_10 = memref.alloc() : memref<1xi32>
+        memref.copy %reinterpret_cast_2, %alloc_10 : memref<1xi32, strided<[1], offset: ?>> to memref<1xi32>
+        %24 = bufferization.to_tensor %alloc_10 restrict writable : memref<1xi32>
+        hivm.hir.store ins(%2 : tensor<1xi32>) outs(%reinterpret_cast_2 : memref<1xi32, strided<[1], offset: ?>>) atomic = <add>
+        %extracted_11 = tensor.extract %24[%c0] : tensor<1xi32>
+        %25 = arith.xori %extracted_9, %extracted_11 : i32
+        %26 = arith.andi %25, %c-2147483648_i32 : i32
+        %27 = arith.cmpi ne, %26, %c0_i32 : i32
+        scf.yield %27 : i1
+      }
+      gpu.barrier
+    }
+    return
+  }
+}

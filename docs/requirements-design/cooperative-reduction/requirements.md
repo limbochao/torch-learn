@@ -652,11 +652,12 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 ### 6.1 已有性能证据及边界
 
 **本节数据来自调研时手写的 Triton kernel，用于验证跨 program 协作的可行性与收益区间。**
-（1）～（4）的计算均为单输入 fp32 `sum(a, dim=-1)`，固定 SIMD、`B=1024`；
+（1）～（4）及（6）的计算均为单输入 fp32 `sum(a, dim=-1)`，固定 SIMD、`B=1024`；
 （5）移除归约计算，测量同步和 atomic 分量。各项均直接调用 Triton-Ascend 编译和运行，
 没有经过 `torch.compile` 的图优化、schedule 或 autotune。
 （1）～（3）为 11 月 18 日的原生同步原型实验；（4）为 11 月 19 日补充的原始
-`x_grid_barrier` 与原生同步对照；（5）为 11 月 20 日的原因分析。各轮结果分开列出。
+`x_grid_barrier` 与原生同步对照；（5）为 11 月 20 日的原因分析，（6）为同日的 helper 改写验证。
+各轮结果分开列出。
 
 “原生”指协作 kernel 使用 TA 已有的 `ext.sync_block_all("all_vector", 0)` 同步接口，
 不是指 NPU Inductor 已实现了 cooperative reduction，也不是某个现成 sum 算子的性能。
@@ -900,6 +901,42 @@ TA/NPUIR 需要明确返回旧值原子操作、高效 acquire 读取或分组�
 流水屏障的占比，也未验证其他 mode/SoC。表中各值包含一次 Triton 调用的隐式状态处理，
 不应标成裸 atomic 指令或裸 barrier 的硬件延迟。
 
+#### （6）保留调用签名，用 `all_vector` 改写 helper
+
+已实现[NPU helper 原型][P6]：保留 `x_grid_barrier(sem)`，函数体只调用
+`extension.sync_block_all("all_vector", 0)`；`sem` 不再读写。调用范围变为整个参与的 Vector 集合，
+要求各组按相同顺序、相同次数执行屏障，具体约束见[方案中的协议说明](design.md#13-kernel-内协议与运行流程)。
+
+代码提交 `fd8f2c733a25beb304676588b876a05e3da069bb`，在同一 `pta_213_case` 环境、共享物理卡 2
+验证。五种参与者配置为 `(X,S)=(1,1)/(1,2)/(1,8)/(1,32)/(4,8)`；每项连续调用三次、
+每次进行八轮数据交换，每轮写后读、读完再覆盖均通过同一个 helper 同步，复用事件 0。
+各次调用写入不同数值，避免旧 workspace 恰好通过检查；传入的 semaphore 保持初值 123 不变。
+四种同步实现共 20 项可见性检查全部通过，五个 shape、四种 sum 策略的 20 项精度检查也全部通过。
+
+下表是同轮 Graph + Event 五组中位数，单位为 µs，均为完整手写 sum 调用耗时。
+`S` 为协作实现的分片数，不分片实际使用 `S=1`。
+
+| `X × R` | `S` | 不分片 | 原始 helper | 改写后的 helper |
+| --- | --- | --- | --- | --- |
+| `1 × 4096` | 32 | 1.031 | 531.395 | 4.801 |
+| `1 × 32768` | 32 | 3.499 | 532.560 | 4.808 |
+| `1 × 1048576` | 32 | 90.597 | 533.919 | 7.530 |
+| `8 × 1048576` | 4 | 93.520 | 484.165 | 27.725 |
+| `1 × 1048593` | 32 | 90.805 | 520.978 | 7.657 |
+
+`(1,1048576)` 的直接原生调用为 7.529 µs，与改写版接近。改写版 adapter 实际生成为
+`ALL_VECTOR`、事件 0；未生成原始协议的 atomic，metadata 不再返回其软件锁布局，
+`auto_blockify_enabled=True`。完整信息见[本轮 manifest][E30]、[可见性记录][E31]、
+[原始计时样本][E32]和[改写版 adapter][E33]。
+
+多输出组 `(8,1048576)` 首轮直接原生同步样本波动在约 28～71 µs，随后用同一源码与编译缓存
+单独复测该 shape：直接原生为 27.810 µs，改写版为 27.792 µs，见[定向复测原始样本][E34]。
+不能将首轮波动解释成 helper 封装使原生同步更快；原始记录均保留。
+
+该结果验证了受限 helper 改写的功能与性能，没有打通完整 Inductor cooperative 路径。
+小工作量场景中改写版仍慢于不分片，不能因此省略收益选择；各组独立推进、动态参与者及其他
+编译模式也不能直接用这组结果宣称支持。
+
 ### 6.2 性能验收原则
 
 | 要求 | 判定依据 |
@@ -1118,3 +1155,9 @@ helper SHA256、明确源码提交、编译选项、设备映射和每项产物�
 [E27]: ../../../artifacts/npu-cooperative-reductions-20261120-components/README.md
 [E28]: ../../../artifacts/npu-cooperative-reductions-20261120-components/final-sum/kernel.ll
 [E29]: ../../../artifacts/npu-cooperative-reductions-20261120-components/final-atomic/kernel.ll
+[P6]: https://github.com/limbochao/torch-learn/blob/fd8f2c733a25beb304676588b876a05e3da069bb/scripts/tests/cooperative_reductions/npu_triton_helpers.py#L7
+[E30]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/manifest.json
+[E31]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/visibility.json
+[E32]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/bench.json
+[E33]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/sum-npu_x_grid_barrier-x1-r1048576.ttadapter
+[E34]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/repeat-x8/bench.json
