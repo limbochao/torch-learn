@@ -236,12 +236,16 @@ def exchange_expected(splits, rows, phases, epoch, skew):
     return expected
 
 
-def make_exchange(args, kernel, splits, y, z, kind, phases=1, epoch=0, skew=False):
+def make_exchange(args, kernel, splits, y, z, kind, phases=1, epoch=0, skew=False, prepared=None):
     rows = y * z
-    workspace = torch.full((rows, splits), -12345, dtype=torch.int32, device=args.backend)
-    output = torch.full((phases, rows, splits), -54321, dtype=torch.int32, device=args.backend)
-    initial = 0 if kind == "original" else 123
-    sem = torch.full((rows,), initial, dtype=torch.int32, device=args.backend)
+    if prepared is None:
+        workspace = torch.full((rows, splits), -12345, dtype=torch.int32, device=args.backend)
+        output = torch.full((phases, rows, splits), -54321, dtype=torch.int32, device=args.backend)
+        initial = 0 if kind == "original" else 123
+        sem = torch.full((rows,), initial, dtype=torch.int32, device=args.backend)
+    else:
+        output, sem, buffers = prepared
+        workspace = buffers[0]
 
     def invoke():
         return kernel[(splits, y, z)](workspace, output, sem, epoch,
@@ -264,23 +268,27 @@ def verify_exchange(args, api, kernel, splits, y, z, kind, phases=1, epoch=0, sk
                       "final_sem": sem.cpu().tolist()}
 
 
-def make_reduction(args, kernel, rows, count, splits, kind, dtype="float32", operation="sum", seed=0):
-    generator = torch.Generator().manual_seed(args.seed + seed)
-    data_dtype = getattr(torch, dtype)
-    left = torch.randn((rows, count), generator=generator, dtype=torch.float32).to(data_dtype)
-    right = torch.randn((rows, count), generator=generator, dtype=torch.float32).to(data_dtype)
-    # Define the prologue in fp32, then use an fp64 CPU reference for the reduction.
-    reference_input = (left.float() + right.float()).double()
-    if operation == "amax":
-        expected = reference_input.amax(-1)
-    elif operation == "mean":
-        expected = reference_input.mean(-1)
+def make_reduction(args, kernel, rows, count, splits, kind, dtype="float32", operation="sum", seed=0, prepared=None):
+    if prepared is None:
+        generator = torch.Generator().manual_seed(args.seed + seed)
+        data_dtype = getattr(torch, dtype)
+        left = torch.randn((rows, count), generator=generator, dtype=torch.float32).to(data_dtype)
+        right = torch.randn((rows, count), generator=generator, dtype=torch.float32).to(data_dtype)
+        # Define the prologue in fp32, then use an fp64 CPU reference for the reduction.
+        reference_input = (left.float() + right.float()).double()
+        if operation == "amax":
+            expected = reference_input.amax(-1)
+        elif operation == "mean":
+            expected = reference_input.mean(-1)
+        else:
+            expected = reference_input.sum(-1)
+        left, right = left.to(args.backend), right.to(args.backend)
+        workspace = torch.full((rows, splits), float("nan"), device=args.backend)
+        output = torch.full((rows,), float("nan"), device=args.backend)
+        sem = torch.zeros(rows, dtype=torch.int32, device=args.backend)
     else:
-        expected = reference_input.sum(-1)
-    left, right = left.to(args.backend), right.to(args.backend)
-    workspace = torch.full((rows, splits), float("nan"), device=args.backend)
-    output = torch.full((rows,), float("nan"), device=args.backend)
-    sem = torch.zeros(rows, dtype=torch.int32, device=args.backend)
+        output, expected, buffers = prepared
+        left, right, workspace, sem = buffers
 
     def invoke():
         return kernel[(splits, rows)](left, right, workspace, output, sem,
@@ -312,19 +320,32 @@ def benchmark(args, api, kernels, info):
             # Rotate the order across S to reduce a fixed ordering bias.
             shift = args.splits.index(splits) % len(args.kinds)
             order = args.kinds[shift:] + args.kinds[:shift]
+            prepared = None
             for kind in order:
                 record = {"workload": workload, "X": rows, "R": count, "S": splits,
                           "kind": kind, "dtype": "float32", "block": args.block}
                 try:
                     if workload == "exchange":
-                        invoke, output, sem, keepalive = make_exchange(args, exchange, splits, rows, 1, kind)
+                        invoke, output, sem, keepalive = make_exchange(
+                            args, exchange, splits, rows, 1, kind, prepared=prepared)
+                        prepared = (output, sem, keepalive)
+                        keepalive[0].fill_(-12345)
+                        output.fill_(-54321)
+                        sem.zero_()
+                        api.synchronize()
                         compiled = invoke()
                         api.synchronize()
                         torch.testing.assert_close(output.cpu(), exchange_expected(splits, rows, 1, 0, False),
                                                    rtol=0, atol=0)
                         accuracy = {"max_abs_error": 0}
                     else:
-                        invoke, output, expected, keepalive = make_reduction(args, reduce, rows, count, splits, kind)
+                        invoke, output, expected, keepalive = make_reduction(
+                            args, reduce, rows, count, splits, kind, prepared=prepared)
+                        prepared = (output, expected, keepalive)
+                        keepalive[2].fill_(float("nan"))
+                        output.fill_(float("nan"))
+                        keepalive[3].zero_()
+                        api.synchronize()
                         compiled = invoke()
                         api.synchronize()
                         accuracy = check_reduction(output, expected, "sum")
@@ -335,6 +356,8 @@ def benchmark(args, api, kernels, info):
                     else:
                         check_reduction(output, expected, "sum")
                     record.update(status="PASS", accuracy=accuracy, **timing, metadata=metadata_dict(compiled))
+                    record["buffer_addresses"] = [tensor.data_ptr() for tensor in keepalive] + [output.data_ptr()]
+                    record["same_buffers_across_helpers"] = True
                     if count == 1048576 and rows == 1 and splits in (1, 8, 32, 56):
                         save_kernel(args, compiled, f"{workload}-{kind}-x{rows}-r{count}-s{splits}")
                 except Exception:
