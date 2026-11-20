@@ -1,4 +1,4 @@
-"""Validate x_grid_barrier before comparing it with TA native synchronization."""
+"""Compare upstream x_grid_barrier, native synchronization and an NPU helper rewrite."""
 
 from __future__ import annotations
 
@@ -37,8 +37,10 @@ def main():
     from triton.backends.ascend.utils import _get_npucompiler_path
     from triton.language.extra.cann import extension as ext
     from torch._inductor.runtime.triton_helpers import x_grid_barrier
+    from npu_triton_helpers import x_grid_barrier as npu_x_grid_barrier
 
-    globals().update(triton=triton, tl=tl, ext=ext, x_grid_barrier=x_grid_barrier)
+    globals().update(triton=triton, tl=tl, ext=ext, x_grid_barrier=x_grid_barrier,
+                     npu_x_grid_barrier=npu_x_grid_barrier)
 
     @triton.jit
     def checked_barrier(Sem, MAX_POLLS: tl.constexpr):
@@ -60,20 +62,23 @@ def main():
     globals()["checked_barrier"] = checked_barrier
 
     @triton.jit
-    def visibility(W, Y, Sem, OK, S: tl.constexpr, X: tl.constexpr,
+    def visibility(W, Y, Sem, OK, epoch, S: tl.constexpr, X: tl.constexpr,
                    PHASES: tl.constexpr, KIND: tl.constexpr):
         pid = tl.program_id(0)
         row = tl.program_id(1)
         sem = Sem.to(tl.pointer_type(tl.uint32)) + row
         for phase in range(PHASES):
-            tl.store(W + row * S + pid, pid + 1 + phase)
+            tl.store(W + row * S + pid, pid + 1 + phase + epoch)
             if KIND == 0:
                 ready = checked_barrier(sem, 4096)
             elif KIND == 1:
                 x_grid_barrier(sem)
                 ready = True
-            else:
+            elif KIND == 2:
                 ext.sync_block_all("all_vector", 0)
+                ready = True
+            else:
+                npu_x_grid_barrier(sem)
                 ready = True
             peers = tl.arange(0, S)
             values = tl.load(W + row * S + peers)
@@ -86,8 +91,10 @@ def main():
                 tl.store(OK + offset, ready & done)
             elif KIND == 1:
                 x_grid_barrier(sem)
-            else:
+            elif KIND == 2:
                 ext.sync_block_all("all_vector", 1)
+            else:
+                npu_x_grid_barrier(sem)
 
     @triton.jit
     def reduction(A, W, Y, Sem, R: tl.constexpr, S: tl.constexpr,
@@ -106,8 +113,10 @@ def main():
             tl.store(W + row * S + shard, partial)
             if KIND == 1:
                 x_grid_barrier(Sem.to(tl.pointer_type(tl.uint32)) + row)
-            else:
+            elif KIND == 2:
                 ext.sync_block_all("all_vector", 0)
+            else:
+                npu_x_grid_barrier(Sem.to(tl.pointer_type(tl.uint32)) + row)
             peers = tl.arange(0, S)
             values = tl.load(W + row * S + peers)
             tl.store(Y + row, tl.sum(values, 0), shard == 0)
@@ -128,6 +137,8 @@ def main():
                              capture_output=True, text=True, timeout=30)
     helper_source = inspect.getsource(x_grid_barrier.fn)
     (args.out / "x_grid_barrier.py").write_text(helper_source)
+    npu_helper_source = inspect.getsource(npu_x_grid_barrier.fn)
+    (args.out / "npu_x_grid_barrier.py").write_text(npu_helper_source)
     write_json(args.out / "manifest.json", {
         "argv": sys.argv, "cwd": str(Path.cwd()),
         "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -141,6 +152,8 @@ def main():
         "logical_device": args.device, "physical_device": physical.value, "properties": str(properties),
         "compiler": compiler, "compiler_version": version.stdout + version.stderr,
         "helper_source_sha256": hashlib.sha256(helper_source.encode()).hexdigest(),
+        "npu_helper_source_sha256": hashlib.sha256(npu_helper_source.encode()).hexdigest(),
+        "npu_helper_file_sha256": hashlib.sha256(Path(inspect.getfile(npu_x_grid_barrier.fn)).read_bytes()).hexdigest(),
     })
     options = {"compile_mode": "simd", "num_warps": 4, "launch_cooperative_grid": True}
 
@@ -153,23 +166,35 @@ def main():
 
     checks = []
     # The exact helper is called only after all bounded visibility checks pass.
-    for kind in (0, 1, 2):
+    for kind in (0, 1, 2, 3):
         for rows, programs in ((1, 1), (1, 2), (1, 8), (1, 32), (4, 8)):
             if rows * programs > properties.vector_core_num:
                 raise ValueError("All test programs must fit within the vector core count")
             workspace = torch.empty((rows, programs), device="npu", dtype=torch.float32)
             output = torch.empty((8, rows, programs), device="npu", dtype=torch.float32)
             ok = torch.empty((8, rows, programs), device="npu", dtype=torch.int32)
-            semaphores = torch.zeros(rows, device="npu", dtype=torch.int32)
-            kernel = visibility[(programs, rows)](
-                workspace, output, semaphores, ok, S=programs, X=rows, PHASES=8, KIND=kind, **options)
-            torch.npu.synchronize()
-            expected = torch.tensor([programs * (programs + 1) / 2 + p * programs for p in range(8)])
-            expected = expected[:, None, None].expand_as(output.cpu())
-            passed = bool(ok.cpu().all()) and torch.equal(output.cpu(), expected)
+            initial_sem = 123 if kind == 3 else 0
+            semaphores = torch.full((rows,), initial_sem, device="npu", dtype=torch.int32)
+            # Change values across launches so an old workspace cannot pass the check.
+            epochs = (0, 100, 200)
+            passed = True
+            for epoch in epochs:
+                kernel = visibility[(programs, rows)](
+                    workspace, output, semaphores, ok, epoch,
+                    S=programs, X=rows, PHASES=8, KIND=kind, **options)
+                torch.npu.synchronize()
+                expected = torch.tensor([
+                    programs * (programs + 1) / 2 + (p + epoch) * programs for p in range(8)])
+                expected = expected[:, None, None].expand_as(output.cpu())
+                passed = passed and bool(ok.cpu().all()) and torch.equal(output.cpu(), expected)
+                if kind == 3:
+                    passed = passed and bool((semaphores.cpu() == initial_sem).all())
+                if not passed:
+                    break
             name = f"visibility-k{kind}-x{rows}-s{programs}"
             save_ir(kernel, name)
-            record = {"kind": kind, "X": rows, "S": programs, "phases": 8, "correct": passed,
+            record = {"kind": kind, "X": rows, "S": programs, "phases": 8, "epochs": epochs,
+                      "initial_sem": initial_sem, "final_sem": semaphores.cpu().tolist(), "correct": passed,
                       "ready": ok.cpu().tolist(), "observed": output.cpu().tolist()}
             checks.append(record)
             write_json(args.out / "visibility.json", checks)
@@ -188,7 +213,8 @@ def main():
         output = torch.empty(rows, device="npu", dtype=torch.float32)
         semaphores = torch.zeros(rows, device="npu", dtype=torch.int32)
         expected = data.sum(-1).cpu()
-        for kind, strategy in ((0, "single"), (1, "x_grid_barrier"), (2, "native_all_vector")):
+        for kind, strategy in ((0, "single"), (1, "x_grid_barrier"),
+                               (2, "native_all_vector"), (3, "npu_x_grid_barrier")):
             actual_splits = 1 if kind == 0 else splits
 
             def invoke():
