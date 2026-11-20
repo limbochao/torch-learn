@@ -68,3 +68,33 @@ ASCEND_RT_VISIBLE_DEVICES=1 python scripts/tests/cooperative_reductions/barrier_
 有限轮询版本只用于功能诊断，不用于性能统计。输出的 `visibility.json` 记录三种协议的
 交换结果，`bench.json` 只记录原始 helper 和原生同步等实际 kernel 的耗时；功能检查失败
 会停止计时。manifest、原始 helper 源码、编译 metadata 与中间 IR 保留在输出目录。
+
+## 同步慢例的分量分析
+
+`barrier_components.py` 使用相同 SIMD 配置和 Graph + Event 方法，比较以下分量：
+
+- 普通 load、不使用 atomic 返回值、使用旧值、独立地址与同地址、加 0 的轮询 atomic。
+- 不含归约负载的原始 helper 与原生同步，覆盖 1/2/8/32 个 program、1/4 次同步。
+- 原生同步关闭自动 block 映射的诊断对照；仅在当前进程临时替换 compiler 的策略函数，
+  用不同 constexpr 区分 JIT key，使用独立缓存目录，不修改安装文件。
+- 有限轮询诊断版记录每个 program 的轮询次数；该版本不参与性能统计。
+
+独立 atomic 地址间隔为 32 个 int32，即 128 字节。每项在计时前检查写入结果及所用旧值；
+atomic 的计数器在计时中继续累加，不把重置操作放入被测 DSL。
+各条记录均为一次完整 Triton 调用的设备耗时，未单独剥离 launcher 的隐式状态处理。
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=2 python scripts/tests/cooperative_reductions/barrier_components.py \
+  --physical-device 2 --out ../cooperative-results/xgrid-components
+```
+
+`dump_adapter.py` 使用已保存的 adapter 和 metadata，仅重新编译，不 launch；编译器的
+debug 保存 lowering 后的 MLIR、LLVM IR 等产物，便于确认软件锁调用。
+锁体通过模板库链接时，还需结合匹配设备编译器版本的源码分析其实现。
+
+```bash
+python scripts/tests/cooperative_reductions/dump_adapter.py \
+  ../cooperative-results/xgrid-components/atomic_old_shared-p32.ttadapter \
+  ../cooperative-results/xgrid-components/atomic_old_shared-p32.metadata.json \
+  --out ../cooperative-results/xgrid-components/dump-atomic
+```

@@ -15,7 +15,8 @@ title: NPU Cooperative Reduction 初步方案（PyTorch 2.13）
 首期在 **NPU Index 路径正向实现 cooperative**，复用现有轴分析、`BLOCK_SUB` 循环、
 tile generator、autotuner 和 wrapper。No-linear 先显式使用普通归约，不同时实现两套协议。
 原有 `KeyError: 'R'` 要通过 NPU 自身的 cooperative 初始化和索引处理解决；只增加一个字典项
-不能证明上游后续 workspace/phase 假设适合 NPU。[N1][N3][E7]
+不能证明上游后续 workspace/phase 假设适合 NPU。实现入口见[NPU schedule][N1]与
+[Index 初始化][N3]，当前断点见[失败记录][E7]。
 
 下图是建议流程；虚线表示编译期失败后的候选淘汰或普通路径回退。
 
@@ -54,6 +55,12 @@ Force 在本方案中只绕过收益判断，不绕过 SoC、mode、算子、参
 `x_grid_barrier` 约为 537.085 µs，使用原生同步约为 7.720 µs。该结果是固定 SIMD 原型的
 整段 sum 调用耗时，尚未替代上述接入方案的同图验收；条件与边界见
 [需求分析第 6.1 节](requirements.md#61-已有性能证据及边界)。
+
+11 月 20 日的分量分析进一步定位：当前 SIMD 返回旧值的 atomic 引入软件锁，锁内部扫描
+各参与者并维护 GM 缓存状态；32 个 program 下，不使用返回值为 4.012 µs，使用旧值为
+278.324 µs，改用独立地址仍为 278.238 µs，均为完整探针调用耗时。因此直接复用上游
+semaphore 协议还依赖 TA/NPUIR 解决这条路径的性能；首期原生同步路线继续按参与者统一、
+单 phase 的约束验收。初始化与锁体的占比尚未分别量化，详细证据仍以需求分析为准。
 
 ### 1.2 最少需要传递的计划信息
 
@@ -135,12 +142,13 @@ Python wrapper 和 NPU Graph 作为首期运行验收，C++/AOT、多 stream 并
 | D2：GM/event 契约 | 屏障保证 partial 可见；明确重排、event 分配/重用与自动同步的约束 | TA 同步依赖 + NPUIR lowering | 是；受限运行通过后仍需明确边界 |
 | D3：owner-only 控制流 | 屏障后 owner 分支读/合并/输出，其他参与者完成；屏障不移入分支 | TA 控制流 + NPUIR 优化 | 是；功能与 G3 优化共同依赖 |
 | D4：资源与 ABI | 区分 UB 用量/容量/unknown；返回同步 scratch/lock，保持缓存/Graph ABI | NPUIR metadata → TA → runtime | ABI 影响功能；用量影响配置 |
-| D5：同步与小 partial 成本 | 定界 G1/G2/G4/G7/G8：等待、小事务、转换、合并及协议差异 | NPUIR 主导，TA 提供固定对照 | 不阻塞原型；影响性能结论与默认启用 |
+| D5：同步与小 partial 成本 | 定界 G1/G2/G4/G7/G8；直接复用 semaphore 时解决返回值 atomic 的软件锁成本 | NPUIR 主导，TA 提供固定对照 | 原生同步原型可继续；所选协议的性能影响默认启用 |
 | D6：模式与流水 | 验收 SIMD multibuffer/访存优化；后续补齐 pure SIMT 同步 | TA options + NPUIR pipeline | SIMD 组合需验收；pure SIMT 不阻塞首期 |
 | D7：分组同步或更轻的归约交换 | 若全 Grid phase 在多输出/多 phase 形态中成为瓶颈，再评估分组或其他交换方式 | TA API/IR + NPUIR 同步实现 | 不阻塞首期；仅作为后续按证据提出的优化 |
 
 交付给 TA/NPUIR 的最小输入是：固定 target/mode/constexpr 的 DSL、参与者/Grid、输入与输出
-语义、TTIR/adapter、编译 metadata，以及同算法分阶段计时。已有 [P1][E3][E13] 可作为起点。
+语义、TTIR/adapter、编译 metadata，以及同算法分阶段计时。已有[探针脚本][P1]、
+[编译矩阵][E3]和[adapter IR][E13]可作为起点。
 下层返回应包含支持组合、最终映射/资源信息、定位结论与对齐基线的性能数据，不能只返回
 “能编译”或一个未经对齐的算子耗时。未确认的能力先采用明确范围保护，不据此默认支持所有 NPU。
 
@@ -166,7 +174,7 @@ Python wrapper 和 NPU Graph 作为首期运行验收，C++/AOT、多 stream 并
 
 上游 `WorkspaceArg`、reduction combine helper、schedule marker、autotuner 编译/计时框架可以
 复用。现有 NPU wrapper 已有 workspace 和编译器 lock 的处理，不应笼统认定需要重写整个
-wrapper。[N7] 同样，正常 `torch.sum` 等 decomposition/ATen lowering 并非首期必须修改项；
+wrapper，见[C++ wrapper 实现][N7]。同样，正常 `torch.sum` 等 decomposition/ATen lowering 并非首期必须修改项；
 只有既有 lowering 已将目标融合链提前拆开时，再按具体图评估。
 
 **工作量是跨多个组件的编译策略与运行时功能，超过局部 codegen patch。** 单阶段 static sum
@@ -216,7 +224,8 @@ partial、屏障、合并和可能增加的资源开销。产品收益比较须�
 
 CUDA 的 `X<=16`、`32768*X` 和以 SM 为基础的 `S` 不能直接作为 NPU 默认值。
 设备属性与 compiler 保留空间也要分开：本卡报告 UB 为 216 KiB，而本地 NPU tile 配置给 A5
-设置 256 KiB；这个配置常量不能单独证明一个 cooperative persistent tile 能放下。[N8]
+设置 256 KiB；这个配置常量不能单独证明一个 cooperative persistent tile 能放下，
+见[tile generator 中的容量配置][N8]。
 
 首期由 shape/能力与校准后的收益规则决定 ordinary/cooperative；cooperative 内部搜索合法的
 `S/B`。现有 `cached_autotune` 不会自动比较两个不同 generated body 的完整代价，不能把加上
