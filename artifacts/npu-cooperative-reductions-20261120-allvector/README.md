@@ -56,6 +56,18 @@ NPU helper 改写版。改写版在写后读、读完再覆盖两个位置都调
   和 `dump_adapter.py` 的 SHA256，均已与归档输入及仓库脚本核对。
 - [编译日志](final-native/compile.log)、[编译器版本](final-native/compiler-version.txt)：保留原始输出。
 
+## 与受测编译器匹配的同步 lowering 源码
+
+`source/` 保存 NPUIR 提交 `395c9c5646f94119a591794a02961b5801f057c0` 的未修改源码。
+[源码 manifest](source/manifest.json)记录仓库路径、固定提交链接和文件 SHA256。
+
+- [HIVMDecomposeOp.cpp](source/HIVMDecomposeOp.cpp)：`insertBlockAllVector` 明确先生成
+  `PipeBarrierOp`，再将 `PIPE_ALL` 生产/消费属性分别转为 MTE3/S，并插入跨核 set/wait。
+- [HIVMSynchronizationOps.td](source/HIVMSynchronizationOps.td)：同步 op 的 IR 定义、作用域及公共 trait。
+- [HIVMTraits.td](source/HIVMTraits.td)：标记同步边界的 `HIVMSyncOpTrait`。
+
+该源码证据解释已归档 adapter 如何按规则降低为后端同步操作，不新增功能或性能测量。
+
 [requirements]: ../../docs/requirements-design/cooperative-reduction/requirements.md#61-已有性能证据及边界
 [design]: ../../docs/requirements-design/cooperative-reduction/design.md#13-kernel-内协议与运行流程
 [scripts]: ../../scripts/tests/cooperative_reductions/README.md

@@ -111,3 +111,33 @@ python scripts/tests/cooperative_reductions/dump_adapter.py \
   ../cooperative-results/xgrid-components/atomic_old_shared-p32.metadata.json \
   --out ../cooperative-results/xgrid-components/dump-atomic
 ```
+
+## 流水采集与 IR 导出的区别
+
+`dump_adapter.py` 导出编译产物，用于确认后端生成了哪些同步，不运行 kernel，不能获得流水耗时。
+上板观测需要 MindStudio 算子工具：`PipeUtilization` 提供忙碌比例等汇总指标，A5 的
+`PipeTimeline` 展示各通路运行区间，支持版本的 `InstrTimeline` 可进一步定位具体指令。
+`PipeTimeline` 与 `InstrTimeline` 分别采集，通过 MindStudio Insight 打开 `visualize_data.bin`。
+
+以下为命令形式，`repro_one_kernel.py` 表示只运行目标 kernel 的复现脚本占位名，需替换为实际脚本。
+先用当前安装工具的 `--help` 确认支持的参数；旧入口可能为 `msprof op`，新入口为 `msopprof`。
+示例未指定设备，实际运行仍按工作区规则和本任务约定选卡。
+
+```bash
+msopprof --kernel-name=reduction --launch-count=1 \
+  --aic-metrics=PipeTimeline --output=profile-pipe python repro_one_kernel.py
+
+msopprof --kernel-name=reduction --launch-count=1 \
+  --aic-metrics=InstrTimeline --output=profile-instr python repro_one_kernel.py
+```
+
+需选择目标编译配置、shape 和真实 kernel 名称；现有 `barrier_bench.py` 会顺序运行多个同名
+配置，不能只用 `--kernel-name=reduction` 就认定已选中目标改写版。
+抓取多核结果时，关联 partial 写回、跨核同步、peer 读取，区分本核搬出与等待慢核的时间。
+插桩数据用于分析，不直接混入此前未插桩 Graph + Event 的性能表。
+
+仿真可使用 `msprof op simulator` 或 `msopprof simulator`，选择对应 CANN 版本支持的 SoC
+仿真器；输出的 `trace.json`/`visualize_data.bin` 是仿真时间线，不能当作 A5 上板时间。
+当前调研尚未实际执行这些时间线采集命令。参数与支持范围见
+[MindStudio 工具指南](https://github.com/Ascend/msopprof/blob/master/docs/zh/user_guide/msopprof_user_guide.md)
+和[TA 性能分析方法](https://triton-ascend.readthedocs.io/zh-cn/latest/debug_guide/profiling.html)。

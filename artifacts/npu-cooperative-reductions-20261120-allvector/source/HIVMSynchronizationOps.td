@@ -1,0 +1,440 @@
+//===- HIVMSynchronizationOps.td - HIVM dialect Sync. Ops. -*- tablegen -*-===//
+//
+// Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//===----------------------------------------------------------------------===//
+//
+// This is the definition file for HIVM dialect synchronization operations.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef BISHENGIR_DIALECT_HIVM_IR_HIVMSYNCHRONIZATIONOPS_TD
+#define BISHENGIR_DIALECT_HIVM_IR_HIVMSYNCHRONIZATIONOPS_TD
+
+include "bishengir/Dialect/HIVM/IR/HIVMBase.td"
+include "bishengir/Dialect/HIVM/IR/HIVMAttrs.td"
+include "bishengir/Dialect/HIVM/IR/HIVMInterfaces.td"
+include "bishengir/Dialect/HIVM/IR/HIVMTraits.td"
+
+include "mlir/IR/BuiltinAttributes.td"
+
+//===----------------------------------------------------------------------===//
+// HIVM pipe synchronization operations.
+//===----------------------------------------------------------------------===//
+
+class HIVM_SynchronizationOp<string mnemonic, list<Trait> traits = []> :
+  HIVM_Op<mnemonic, !listconcat(
+    [DeclareOpInterfaceMethods<HIVMInferCoreTypeInterface,
+      ["inferCoreType"]>,
+     HIVMSyncOpTrait
+    ], traits)> {
+}
+
+def SetFlagOp : HIVM_SynchronizationOp<"set_flag"> {
+  let summary = "hivm set flag.";
+  let arguments = (ins HIVM_PipeAttr:$set_pipe,
+                       HIVM_PipeAttr:$wait_pipe,
+                       OptionalAttr<HIVM_EventAttr>:$static_event_id,
+                       Optional<I64>:$dynamic_event_id
+  );
+  let assemblyFormat = [{
+    `[`
+    $set_pipe
+    `,` $wait_pipe
+    `,` custom<EventID>($static_event_id, $dynamic_event_id)
+    `]` attr-dict
+  }];
+  let hasVerifier = 1;
+}
+
+def WaitFlagOp : HIVM_SynchronizationOp<"wait_flag"> {
+  let summary = "hivm wait flag.";
+  let arguments = (ins HIVM_PipeAttr:$set_pipe,
+                       HIVM_PipeAttr:$wait_pipe,
+                       OptionalAttr<HIVM_EventAttr>:$static_event_id,
+                       Optional<I64>:$dynamic_event_id
+  );
+  let assemblyFormat = [{
+    `[`
+    $set_pipe
+    `,` $wait_pipe
+    `,` custom<EventID>($static_event_id, $dynamic_event_id)
+    `]` attr-dict
+  }];
+  let hasVerifier = 1;
+}
+
+def TryWaitOp : HIVM_SynchronizationOp<"try_wait", [
+    OpPipeInterface, SinglePipeOpTrait, OpPipeTrait<"PIPE::PIPE_S">]> {
+  let summary = "Query a synchronization counter without blocking.";
+  let description = [{
+    `try_wait` reads a synchronization counter without consuming its token.
+    It is available on Ascend950 (A5) and later generations. The legacy
+    memory-based (A3) pipeline is not supported. Only `intra_block`
+    (hardware mode 1) is supported. Other hardware modes are intentionally
+    not implemented.
+
+    A CUBE wait for two VECTOR sub-blocks observes two physical counters,
+    `flag_id` and `flag_id + 16`. A nonblocking readiness check must query
+    both. The original blocking wait still consumes the tokens after both
+    queries succeed. Dynamic IDs must stay in [0, 31]. The operation runs
+    on PIPE_S and has unknown effects to prevent CSE and speculation.
+
+    The result is used only to test readiness; it does not replace WAIT.
+    Both static and dynamic flag IDs lower directly to a call to
+    `llvm.hivm.TRY.WAIT.mode(flag, 1)`, recognized by CCE. The mode argument
+    selects the queried counter; mode 1 is the intra-block counter, as
+    documented in the Ascend950 CCE instruction manual.
+    No template wrapper or local LLVM intrinsic registration is required.
+  }];
+  let arguments = (ins OptionalAttr<Builtin_IntegerAttr>:$static_flag_id,
+                       Optional<I64>:$dynamic_flag_id,
+                       HIVM_TryWaitSyncModeAttr:$sync_mode);
+  let results = (outs I64:$counter);
+  let assemblyFormat = [{
+    `flag` `=` custom<FlagID>($static_flag_id, $dynamic_flag_id)
+    `,` `sync_mode` `=` $sync_mode attr-dict `:` type($counter)
+  }];
+  let builders = [OpBuilder<(ins "OpFoldResult":$flag_id,
+      "hivm::TryWaitSyncMode":$sync_mode)>];
+  let extraClassDeclaration = [{
+    ::mlir::OpFoldResult getFlagId();
+  }];
+  let hasVerifier = 1;
+}
+
+
+def PipeBarrierOp : HIVM_SynchronizationOp<"pipe_barrier"> {
+  let summary = "hivm pipe barrier.";
+  let arguments = (ins HIVM_PipeAttr:$pipe);
+  let assemblyFormat = "`[` $pipe `]` attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// HIVM block synchronization operations.
+//===----------------------------------------------------------------------===//
+
+class HIVM_SyncIntraBlockOp<string mnemonic> : HIVM_SynchronizationOp<mnemonic> {
+  let summary = "Synchronize individual cores within an A5 mixed block.";
+  let description = [{
+    Explicit intra-block synchronization on Ascend950 (A5). The operation
+    directly signals or waits on the hardware synchronization counter selected
+    by `sync_id` using the pipe owned by `tcore_type`. Each vector subcore owns
+    its own counter, so subcores participate independently.
+
+    This differs from `sync_block_set`/`sync_block_wait`:
+      - `sync_block_*` is the logical AIC/AIV block synchronization used by the
+        scheduler. It describes a producer/consumer handshake between CUBE and
+        VECTOR, can carry `ffts_base_addr`, and is portable across generations
+        (FFTS on A3). On A5 with `INTRA_BLOCK_SYNCHRONIZATION` mode it may be
+        lowered to the same hardware instructions; for a CUBE op it also emits
+        the implicit partner access at `sync_id + 16` so both halves of the
+        AIC/AIV pair stay in sync (except the CV 1:1 FFTS path).
+      - `sync_intra_block_*` exposes exactly one physical counter and performs
+        no implicit partner access. The frontend must issue the matching
+        set/wait on the peer core or subcore itself.
+
+    Use `sync_block_*` for normal CV pipeline handoff where logical block
+    pairing and A3/A5 portability are desired. Use `sync_intra_block_*` only
+    when the frontend needs exact control of a physical A5 counter, for example
+    an explicit subcore-level handoff or a buffer-token protocol. Keeping the
+    operations separate prevents the block-level form from silently acquiring
+    raw-counter semantics and allows each form to keep its own target and ID
+    validation.
+
+    `sync_id` is either a static integer or a dynamic i64; exactly one form is
+    required. Cube IDs are in [0, 31] and Vector IDs in [0, 15], and `pipe`
+    must match the core type and cannot be PIPE_ALL. Available on Ascend950.
+  }];
+  let arguments = (ins HIVM_TCoreTypeAttr:$tcore_type,
+                       HIVM_PipeAttr:$pipe,
+                       OptionalAttr<Builtin_IntegerAttr>:$static_sync_id,
+                       Optional<I64>:$dynamic_sync_id);
+  let assemblyFormat = [{
+    `[` $tcore_type `,` $pipe `,`
+    custom<FlagID>($static_sync_id, $dynamic_sync_id) `]` attr-dict
+  }];
+  let builders = [OpBuilder<(ins "TCoreTypeAttr":$tcore_type,
+      "PipeAttr":$pipe, "OpFoldResult":$sync_id)>];
+  let extraClassDeclaration = [{
+    ::mlir::OpFoldResult getSyncId();
+  }];
+  let hasVerifier = 1;
+}
+
+def SyncIntraBlockSetOp : HIVM_SyncIntraBlockOp<"sync_intra_block_set">;
+def SyncIntraBlockWaitOp : HIVM_SyncIntraBlockOp<"sync_intra_block_wait">;
+
+class HIVM_BufferSyncOp<string mnemonic> : HIVM_SynchronizationOp<mnemonic> {
+  let summary = "Acquire or release an A5 buffer synchronization token.";
+  let description = [{
+    The buffer ID is in [0, 31], including for dynamic IDs. The pipe and mode
+    are compile-time attributes. Mode false blocks the issuing pipeline;
+    mode true selects nonblocking execution. Available on Ascend950.
+    These operations have unknown effects to preserve synchronization ordering.
+  }];
+  let arguments = (ins HIVM_PipeAttr:$pipe,
+                       OptionalAttr<Builtin_IntegerAttr>:$static_buf_id,
+                       Optional<I64>:$dynamic_buf_id,
+                       BoolAttr:$mode);
+  let assemblyFormat = [{
+    `[` $pipe `,`
+    custom<FlagID>($static_buf_id, $dynamic_buf_id) `,` $mode `]` attr-dict
+  }];
+  let builders = [OpBuilder<(ins "PipeAttr":$pipe,
+      "OpFoldResult":$buf_id, "BoolAttr":$mode)>];
+  let extraClassDeclaration = [{
+    ::mlir::OpFoldResult getBufId();
+  }];
+  let hasVerifier = 1;
+}
+
+def GetBufOp : HIVM_BufferSyncOp<"get_buf">;
+def RlsBufOp : HIVM_BufferSyncOp<"rls_buf">;
+
+def SyncBlockOp : HIVM_SynchronizationOp<"sync_block"> {
+  let summary = "hivm sync block between different kernels.";
+  let description = [{
+    There are three sync block modes:
+      - ALL_CUBE : All cube are synchronized to a same point.
+                   `tcube_pipe` and `cube_pipe` need to be set to the pipes
+                   used for cube block synchronization (analogous to
+                   `tpipe` and `pipe` in `sync_block_set`/`sync_block_wait`).
+      - ALL_VECTOR : All vector are synchronized to a same point.
+                   `tvector_pipe` and `vector_pipe` need to be set to the
+                   pipes used for vector block synchronization.
+      - ALL_SUB_VECTOR : All sub vector are synchronized to a same point.
+      - BARRIER_CUBE : Used for cube-cube synchronization, it's going to
+                   be lowered to a barrie.pipe_all and would only be
+                   copied the aic kernel.
+      - BARRIER_VECTOR : Used for cube-cube synchronization, it's going to
+                   be lowered to a barrie.pipe_all and  would only be
+                   copied the aiv kernel.
+      - ALL : All aic/aiv are synchronized to same point.
+              Both cube and vector pipe pairs need to be set.
+
+    Note:
+      - SyncBlockOp can only use after data is moved to gm.
+      - `$ffts_base_addr` must be set in Ascend910B. Every time FFTS collect
+        one specific `$flag_id` from all subblocks, FFTS would set the flag ID
+        back to the block in the group to do synchronization.
+  }];
+  let arguments = (ins HIVM_SyncBlockModeAttr:$sync_block_mode,
+                       OptionalAttr<Builtin_IntegerAttr>:$flag_id,
+                       Optional<I64>:$ffts_base_addr,
+                       OptionalAttr<HIVM_PipeAttr>:$tcube_pipe,
+                       OptionalAttr<HIVM_PipeAttr>:$cube_pipe,
+                       OptionalAttr<HIVM_PipeAttr>:$tvector_pipe,
+                       OptionalAttr<HIVM_PipeAttr>:$vector_pipe
+  );
+  let assemblyFormat = [{
+    attr-dict `[` $sync_block_mode (`,` $flag_id^)?`]`
+    (`ffts_base_addr` `=` $ffts_base_addr^)?
+    (`tcube_pipe` `=` $tcube_pipe^)?
+    (`cube_pipe` `=` $cube_pipe^)?
+    (`tvector_pipe` `=` $tvector_pipe^)?
+    (`vector_pipe` `=` $vector_pipe^)?
+  }];
+  let builders = [
+    OpBuilder<(ins "SyncBlockModeAttr":$sync_block_mode,
+                   CArg<"IntegerAttr", "{}">:$flag_id,
+                   CArg<"Value", "{}">:$ffts_base_addr,
+                   CArg<"PipeAttr", "{}">:$tcube_pipe,
+                   CArg<"PipeAttr", "{}">:$tvector_pipe)>
+  ];
+  let hasVerifier = 1;
+}
+
+def SyncBlockSetOp : HIVM_SynchronizationOp<"sync_block_set", [AttrSizedOperandSegments]> {
+  let summary = "hivm set block sync.";
+  let arguments = (ins HIVM_TCoreTypeAttr:$tcore_type,
+                       HIVM_PipeAttr:$tpipe,
+                       HIVM_PipeAttr:$pipe,
+                       OptionalAttr<Builtin_IntegerAttr>:$static_flag_id,
+                       Optional<I64>:$dynamic_flag_id,
+                       Optional<I64>:$ffts_base_addr,
+                       DefaultValuedOptionalAttr<HIVM_SyncBlockInstrModeAttr,
+                         "INTRA_BLOCK_SYNCHRONIZATION">:$tsync_instr_mode
+  );
+  let assemblyFormat = [{
+    attr-dict `[` $tcore_type `,` $tpipe `,` $pipe`]`
+    `flag` `=` custom<FlagID>($static_flag_id, $dynamic_flag_id)
+    (`ffts_base_addr` `=` $ffts_base_addr^)?
+    (`sync_instr_mode` `=` $tsync_instr_mode^)?
+  }];
+  let builders = [
+    OpBuilder<(ins "TCoreTypeAttr":$tcore_type, "PipeAttr":$tpipe, "PipeAttr":$pipe,
+                   "OpFoldResult":$flag_id)>,
+    OpBuilder<(ins "TCoreTypeAttr":$tcore_type, "PipeAttr":$tpipe, "PipeAttr":$pipe,
+                   "OpFoldResult":$flag_id, "Value":$ffts_base_addr,
+                   "SyncBlockInstrModeAttr":$tsync_instr_mode)>
+  ];
+  let extraClassDeclaration = [{
+    ::mlir::OpFoldResult getFlagId();
+  }];
+  let hasVerifier = 1;
+}
+
+def SyncBlockWaitOp : HIVM_SynchronizationOp<"sync_block_wait"> {
+  let summary = "hivm wait block sync.";
+  let arguments = (ins HIVM_TCoreTypeAttr:$tcore_type,
+                       HIVM_PipeAttr:$tpipe,
+                       HIVM_PipeAttr:$pipe,
+                       OptionalAttr<Builtin_IntegerAttr>:$static_flag_id,
+                       Optional<I64>:$dynamic_flag_id,
+                       DefaultValuedOptionalAttr<HIVM_SyncBlockInstrModeAttr,
+                         "INTRA_BLOCK_SYNCHRONIZATION">:$tsync_instr_mode
+  );
+  let assemblyFormat = [{
+    attr-dict `[` $tcore_type `,` $tpipe `,` $pipe`]`
+    `flag` `=` custom<FlagID>($static_flag_id, $dynamic_flag_id)
+    (`sync_instr_mode` `=` $tsync_instr_mode^)?
+  }];
+  let builders = [
+    OpBuilder<(ins "TCoreTypeAttr":$tcore_type, "PipeAttr":$tpipe, "PipeAttr":$pipe,
+                   "OpFoldResult":$flag_id)>,
+    OpBuilder<(ins "TCoreTypeAttr":$tcore_type, "PipeAttr":$tpipe, "PipeAttr":$pipe,
+                   "OpFoldResult":$flag_id, "SyncBlockInstrModeAttr":$tsync_instr_mode)>
+  ];
+  let extraClassDeclaration = [{
+    ::mlir::OpFoldResult getFlagId();
+  }];
+  let hasVerifier = 1;
+}
+
+def CreateSyncBlockLockOp
+    : HIVM_Op<"create_sync_block_lock"> {
+  let summary = "create sync block lock operation.";
+  let description = [{
+    The `create_sync_block_lock` operation allocates a region of lock memory,
+    which is used to make the code between lock and unlock execute in order among blocks.
+    Example:
+
+    ```mlir
+      hivm.hir.create_sync_block_lock() : memref<1xi64>
+      hivm.hir.create_sync_block_lock() from %arg : from memref<?xi8> to memref<1xi64>
+    ```
+  }];
+  let arguments = (ins Optional<AnyMemRef>:$lockArg);
+  let results = (outs Res<AnyMemRef, "",
+                        [MemAlloc<DefaultResource, 0, FullEffect>]>:$memref);
+
+  let assemblyFormat = [{
+    (`from` $lockArg^)?
+        attr-dict `:` (`from` type($lockArg)^ `to`)? type($memref)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SyncBlockLockOp
+  : HIVM_SynchronizationOp<"sync_block_lock", [HIVMCoreTypeInterface, VectorCoreTypeTrait]> {
+  let summary = "sync block lock operation.";
+  let description = [{
+    The sync_block_lock operation will not release until the lock_var equals the block idx.
+    Example:
+
+    ```mlir
+      hivm.hir.sync_block_lock lock_var(%lock : memref<1xi64>)
+    ```
+  }];
+  let arguments = (ins MemRefRankOf<[I64], [1]>:$lock_var,
+                       DefaultValuedAttr<HIVM_SyncBlockLockOrderingAttr,
+                                         "SyncBlockLockOrdering::Ordered">:$ordering);
+
+  let assemblyFormat = [{
+    attr-dict `lock_var` `(` $lock_var `:` type($lock_var) `)`
+  }];
+
+  let extraClassDeclaration = [{
+    static StringRef getOpName() { return "sync_block_lock"; }
+  }];
+}
+
+def SyncBlockUnlockOp
+  : HIVM_SynchronizationOp<"sync_block_unlock", [HIVMCoreTypeInterface, VectorCoreTypeTrait]> {
+  let summary = "sync block unlock operation.";
+  let description = [{
+    The `sync_block_lock` operation will increase and release the lock_var.
+    Example:
+
+    ```mlir
+      hivm.hir.sync_block_unlock lock_var(%lock : memref<1xi64>)
+    ```
+  }];
+  let arguments = (ins MemRefRankOf<[I64], [1]>:$lock_var,
+                       DefaultValuedAttr<HIVM_SyncBlockLockOrderingAttr,
+                                         "SyncBlockLockOrdering::Ordered">:$ordering);
+
+  let assemblyFormat = [{
+    attr-dict `lock_var` `(` $lock_var `:` type($lock_var) `)`
+  }];
+
+  let extraClassDeclaration = [{
+    static StringRef getOpName() { return "sync_block_unlock"; }
+  }];
+}
+
+def FreeLockVarOp
+  : HIVM_SynchronizationOp<"free_lock_var", [HIVMCoreTypeInterface, VectorCoreTypeTrait]> {
+  let summary = "free lock var when control flow skipped sync_block unlock.";
+  let description = [{
+    Lowered to the template `free_lock_var`, which runs one
+    sync_block_lock / sync_block_unlock pair so lock_var advances with the
+    same barrier and memory semantics as the normal ops. Inserted before
+    return when control flow may have skipped a guarded lock/unlock region.
+
+    Example:
+
+    ```mlir
+      hivm.hir.free_lock_var lock_var(%lock : memref<1xi64>)
+    ```
+  }];
+  let arguments = (ins MemRefRankOf<[I64], [1]>:$lock_var,
+                       DefaultValuedAttr<HIVM_SyncBlockLockOrderingAttr,
+                                         "SyncBlockLockOrdering::Ordered">:$ordering);
+
+  let assemblyFormat = [{
+    attr-dict `lock_var` `(` $lock_var `:` type($lock_var) `)`
+  }];
+
+  let extraClassDeclaration = [{
+    static StringRef getOpName() { return "free_lock_var"; }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// HIVM Anchor Operation.
+//===----------------------------------------------------------------------===//
+
+def AnchorOp
+    : HIVM_Op<"anchor", [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let summary = "Marker operation for recording IR positional information.";
+  let description = [{
+    Anchor operation used as a marker to record positional information in the
+    IR. Anchors carry a unique monotonically-increasing `id`.
+
+    They are inserted into the IR first, then later checked after other passes
+    have modified the IR so their positions can be used to analyze how the IR
+    changed.
+
+    Anchors declare a write effect on an internal resource so that
+    canonicalization / CSE / DCE / LICM cannot remove or reorder them.
+  }];
+  let arguments = (ins I64Attr:$id,
+                       OptionalAttr<HIVM_TCoreTypeAttr>:$tcore_type);
+  let assemblyFormat = "attr-dict";
+}
+
+#endif // BISHENGIR_DIALECT_HIVM_IR_HIVMSYNCHRONIZATIONOPS_TD

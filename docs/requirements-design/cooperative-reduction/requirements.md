@@ -234,6 +234,12 @@ program，而不是无条件等待整个 kernel 的所有输出组。
 函数前后还有 `tl.debug_barrier()` 组织 program 内的线程同步。完整实现见
 [`x_grid_barrier` 源码][U4]，atomic 的返回值与内存序参数见[Triton API 定义][D0]。
 
+调用发生在 cooperative kernel 的归约循环结束处：先生成 partial store，若有跨分片交换
+内容且 `HAS_RSPLIT = RSPLIT > 1`，再发射 helper，之后读取 partial 并合并。
+因此普通归约及 `RSPLIT=1` 不需要这里的跨分片会合。Softmax、连续归约融合可能多次执行
+该过程；上游八轮 chained softmax 用例会检查 8 或 16 次 barrier，取决于是否联合完成
+max/sum，见[codegen 调用点][U21]与[连续归约用例][U22]。
+
 协作启动解决的是另一个问题：**所有被等待的分片都必须有机会执行到同步点。** 例如某种配置
 只能同时驻留 64 个 program，却启动 128 个相互等待的参与者，先运行的 64 个可能一直等待
 后 64 个，而后者又没有资源启动，形成死锁。因此上游按 SM 数限制 program 数，并在生成
@@ -940,6 +946,13 @@ TA/NPUIR 需要明确返回旧值原子操作、高效 acquire 读取或分组�
 小工作量场景中改写版仍慢于不分片，不能因此省略收益选择；各组独立推进、动态参与者及其他
 编译模式也不能直接用这组结果宣称支持。
 
+**保留签名不代表保留 helper 的全部语义。** 上游只等同一 y/z 的 x 分片组，NPU 原型则等
+全部参与 Vector 核，且忽略原 semaphore、固定使用核间事件 0。各组同步次数或控制流不一致时，
+范围扩大可能使原本合法的按组调用无法继续。因此正式接入应使用明确作用域的 NPU 同步协议，
+由 schedule/codegen 保证参与者、同步序列、事件及空间复用条件，不全局替换通用 helper。
+已安装 TA 的接口语义与受测 NPUIR 的固定 lowering 规则说明底层存在实现机制；它们不能
+替上层自动证明任意调用合法，具体机制和反例见[方案中的同步契约](design.md#13-kernel-内协议与运行流程)。
+
 ### 6.2 性能验收原则
 
 | 要求 | 判定依据 |
@@ -1109,6 +1122,8 @@ helper SHA256、明确源码提交、编译选项、设备映射和每项产物�
 [U18]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L7448
 [U19]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L3222
 [U20]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L6344
+[U21]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L5948
+[U22]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/test/inductor/test_cooperative_reductions.py#L294
 [D0]: https://triton-lang.org/main/python-api/generated/triton.language.atomic_add.html
 [D1]: https://docs.nvidia.com/cuda/cuda-driver-api/cuda_driver_api/group__CUDA__EXEC.html
 [N0]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/__init__.py

@@ -147,9 +147,76 @@ LLVM IR 中也保留了 `llvm.hivm.BARRIER`、`llvm.hivm.SET.CROSS.CORE` 与
 它不是唯一能表达本核同步的方式，也不能单独同步其他 block。
 当前结论限定于已检查的 A5 SIMD 生成路径，不推导其他编译模式具有相同 lowering。
 
+**Inductor 依赖什么保障，而不是如何猜测产物。** 同步原语的接口语义是上层和后端之间的契约。
+已安装 TA 的 `sync_block_all` 明确说明，它处理指定核类型之间共享 GM 的 RAW、WAR、WAW
+依赖，即写后读、读后写、写后写；不是仅让各核的标量指令到达同一源码位置。
+接口定义及参数见[已安装接口片段][installed-sync-api]。
+
+受测 NPUIR 的 `HIVMDecomposeOp.cpp::insertBlockAllVector()` 有如下固定 lowering 规则，
+这里仅保留关键语句：
+
+```cpp
+auto tpipeAttr = op.getTvectorPipeAttr();
+auto pipeAttr = op.getVectorPipeAttr() ? op.getVectorPipeAttr()
+                                       : op.getTvectorPipeAttr();
+rewriter.create<PipeBarrierOp>(loc, tpipeAttr);
+if (tpipeAttr.getPipe() == PIPE::PIPE_ALL) {
+  tpipeAttr = PipeAttr::get(ctx, PIPE::PIPE_MTE3);
+}
+if (pipeAttr.getPipe() == PIPE::PIPE_ALL) {
+  pipeAttr = PipeAttr::get(ctx, PIPE::PIPE_S);
+}
+```
+
+随后 `insertBlockSyncOperations()` 生成跨核 set/wait。当前 adapter 的输入 pipe 为
+`PIPE_ALL`，所以这里明确生成本核全流水屏障，再使用 MTE3 通知、S 等待；不是 shape
+启发式恰好插入了一条屏障。完整源码见[对应编译器版本的 lowering][sync-lowering-source]。
+同步 op 还携带 `HIVMSyncOpTrait`，供分析识别不能随意跨越的同步边界，见
+[同步 op 定义][sync-op-source]与[同步边界 trait][sync-trait-source]。
+这些是现成的接口、IR 和 lowering 机制；不能据此声称所有自定义优化 pass 都已完成验证。
+
+| 层次 | 应负责的保证 |
+| --- | --- |
+| Inductor choices/schedule/codegen | 选择合法核集合和模式；partial 先写、同步后读；所有参与者执行一致的屏障序列 |
+| TA | 将 DSL 同步原语保留为有同步语义的 IR，维护依赖与执行映射 |
+| NPUIR | 按接口语义实现流水完成、跨核通知与等待，优化后仍保持相关内存顺序 |
+| launcher/runtime | 正确启动参与者、传递所需 ABI，并满足跨核等待的执行前进条件 |
+
+Inductor 不应在正常编译时解析 LLVM IR 来判断“这次有没有某条 barrier”，也不应把普通
+`tl.store` 后的自动依赖分析当成任意跨核通信的保证；应显式发射适用的同步原语。
+对接阶段核对 IR 和数据交换探针用于确认实现符合契约，后续后端也可以用等价机制实现该语义，
+无需永久保持同一条指令。现有接口不会替 Inductor 自动证明任意 Grid、分支和循环均满足全核会合条件。
+
+**当前改写改变了 helper 的通用语义。** 上游定义是相同 y/z 下的所有 x program 会合，
+每组有自己的 semaphore；改写后 `sem` 不参与协议，所有参与 Vector 核共用事件 0。
+因此本原型验证的是受限 cooperative 路径的结果交换，不能作为上游 helper 的通用等价替换。
+正式接入宜使用表达 NPU 全 Vector 语义的专用 helper，只在已满足条件的 codegen 路径调用，
+不全局替换 `triton_helpers.x_grid_barrier`。
+
 例如 `Q=4,S=8` 时，上游四个八分片组可以独立同步；改写后 32 个参与者一起等待。
 各组都执行同样八轮交换时可以验证结果等价；若一组提前退出或少执行一轮，全体同步条件
 就不再成立。因此这是受约束的 NPU 实现原型，完整接入仍需 schedule/codegen 保证调用条件。
+
+一个说明 helper 语义差异的例子是：只有 `row==0` 的组调用屏障，其他组继续执行。
+只要该组所有 x 分片均到达，上游的按组屏障允许这样调用；改成全 Vector 屏障则会等待
+根本不调用它的其他组。这是通用替换不成立的反例，不表示当前上游调用点已经生成了该分支。
+上游当前在 cooperative 的归约循环结束处、`HAS_RSPLIT` 为真时统一调用，见
+[helper 定义][upstream-x-grid]与[codegen 调用点][upstream-barrier-call]。
+
+| 需要保留的条件 | 失去条件的后果与处理 |
+| --- | --- |
+| 统一的屏障次数与顺序 | 提前退出、按输出组决定是否调用、屏障所在循环次数不同会破坏全体会合；尾块只 mask 数据访问 |
+| program 与物理参与者映射明确 | 自动分核、sub-block 或一个核循环处理多个 program 可能改变参与者；仅检查 `Q*S` 不够 |
+| 核间事件 0 不被另一协议占用 | 不同 semaphore 原本区分的实例现在合并，需隔离或统一规划核间 flag；本核 event 0 不是同一命名空间 |
+| workspace 读者完成后再复用 | 写后读屏障不代表所有核已读完；多 phase 复用需另有读后写依赖保障 |
+| 启动与并发满足执行前进条件 | 部分核等待、其余核因资源占用无法启动时可能死锁；CUDA launch 标记不能代替 NPU 启动契约 |
+| 评估全局等待与 PIPE_ALL 成本 | 各输出组互相等待，全流水屏障也会约束重叠；即使结果相同，性能也不等价 |
+
+这里要求的是屏障序列一致，各组屏障之前的计算耗时可以不同；归约 tile 循环若不含屏障，
+其迭代次数不同本身不构成会合错误。首期 `Q=1`、单 phase、映射已确认时，全 Vector 集合
+可对应唯一的分片组；扩展 `Q>1` 则必须复核全体会合条件。并发启动约束见
+[跨核同步的执行前进说明][cross-core-sync]，多 phase 的空间复用还要与上游
+[workspace 两轮复用规则][upstream-workspace]对齐。
 
 ![cooperative 单 phase 运行流程](assets/kernel-flow.svg)
 
@@ -317,6 +384,29 @@ autotune 预运行还应遵守 workspace/隐式 lock 的初始化契约：每个
 metadata 与阶段实验限定结论。TA/NPUIR 提供等价原生参考实现后，才能进一步评估编译器带来的性能差距。
 这些是后续验证计划，本轮没有新增性能测量，也没有为任一 TA/NPUIR 优化填写未实测的加速比。
 
+### 4.1 流水是什么，以及如何观测
+
+这里的“流水”是 AI Core 内分工执行指令的通路及队列，不是 Inductor 的编译 pass pipeline。
+V 做向量计算，MTE2 将 GM 数据搬入 UB，MTE3 将 UB 数据搬出到 GM，S 负责标量控制。
+这些单元可以异步并行：例如计算 tile 0 时预取 tile 1；同一 tile 的“搬入→计算→搬出”
+仍需依赖控制。`PIPE_ALL` 是选取本核所有流水的同步参数，不是另一种计算单元。
+硬件分工与异步下发机制见[同步控制说明][sync-overview]。
+
+| 需要回答的问题 | 证据与工具 | 不能单独证明什么 |
+| --- | --- | --- |
+| 编译器安排了哪些同步 | 后端 MLIR、LLVM IR，必要时检查设备反汇编 | IR 的文本顺序不能给出各流水实际耗时与重叠 |
+| 哪条通路忙、哪条可能受限 | 上板 `PipeUtilization`，结合内存流量与核间负载 | 汇总利用率不是每条指令的执行时间线 |
+| 各流水什么时候工作、空闲和重叠 | A5 上板 `PipeTimeline`，在 MindStudio Insight 中查看 | 插桩采集的时间不可直接替代未插桩 Graph + Event 样本 |
+| 进一步定位到具体指令 | 支持版本中的上板 `InstrTimeline`；按需保留源码行号 | 不能把未记录通路或未显示指令的空白一律当作 barrier 等待 |
+| 分析仿真器中的指令顺序与依赖 | `msprof op simulator` / `msopprof simulator` 导出 trace | 仿真时间不是这块物理卡的实测时间 |
+
+现有结果包含后端 IR 和 Graph + Event 计时，尚未抓取该 kernel 的上板或仿真指令时间线。
+要进一步定界 G2，可先抓流水重叠，再关联 MTE3 写回、跨核等待、MTE2 peer 读取；
+需要同时看多个参与核，区分本核搬出慢和等待其他核两种来源。
+入口与示例命令见[探针 README 的流水采集说明][pipeline-commands]。
+工具的 A5 支持、`PipeTimeline`/`InstrTimeline` 参数及两者分开采集的约束见
+[MindStudio 算子工具指南][profiler-guide]；Triton 仿真方法见[TA 性能分析指南][ta-profiling]。
+
 ## 5. 建议交付阶段与验收
 
 | 阶段 | 交付边界 | 验收依据 |
@@ -363,3 +453,13 @@ unsupported 算子/模式回退、同一 kernel 多次调用与 workspace 重用
 [pipe-barrier]: https://www.hiascend.com/doc_center/source/zh/canncommercial/850/API/ascendcopapi/atlasascendc_api_07_0271.html
 [cross-core-sync]: https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/inter_core_sync/CrossCoreSetFlag_ISASI.html
 [debug-barrier]: https://triton-lang.org/main/python-api/generated/triton.language.debug_barrier.html
+[installed-sync-api]: ../../../artifacts/npu-cooperative-reductions-20261118/inspect/installed-source-excerpts.txt
+[sync-lowering-source]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/source/HIVMDecomposeOp.cpp
+[sync-op-source]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/source/HIVMSynchronizationOps.td
+[sync-trait-source]: ../../../artifacts/npu-cooperative-reductions-20261120-allvector/source/HIVMTraits.td
+[upstream-x-grid]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/runtime/triton_helpers.py#L824
+[upstream-barrier-call]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L5948
+[upstream-workspace]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L2716
+[pipeline-commands]: ../../../scripts/tests/cooperative_reductions/README.md#流水采集与-ir-导出的区别
+[profiler-guide]: https://github.com/Ascend/msopprof/blob/master/docs/zh/user_guide/msopprof_user_guide.md
+[ta-profiling]: https://triton-ascend.readthedocs.io/zh-cn/latest/debug_guide/profiling.html
