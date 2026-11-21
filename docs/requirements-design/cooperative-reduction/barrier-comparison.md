@@ -503,6 +503,47 @@ GPU 补测前出现过容器设备访问故障，仅重启指定容器后恢复�
 
 ## 7. 接入范围判断
 
+### 7.1 v2.13.0 中哪些路径实际调用 x_grid_barrier
+
+对 PyTorch `v2.13.0`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`，执行全仓
+`git grep -n x_grid_barrier v2.13.0`，共找到 5 处文本引用：helper 定义、一个生产代码发射点、
+两处测试断言和一处 runtime 注释。**该版本唯一的生产代码发射点在 cooperative reduction；
+没有发现其他独立的生产调用路径。** 这不表示任意手写 Triton kernel 都不能使用该 helper。
+
+发射条件是 `self.cooperative_reduction` 为真，且该归约阶段有待合并或待输出的结果；
+生成代码再由 `HAS_RSPLIT = RSPLIT > 1` 控制是否真正执行屏障：
+
+```python
+# 上游 codegen 生成的关键顺序；省略与本问题无关的语句
+# 先写本片 partial
+if HAS_RSPLIT:
+    triton_helpers.x_grid_barrier(semaphores + tl.program_id(1))
+# 再读取同组 partial、合并及输出
+```
+
+这里的 `program_id(1)` 标识输出 tile；每个 tile 的 R 分片构成独立同步组。
+一次调用对应一次归约阶段的交换，不一定对应整个 kernel 唯一一次屏障。
+
+| 实际场景 | 是否使用及含义 |
+| --- | --- |
+| cooperative 的 sum/mean/prod/min/max、布尔归约、var/std 等 | 共用该发射点；合并状态可以是标量、索引或 Welford 元组 |
+| cooperative softmax、连续归约及广播消费者 | 每个需要交换的阶段调用；不能只按单次 sum 验证 |
+| persistent / non-persistent cooperative、固定配置和调优候选 | 仍由同一 codegen 入口发射，所选候选必须分别合法 |
+| 普通 reduction 或 `RSPLIT=1` | 不执行该跨 program 屏障 |
+| split scan | 专用 kernel 显式关闭 cooperative，使用自己的前缀依赖协议 |
+| combo/foreach | 构建 kernel 时设置 `override_cooperative_reduction=False` |
+
+具体测试依据：`test_reduction_fns` 覆盖 sum、mean、prod、amin/amax、min/max、var_mean、std、
+softmax；布尔测试检查 6 个输出的 owner 分支均位于屏障之后。`test_chained_reductions` 连续执行
+8 次 `x = x + softmax(x, 1)`，在同一生成代码中检查 8 次屏障；关闭 online softmax 时检查 16 次。
+因此改写的影响范围还包括多次同步、多个结果和 workspace 重用，不能仅限于单输出 sum。
+本地 `pytorch_new/torch_npu` 中没有新增的直接调用点，NPU 接入仍需审查继承的上游路径。
+
+代码依据：[生产发射点][upstream-barrier-call]、[算子与连续归约测试][upstream-coop-tests]、
+[split scan 禁用入口][scan-kernel]、[combo 禁用入口][upstream-combo-disable]。
+
+### 7.2 原生全 Vector 同步的适用边界
+
 **两个改写均不具备上游 helper 的通用等价语义。** 上游允许不同 y/z 组独立会合，
 all_vector 要求参与 Vector 核执行相同的屏障序列。例如：
 
@@ -536,6 +577,105 @@ NaN/Inf、混合 Cube/Vector、其他编译模式、C++/AOT 等组合。这些�
 | NPUIR 同步 lowering | 保留本核完成、跨核会合及读取依赖；优化后维持语义 | 当前 PIPE_ALL、MTE3 set/S wait 已有实现证据 |
 | TA/NPUIR 性能 | 分析大 S 的全核交换与 all-read 合并开销，分别优化访存和同步 | 32 片整数交换 NPU native 7.373 µs，CUDA 1.581 µs |
 | Runtime/同步接口契约 | 明确事件在 task/context/stream 间的隔离和实际重叠执行条件 | 提交并发通过，设备重叠与同核事件竞争未覆盖 |
+
+### 7.3 限核后如何约束分片数
+
+这里的“核数”应是**本次 kernel 实际可用的 Vector 核数**，记为 `C_eff`，不能继续使用整卡的
+56，也不能将 Cube 核数直接代入。`NPU_DEVICE_LIMIT` 的格式是 `Cube,Vector`；本卡配比为 1:2，
+因此限制到 8 个 Vector 核对应 `NPU_DEVICE_LIMIT=4,8`；`8,16` 则是 16 个 Vector 核。
+环境变量应在设备初始化前设置，不能靠初始化后修改字符串更新已有编译计划。
+
+对首期采用的“每个 program 对应一个参与核、所有输出及分片在同一批执行”的方案，定义：
+
+```text
+X = 非规约元素数
+XBLOCK = 一个输出 program 处理的非规约元素数
+Q = ceil_div(X, XBLOCK)       # 输出 program 数，首期 XBLOCK=1
+S = RSPLIT                  # 每个输出 tile 的 R 分片数
+
+Q * S <= C_eff
+S <= floor(C_eff / Q)
+```
+
+| 有效 Vector 核数 | 非规约元素数 X | XBLOCK | 输出 program 数 Q | 单批方案的 S 上限 |
+| --- | --- | --- | --- | --- |
+| 8 | 1 | 1 | 1 | 8 |
+| 8 | 2 | 1 | 2 | 4 |
+| 8 | 2 | 2 | 1 | 8；仅说明公式，首期不采用该输出 tile |
+
+上述是核数预算上限；仍需满足分片工作量、资源、映射和同步参与者等条件，并不表示上限配置
+一定有性能收益。当 `Q>=C_eff` 时，首期没有继续沿 R 增加并行度的空间。
+
+**这不是逻辑分片数的数学上限。** 若后端保证每批包含完整的归约组，例如 `C_eff=8,Q=2,S=8`，
+可以第一批执行第 0 行的全部 8 片，第二批执行第 1 行的全部 8 片；每组都在本批完成。
+这需要另一套明确的多批映射准入，不能直接放宽上述单批规则。第 6.4 节实测的
+`C=56,X=56,S=2` 共 112 个 program 通过，正是总 program 数超核、但组未跨批的现有例子。
+8 核限核下的这些例子目前是方案推导，**尚未进行设备验证**。
+
+现有组件已有部分限核基础：NPU Inductor 的 `_obtain_and_limit_cube_vector_core_num()`
+读取并校验环境限制；TA 也将受限 Vector 核数用于设备属性和 launcher，并通过
+`--custom-aiv-number` 传给 NPUIR。因此 cooperative 的 choices、候选、编译、launcher
+必须使用同一个 `C_eff`，而不是仅修改一处 `RSPLIT` 上限。
+另外还有 device/stream 限核 API 和 `limit_core_num` scope；不能仅凭环境变量推定这些
+运行时状态已自动传入 cooperative 计划。实际生效的限制应按目标 stream/runtime 契约确定；
+本轮未确认这些限制的覆盖优先级，不直接假设取最小值即可。
+
+限核状态改变后，需要重新校验计划、映射及缓存复用条件；无法保证一致时回退到已验证路径。
+后续限核测试至少记录整卡 Vector 数、实际限额、编译限额和最终 program 映射，并检查
+`Q=1,S=8/16` 与 `Q=2,S=4/8`，避免仅记录物理设备属性 56 后误判预算。
+代码依据：[Inductor 限核配置][npu-core-limit-config]、[device/stream 限核 API][npu-core-limit-api]、
+[TA 受限设备属性与 launcher][ta-core-limit-driver]、[传给 NPUIR 的编译参数][ta-core-limit-compiler]。
+
+### 7.4 sync_block_all 版增加什么逻辑才能保证正确
+
+首先明确已有证据的边界：原版在本轮实际运行的预算内配置通过；超过核数预算的 original 配置
+被跳过，**没有验证“原版在任意超预算配置也正确”**。CUDA 上游同样主动限制 CTA 数，注释说明
+若等待尚未运行的 CTA，可能死锁。原版的按组计数保证已到达参与者的会合，不能代替执行前进条件。
+
+对受限 cooperative 场景，可以围绕 `sync_block_all` 补齐准入及执行协议；需要保障的是：
+
+1. 在预运行和 autotune 前拒绝不合法的 `Q/S/C_eff` 与物理映射，force 也不绕过。
+2. 每片写入唯一 partial；尾块 mask 输入、空片写 identity，但所有参与者仍执行一致的屏障序列。
+3. 通过具有 GM 顺序保证的原语完成本核写回、跨核会合及同步后的读取依赖；编译优化保留该契约。
+4. 所有参与者到达屏障后，再由唯一 owner 合并/输出；不能为了减少读取把屏障也放进 owner 分支。
+5. 多阶段重用 workspace 前保证旧读者已完成：保留经证明的轮换生命周期，或在需要处增加
+   读后写屏障；同时保证事件复用、重复调用和 stream/Graph 生命周期正确。
+
+这些约束可以使**明确支持范围内的归约结果**正确，并不恢复通用 helper 的独立分组语义。
+上游 `CooperativeReductionWorkspaceCache` 将空间延后两次归约循环再复用，说明不能忽略第 5 项；
+也不应不经分析就在每次 `tl.load` 后机械添加屏障。
+
+单靠 helper 内多加一次 `tl.debug_barrier()`、清零 workspace 或登记计数，无法修正组跨批问题。
+例如 `C_eff=8,Q=1,S=16`，若整个“partial → 屏障 → combine”按 8 核分两批执行，
+第一批返回屏障时第 8～15 片根本未计算；清零会将漏算掩盖成错误的部分和，等待计数到 16
+则可能让当前 8 核一直等待，而它们无法进入下一批。
+
+若确实需要一组逻辑分片跨多批，需改变任务组织。一个供后续评估的单 kernel 结构是：
+
+```python
+# 方案伪代码，尚未实现/验证；所有启动的 worker 均参加屏障
+for partial_task in tasks_assigned_to_this_worker:
+    compute_and_store_partial(partial_task)
+
+sync_all_vector_workers()  # 在全部 partial 任务循环之外
+
+for output_tile in outputs_owned_by_this_worker:
+    combine_and_store(output_tile)
+```
+
+即先由固定参与核循环完成全部 partial，再统一同步，最后合并；不能继续让 AutoBlockify
+把包含“同步和合并”的整个逻辑 program 放入原来的逐批循环。这涉及 Inductor schedule/codegen
+和 TA/NPUIR 的任务映射，已经超出 helper 内局部修改。更多分片只表示每核处理更多任务，
+不会增加实际并行核数，其性能价值仍需另测。首期继续采用单批方案，不将此结构视为已交付能力。
+
+如果还要求不同输出组可独立进入/退出屏障，现有全 Vector API 没有分组参数；
+增加不同 event ID 也不会改变“等待全部 Vector 参与者”的范围。需要保留合法的按组 semaphore
+协议，或由下层提供真实的分组同步。多输出统一 phase 的受限支持与通用等价替换应分别评审。
+代码依据：[CUDA 预算约束][upstream-coop-budget]、[workspace 复用][upstream-workspace]、
+[TA 全核同步接口][ta-sync-all]。
+
+本节讨论的跨批错误是同步与输入完整性错误；修正它不代表浮点计算与未分片版本逐 bit 一致。
+浮点归约树改变后的误差仍按需求第 5.4 节单独验收。
 
 ## 8. Split scan 的场景与 cooperative 的关系
 
@@ -727,3 +867,12 @@ CUDA 识别到所选的一张 GPU，UUID 与物理卡 6 一致，`sum(arange(16)
 [ta-sync-set]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/docs/zh/triton_api_extension/al/sync_block_set.md
 [ta-sync-wait]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/docs/zh/triton_api_extension/al/sync_block_wait.md
 [ta-sync-constraints]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/third_party/ascend/language/cann/extension/core.py#L251
+[upstream-barrier-call]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L5948
+[upstream-coop-tests]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/test/inductor/test_cooperative_reductions.py#L243
+[upstream-combo-disable]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton_combo_kernel.py#L514
+[upstream-coop-budget]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/runtime/triton_heuristics.py#L4650
+[upstream-workspace]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L2716
+[npu-core-limit-config]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/_inductor/config.py#L47
+[npu-core-limit-api]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/npu/npu_config.py#L227
+[ta-core-limit-driver]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/third_party/ascend/backend/driver.py#L101
+[ta-core-limit-compiler]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/third_party/ascend/backend/compiler.py#L964

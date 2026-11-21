@@ -76,20 +76,29 @@ semaphore 协议还依赖 TA/NPUIR 解决这条路径的性能；首期原生同
 | --- | --- |
 | cooperative 准入状态 | IR 与 Index kernel 一致；普通/no-linear 路径明确为 False |
 | `RSPLIT=S`、输出 program 数 `Q` | 将归约分片与输出分核分开；首批 `X=1`，扩展小 `X` 时保持输出 tile 为 1 |
+| 有效 Vector 核数 `C_eff` | 使用本次启动的限核预算；choices、编译映射与 launcher 一致，不能只读取整卡属性 |
 | `BLOCK_SUB=B`、compile mode | 控制分片内循环与局部资源；首期固定 SIMD，非 persistent |
 | combine 方式 | 首期 `terminal_owner`：每个输出只有一个分片读取 partial 并输出 |
 | partial stride / workspace 大小 | 按候选最大 `S` 分配，行 stride 固定，实际只读当前有效分片 |
 | 同步/映射契约 | 原生 `all_vector`、统一单 phase；实际 program 映射由 TA/NPUIR 保证并验证 |
 
-`S/B`、combine 方式、影响映射的 options 及相关能力版本须进入对应代码/候选缓存标识，
+`S/B`、combine 方式、有效核数、影响映射的 options 及相关能力版本须进入对应代码/候选缓存标识，
 cache hit 后恢复同样的 Grid、workspace stride 与 compile options；不能只恢复一个 `R` block。
+运行时 device/stream/scope 限核状态改变时，先重新校验计划及编译映射，不能直接复用旧的 cooperative 候选。
 首期可限定已验证的软件栈和目标架构，不将新增通用 capability 查询服务作为开工前提。
 
 ### 1.3 Kernel 内协议与运行流程
 
-设输出 program 数为 `Q=X`，Grid 为 `(S, Q, 1)`。首期仅接 TA 确认的单轮映射，要求
-`Q*S` 不超过有效 AIV 数，并确认没有额外 program 循环或 sub-block 改写参与者。
+设输出 program 数为 `Q=ceil_div(X,XBLOCK)`，Grid 为 `(S, Q, 1)`；首期 `XBLOCK=1`，所以 `Q=X`。
+首期仅接 TA 确认的单轮映射，要求 `Q*S<=C_eff`，并确认没有额外 program 循环或 sub-block 改写参与者。
 数量检查是必要条件，**不代替后端对物理映射与屏障参与者的确认**。
+
+例如有效预算为 8 个 Vector 核，`X=1` 时 `S<=8`，`X=2` 时 `S<=4`。
+在本卡 1:2 配比下，8 个 Vector 核对应 `NPU_DEVICE_LIMIT=4,8`；`8,16` 代表 16 个 Vector 核。
+编译器的 `--custom-aiv-number`、launcher 和候选过滤必须使用一致限额；环境变量之外的
+device/stream/scope 限核需单独确认如何传递。上述 8 核例子是预算推导，尚未进行限核设备验证。
+这只是首期单批方案的限制；组完整的多批映射可能允许总 program 数超过预算，但不在首期默认准入。
+详见[限核依据与多批边界](barrier-comparison.md#73-限核后如何约束分片数)。
 
 11 月 21 日已实测：默认 AutoBlockify 将单行的 112 个分片映射到 56 核时，两种 all_vector
 helper 均产生 1736/1792 个错误整数结果；增加两侧本核屏障不能修正。实际编译产物按步长 56
@@ -204,6 +213,9 @@ Inductor 不应在正常编译时解析 LLVM IR 来判断“这次有没有某�
 因此本原型验证的是受限 cooperative 路径的结果交换，不能作为上游 helper 的通用等价替换。
 正式接入宜使用表达 NPU 全 Vector 语义的专用 helper，只在已满足条件的 codegen 路径调用，
 不全局替换 `triton_helpers.x_grid_barrier`。
+全仓调用核对表明，PyTorch `v2.13.0` 只有 cooperative 的一个生产发射点，但它覆盖 mean、
+var/std、softmax 和多阶段融合等场景；连续 8 次 softmax 的测试会产生 8 或 16 次屏障。
+split scan 与 combo/foreach 显式关闭该路径，见[实际调用范围](barrier-comparison.md#71-v2130-中哪些路径实际调用-x_grid_barrier)。
 
 例如 `Q=4,S=8` 时，上游四个八分片组可以独立同步；改写后 32 个参与者一起等待。
 各组都执行同样八轮交换时可以验证结果等价；若一组提前退出或少执行一轮，全体同步条件
@@ -229,6 +241,10 @@ Inductor 不应在正常编译时解析 LLVM IR 来判断“这次有没有某�
 可对应唯一的分片组；扩展 `Q>1` 则必须复核全体会合条件。并发启动约束见
 [跨核同步的执行前进说明][cross-core-sync]，多 phase 的空间复用还要与上游
 [workspace 两轮复用规则][upstream-workspace]对齐。
+
+增加本核屏障不能修正尚未执行的后续分片。若以后支持同组跨批，需要将“全部 partial 任务”
+与“同步后合并”分为两个执行阶段，并由 TA/NPUIR 保证屏障位于任务循环之外；不是仅替换 helper。
+该结构尚未实施，首期仍按上述单批协议接入；见[补充逻辑与正确性边界](barrier-comparison.md#74-sync_block_all-版增加什么逻辑才能保证正确)。
 
 ![cooperative 单 phase 运行流程](assets/kernel-flow.svg)
 
@@ -294,7 +310,7 @@ Python wrapper 和 NPU Graph 作为首期运行验收，C++/AOT、多 stream 并
 
 | 依赖 | 需要提供或确认的内容 | 责任接口 | 是否阻塞首期 |
 | --- | --- | --- | --- |
-| D1：参与者与映射契约 | A5 SIMD 的 Grid/AIV 映射、auto-map/sub-block 与屏障一致性、非法配置拒绝 | TA launcher + NPUIR 映射 | 是；合法性未明确时不能发射 |
+| D1：参与者与映射契约 | 对齐限核后的编译/启动预算；确认 Grid/AIV、auto-map/sub-block 与屏障一致性 | TA launcher + NPUIR 映射 | 是；合法性未明确时不能发射 |
 | D2：GM/event 契约 | 屏障保证 partial 可见；明确重排、event 分配/重用与自动同步的约束 | TA 同步依赖 + NPUIR lowering | 是；受限运行通过后仍需明确边界 |
 | D3：owner-only 控制流 | 屏障后 owner 分支读/合并/输出，其他参与者完成；屏障不移入分支 | TA 控制流 + NPUIR 优化 | 是；功能与 G3 优化共同依赖 |
 | D4：资源与 ABI | 区分 UB 用量/容量/unknown；返回同步 scratch/lock，保持缓存/Graph ABI | NPUIR metadata → TA → runtime | ABI 影响功能；用量影响配置 |
@@ -367,7 +383,7 @@ partial、屏障、合并和可能增加的资源开销。产品收益比较须�
 
 ```text
 1. capability: SoC、compile mode、原生同步契约已验证
-2. legality: 单归约形态、支持的 combine、统一 phase、合法 Grid/映射和 workspace
+2. legality: 单归约形态、支持的 combine、统一 phase、限核后的合法 Grid/映射和 workspace
 3. parallelism: 当前 Q 不足，存在 S > 1 且每片有足够工作量
 4. resources: B、S、persistent/looping 的 UB 与寄存器资源合法
 5. profitability: 预测或实测 cooperative 优于当前普通 reduction
