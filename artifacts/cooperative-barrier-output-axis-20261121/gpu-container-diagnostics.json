@@ -1,0 +1,86 @@
+{
+  "collected_at_utc": "2026-11-21T10:26:36.984015+00:00",
+  "scope": "GPU_4090 host read-only diagnosis of pytorch-dev-gpu67; no container/host configuration modified",
+  "commands": {
+    "host_gpu_6_7": {
+      "command": "nvidia-smi -i 6,7 --query-gpu=index,uuid,name,memory.total,memory.used,utilization.gpu,driver_version --format=csv",
+      "exit_code": 0,
+      "stdout": "index, uuid, name, memory.total [MiB], memory.used [MiB], utilization.gpu [%], driver_version\n6, GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7, NVIDIA GeForce RTX 4090, 24564 MiB, 13757 MiB, 0 %, 535.183.01\n7, GPU-19ae2c1b-628b-0861-d177-a8fe4d3894a4, NVIDIA GeForce RTX 4090, 24564 MiB, 22791 MiB, 0 %, 535.183.01\n",
+      "stderr": ""
+    },
+    "container_config": {
+      "command": "env DOCKER_API_VERSION=1.43 docker inspect --format '{{json .State}} {{json .Config.User}} {{json .HostConfig.Runtime}} {{json .HostConfig.DeviceRequests}} {{json .HostConfig.Devices}} {{json .HostConfig.DeviceCgroupRules}} {{json .HostConfig.Privileged}} {{json .AppArmorProfile}}' pytorch-dev-gpu67",
+      "exit_code": 0,
+      "stdout": "{\"Status\":\"running\",\"Running\":true,\"Paused\":false,\"Restarting\":false,\"OOMKilled\":false,\"Dead\":false,\"Pid\":\"<pid>\",\"ExitCode\":0,\"Error\":\"\",\"StartedAt\":\"2026-11-20T12:36:52.436350528Z\",\"FinishedAt\":\"0001-01-01T00:00:00Z\"} \"1001:1001\" \"runc\" [{\"Driver\":\"\",\"Count\":0,\"DeviceIDs\":[\"GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7\",\"GPU-19ae2c1b-628b-0861-d177-a8fe4d3894a4\"],\"Capabilities\":[[\"gpu\"]],\"Options\":{}}] [] null false \"docker-default\"\n",
+      "stderr": ""
+    },
+    "docker_cgroup": {
+      "command": "env DOCKER_API_VERSION=1.43 docker info --format '{{json .CgroupDriver}} {{json .CgroupVersion}}'",
+      "exit_code": 0,
+      "stdout": "\"systemd\" \"2\"\n",
+      "stderr": ""
+    },
+    "target_processes": {
+      "command": "env DOCKER_API_VERSION=1.43 docker top pytorch-dev-gpu67 -eo pid,ppid,user,etimes,comm",
+      "exit_code": 0,
+      "stdout": "Process command names only: docker-init, sleep, bash (one pre-existing interactive shell); diagnostic processes may appear transiently.\n",
+      "stderr": ""
+    },
+    "target_device_policy": {
+      "command": "systemctl show --no-pager docker-<container-id>.scope -p DevicePolicy -p DeviceAllow -p DropInPaths",
+      "exit_code": 0,
+      "stdout": "DevicePolicy=strict\nDeviceAllow=block-* m\nDeviceAllow=char-* m\nDeviceAllow=/dev/char/1:3 rwm\nDeviceAllow=/dev/char/1:5 rwm\nDeviceAllow=/dev/char/1:7 rwm\nDeviceAllow=/dev/char/1:8 rwm\nDeviceAllow=/dev/char/1:9 rwm\nDeviceAllow=/dev/char/5:0 rwm\nDeviceAllow=/dev/char/5:1 rwm\nDeviceAllow=/dev/char/5:2 rwm\nDeviceAllow=/dev/char/10:200 rwm\nDeviceAllow=char-136 rwm\nDropInPaths=/run/systemd/transient/docker-<container-id>.scope.d/50-CPUQuota.conf /run/systemd/transient/docker-<container-id>.scope.d/50-CPUQuotaPeriodSec.conf /run/systemd/transient/docker-<container-id>.scope.d/50-DeviceAllow.conf /run/systemd/transient/docker-<container-id>.scope.d/50-DevicePolicy.conf /run/systemd/transient/docker-<container-id>.scope.d/50-MemoryMax.conf /run/systemd/transient/docker-<container-id>.scope.d/50-TasksMax.conf\n",
+      "stderr": ""
+    },
+    "target_bpf_attachments": {
+      "command": "sudo -n bpftool cgroup show /sys/fs/cgroup/system.slice/docker-<container-id>.scope",
+      "exit_code": 0,
+      "stdout": "ID       AttachType      AttachFlags     Name           \n15795    cgroup_device   multi                                          \n15796    cgroup_device   multi                                          \n15876    cgroup_device   multi                                          \n",
+      "stderr": ""
+    },
+    "blocking_bpf": {
+      "command": "sudo -n bpftool prog dump xlated id 15876",
+      "exit_code": 0,
+      "stdout": "   0: (61) r2 = *(u32 *)(r1 +0)\n   1: (54) w2 &= 65535\n   2: (61) r3 = *(u32 *)(r1 +0)\n   3: (74) w3 >>= 16\n   4: (61) r4 = *(u32 *)(r1 +4)\n   5: (61) r5 = *(u32 *)(r1 +8)\n   6: (bc) w1 = w3\n   7: (54) w1 &= 1\n   8: (5d) if r1 != r3 goto pc+2\n   9: (55) if r2 != 0x1 goto pc+1\n  10: (05) goto pc+46\n  11: (bc) w1 = w3\n  12: (54) w1 &= 1\n  13: (5d) if r1 != r3 goto pc+2\n  14: (55) if r2 != 0x2 goto pc+1\n  15: (05) goto pc+41\n  16: (55) if r2 != 0x2 goto pc+3\n  17: (55) if r4 != 0x1 goto pc+2\n  18: (55) if r5 != 0x3 goto pc+1\n  19: (05) goto pc+37\n  20: (55) if r2 != 0x2 goto pc+3\n  21: (55) if r4 != 0x1 goto pc+2\n  22: (55) if r5 != 0x5 goto pc+1\n  23: (05) goto pc+33\n  24: (55) if r2 != 0x2 goto pc+3\n  25: (55) if r4 != 0x1 goto pc+2\n  26: (55) if r5 != 0x7 goto pc+1\n  27: (05) goto pc+29\n  28: (55) if r2 != 0x2 goto pc+3\n  29: (55) if r4 != 0x1 goto pc+2\n  30: (55) if r5 != 0x8 goto pc+1\n  31: (05) goto pc+25\n  32: (55) if r2 != 0x2 goto pc+3\n  33: (55) if r4 != 0x1 goto pc+2\n  34: (55) if r5 != 0x9 goto pc+1\n  35: (05) goto pc+21\n  36: (55) if r2 != 0x2 goto pc+3\n  37: (55) if r4 != 0x5 goto pc+2\n  38: (55) if r5 != 0x0 goto pc+1\n  39: (05) goto pc+17\n  40: (55) if r2 != 0x2 goto pc+3\n  41: (55) if r4 != 0x5 goto pc+2\n  42: (55) if r5 != 0x1 goto pc+1\n  43: (05) goto pc+13\n  44: (55) if r2 != 0x2 goto pc+3\n  45: (55) if r4 != 0x5 goto pc+2\n  46: (55) if r5 != 0x2 goto pc+1\n  47: (05) goto pc+9\n  48: (55) if r2 != 0x2 goto pc+3\n  49: (55) if r4 != 0xa goto pc+2\n  50: (55) if r5 != 0xc8 goto pc+1\n  51: (05) goto pc+5\n  52: (55) if r2 != 0x2 goto pc+2\n  53: (55) if r4 != 0x88 goto pc+1\n  54: (05) goto pc+2\n  55: (b7) r0 = 0\n  56: (05) goto pc+1\n  57: (b7) r0 = 1\n  58: (95) exit\n",
+      "stderr": ""
+    },
+    "blocking_bpf_loaded_at": {
+      "command": "sudo -n bpftool prog show id 15876",
+      "exit_code": 0,
+      "stdout": "15876: cgroup_device  tag 5b66259bfca5c6d7  gpl\n\tloaded_at 2026-11-21T06:08:44+0800  uid 0\n\txlated 472B  jited 295B  memlock 4096B\n",
+      "stderr": ""
+    },
+    "container_default_user_device_open": {
+      "command": "env DOCKER_API_VERSION=1.43 docker exec -e CUDA_VISIBLE_DEVICES=GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7 -w <workspace>/torch-learn pytorch-dev-gpu67 python -c 'import os,json,ctypes\npaths=[\"/dev/nvidiactl\",\"/dev/nvidia-uvm\",\"/dev/nvidia6\",\"/dev/nvidia7\"]\nresult={\"uid\":os.getuid(),\"gid\":os.getgid(),\"nodes\":[]}\nfor p in paths:\n st=os.stat(p); item={\"path\":p,\"mode\":oct(st.st_mode&0o777),\"uid\":st.st_uid,\"gid\":st.st_gid,\"major\":os.major(st.st_rdev),\"minor\":os.minor(st.st_rdev)}\n try:\n  fd=os.open(p,os.O_RDWR); os.close(fd); item[\"open\"]=\"OK\"\n except OSError as e: item.update(errno=e.errno,error=e.strerror)\n result[\"nodes\"].append(item)\ndrv=ctypes.CDLL(\"libcuda.so.1\"); result[\"cuInit\"]=drv.cuInit(0)\nprint(json.dumps(result,indent=2))\n'",
+      "exit_code": 0,
+      "stdout": "{\n  \"uid\": 1001,\n  \"gid\": 1001,\n  \"nodes\": [\n    {\n      \"path\": \"/dev/nvidiactl\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 195,\n      \"minor\": 255,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    },\n    {\n      \"path\": \"/dev/nvidia-uvm\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 509,\n      \"minor\": 0,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    },\n    {\n      \"path\": \"/dev/nvidia6\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 195,\n      \"minor\": 6,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    },\n    {\n      \"path\": \"/dev/nvidia7\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 195,\n      \"minor\": 7,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    }\n  ],\n  \"cuInit\": 100\n}\n",
+      "stderr": ""
+    },
+    "container_root_device_open": {
+      "command": "env DOCKER_API_VERSION=1.43 docker exec -e CUDA_VISIBLE_DEVICES=GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7 -w <workspace>/torch-learn -u 0 pytorch-dev-gpu67 python -c 'import os,json,ctypes\npaths=[\"/dev/nvidiactl\",\"/dev/nvidia-uvm\",\"/dev/nvidia6\",\"/dev/nvidia7\"]\nresult={\"uid\":os.getuid(),\"gid\":os.getgid(),\"nodes\":[]}\nfor p in paths:\n st=os.stat(p); item={\"path\":p,\"mode\":oct(st.st_mode&0o777),\"uid\":st.st_uid,\"gid\":st.st_gid,\"major\":os.major(st.st_rdev),\"minor\":os.minor(st.st_rdev)}\n try:\n  fd=os.open(p,os.O_RDWR); os.close(fd); item[\"open\"]=\"OK\"\n except OSError as e: item.update(errno=e.errno,error=e.strerror)\n result[\"nodes\"].append(item)\ndrv=ctypes.CDLL(\"libcuda.so.1\"); result[\"cuInit\"]=drv.cuInit(0)\nprint(json.dumps(result,indent=2))\n'",
+      "exit_code": 0,
+      "stdout": "{\n  \"uid\": 0,\n  \"gid\": 0,\n  \"nodes\": [\n    {\n      \"path\": \"/dev/nvidiactl\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 195,\n      \"minor\": 255,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    },\n    {\n      \"path\": \"/dev/nvidia-uvm\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 509,\n      \"minor\": 0,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    },\n    {\n      \"path\": \"/dev/nvidia6\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 195,\n      \"minor\": 6,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    },\n    {\n      \"path\": \"/dev/nvidia7\",\n      \"mode\": \"0o666\",\n      \"uid\": 0,\n      \"gid\": 0,\n      \"major\": 195,\n      \"minor\": 7,\n      \"errno\": 1,\n      \"error\": \"Operation not permitted\"\n    }\n  ],\n  \"cuInit\": 100\n}\n",
+      "stderr": ""
+    },
+    "container_nvml": {
+      "command": "env DOCKER_API_VERSION=1.43 docker exec -e CUDA_VISIBLE_DEVICES=GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7 -w <workspace>/torch-learn pytorch-dev-gpu67 nvidia-smi -L",
+      "exit_code": 255,
+      "stdout": "Failed to initialize NVML: Unknown Error\n",
+      "stderr": ""
+    },
+    "container_source_commit": {
+      "command": "env DOCKER_API_VERSION=1.43 docker exec -e CUDA_VISIBLE_DEVICES=GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7 -w <workspace>/torch-learn pytorch-dev-gpu67 git rev-parse HEAD",
+      "exit_code": 0,
+      "stdout": "94e7b6459e015476351ef1a98c0ad30c37d51ac3\n",
+      "stderr": ""
+    },
+    "nvidia_runtime_version": {
+      "command": "nvidia-container-runtime --version",
+      "exit_code": 0,
+      "stdout": "NVIDIA Container Runtime version 1.13.5\ncommit: 6b8589dcb4dead72ab64f14a5912886e6165c079\nspec: 1.1.0-rc.2\n\nrunc version 1.3.3-0ubuntu1~22.04.3\nspec: 1.2.1\ngo: go1.23.1\nlibseccomp: 2.5.3\n",
+      "stderr": ""
+    }
+  },
+  "completed_at_utc": "2026-11-21T10:27:48.701898+00:00",
+  "sanitization": "User name, workspace, full container ID and process IDs omitted; raw device-open results, device UUIDs, policy and BPF instructions retained."
+}

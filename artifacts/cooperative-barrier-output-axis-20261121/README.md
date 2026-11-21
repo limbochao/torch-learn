@@ -36,7 +36,10 @@ S=1/2/4/8/16/32/48/56。三种 helper 复用相同地址，另有不交换 parti
 [安装包 core.py](npu/installed-ta-core.py)用于核对实际环境也拒绝同类型 set/wait 端点。
 
 本轮唯一允许的 GPU 容器 `pytorch-dev-gpu67` 中 NVML/CUDA 不可用，未运行新增 GPU 矩阵。
-[最后一次只读检查](gpu-access-final.txt)仍为 `Failed to initialize NVML: Unknown Error`。
+[前次只读检查](gpu-access-final.txt)为 `Failed to initialize NVML: Unknown Error`。
+18:26～18:28 的[进一步诊断](gpu-container-diagnostics.json)确认宿主机 GPU 正常，容器内普通用户
+和 root 打开设备均返回 `EPERM`。目标 cgroup 的严格设备白名单未放行 NVIDIA 设备；对应 BPF
+程序加载于当天 06:08:44，但触发操作未确认。诊断期间未修改容器或宿主机配置。
 此前 GPU 性能数据保留在相邻的 `cooperative-barrier-comparison-20261121/`，不与本轮数据混合。
 
 `verification-summary.json` 汇总本地一致性核验；`sha256.json` 为本目录其余文件的摘要。

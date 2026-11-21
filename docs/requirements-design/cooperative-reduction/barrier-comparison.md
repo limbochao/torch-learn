@@ -452,9 +452,10 @@ X=56，S=16：
 [S=2 最终 IR][output-axis-ir-s2]、[S=16 最终 IR][output-axis-ir-s16]。
 最终 IR 来自实际执行 adapter 的仅编译导出，摘要一致，未将导出产物再次启动运行。
 
-本轮也尝试在唯一允许的 GPU 容器 `pytorch-dev-gpu67` 中检查设备：NVML 返回
-`Failed to initialize NVML: Unknown Error`，PyTorch 报 `device_count=0`、
-`No CUDA GPUs are available`。因此本节没有新增 GPU 数据；第 4 节此前取得的 GPU 曲线仍单独保留。
+本轮 GPU 补测的前置检查被指定容器的设备访问控制阻断：宿主机 GPU 6/7 正常，容器内普通用户
+及 root 打开 NVIDIA 设备均返回 `EPERM`，CUDA 识别不到设备。已定位到容器 cgroup 的严格设备
+白名单没有放行 NVIDIA 设备，具体证据见[容器访问检查](#101-gpu-容器访问检查)。
+本节尚无新增 GPU 数据；第 4 节此前取得的 GPU 曲线仍单独保留。
 补测脚本已支持在其他 GPU 机器采集相同 X=7/56 及该 GPU 自身 SM 数对应的满核场景，
 并按相同 X/R 将结果加入本节同名 SVG。设备满核 X 不同时单独成行，避免误配 shape；
 未导入 GPU 数据时图中明确标为待补。运行和导入方式见
@@ -618,6 +619,35 @@ python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
 仅绘图不需要 GPU，详细依赖与便携包说明见
 [GPU 补测说明](../../../scripts/tests/cooperative_reductions/GPU_README.md)。
 
+### 10.1 GPU 容器访问检查
+
+2026-11-21 18:26～18:28（北京时间）重新检查 GPU_4090 的指定容器。
+这是补测前的设备初始化故障，尚未执行本节新增矩阵的 kernel。
+检查结果如下：
+
+| 检查位置 | 实际结果 | 说明 |
+| --- | --- | --- |
+| 宿主机 GPU 6/7 | 两张 RTX 4090 均可由 `nvidia-smi` 查询，驱动 `535.183.01` | 宿主机仍可访问这两张 GPU |
+| 容器设备文件 | `/dev/nvidia6`、`nvidia7`、`nvidiactl`、`nvidia-uvm` 存在，权限均为 `666` | 设备节点存在且普通文件权限允许读写 |
+| 容器普通用户及 root | 上述四个设备的 `os.open(..., os.O_RDWR)` 均返回 `errno=1: Operation not permitted` | 访问在设备打开阶段被拒绝，切换用户不能解决 |
+| 容器 CUDA/NVML | `cuInit(0)=100`，NVML 为 `Failed to initialize NVML: Unknown Error` | 失败早于 Triton 编译、kernel 启动和性能采集 |
+| 容器 cgroup | Docker 使用 `systemd`、cgroup v2；目标 scope 的 `DevicePolicy=strict` | 还需要满足内核设备白名单，不能仅检查文件权限 |
+| 生效的设备规则 | BPF 程序 15876 没有放行主设备号 195、509 的读写；分别对应本机 NVIDIA 控制/GPU、UVM 设备 | 该规则直接阻断本次设备打开 |
+
+其中 BPF 是内核执行的过滤程序；这里的 cgroup device 程序决定容器能否打开指定设备。
+容器配置仍保留 NVIDIA 设备请求和设备节点，但后加载的严格白名单拒绝了设备访问。
+程序 15876 加载于 **2026-11-21 06:08:44 +08:00**，晚于容器启动时间；具体触发操作尚未确认。
+
+NVIDIA 官方说明，传统 runtime hook 注入的 GPU 权限可能在容器更新或 systemd reload 后丢失，
+产生相同 NVML 错误。这能解释本机观察到的状态，但目前没有证据确定本次由哪一种操作触发，
+见[NVIDIA 容器故障说明][nvidia-gpu-access]。
+当前待确认仅重启指定容器以重新初始化设备权限；恢复后仍需重新检查设备并执行补测，不能以
+容器启动成功代替 CUDA、正确性与性能验证。
+
+完整命令、设备打开结果及 BPF 指令保留在
+[容器诊断记录][gpu-container-diagnostics]；用户名、进程 ID、完整容器 ID 和工作目录已替换或省略。
+测试代码已通过 Git bundle 同步至 `94e7b6459e015476351ef1a98c0ad30c37d51ac3`。
+
 [npu-manifest]: ../../../artifacts/cooperative-barrier-comparison-20261121/npu/bench-shared/manifest.json
 [gpu-manifest]: ../../../artifacts/cooperative-barrier-comparison-20261121/cuda/bench-shared/manifest.json
 [npu-bench]: ../../../artifacts/cooperative-barrier-comparison-20261121/npu/bench-shared/bench.json
@@ -640,6 +670,8 @@ python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
 [output-axis-manifest]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/manifest.json
 [output-axis-ir-s2]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/final-x56-s2/module.hivm.opt.mlir
 [output-axis-ir-s16]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/final-x56-s16/module.hivm.opt.mlir
+[gpu-container-diagnostics]: ../../../artifacts/cooperative-barrier-output-axis-20261121/gpu-container-diagnostics.json
+[nvidia-gpu-access]: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/troubleshooting.html
 [scan-lowering]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/lowering.py#L7490
 [scan-choice]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/ir.py#L2853
 [scan-kernel]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton_split_scan.py#L20

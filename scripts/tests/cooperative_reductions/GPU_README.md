@@ -5,6 +5,52 @@
 此前 CUDA 对照实际使用 PyTorch `2.13.0+cu126`、Triton `3.7.1`；其他版本的设备运行尚待验证。
 绘图另需 Matplotlib 3.8+，可在没有 GPU 的机器上运行。
 
+## GPU_4090 指定环境运行
+
+使用工作区约定的 `pytorch-dev-gpu67`，优先物理卡 6；其 UUID 为
+`GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7`，启动前以实际查询结果复核。
+先按工作区流程同步代码，确认版本包含 `94e7b64` 的 CUDA 补测入口，再进入容器工作目录：
+
+```bash
+ssh GPU_4090
+docker exec -it \
+  -e CUDA_VISIBLE_DEVICES=GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7 \
+  -w /home/gaojg/dev/torch-learn pytorch-dev-gpu67 bash
+```
+
+下面命令均在该容器中执行。先检查物理编号、UUID、空闲显存和利用率，并确认 CUDA 能识别卡：
+
+```bash
+nvidia-smi --query-gpu=index,uuid,name,memory.free,utilization.gpu --format=csv
+python - <<'PY'
+import torch
+print(torch.cuda.is_available(), torch.cuda.device_count())
+print(torch.cuda.get_device_properties(0))
+PY
+git rev-parse HEAD
+```
+
+CUDA 可用后运行完整补测；`--rows auto` 会在 RTX 4090 上选择 X=7/56/128：
+
+```bash
+python -u scripts/tests/cooperative_reductions/output_axis_cases.py \
+  --backend cuda --physical-device 6 --rows auto \
+  --rnumels 32768,1048593 --splits 1,2,4,8,16,32,48,56 \
+  --out artifacts/cooperative-barrier-output-axis-20261121/cuda
+```
+
+将该 `cuda/` 目录的 JSON 和 helper 源码取回本地同一目录后，在 torch-learn 根目录刷新现有图：
+
+```bash
+python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
+  --npu artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
+  --cuda artifacts/cooperative-barrier-output-axis-20261121/cuda/output-axis.json \
+  --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
+```
+
+该命令覆盖文档引用的同名 SVG/PNG/CSV；完整环境、通过/跳过数量与性能结论按实际结果更新报告。
+若 NVML/CUDA 初始化失败，则只记录访问错误，不能将其记为已经完成 kernel 测试或生成性能值。
+
 ## 便携包运行
 
 解压后在包目录内执行；GPU 测试不需要 torch_npu、TA 或 PyTorch 源码仓库。
