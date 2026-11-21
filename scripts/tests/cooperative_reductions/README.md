@@ -198,7 +198,7 @@ CUDA 在指定容器内按 UUID 选择物理 GPU 6，使用 `--backend cuda --ph
 
 ```bash
 python scripts/tests/cooperative_reductions/output_axis_cases.py \
-  --backend npu --physical-device 1 --rows 7,56 \
+  --backend npu --physical-device 4 --rows 7,56 \
   --rnumels 32768,1048593 --splits 1,2,4,8,16,32,48,56 \
   --out artifacts/cooperative-barrier-output-axis-20261121/npu
 ```
@@ -207,3 +207,11 @@ python scripts/tests/cooperative_reductions/output_axis_cases.py \
 `SKIP_CORE_BUDGET`；native/debug 的超核点仅用于分核诊断，不能视作上游自动选择的候选。
 结果记录数值错误的数量和样例；错误点没有性能值。输入和输出地址在各 helper 之间保持一致。
 CUDA 可使用同一脚本，`--rows` 应按该设备的 SM 数设置；CUDA 仅测试 original 和 plain。
+
+`plot_output_axis_cases.py` 读取该 JSON，保留错误/跳过状态并导出 SVG、PNG 和完整 CSV：
+
+```bash
+python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
+  --data artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
+  --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
+```

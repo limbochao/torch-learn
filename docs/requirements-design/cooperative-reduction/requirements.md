@@ -331,6 +331,9 @@ assert not self.cooperative_reduction, "TODO"
 ```
 
 这是当前实现边界；scan、sort 和 median 本身仍可有各自的并行算法。
+例如 split scan 分块计算前缀和，通过前序块状态补齐当前块；它有独立的 kernel 和同步协议，
+不调用 `x_grid_barrier`，也不随 cooperative 开关走这条归约路径。示例和版本代码见
+[Split scan 的场景与关系](barrier-comparison.md#8-split-scan-的场景与-cooperative-的关系)。
 代码对照：[scan 限制][U10]、[sort 限制][U13]、[median lowering][U11]。
 
 ## 3. NPU 现状与差距
@@ -416,6 +419,11 @@ feature 会因 cooperative 开关加入该能力；NPU IR 缺少上游“本次�
 已安装接口为 `sync_block_all(mode, event_id)`，scope 包含 `all_vector`、`all_cube`、`all` 和
 `all_sub_vector`，event ID 为 0～15。原型调用 `ext.sync_block_all("all_vector", 0)`，在写出
 partial 后等待参与者，再读取同组结果；接口本身没有按输出 row/program group 分组的参数。
+
+按 2026-11-21 的官方 `main-dev` 文档与实现核对，`sync_block_set/wait` 只允许 Cube→Vector
+或 Vector→Cube，明确拒绝 Vector→Vector；`all_sub_vector` 需另行建立受支持的子块映射。
+目前没有发现能直接恢复上游任意 y/z 分组语义的另一现成接口，详细约束见
+[TA 官方同步接口评估](barrier-comparison.md#9-ta-官方-al-接口能否替换-x_grid_barrier)。
 
 2026-11-18 固定 `num_warps=4` 的编译结果与当日另行取得的运行证据如下。原生 sum、可见性探针和 CUDA
 helper 探针合计 9 个编译配置，其中 6 个通过、3 个失败。
@@ -668,6 +676,16 @@ Index/no-linear 的实现入口、具体同步原语、结果合并方式和参�
 
 该轮还验证重复同步、尾块、空分片、mean/amax 和多进程多流提交，并单独检查自动分核边界。
 这类手写 helper 的功能证据用于明确 TA/NPUIR 契约，不能替代 Inductor 集成验收。
+
+**补充了输出任务未满核与满核的对照。** A5 的 56 个 Vector 核上，固定每行一个输出任务，
+`X=7,R=1048593` 从手写普通归约的 119.210 µs 降至 8 片 all_vector 协作的 19.451 µs，
+约加速 6.13 倍；`X=56` 已有足够输出任务，长轴继续拆分没有明显收益，短轴则变慢。
+这要求 NPU 同时考虑输出并行度和每片工作量，不能只根据 R 长度启用。
+原生屏障改写也出现了同一行分片跨物理执行批次时读到未写 partial 的错误；是否出错取决于组与映射，
+不能只用总 program 数推断。参数、普通归约定义、曲线及错误样例见
+[非规约轴未满核与满核](barrier-comparison.md#64-非规约轴未满核与满核)。
+此组使用共享物理卡 4，固定 BLOCK 的手写实现，尚不能替代实际 Inductor 的同图性能验收。
+
 下文保留此前单输入 sum 和 atomic 分量实验，用于解释不同原型及原始协议的性能缺口。
 
 **本节数据来自调研时手写的 Triton kernel，用于验证跨 program 协作的可行性与收益区间。**

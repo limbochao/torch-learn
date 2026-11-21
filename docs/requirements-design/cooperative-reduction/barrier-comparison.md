@@ -8,8 +8,9 @@ title: 三种 x_grid_barrier 的 A5 与 RTX 4090 验证
 [Cooperative Reduction 需求分析](requirements.md)和[方案设计](design.md)的验证依据。
 
 **结论：两种 all_vector 改写在本轮核数内、统一参与的配置中精度正常，同地址耗时中位数几乎一致；
-它们都不能作为通用 x_grid_barrier 的完整替换。** 默认自动分核将 112 个逻辑 program
+它们都不能作为通用 x_grid_barrier 的完整替换。** 默认自动分核将单行的 112 个分片
 映射到 56 核时，两种版本均正常返回却产生错误结果；两侧本核屏障不能解决这一问题。
+第 6.4 节新增未满核/满核对照：错误取决于同一输出的分片是否跨执行批次，不能只看总 program 数。
 多进程多流提交检查通过，设备指令真正重叠时的事件隔离尚未确认。
 
 ## 1. 评估对象
@@ -46,6 +47,8 @@ def x_grid_barrier_debug(sem):
 [被测 helper](../../../scripts/tests/cooperative_reductions/npu_triton_helpers.py)。
 
 ## 2. 环境与版本
+
+下表对应最初 210 个性能点；第 6.4 节补充测试使用同一 NPU 软件环境、共享物理卡 4。
 
 | 项目 | NPU | GPU |
 | --- | --- | --- |
@@ -273,7 +276,7 @@ MTE3 搬出本片 partial，`PIPE_ALL` 等待本核前序流水，跨核 set/wai
 
 关闭分核的两项使用独立编译缓存；开关仅在诊断进程内临时设置，metadata 确认实际关闭。
 112 用于显式构造两批等长 program 的分核诊断，不代表上游默认会选择 112 片；
-其他超核数量尚未运行，本轮不将这项结果外推为全部超核 Grid 的实际表现。
+本小节不将这项结果外推为全部超核 Grid 的实际表现；其他组形态的补充结果见第 6.4 节。
 两项超核诊断均完成编译和运行，随后因整数校验失败以状态 1 退出，没有触发超时。
 每项均有 **1736/1792 个值不相等，最大绝对差 9717988**。关键观测如下：
 
@@ -307,7 +310,7 @@ workspace 初始哨兵。此时前半部分的和为 623532，后半部分仍是
 相加正好为观测到的 `-67788`。后半部分 program 随后执行时，又会读到前半部分较晚 phase
 留下的值。两条本核屏障只能等待已经发出的本核操作，无法使后一批 program 提前完成。
 
-这把风险从推测收敛为可复现边界：**当前全 Vector helper 与这种 program 循环不能直接组合。**
+这把风险从推测收敛为可复现边界：**当前全 Vector helper 与这种同组跨批的 program 循环不能直接组合。**
 Inductor/TA 必须在发射、预运行和 autotune 前确认映射合法，限制或拒绝跨批次参与的配置；
 不能仅靠 `launch_cooperative_grid=True`、编译成功或额外本核屏障保证正确性。
 本轮没有执行超核 original 协议，也没有将错误点纳入性能图。
@@ -344,6 +347,114 @@ NPU 共 11 组并发配置，校验 1024 次 sum 和 1024 次变化 epoch 的整
 前述本核流水的 `EVENT_ID0` 属于不同同步通路，不能只按数值同为 0 判断冲突。
 明细见[并发配置结果索引][concurrency-index]、[GPU 并发结果][gpu-concurrency]。
 
+### 6.4 非规约轴未满核与满核
+
+#### 场景与对照方法
+
+新增两类输入，计算均为 fp32 `(a+b).sum(-1)`。本脚本固定每行一个输出 program：
+
+| 场景 | 输出行数 X | 不拆 R 时的输出任务数 | 选择理由 |
+| --- | ---: | ---: | --- |
+| 非规约轴未满核 | 7 | 7 | 56 个 Vector 核中只需 7 个；每行拆成 8 片时，恰好有 56 个任务 |
+| 非规约轴满核 | 56 | 56 | 不拆 R 已有 56 个任务；用于检查继续切分的收益与映射风险 |
+
+这里“满核”指输出任务数量足够分配给全部核，不表示实测硬件利用率持续为 100%。
+真实 Inductor 还需考虑输出 tile：若每个 program 处理 `XBLOCK` 行，应看
+`Q=ceil_div(X,XBLOCK)`，不能仅凭输出元素数 X 判断并行度。
+
+每类分别测试 `R=32768` 和带尾块的长轴 `R=1048593`，扫描
+`S=1,2,4,8,16,32,48,56`，固定 `BLOCK=1024`。
+增加 `plain` 对照：一个 program 循环完成一行，无 partial workspace 交换或屏障。
+它是固定 BLOCK 的手写普通归约，不是实际 Inductor 生成或 autotune 后的最优实现。
+三种 helper 则沿用第 3 节的 all-read 算法；`S=1` 仍调用 helper。
+**上游实际 codegen 会在没有 R 拆分时省去协作屏障，因此图中的 original S=1 耗时不能代表
+普通 Inductor 归约。** 判断分片收益时应对照 `plain`。
+
+这些是显式构造的性能与边界用例，并不表示上游会自动选择全部配置：按
+[v2.13.0 的选择规则](requirements.md#22-cuda-上游如何选择)，`X=56` 不进入 cooperative，
+`X=7,R=32768` 也未达到长轴阈值。超过 `X*S<=56` 预算的 original 配置跳过；
+native/debug 的超核配置仅用于观察分核行为，不据此加入正式 autotune 候选。
+
+实际于 2026-11-21 15:37 起在 NPU_A5 Docker 的 `pta_213_case` 环境运行，使用用户授权共享的
+物理卡 4。开始与结束检查均为 Health OK、AIV/Cube 利用率 0%，有 3 个其他驻留进程，
+所以曲线同时保留样本最小/最大值，不将共享环境中的单个最优值作为生产阈值。
+设备执行脚本来自 `torch-learn` 提交 `1783f4534323269bd8e80444faaec538501520d5`。
+同一 X/R/S 的 helper 复用相同输入、workspace、输出及 semaphore 地址；计时仍为
+32 次调用的 NPUGraph、10 次 replay、7 组 device Event 样本取中位数。
+
+#### 性能结果
+
+![非规约轴未满核与满核的 R 分片扫描](assets/barrier-comparison/output-axis-occupancy.svg)
+
+虚线为对应 shape 的 `plain`；灰色区域为超过核数预算的分核诊断。
+叉号只表示错误配置的位置，没有对应耗时；错误点之间不补性能曲线。
+共记录 100 个配置：**54 个通过并计时，24 个错误，22 个 original 因核数预算跳过**。
+代表性 native 中位数如下，单位 µs，均为完整 kernel 耗时：
+
+| X | R | 普通归约 plain | native S=1 | S=2 | S=4 | S=8 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 7 | 32768 | 4.768 | 5.827 | 5.285 | 5.954 | 5.797 |
+| 7 | 1048593 | 119.210 | 120.383 | 62.047 | 33.540 | 19.451 |
+| 56 | 32768 | 7.358 | 11.054 | 14.232 | 20.614 | 34.534 |
+| 56 | 1048593 | 373.409 | 377.296 | 376.537 | 372.612 | 385.581 |
+
+`X=7` 的长轴拆成 8 片后，相对普通归约约加速 **6.13 倍**；短轴则没有收益。
+`X=56` 时，短轴越拆越慢；长轴 `S=4` 与普通归约只差约 0.2%，不足以证明有效收益，
+继续拆分还会增加开销。此表 `X=56,S>1` 均属于超核诊断。
+debug 与 native 的中位数接近，例如未满核长轴 `S=8` 分别为 19.463 和 19.451 µs；
+额外本核屏障没有改变这组收益判断。
+
+这支持将“普通输出任务是否已足够并行”与“每片有效工作量”同时纳入 NPU 选择条件。
+本轮固定算法与 BLOCK，尚未测实际 Inductor、owner-only 合并或融合图，不能直接固化启用阈值。
+
+#### 正确性与分核解释
+
+每个 helper 点先校验 fp32 sum，再执行 4 个 phase、变化 epoch 和分片计算量的整数交换。
+所有通过点的整数误差为 0，sum 最大绝对误差为 `0.00193847`，满足本轮约定容限。
+失败点同时存在 sum 读到 NaN 哨兵和整数交换错误，属于同步/映射错误，不是浮点舍入差异。
+下表给出每一个 R、每一个改写版本的错误数量；两个 R 和 native/debug 的计数均相同：
+
+| S | X=7：错误 sum 输出 | X=7：错误整数输出 | X=56：错误 sum 输出 | X=56：错误整数输出 |
+| ---: | ---: | ---: | ---: | ---: |
+| 16 | 1 / 7 | 56 / 448 | 8 / 56 | 448 / 3584 |
+| 32 | 3 / 7 | 336 / 896 | 24 / 56 | 2688 / 7168 |
+| 48 | 5 / 7 | 840 / 1344 | 40 / 56 | 6720 / 10752 |
+
+例如 `X=7,R=32768,S=16` 的第 3 行实际为 NaN，参考值约为 `-45.06831`。
+但超核配置也有通过点：`X=56,S=2` 共 112 个 program 通过，`X=7,S=56` 共 392 个、
+`X=56,S=56` 共 3136 个 program 也通过。原因需要结合分片所属的行来解释。
+
+当前映射以分片为最快维度，线性编号为 `p=shard+S*row`。
+从实际执行的 adapter/metadata 重新编译导出的最终 IR 中，S=2 与 S=16 都保留了步长为 56
+的外层 program 循环，以及循环内部的跨 Vector 同步：每核先完成 program p 的全部 phase，
+再执行 p+56。它们不是将全部逻辑 program 同时放到物理核上运行。
+
+```text
+X=56，S=2：
+  第 1 批 56 个 program = 第 0～27 行的全部分片
+  第 2 批 56 个 program = 第 28～55 行的全部分片
+  每行所需的两个 partial 均能在同一批内写好，本轮通过。
+
+X=56，S=16：
+  第 1 批 = 第 0～2 行各 16 片 + 第 3 行的前 8 片
+  第 3 行后 8 片要到第 2 批才执行
+  第 1 批的全 Vector 屏障无法等待尚未执行的后 8 片，读取时得到旧值/哨兵。
+```
+
+因此，“总 program 数超过 56”不足以单独判定这组改写是否出错；关键是一个归约组是否跨批、
+各核执行的屏障次数和次序是否一致。本轮 S 能整除 56 的完整批次配置通过，**不构成任意映射、
+不完整批次、分支或 phase 数变化时的通用保证**，也不能据此恢复上游任意 y/z 组独立会合的语义。
+首期仍按已经确认的单批映射准入；若后续放开多批映射，需要 TA/NPUIR 明确保证组完整性和参与者。
+
+详细证据：[全部 100 个配置与误差][output-axis-data]、
+[执行版本与参数][output-axis-manifest]、[完整 CSV](assets/barrier-comparison/output-axis.csv)、
+[S=2 最终 IR][output-axis-ir-s2]、[S=16 最终 IR][output-axis-ir-s16]。
+最终 IR 来自实际执行 adapter 的仅编译导出，摘要一致，未将导出产物再次启动运行。
+
+本轮也尝试在唯一允许的 GPU 容器 `pytorch-dev-gpu67` 中检查设备：NVML 返回
+`Failed to initialize NVML: Unknown Error`，PyTorch 报 `device_count=0`、
+`No CUDA GPUs are available`。因此本节没有新增 GPU 数据；第 4 节此前取得的 GPU 曲线仍单独保留。
+
 ## 7. 接入范围判断
 
 **两个改写均不具备上游 helper 的通用等价语义。** 上游允许不同 y/z 组独立会合，
@@ -374,13 +485,105 @@ NaN/Inf、混合 Cube/Vector、其他编译模式、C++/AOT 等组合。这些�
 
 | 组件 | 需要适配或确认的内容 | 本轮依据 |
 | --- | --- | --- |
-| Inductor choices/schedule/autotune | 先检查全参与、统一 phase 和合法映射，再形成 S 候选；force 仍遵守条件 | 核数内通过，112 program 错误 |
+| Inductor choices/schedule/autotune | 先检查全参与、统一 phase 和合法映射，再形成 S 候选；force 仍遵守条件 | 单组跨批出错，输出满核时继续拆分无明显收益 |
 | TA 分核与 launcher | 识别全核同步与 program 循环的关系；给出合法映射或明确拒绝不合法组合 | native/debug 仍开启 AutoBlockify，循环步长为 56 |
 | NPUIR 同步 lowering | 保留本核完成、跨核会合及读取依赖；优化后维持语义 | 当前 PIPE_ALL、MTE3 set/S wait 已有实现证据 |
 | TA/NPUIR 性能 | 分析大 S 的全核交换与 all-read 合并开销，分别优化访存和同步 | 32 片整数交换 NPU native 7.373 µs，CUDA 1.581 µs |
 | Runtime/同步接口契约 | 明确事件在 task/context/stream 间的隔离和实际重叠执行条件 | 提交并发通过，设备重叠与同核事件竞争未覆盖 |
 
-## 8. 复现入口
+## 8. Split scan 的场景与 cooperative 的关系
+
+Split scan 面向长轴的前缀计算，例如 `torch.cumsum(x, dim=-1)`、`torch.cumprod(x, dim=-1)`。
+它保留轴上的全部输出，区别于将整条轴合并成一个值的 reduction：
+
+```text
+输入                [1, 2, 3, 4]
+sum 输出            10
+cumsum 输出         [1, 3, 6, 10]
+```
+
+若将 cumsum 切成两块，第一块 `[1,2]` 的局部前缀为 `[1,3]`，第二块 `[3,4]` 的局部前缀为
+`[3,7]`。第二块还需要前面全部块的和 3，才能输出 `[6,10]`；仅做各块局部 scan 不够。
+长轴、小行数时，将一条 scan 分给多个 program 可以增加并行度。
+
+PyTorch `v2.13.0`，提交 `cf30153c4c131c8164ee7798e5022d810682e2cb` 的实现如下：
+
+- `cumsum/cumprod` lowering 创建 `ir.Scan`；`Scan.num_splits()` 复用 `Reduction.num_splits()`
+  的形状选择逻辑，并传入 `reduction_type="scan"`。满足拆分与支持条件时创建 `ir.SplitScan`。
+- `TritonSplitScanKernel` 在一个 kernel 内分块，通过清零的 GM scratch 发布块和与完成状态。
+  `exclusive_scan_decoupled_lookback*` 向前查找块和或已完成前缀，再补到当前块的局部 scan 上。
+  这是前缀依赖协议，没有调用 `x_grid_barrier` 让全部 program 会合。
+- `TritonSplitScanKernel.should_use_cooperative_reduction()` 直接返回 False；普通 scan 的
+  `create_kernel_choices()` 也设置 `override_cooperative_reduction=False`。
+
+因此，**split scan 与 cooperative reduction 都涉及跨 program 数据依赖，但在该版本是独立
+执行路径，不能将 split scan 当作 cooperative reduction 的一种，也不能用 all_vector 直接
+替换它的前缀协议。** `num_splits()` 中对 scan 的特殊处理，是为了让 scan 仍可选择专用拆分路径，
+不因 cooperative 相关 backend capability 而被错误禁用。
+Split scan 自身仍有 atomic、数据可见性和执行前进性要求；本轮没有验证 NPU 的 split scan。
+
+代码依据：
+[scan lowering][scan-lowering]、
+[Scan 选择][scan-choice]、
+[专用 kernel][scan-kernel]、
+[scan 禁用 cooperative][scan-cooperative-override]。
+
+## 9. TA 官方 al 接口能否替换 x_grid_barrier
+
+核对范围为用户指定的
+[官方 al 文档目录](https://github.com/triton-lang/triton-ascend/tree/main-dev/docs/zh/triton_api_extension/al)。
+2026-11-21 获取的 `main-dev` 提交为 `20ebbba9c695d5353488d3516d54f1d5f3c43310`；
+以下结论同时核对该提交的接口实现，不将最新文档直接当作已安装 TA 的能力保证。
+该目录共有 10 篇接口文档，其中涉及同步的接口及模式如下：
+
+| 接口或模式 | 文档与实现表达的同步对象 | 对当前 Vector cooperative 的判断 |
+| --- | --- | --- |
+| `al.sync_block_all("all_vector", event_id)` | 全部参与 Vector 核，解决共享 GM 读写依赖 | 当前受限改写所用原语；仍有分组与分核限制 |
+| 同接口的 `"all_cube"` / `"all"` | Cube，或 Cube 与 Vector | 改变参与核类型，未增加按逻辑 y/z 分组的能力 |
+| 同接口的 `"all_sub_vector"` | Vector 子块 | 不能表达任意输出行的全部 R 分片会合 |
+| `al.sync_block_set/wait` | 分离模式下 Cube 与 Vector 的配对通知 | 不是任意 Vector 核之间的分组屏障 |
+| `al.debug_barrier(SYNC_IN_VF.*)` | VF 中 Vector/Scalar load/store 指令之间的顺序 | 解决局部指令依赖，不是跨 program 会合 |
+
+NPU_A5 的 `pta_213_case` 安装包也提供这四个函数；实际安装源码中的 `create_sync_block()`
+包含相同的同类型端点拒绝逻辑，见
+[已安装 TA 源码](../../../artifacts/cooperative-barrier-output-axis-20261121/npu/installed-ta-core.py)。
+
+`sync_block_set/wait` 的约束比“可自定义 event_id”更关键：sender/receiver 只接受
+`"cube"`、`"vector"`，且两者必须不同。`core.py::create_sync_block()` 明确拒绝同类型端点：
+
+```python
+if sender == receiver:
+    raise ValueError(f'Unexpected pair: {sender} -> {receiver}, only supports cube -> vector or vector -> cube')
+```
+
+接口没有提供逻辑 program 的成员列表、按 y/z 分组或任意到达人数。按这些参数与约束判断，
+它不能直接构造这里需要的 Vector→Vector R 分片屏障。为每行换一个 `event_id` 也没有定义该行
+究竟包含哪些物理参与者，因此不能据此恢复上游按组会合语义。
+
+`all_sub_vector` 只适合作为另一种局部协作映射的待评估方向：需先明确所有 R 分片确实位于
+同一个受支持的 Vector 子块同步域。当前按 program ID 切片的代码没有建立这一映射，
+本轮没有据此替换或测速；不能将它当作任意 Vector 核分组的现成接口。
+
+`al.debug_barrier` 还应与 `tl.debug_barrier()` 区分：前者接受 `SYNC_IN_VF`，描述 VF 内具体
+Vector/Scalar 访存指令的依赖；文档约束在 `scope` 内使用。它不是另一种跨核屏障。
+目录其余的 scope、copy、地址空间、subview、sub_vec_id 等接口也未定义这样的会合协议。
+最终 IR 中的 `hivm.hir.sync_block_set/wait[<VECTOR>, ...]` 是 `sync_block_all` 的内部 lowering，
+不能因名字相似就认为用户层 `al.sync_block_set/wait` 也开放了 Vector→Vector 端点。
+
+**在这个文档目录和对应实现中，没有发现另一个可直接等价替换上游 x_grid_barrier 的接口。**
+当前可继续评估的仍是有明确准入条件的全 Vector 专用路径；若要提供通用按组语义，需 TA/NPUIR
+进一步给出分组成员、到达计数、GM 可见性、重复 phase 和 program 映射的接口或协议契约。
+本节没有运行不满足端点约束的 set/wait，也未将文档示例的“编译成功”当作设备性能证据。
+
+官方依据：
+[sync_block_all][ta-sync-all]、
+[sync_block_set][ta-sync-set]、
+[sync_block_wait][ta-sync-wait]、
+[接口约束实现][ta-sync-constraints]。
+本地还保留了
+[官方版本与源码摘要](../../../artifacts/cooperative-barrier-output-axis-20261121/ta-main-dev/manifest.json)。
+
+## 10. 复现入口
 
 共用测试脚本为 [barrier_suite.py](../../../scripts/tests/cooperative_reductions/barrier_suite.py)，
 阶段、设备选择、结果目录和命令说明见
@@ -392,6 +595,16 @@ NaN/Inf、混合 Cube/Vector、其他编译模式、C++/AOT 等组合。这些�
 python scripts/tests/cooperative_reductions/plot_barrier_suite.py \
   --npu artifacts/cooperative-barrier-comparison-20261121/npu/bench-shared/bench.json \
   --cuda artifacts/cooperative-barrier-comparison-20261121/cuda/bench-shared/bench.json \
+  --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
+```
+
+新增输出轴场景使用 [output_axis_cases.py](../../../scripts/tests/cooperative_reductions/output_axis_cases.py)，
+运行方式见[脚本说明](../../../scripts/tests/cooperative_reductions/README.md#非规约轴未满核与满核)。
+图表可从归档结果重新生成：
+
+```bash
+python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
+  --data artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
   --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
 ```
 
@@ -413,3 +626,15 @@ python scripts/tests/cooperative_reductions/plot_barrier_suite.py \
 [mapping-values]:
   ../../../artifacts/cooperative-barrier-comparison-20261121/npu/mapping-auto-native-112/mapping-observations.json
 [mapping-mlir]: ../../../artifacts/cooperative-barrier-comparison-20261121/npu/final-mapping112/module.hivm.opt.mlir
+[output-axis-data]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json
+[output-axis-manifest]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/manifest.json
+[output-axis-ir-s2]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/final-x56-s2/module.hivm.opt.mlir
+[output-axis-ir-s16]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/final-x56-s16/module.hivm.opt.mlir
+[scan-lowering]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/lowering.py#L7490
+[scan-choice]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/ir.py#L2853
+[scan-kernel]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton_split_scan.py#L20
+[scan-cooperative-override]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/codegen/triton.py#L7436
+[ta-sync-all]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/docs/zh/triton_api_extension/al/sync_block_all.md
+[ta-sync-set]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/docs/zh/triton_api_extension/al/sync_block_set.md
+[ta-sync-wait]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/docs/zh/triton_api_extension/al/sync_block_wait.md
+[ta-sync-constraints]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/third_party/ascend/language/cann/extension/core.py#L251

@@ -91,7 +91,7 @@ cache hit 后恢复同样的 Grid、workspace stride 与 compile options；不�
 `Q*S` 不超过有效 AIV 数，并确认没有额外 program 循环或 sub-block 改写参与者。
 数量检查是必要条件，**不代替后端对物理映射与屏障参与者的确认**。
 
-11 月 21 日已实测：默认 AutoBlockify 将 112 个 program 映射到 56 核时，两种 all_vector
+11 月 21 日已实测：默认 AutoBlockify 将单行的 112 个分片映射到 56 核时，两种 all_vector
 helper 均产生 1736/1792 个错误整数结果；增加两侧本核屏障不能修正。实际编译产物按步长 56
 循环执行完整 program，第一批屏障返回时后一批尚未写入 partial，见
 [分核边界及产物](barrier-comparison.md#62-分核边界)。接入时必须在预运行/autotune 前校验
@@ -263,9 +263,18 @@ flowchart TD
 
 ### 1.4 Tiling、autotune 与运行时
 
+收益选择先检查普通输出任务数 `Q=ceil_div(X,XBLOCK)` 与有效 AIV 数的关系。
+11 月 21 日新增的[输出并行度对照](barrier-comparison.md#64-非规约轴未满核与满核)中，
+`XBLOCK=1`，长轴 X=7 从普通归约的 119.210 µs 降至 8 片的 19.451 µs；X=56 继续拆分无明显收益。
+因此候选需与省去 workspace/屏障的普通路径比较，不能把“仍调用 barrier 的 S=1”作为普通基线。
+这些数据来自固定 BLOCK 的手写实现，仅用于指导选择维度，具体阈值仍需实际 Inductor 图校准。
+
 候选先从 `S` 的小集合与保守 `B` 组合开始，按有效核数、输入区间、UB/活跃值和已确认的映射
 契约过滤；数量与范围通过第 4 节实验校准。`S=1` 在准入阶段回到普通 kernel，不分配协议
 workspace，也不发出屏障。
+
+补充矩阵中，多批映射有组完整时通过、组跨批时出错的两类结果。首期仍保持第 1.3 节的单批
+保守约束；不能只因为某个 S 整除核数且样例通过，就开放所有超核配置。
 
 Cooperative 候选在相同算法/合法参与者约束下编译和计时；编译或资源检查不通过时淘汰候选，
 全失败时走普通路径。Partial workspace 按候选最大需求分配，固定 stride，确保候选预运行和

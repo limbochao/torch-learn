@@ -36,11 +36,15 @@ def main():
                 values = [series[s]["median_us"] if series.get(s, {}).get("status") == "PASS"
                           else float("nan") for s in splits]
                 axis.plot(splits, values, label=label, color=color, marker=marker, markersize=4)
+                limits = [[series[s][key] if series.get(s, {}).get("status") == "PASS" else float("nan")
+                           for s in splits] for key in ("min_us", "max_us")]
+                axis.fill_between(splits, *limits, color=color, alpha=0.1)
                 failed = [s for s, r in series.items() if r["status"] == "FAIL_WRONG_RESULT"]
                 axis.plot(failed, [0.035 if kind == "native" else 0.07] * len(failed),
                           transform=axis.get_xaxis_transform(), linestyle="none", marker="x", color=color)
             baseline = next(r for r in selected if r["kind"] == "plain")
             axis.axhline(baseline["median_us"], label="Ordinary reduction (S=1)", color="#555555", linestyle=":")
+            axis.axhspan(baseline["min_us"], baseline["max_us"], color="#555555", alpha=0.07)
             limit = cores / x
             if limit < max(splits):
                 axis.axvspan(limit, max(splits), color="#777777", alpha=0.07)
@@ -56,7 +60,7 @@ def main():
     labels.append("Wrong result; no timing")
     figure.legend(handles, labels, loc="outside lower center", ncol=3)
     figure.suptitle("A5 output-axis occupancy and cooperative split count\n"
-                    "Gray area: over-core mapping diagnostics; upstream helper skipped", fontsize=14)
+                    "Median with min/max bands; gray area: over-core mapping diagnostics", fontsize=14)
     export(figure, args.out, "output-axis-occupancy")
     plt.close(figure)
     fields = ("X", "R", "S", "kind", "status", "diagnostic_over_core", "median_us", "min_us", "max_us")
