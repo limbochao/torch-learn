@@ -189,6 +189,7 @@ CUDA 在指定容器内按 UUID 选择物理 GPU 6，使用 `--backend cuda --ph
 `plot_barrier_suite.py` 使用 Matplotlib 3.8 及以上版本，读取两端 `bench.json`，
 导出 SVG/PNG 折线图及 CSV。结果与示例图见
 [同步验证文档](../../../docs/requirements-design/cooperative-reduction/barrier-comparison.md)。
+
 ## 非规约轴未满核与满核
 
 `output_axis_cases.py` 固定每行一个输出任务，对照 `X=7`（未满 56 核）与 `X=56`（满核），
@@ -206,4 +207,3 @@ python scripts/tests/cooperative_reductions/output_axis_cases.py \
 `SKIP_CORE_BUDGET`；native/debug 的超核点仅用于分核诊断，不能视作上游自动选择的候选。
 结果记录数值错误的数量和样例；错误点没有性能值。输入和输出地址在各 helper 之间保持一致。
 CUDA 可使用同一脚本，`--rows` 应按该设备的 SM 数设置；CUDA 仅测试 original 和 plain。
-
