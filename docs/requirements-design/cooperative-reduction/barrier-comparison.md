@@ -386,7 +386,8 @@ native/debug 的超核配置仅用于观察分核行为，不据此加入正式 
 
 ![非规约轴未满核与满核的 R 分片扫描](assets/barrier-comparison/output-axis-occupancy.svg)
 
-虚线为对应 shape 的 `plain`；灰色区域为超过核数预算的分核诊断。
+横向基线为对应 shape 的 `plain`；灰色区域为 NPU 超过核数预算的分核诊断，
+竖向虚线为各设备的 Grid 预算。
 叉号只表示错误配置的位置，没有对应耗时；错误点之间不补性能曲线。
 共记录 100 个配置：**54 个通过并计时，24 个错误，22 个 original 因核数预算跳过**。
 代表性 native 中位数如下，单位 µs，均为完整 kernel 耗时：
@@ -454,6 +455,10 @@ X=56，S=16：
 本轮也尝试在唯一允许的 GPU 容器 `pytorch-dev-gpu67` 中检查设备：NVML 返回
 `Failed to initialize NVML: Unknown Error`，PyTorch 报 `device_count=0`、
 `No CUDA GPUs are available`。因此本节没有新增 GPU 数据；第 4 节此前取得的 GPU 曲线仍单独保留。
+补测脚本已支持在其他 GPU 机器采集相同 X=7/56 及该 GPU 自身 SM 数对应的满核场景，
+并按相同 X/R 将结果加入本节同名 SVG。设备满核 X 不同时单独成行，避免误配 shape；
+未导入 GPU 数据时图中明确标为待补。运行和导入方式见
+[GPU 补测说明](../../../scripts/tests/cooperative_reductions/GPU_README.md)。
 
 ## 7. 接入范围判断
 
@@ -604,9 +609,14 @@ python scripts/tests/cooperative_reductions/plot_barrier_suite.py \
 
 ```bash
 python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
-  --data artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
+  --npu artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
   --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
 ```
+
+取得 GPU 补测结果后，为上述命令增加 `--cuda /实际路径/cuda/output-axis.json`，
+即可将 GPU 曲线、普通归约基线和 GPU 自身满核子图更新到当前文档引用的 SVG/PNG/CSV。
+仅绘图不需要 GPU，详细依赖与便携包说明见
+[GPU 补测说明](../../../scripts/tests/cooperative_reductions/GPU_README.md)。
 
 [npu-manifest]: ../../../artifacts/cooperative-barrier-comparison-20261121/npu/bench-shared/manifest.json
 [gpu-manifest]: ../../../artifacts/cooperative-barrier-comparison-20261121/cuda/bench-shared/manifest.json

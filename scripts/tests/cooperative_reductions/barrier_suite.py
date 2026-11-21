@@ -35,7 +35,11 @@ def load_stack(args):
     import torch
     import triton
     import triton.language as tl
-    from torch._inductor.runtime.triton_helpers import x_grid_barrier as original_barrier
+
+    if args.backend == "cuda" and getattr(args, "cuda_barrier", "installed") == "snapshot":
+        from cuda_triton_helpers import x_grid_barrier as original_barrier
+    else:
+        from torch._inductor.runtime.triton_helpers import x_grid_barrier as original_barrier
 
     if args.backend == "npu":
         import torch_npu
@@ -59,6 +63,8 @@ def load_stack(args):
         options = {"compile_mode": "simd", "num_warps": 4, "launch_cooperative_grid": True}
     else:
         device_api = torch.cuda
+        if not device_api.is_available():
+            raise RuntimeError("CUDA is unavailable; check the container and CUDA_VISIBLE_DEVICES")
         device_api.set_device(0)
         native_barrier = original_barrier
         debug_barrier = original_barrier
@@ -174,9 +180,11 @@ def manifest(args, api):
               else os.getenv("ASCEND_RT_VISIBLE_DEVICES"), "options": args.options,
               "op_timeout_ms": args.op_timeout_ms if args.backend == "npu" else None,
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    repository = next((parent for parent in Path(__file__).resolve().parents if (parent / ".git").exists()), None)
     try:
         record["git_commit"] = subprocess.check_output(
-            ["git", "-C", str(Path(__file__).resolve().parents[3]), "rev-parse", "HEAD"], text=True).strip()
+            ["git", "-C", str(repository), "rev-parse", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL).strip() if repository else None
     except subprocess.CalledProcessError:
         record["git_commit"] = None
     record["helper_sha256"] = {}
@@ -195,8 +203,12 @@ def manifest(args, api):
         record["core_count"] = properties.vector_core_num
     else:
         record["core_count"] = properties.multi_processor_count
+        record["device_name"] = properties.name
         record["cuda_version"] = torch.version.cuda
         record["device_uuid"] = str(getattr(properties, "uuid", "unknown"))
+        record["cuda_barrier"] = getattr(args, "cuda_barrier", "installed")
+        if record["cuda_barrier"] == "snapshot":
+            record["barrier_source_commit"] = "cf30153c4c131c8164ee7798e5022d810682e2cb"
     write_json(args.out / "manifest.json", record)
     return record
 

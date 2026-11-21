@@ -206,12 +206,17 @@ python scripts/tests/cooperative_reductions/output_axis_cases.py \
 运行前按工作区约定检查卡号、占用和设备可见性。超过核数预算的 original 点记录为
 `SKIP_CORE_BUDGET`；native/debug 的超核点仅用于分核诊断，不能视作上游自动选择的候选。
 结果记录数值错误的数量和样例；错误点没有性能值。输入和输出地址在各 helper 之间保持一致。
-CUDA 可使用同一脚本，`--rows` 应按该设备的 SM 数设置；CUDA 仅测试 original 和 plain。
+CUDA 可使用同一脚本，默认自动补充当前 GPU 的 SM 数作为满核 X；仅测试 original 和 plain。
+便携包运行、选卡、依赖与结果回传见 [GPU 补测说明](GPU_README.md)。
 
-`plot_output_axis_cases.py` 读取该 JSON，保留错误/跳过状态并导出 SVG、PNG 和完整 CSV：
+`plot_output_axis_cases.py` 按相同 X/R 合并两端 JSON，保留错误/跳过状态并导出 SVG、PNG 和完整 CSV。
+只有 NPU 数据时可先运行：
 
 ```bash
 python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
-  --data artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
+  --npu artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
   --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
 ```
+
+GPU 数据取得后增加 `--cuda /实际路径/cuda/output-axis.json` 即可覆盖更新同名 SVG/PNG/CSV；
+未提供 GPU 数据时图中明确标为待补。GPU 单独绘图也使用同一入口，只传 `--cuda`。

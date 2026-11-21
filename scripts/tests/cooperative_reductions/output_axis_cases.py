@@ -68,7 +68,8 @@ def run(args, api, info):
                 kinds = (["plain"] if splits == 1 else []) + args.kinds
                 shift = args.splits.index(splits) % len(kinds)
                 for kind in kinds[shift:] + kinds[:shift]:
-                    record = {"X": rows, "R": count, "S": splits, "kind": kind,
+                    record = {"backend": args.backend, "device_name": info.get("device_name", "NPU"),
+                              "X": rows, "R": count, "S": splits, "kind": kind,
                               "output_axis_full": rows == info["core_count"],
                               "program_count": rows * splits, "core_count": info["core_count"],
                               "diagnostic_over_core": rows * splits > info["core_count"],
@@ -126,10 +127,12 @@ def run(args, api, info):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend", choices=("npu", "cuda"), required=True)
-    parser.add_argument("--physical-device", type=int, required=True)
+    parser.add_argument("--backend", choices=("npu", "cuda"), default="cuda")
+    parser.add_argument("--physical-device", type=int, help="required for NPU; optional CUDA physical-ID annotation")
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--rows", default="7,56")
+    parser.add_argument("--rows", default="auto", help="comma-separated X; auto uses 7,56,SMs on CUDA, 7,cores on NPU")
+    parser.add_argument("--cuda-barrier", choices=("snapshot", "installed"), default="snapshot",
+                        help="CUDA helper: fixed v2.13.0 snapshot or installed Inductor helper")
     parser.add_argument("--rnumels", default="32768,1048593")
     parser.add_argument("--splits", default="1,2,4,8,16,32,48,56")
     parser.add_argument("--block", type=int, default=1024)
@@ -142,22 +145,43 @@ def main():
     args = parser.parse_args()
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=True)
-    for field in ("rows", "rnumels", "splits"):
-        setattr(args, field, list(map(int, getattr(args, field).split(","))))
+    if args.backend == "npu" and args.physical_device is None:
+        parser.error("--physical-device is required for NPU mapping verification")
+    for field in ("rnumels", "splits") + (() if args.rows == "auto" else ("rows",)):
+        try:
+            setattr(args, field, list(dict.fromkeys(map(int, getattr(args, field).split(",")))))
+        except ValueError:
+            parser.error(f"--{field} requires comma-separated positive integers")
         if not getattr(args, field) or min(getattr(args, field)) < 1:
             parser.error(f"--{field} requires positive integers")
+    for field in ("block", "phases", "batch", "replays", "samples"):
+        if getattr(args, field) < 1:
+            parser.error(f"--{field} must be positive")
     args.kinds = ["original", "native", "debug"] if args.backend == "npu" else ["original"]
     args.mapping, args.phase = "auto", "output-axis"
     torch_module, triton_module, api, args.options = suite.load_stack(args)
     globals().update(torch=torch_module, triton=triton_module, tl=suite.tl)
     info = suite.manifest(args, api)
+    if args.rows == "auto":
+        args.rows = sorted({7, info["core_count"]} | ({56} if args.backend == "cuda" else set()))
+    info["rows"] = args.rows
+    info["rnumels"], info["splits"] = args.rnumels, args.splits
+    info["block"], info["seed"], info["phases"] = args.block, args.seed, args.phases
     info["driver_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     info["driver"] = Path(__file__).name
     info["scope"] = "Output-axis occupancy; over-core native/debug points are mapping diagnostics"
+    bundle = Path(__file__).with_name("bundle_manifest.json")
+    if bundle.exists():
+        info["bundle_source_commit"] = json.loads(bundle.read_text())["source_commit"]
+        info["bundle_manifest_sha256"] = hashlib.sha256(bundle.read_bytes()).hexdigest()
     suite.write_json(args.out / "manifest.json", info)
+    print(json.dumps({key: info.get(key) for key in
+                      ("backend", "device_name", "device_uuid", "core_count", "rows", "cuda_barrier")}), flush=True)
     records = run(args, api, info)
     print(json.dumps({"counts": {status: sum(r["status"] == status for r in records)
                                  for status in sorted({r["status"] for r in records})}}), flush=True)
+    if args.backend == "cuda" and any(r["status"] != "PASS" and not r["status"].startswith("SKIP_") for r in records):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
