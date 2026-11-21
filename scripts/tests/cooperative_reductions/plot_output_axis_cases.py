@@ -119,7 +119,16 @@ def main():
             axis.set_ylabel("Device time per kernel (us; log scale)")
             ticks = splits if len(splits) <= 5 else sorted({splits[0], splits[-1]} | set(splits) & {8, 16, 32, 48, 64})
             axis.set_xticks(ticks)
+            axis.set_xlim(min(splits) - 0.5, max(splits) + 1)
             axis.set_yscale("log")
+            lower, upper = axis.get_ylim()
+            if upper / lower < 2:
+                center = math.sqrt(lower * upper)
+                axis.set_ylim(center / math.sqrt(2), center * math.sqrt(2))
+            cuda = [r for r in selected if r["backend"] == "cuda" and r["kind"] == "original" and r["S"] > 1]
+            if cuda and all(r["status"] == "SKIP_CORE_BUDGET" for r in cuda):
+                axis.text(0.5, 0.9, "CUDA: S > 1 skipped by grid budget", transform=axis.transAxes,
+                          ha="center", fontsize=9, color=COLORS["cuda"])
             axis.grid(True, alpha=0.2, which="both")
     legend = {}
     for axis in axes.flat:
