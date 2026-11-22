@@ -276,6 +276,8 @@ def main():
         previous_info = json.loads(previous_manifest.read_text())
         if previous_info["backend"] != args.backend:
             parser.error("--resume backend differs from the existing run")
+        if args.backend == "npu" and previous_info.get("npu_device_limit") != os.getenv("NPU_DEVICE_LIMIT"):
+            parser.error("--resume NPU_DEVICE_LIMIT differs from the existing run; use a separate output directory")
         stamp = previous_info["time_utc"].replace(":", "").replace("+", "_")
         manifest_name = f"manifest-run-{stamp}.json"
         suite.write_json(args.out / manifest_name, previous_info)
