@@ -59,6 +59,7 @@ def mapping_metadata(compiled):
 
 
 def isolated_case(args, record):
+    launch_manifest = record["run_manifest"]
     directory = args.out / "cases" / f"x{record['X']}-r{record['R']}-s{record['S']}-{record['kind']}"
     directory.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, "-u", str(Path(__file__).resolve()), "--backend", args.backend,
@@ -91,7 +92,8 @@ def isolated_case(args, record):
         record.update(json.loads(result_path.read_text())[-1])
     elif checkpoint.exists():
         record.update(json.loads(checkpoint.read_text()))
-    record.update(isolated=True, worker_exit_code=process.returncode,
+    record.update(isolated=True, run_manifest=launch_manifest, worker_exit_code=process.returncode,
+                  worker_manifest=str((directory / "manifest.json").relative_to(args.out)),
                   worker_log=str((directory / "run.log").relative_to(args.out)))
     if timed_out:
         record.update(status="FAIL_TIMEOUT", timeout_seconds=args.case_timeout)
@@ -242,6 +244,10 @@ def main():
         manifest_name = f"manifest-run-{stamp}.json"
         suite.write_json(args.out / manifest_name, previous_info)
         args.previous_records = json.loads(previous_path.read_text())
+        args.previous_records = [record for record in args.previous_records
+                                 if not (args.allow_over_core and record["status"] == "SKIP_CORE_BUDGET")
+                                 and not (args.time_wrong_results and record["status"] == "FAIL_WRONG_RESULT"
+                                          and "median_us" not in record)]
         for record in args.previous_records:
             record.setdefault("run_manifest", manifest_name)
     if args.backend == "npu" and args.physical_device is None:
