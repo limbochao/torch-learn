@@ -9,7 +9,7 @@
 
 使用工作区约定的 `pytorch-dev-gpu67`，优先物理卡 6；其 UUID 为
 `GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7`，启动前以实际查询结果复核。
-先按工作区流程同步代码，确认版本包含 `94e7b64` 的 CUDA 补测入口，再进入容器工作目录：
+先按工作区流程同步代码，确认版本包含 `90d2475` 的解除过滤与诊断计时入口，再进入容器工作目录：
 
 ```bash
 ssh GPU_4090
@@ -36,15 +36,16 @@ CUDA 可用后运行完整补测；`--rows auto` 会在 RTX 4090 上选择 X=7/5
 python -u scripts/tests/cooperative_reductions/output_axis_cases.py \
   --backend cuda --physical-device 6 --rows auto \
   --rnumels 32768,1048593 --splits 1,2,4,8,16,32,48,56 \
-  --out artifacts/cooperative-barrier-output-axis-20261121/cuda
+  --allow-over-core --time-wrong-results --case-timeout 120 \
+  --out artifacts/cooperative-barrier-unfiltered-20261122/cuda
 ```
 
 将该 `cuda/` 目录的 JSON 和 helper 源码取回本地同一目录后，在 torch-learn 根目录刷新现有图：
 
 ```bash
 python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
-  --npu artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
-  --cuda artifacts/cooperative-barrier-output-axis-20261121/cuda/output-axis.json \
+  --npu artifacts/cooperative-barrier-unfiltered-20261122/npu/output-axis.json \
+  --cuda artifacts/cooperative-barrier-unfiltered-20261122/cuda/output-axis.json \
   --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
 ```
 
@@ -67,7 +68,8 @@ nvidia-smi --query-gpu=index,uuid,name,memory.free,utilization.gpu --format=csv
 在已有的 GPU_4090 上仍须遵循工作区约定，仅用 `pytorch-dev-gpu67`、优先物理卡 6。
 
 ```bash
-CUDA_VISIBLE_DEVICES=GPU-实际UUID python output_axis_cases.py --out cuda
+CUDA_VISIBLE_DEVICES=GPU-实际UUID python output_axis_cases.py \
+  --allow-over-core --time-wrong-results --out cuda
 ```
 
 默认包含以下场景，重复的 X 会去重：
@@ -80,12 +82,16 @@ CUDA_VISIBLE_DEVICES=GPU-实际UUID python output_axis_cases.py --out cuda
 
 每种 X 均测试 fp32 `(a+b).sum(-1)`，R=32768/1048593，S=1/2/4/8/16/32/48/56，BLOCK=1024。
 仅运行原始协议 `original` 与无 workspace/屏障的 `plain`。S=1 的 original 仍调用 barrier，
-应使用 plain 作为普通归约基线。超过 `X*S<=SM数` 的 original 配置记为 `SKIP_CORE_BUDGET`，不启动。
+应使用 plain 作为普通归约基线。`--allow-over-core` 放开 `X*S<=SM数` 的保守过滤；
+超预算 original 逐点使用独立进程，保留启动异常、执行阶段和超时。超 SM 数不等于必然无法启动；
+实际 cooperative launch 还受该 kernel 可同时驻留的 block 数约束。
+未传该开关时，超预算配置仍记为 `SKIP_CORE_BUDGET`，不启动。
 这些为手写 kernel 对照，并不表示上游 Inductor 会自动选择所有 shape/S。
 
-默认先做 fp32 sum 与 4 phase 整数交换检查，再用 CUDA Graph + device Event 计时：
+每点先校验 fp32 sum，再用 CUDA Graph + device Event 计时，最后做 4 phase 整数交换检查：
 每图 32 次调用、每样本 replay 10 次、7 样本取中位数；计时后再次检查输出。
-同一 X/R/S 的 original/plain 使用相同输入与输出地址。
+`--time-wrong-results` 允许 sum 错误后继续计时，计时后保留再次校验的结果。
+同一进程内的 helper 使用相同输入与输出地址；隔离进程单独分配地址，输入仍由相同 seed 生成。
 CPU 会为长轴建立 fp64 参考；128 SM 的满核长轴约需 1 GiB 输入显存和数 GiB 主机内存。
 
 只对照现有 NPU 的相同 shape 可指定 `--rows 7,56`。首次检查环境可以运行小矩阵：
@@ -96,8 +102,10 @@ CUDA_VISIBLE_DEVICES=GPU-实际UUID python output_axis_cases.py \
 ```
 
 缺少 cooperative launch 支持时保留编译异常；不要删掉该选项后把结果混入当前协议对照。
-CUDA 数值检查失败会保存错误点，并以状态 1 退出；预算内全部通过时为 0。
-数值错误/跳过点均没有有效性能值，不能只比较 JSON 中是否存在配置。
+CUDA 检查或执行失败会保存失败记录，并以状态 1 退出；全部通过时为 0。
+状态 1 不代表整组未完成，应检查记录数与逐点状态。
+数值错误但正常返回的点可以有 `median_us`；编译/启动失败或尚未完成计时的点没有耗时。
+预热与重复调用使用相同输入和 workspace，可能掩盖第一次调用的旧值读取错误，因此保留首次和计时后两次校验。
 
 ## 更新图表
 
@@ -112,13 +120,14 @@ python plot_output_axis_cases.py \
 生成 `figures/output-axis-occupancy.svg`、同名 PNG 和 `output-axis.csv`。
 相同 X/R 画在同一子图；GPU 自身满核的额外 X 单独成行，不会与 NPU 的 X=56 错配。
 图中分别标出设备核数、未满核/满核状态、普通归约基线及各自 Grid 预算；缺失结果不补值。
+实线为检查通过，空心虚线为错误或未完成检查但取得的诊断耗时，底部叉号为无耗时的执行失败。
 不传 `--npu` 可只画 GPU；不传 `--cuda` 时明确显示 CUDA 数据待补。
 
 在完整 torch-learn 仓库根目录更新文档现有 SVG 时，使用下面命令，将 CUDA 路径改成实际结果文件：
 
 ```bash
 python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
-  --npu artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
+  --npu artifacts/cooperative-barrier-unfiltered-20261122/npu/output-axis.json \
   --cuda /实际路径/cuda/output-axis.json \
   --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
 ```

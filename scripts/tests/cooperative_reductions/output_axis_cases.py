@@ -165,7 +165,8 @@ def measure_case(args, api, exchange, reduce, plain, record, prepared):
 def run(args, api, info):
     exchange, reduce = suite.build_kernels()
     plain = build_plain_kernel()
-    records = []
+    records = args.previous_records
+    completed = {tuple(record[key] for key in ("X", "R", "S", "kind")) for record in records}
     for rows in args.rows:
         for count in args.rnumels:
             _, output, expected, initial = suite.make_reduction(args, reduce, rows, count, 1, "original")
@@ -177,12 +178,15 @@ def run(args, api, info):
                 kinds = [args.only_kind] if args.only_kind else (["plain"] if splits == 1 else []) + args.kinds
                 shift = args.splits.index(splits) % len(kinds)
                 for kind in kinds[shift:] + kinds[:shift]:
+                    key = (rows, count, splits, kind)
+                    if key in completed:
+                        continue
                     record = {"backend": args.backend, "device_name": info.get("device_name", "NPU"),
                               "X": rows, "R": count, "S": splits, "kind": kind,
                               "output_axis_full": rows == info["core_count"],
                               "program_count": rows * splits, "core_count": info["core_count"],
                               "diagnostic_over_core": rows * splits > info["core_count"],
-                              "block": args.block, "dtype": "float32"}
+                              "block": args.block, "dtype": "float32", "run_manifest": args.run_manifest}
                     if kind == "original" and record["diagnostic_over_core"] and not args.allow_over_core:
                         record.update(status="SKIP_CORE_BUDGET",
                                       reason="Upstream cooperative candidates bound the grid by the SM budget")
@@ -191,6 +195,7 @@ def run(args, api, info):
                     else:
                         record = measure_case(args, api, exchange, reduce, plain, record, prepared)
                     records.append(record)
+                    completed.add(key)
                     suite.write_json(args.out / "output-axis.json", records)
                     print(json.dumps({key: record[key] for key in
                                       ("X", "R", "S", "kind", "status")}
@@ -220,11 +225,25 @@ def main():
     parser.add_argument("--time-wrong-results", action="store_true", help="retain timings when sum accuracy fails")
     parser.add_argument("--case-timeout", type=float, default=120, help="wall seconds per isolated original case")
     parser.add_argument("--max-sample-ms", type=float, help="reduce graph repetitions for very slow kernels")
+    parser.add_argument("--resume", action="store_true", help="retain completed cases and run remaining configurations")
     parser.add_argument("--only-kind", choices=("plain", "original", "native", "debug"))
     parser.add_argument("--case-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=True)
+    args.previous_records = []
+    previous_path = args.out / "output-axis.json"
+    previous_manifest = args.out / "manifest.json"
+    if args.resume and previous_path.exists():
+        previous_info = json.loads(previous_manifest.read_text())
+        if previous_info["backend"] != args.backend:
+            parser.error("--resume backend differs from the existing run")
+        stamp = previous_info["time_utc"].replace(":", "").replace("+", "_")
+        manifest_name = f"manifest-run-{stamp}.json"
+        suite.write_json(args.out / manifest_name, previous_info)
+        args.previous_records = json.loads(previous_path.read_text())
+        for record in args.previous_records:
+            record.setdefault("run_manifest", manifest_name)
     if args.backend == "npu" and args.physical_device is None:
         parser.error("--physical-device is required for NPU mapping verification")
     if args.backend == "cuda" and args.only_kind in ("native", "debug"):
@@ -259,11 +278,15 @@ def main():
     info["allow_over_core"], info["time_wrong_results"] = args.allow_over_core, args.time_wrong_results
     info["case_timeout_seconds"] = args.case_timeout
     info["max_sample_ms"] = args.max_sample_ms
+    info["resumed_records"] = len(args.previous_records)
+    stamp = info["time_utc"].replace(":", "").replace("+", "_")
+    args.run_manifest = f"manifest-run-{stamp}.json"
     bundle = Path(__file__).with_name("bundle_manifest.json")
     if bundle.exists():
         info["bundle_source_commit"] = json.loads(bundle.read_text())["source_commit"]
         info["bundle_manifest_sha256"] = hashlib.sha256(bundle.read_bytes()).hexdigest()
     suite.write_json(args.out / "manifest.json", info)
+    suite.write_json(args.out / args.run_manifest, info)
     print(json.dumps({key: info.get(key) for key in
                       ("backend", "device_name", "device_uuid", "core_count", "rows", "cuda_barrier")}), flush=True)
     records = run(args, api, info)

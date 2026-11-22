@@ -200,21 +200,28 @@ CUDA 在指定容器内按 UUID 选择物理 GPU 6，使用 `--backend cuda --ph
 python scripts/tests/cooperative_reductions/output_axis_cases.py \
   --backend npu --physical-device 4 --rows 7,56 \
   --rnumels 32768,1048593 --splits 1,2,4,8,16,32,48,56 \
-  --out artifacts/cooperative-barrier-output-axis-20261121/npu
+  --allow-over-core --time-wrong-results --max-sample-ms 500 --case-timeout 300 \
+  --out artifacts/cooperative-barrier-unfiltered-20261122/npu
 ```
 
-运行前按工作区约定检查卡号、占用和设备可见性。超过核数预算的 original 点记录为
-`SKIP_CORE_BUDGET`；native/debug 的超核点仅用于分核诊断，不能视作上游自动选择的候选。
-结果记录数值错误的数量和样例；错误点没有性能值。输入和输出地址在各 helper 之间保持一致。
+运行前按工作区约定检查卡号、占用和设备可见性。`--allow-over-core` 放开 original 的核数预算过滤，
+超预算点逐个启动独立进程；`--case-timeout` 限制单个子进程的墙钟时间。
+`--time-wrong-results` 在 sum 校验失败后继续计时，仍保留错误数量、样例和失败状态。
+不传这两个开关时保留保守过滤行为。数值错误点的耗时可用于分析性能潜力，不能视为正确实现的收益。
+原版的单次 kernel 可能很慢；`--max-sample-ms 500` 根据额外一次 device Event 预测缩减重复数，
+每条记录保留实际 batch/replays、预测耗时和 7 个测量样本，短 kernel 沿用 32/10。
+原版超预算点使用独立分配的地址；同一进程内的 helper 仍复用相同输入/输出及 workspace 地址。
 CUDA 可使用同一脚本，默认自动补充当前 GPU 的 SM 数作为满核 X；仅测试 original 和 plain。
 便携包运行、选卡、依赖与结果回传见 [GPU 补测说明](GPU_README.md)。
 
-`plot_output_axis_cases.py` 按相同 X/R 合并两端 JSON，保留错误/跳过状态并导出 SVG、PNG 和完整 CSV。
+`plot_output_axis_cases.py` 按相同 X/R 合并两端 JSON，导出 SVG、PNG 和完整 CSV。
+实线表示检查通过的测量，空心虚线表示数值错误或检查未完成但取得的耗时，底部叉号表示无耗时的执行失败。
+CSV 同时保留状态、相对本轮 plain 的倍率、计时前后误差及整数交换误差。
 只有 NPU 数据时可先运行：
 
 ```bash
 python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
-  --npu artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json \
+  --npu artifacts/cooperative-barrier-unfiltered-20261122/npu/output-axis.json \
   --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
 ```
 
