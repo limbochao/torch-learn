@@ -4,14 +4,16 @@ title: 三种 x_grid_barrier 的 A5 与 RTX 4090 验证
 
 # 三种 x_grid_barrier 的 A5 与 RTX 4090 验证
 
-实验日期：2026-11-21，北京时间。本文评估同步 helper 的改写，作为
+实验日期：2026-11-21；输出并行度矩阵于 2026-11-22 解除过滤后重测，均为北京时间。本文作为
 [Cooperative Reduction 需求分析](requirements.md)和[方案设计](design.md)的验证依据。
 
-**结论：两种 all_vector 改写在本轮核数内、统一参与的配置中精度正常，同地址耗时中位数几乎一致；
+**结论：两种 all_vector 改写在核数内、统一参与的已测配置中精度正常，第 4 节同地址耗时中位数几乎一致；
 它们都不能作为通用 x_grid_barrier 的完整替换。** 默认自动分核将单行的 112 个分片
 映射到 56 核时，两种版本均正常返回却产生错误结果；两侧本核屏障不能解决这一问题。
 第 6.4 节新增 A5/RTX 4090 未满核与满核对照：A5 的错误取决于同一输出的分片是否跨执行批次，
-不能只看总 program 数。GPU 补测的 22 个配置通过，32 个按预算跳过。
+不能只看总 program 数。11 月 22 日解除过滤后，NPU 的 100 点全部尝试：64 通过、24 错误且已计时、
+12 个原版配置在首次 sum 超时；GPU 的 54 点中 40 通过、14 个 cooperative launch 规模超限。
+两端均无 SKIP；数值错误点保留耗时，未完成的调用不虚构耗时。
 多进程多流提交检查通过，设备指令真正重叠时的事件隔离尚未确认。
 
 ## 1. 评估对象
@@ -49,7 +51,7 @@ def x_grid_barrier_debug(sem):
 
 ## 2. 环境与版本
 
-下表对应最初 210 个性能点；第 6.4 节使用同一软件环境，NPU 为共享物理卡 4，GPU 为共享物理卡 6。
+下表对应最初 210 个性能点；第 6.4 节重测使用同一软件栈，NPU 为物理卡 5，GPU 为共享物理卡 6。
 
 | 项目 | NPU | GPU |
 | --- | --- | --- |
@@ -314,7 +316,8 @@ workspace 初始哨兵。此时前半部分的和为 623532，后半部分仍是
 这把风险从推测收敛为可复现边界：**当前全 Vector helper 与这种同组跨批的 program 循环不能直接组合。**
 Inductor/TA 必须在发射、预运行和 autotune 前确认映射合法，限制或拒绝跨批次参与的配置；
 不能仅靠 `launch_cooperative_grid=True`、编译成功或额外本核屏障保证正确性。
-本轮没有执行超核 original 协议，也没有将错误点纳入性能图。
+本节 11 月 21 日的探针没有执行超核 original，也没有计时错误点；
+11 月 22 日已放开这两类配置重测，最新测量与异常见第 6.4 节。
 设备检查结束时物理卡 2 为 Health OK、无运行进程。
 
 证据：[native 失败及错误计数][mapping-native]、[debug 失败及错误计数][mapping-debug]、
@@ -377,23 +380,39 @@ NPU 测三种 helper，GPU 测原始 `x_grid_barrier`；均沿用第 3 节的 al
 
 这些是显式构造的性能与边界用例，并不表示上游会自动选择全部配置：按
 [v2.13.0 的选择规则](requirements.md#22-cuda-上游如何选择)，`X=56/128` 不进入 cooperative，
-`X=7,R=32768` 也未达到长轴阈值。original 按本轮保守预算过滤：NPU 要求 `X*S<=56`，
-GPU 要求 `X*S<=128`，超出时不启动 kernel；
-native/debug 的超核配置仅用于观察分核行为，不据此加入正式 autotune 候选。
+`X=7,R=32768` 也未达到长轴阈值。本轮按用户要求解除两项限制：
 
-实际于 2026-11-21 15:37 起在 NPU_A5 Docker 的 `pta_213_case` 环境运行，使用用户授权共享的
-物理卡 4。开始与结束检查均为 Health OK、AIV/Cube 利用率 0%，有 3 个其他驻留进程，
-所以曲线同时保留样本最小/最大值，不将共享环境中的单个最优值作为生产阈值。
-设备执行脚本来自 `torch-learn` 提交 `1783f4534323269bd8e80444faaec538501520d5`。
-同一 X/R/S 的 helper 复用相同输入、workspace、输出及 semaphore 地址；计时仍为
-32 次调用的 NPUGraph、10 次 replay、7 组 device Event 样本取中位数。
+- `--allow-over-core`：不再因 NPU 的 `X*S>56` 或 GPU 的 `X*S>128` 跳过 original。
+  超预算的 original 配置在独立子进程中实际启动，记录启动失败、超时或完成结果。
+- `--time-wrong-results`：sum 数值错误时仍计时，保留错误状态及计时前后检查。
+  获得耗时后再执行整数交换检查，避免后续检查失败时丢失已完成的 sum 测量。
 
-GPU 于同日 **18:34～18:35** 在 GPU_4090 的 `pytorch-dev-gpu67` 中补测，使用共享物理卡 6，
-通过 UUID 核对映射到所选逻辑卡 0。开始与结束时均有约 10.5 GiB 空闲显存、采样利用率 0%，
-结果包含共享环境波动。实际软件为 PyTorch `2.13.0+cu126`、CUDA `12.6`、Triton `3.7.1`，
-驱动 `535.183.01`，代码提交 `94e7b6459e015476351ef1a98c0ad30c37d51ac3`。
-GPU 使用同样的 32 次调用、10 次 replay、7 个样本与 CUDA Graph/device Event；
-原始 helper 的源码 SHA256 与 NPU 对照完全一致，均来自 PyTorch v2.13.0。
+两端都没有修改安装包或生产后端。超核与错误点用于性能、映射边界诊断，不能直接加入正式 autotune 候选。
+每点先将 partial/output 填为 NaN，清零 semaphore，检查首次 sum；计时后再次检查 sum，
+并用 4 phase、变化 epoch 与分片工作量的整数交换检查同步。sum 参考为 CPU fp64，
+容限 `rtol=2e-4,atol=2e-2`，整数交换要求完全相等。
+
+NPU 于 2026-11-22 在 NPU_A5 Docker 的 `pta_213_case` 环境运行，使用物理卡 5；
+开始时 Health OK、采样利用率 0%、无驻留进程。实际 Vector 限额在 device 和目标 stream 上均为 56，
+没有设置 `NPU_DEVICE_LIMIT`。脚本前 19 个记录来自 `90d2475`，其余由 `62512a8` 继续执行；
+每个记录的 `run_manifest` 保留实际版本与参数。首个未返回的 original 点限时 300 秒，
+其后改为每点 60 秒，均为包含初始化、编译、执行与检查的**子进程墙钟时限**。
+只有本次子进程被终止，后续点仍继续执行；这不是设备 kernel 的耗时测量。
+矩阵完成后将 X=56/S=16 的两个 original 点延长至 180 秒复测，均通过；
+最新结果替换这两点，原 100 点记录与两次来源完整保留。全部设备计算于 19:02 前结束，
+物理卡 5 最终 Health OK、无运行进程。
+
+短 NPU kernel 沿用 32 次调用的 NPUGraph、10 次 replay、7 个 device Event 样本取中位数。
+原版极慢的点先测一次，再用 `--max-sample-ms 500` 减少 batch/replays；实际参数写入每点记录。
+最少仍需调用一次，因此单个 kernel 超过 500 ms 时，样本也会超过此目标。
+同一进程中的 helper 复用相同输入、workspace、输出及 semaphore 地址；隔离子进程则独立分配，
+保持相同随机种子与 shape，不能称为全部版本同地址对照。
+
+GPU 于 **11 月 22 日 18:17～18:20** 在 GPU_4090 的 `pytorch-dev-gpu67` 中补测，使用共享物理卡 6，
+通过 UUID 核对映射到所选逻辑卡 0。启动前约 10.2 GiB 空闲显存、采样利用率 0%。
+实际软件为 PyTorch `2.13.0+cu126`、CUDA `12.6`、Triton `3.7.1`，驱动 `535.183.01`，
+脚本提交 `4cf4918`。使用 32 次调用、10 次 replay、7 个样本与 CUDA Graph/device Event，
+超预算 original 子进程时限 120 秒；原始 helper 源码摘要与 NPU 完全一致，均来自 PyTorch v2.13.0。
 
 #### 性能结果
 
@@ -401,61 +420,112 @@ GPU 使用同样的 32 次调用、10 次 replay、7 个样本与 CUDA Graph/dev
 
 横向基线为对应 shape 的 `plain`；灰色区域为 NPU 超过核数预算的分核诊断，
 竖向虚线为各设备的 Grid 预算。
-叉号只表示错误配置的位置，没有对应耗时；错误点之间不补性能曲线。
-NPU 共记录 100 个配置：**54 个通过并计时，24 个错误，22 个 original 因核数预算跳过**。
-GPU 共记录 54 个配置：**22 个通过并计时（6 个 plain、16 个 original），32 个因 SM 预算跳过**，
-没有错误结果。图中 X=7/56 叠加相同 shape 的两设备数据，X=128 单独展示 GPU 的满核结果。
-下表为 NPU native 中位数，单位 µs，均为完整 kernel 耗时：
+实线与实心点表示通过，空心虚线表示数值错误或检查未完成但已取得耗时；
+底部叉号表示启动失败或超时且没有耗时。不能把叉号的图上位置读成执行时间。
+NPU 与 GPU 的通过、错误与未完成配置都按真实结果展示，完整 154 点保留在 CSV 中。
+NPU 最终 **64 PASS、24 FAIL_WRONG_RESULT、12 FAIL_TIMEOUT**，其中 88 点取得耗时；
+GPU 为 **40 PASS、14 FAIL_EXECUTION**，40 点取得耗时，均没有 SKIP。
+图中 X=7/56 叠加相同 shape 的两设备数据，X=128 单独展示 GPU 的满核结果。
+下表为本轮 NPU native 的中位数，单位 µs，均为完整 sum kernel 耗时；所列点全部通过检查。
 
-| X | R | 普通归约 plain | native S=1 | S=2 | S=4 | S=8 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 7 | 32768 | 4.768 | 5.827 | 5.285 | 5.954 | 5.797 |
-| 7 | 1048593 | 119.210 | 120.383 | 62.047 | 33.540 | 19.451 |
-| 56 | 32768 | 7.358 | 11.054 | 14.232 | 20.614 | 34.534 |
-| 56 | 1048593 | 373.409 | 377.296 | 376.537 | 372.612 | 385.581 |
+| X | R | plain | native S=1 | S=2 | S=4 | S=8 | S=56 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 7 | 32768 | 80.433 | 95.328 | 71.157 | 71.611 | 103.179 | 448.071 |
+| 7 | 1048593 | 2270.143 | 2286.058 | 1183.420 | 883.233 | 499.059 | 737.306 |
+| 56 | 32768 | 150.117 | 219.934 | 219.225 | 311.025 | 504.320 | 3363.148 |
+| 56 | 1048593 | 4864.451 | 4933.997 | 4942.200 | 4965.154 | 5093.524 | 7429.561 |
 
-`X=7` 的长轴拆成 8 片后，相对普通归约约加速 **6.13 倍**；短轴则没有收益。
-`X=56` 时，短轴越拆越慢；长轴 `S=4` 与普通归约只差约 0.2%，不足以证明有效收益，
-继续拆分还会增加开销。此表 `X=56,S>1` 均属于超核诊断。
-debug 与 native 的中位数接近，例如未满核长轴 `S=8` 分别为 19.463 和 19.451 µs；
-额外本核屏障没有改变这组收益判断。
+`X=7` 长轴的 native S=8 相对同轮 plain 约加速 **4.55 倍**；短轴 S=2 约 **1.13 倍**，
+继续拆分无收益。`X=56` 的长短轴均未优于 plain，满核时增加 R 分片只增加了本轮工作量和同步成本。
+debug 与 native 接近，例如未满核长轴 S=8 为 498.180 / 499.059 µs。
 
-GPU 原始 `x_grid_barrier` 的代表性结果如下，同样为完整 kernel 的中位数，单位 µs。
-“跳过”表示超出本轮 `X*S<=128` 预算，没有对应耗时：
+**本轮物理卡 5 的绝对耗时明显高于 11 月 21 日物理卡 4 的数据。** 为检查是否由新增预测计时造成，
+在同一 `pta_213_case` 中关闭 `--max-sample-ms`、保留 32/10/7 计时参数，独立复测 X=7 的 plain：
+短轴为 81.096 µs，长轴为 3025.420 µs，仍明显高于前轮；软件包版本及 device/stream 限额一致。
+因此当前证据不能将差异归因于预测计时，也尚未确定硬件或运行环境中的具体原因。
+本节只用**本轮相同 shape 的 plain**计算倍率，并保留 min/max 与复核数据；
+不混用前轮 119.210 µs 的基线，也不将 4.55 倍直接固化为生产阈值。
 
-| X | R | GPU 普通归约 plain | original S=1 | S=2 | S=8 | S=16 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 7 | 32768 | 5.747 | 7.686 | 4.857 | 2.794 | 2.547 |
-| 7 | 1048593 | 213.226 | 209.354 | 105.725 | 28.621 | 17.033 |
-| 56 | 32768 | 5.971 | 7.808 | 5.526 | 跳过 | 跳过 |
-| 56 | 1048593 | 572.960 | 571.581 | 498.784 | 跳过 | 跳过 |
-| 128 | 32768 | 8.282 | 9.328 | 跳过 | 跳过 | 跳过 |
-| 128 | 1048593 | 1141.877 | 1142.534 | 跳过 | 跳过 | 跳过 |
+以下是此前因数值错误未计时的全部 24 个点，每格为 `native / debug`，单位 µs。
+它们都已运行并取得耗时，状态仍为 `FAIL_WRONG_RESULT`，这些数值仅反映当前错误实现的执行成本。
 
-这组 GPU 对照说明了两个需要分别判断的维度：
+| X | R | S=16：native / debug | S=32：native / debug | S=48：native / debug |
+| ---: | ---: | ---: | ---: | ---: |
+| 7 | 32768 | 140.367 / 140.328 | 248.684 / 248.666 | 363.080 / 363.923 |
+| 7 | 1048593 | 516.362 / 516.831 | 567.548 / 567.824 | 682.416 / 681.409 |
+| 56 | 32768 | 907.856 / 907.459 | 1828.717 / 1829.516 | 2593.174 / 2593.239 |
+| 56 | 1048593 | 5424.375 / 5424.695 | 6255.000 / 6255.314 | 6984.314 / 6983.889 |
 
-- **同样的 R，收益区间不同。** X=7 时，GPU 短轴拆成 16 片相对 plain 约加速 **2.26 倍**，
-  长轴约 **12.52 倍**；A5 短轴没有收益，长轴在单批合法的已测配置中以 S=8 最快、约 **6.13 倍**。
-  X=7 在这组 GPU 候选中的最优分片数 16 也不能直接用于只有 56 个 Vector 核的 A5。
-- **同样的 X，是否满核不同。** X=56 在 A5 上已满核，在 4090 上仍未满核；GPU 长轴 S=2
-  约加速 **1.15 倍**。GPU 自身满核的 X=128 在本轮预算下只运行 S=1；S>1 均跳过，
-  这组数据没有测量超出该预算的拆分性能。
+错误配置中，X=7 长轴 S=16/32/48 的 native 耗时分别对应 plain 的 4.40/4.00/3.33 倍；
+它们均未优于本轮正确的 S=8，不能用错误点替代合法候选。X=56 的这些错误点也都慢于 plain。
+后续增加正确性保障后，仍需重新测量，不能承诺保留当前错误实现的耗时。
 
-上述 GPU 点是显式指定分片的手写 kernel，不表示上游默认会为这些 shape 启用 cooperative。
-这支持将“普通输出任务是否已足够并行”与“每片有效工作量”同时纳入 NPU 选择条件。
-本轮固定算法与 BLOCK，尚未测实际 Inductor、owner-only 合并或融合图，不能直接固化启用阈值。
+原版此前跳过的 22 个 NPU 点也全部实际启动：**10 个通过，12 个在首次 sum 未完成**。
+下表 original 单位为 **ms**，以便呈现其量级；S=1/2/4/8/16 所列点全部通过 sum 与整数交换。
+
+| X | R | original S=1 | S=2 | S=4 | S=8 | S=16 | S=32/48/56 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 7 | 32768 | 0.495 | 1.025 | 3.694 | 16.481 | 55.747 | 三者均超时 |
+| 7 | 1048593 | 2.560 | 2.035 | 4.070 | 16.451 | 55.496 | 三者均超时 |
+| 56 | 32768 | 11.283 | 42.334 | 159.900 | 634.969 | 2528.572 | 三者均超时 |
+| 56 | 1048593 | 15.702 | 46.401 | 166.479 | 633.047 | 2528.982 | 三者均超时 |
+
+X=56/S=16 的初轮在 60 秒内完成了 sum 计时，但没有完成后续整数交换；延长至 180 秒后全套检查通过，
+sum 仍约 2.53 秒，属于极慢配置。不能把此前的进程超时等同于该点必然死锁。
+其余 12 点停在首次 `sum_launch`，首个点等待 300 秒，其余等待 60 秒仍未完成；
+没有精度结果和完成耗时。运行时配置的 5000 ms 超时没有使这些点及时返回，最终由独立进程时限终止。
+该阶段包含首次编译、启动与同步，仅凭最后阶段记录不能断言所有超时点均为设备死锁。
+它们已尝试执行，无法作为“已测出速度收益”的点；图表保留真实未完成状态，不再跳过。
+
+GPU 原始 `x_grid_barrier` 在 **11 月 22 日解除预算过滤**后的结果如下，单位 µs。
+“启动失败”均为 `too many blocks in cooperative launch`，发生在 `sum_launch`，没有完成耗时；
+这与已运行并产生错误数值的点不同。
+
+| X | R | plain | S=1 | S=2 | S=4 | S=8 | S=16 | S=32 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 7 | 32768 | 5.750 | 7.738 | 4.845 | 3.427 | 2.777 | 2.505 | 2.505 |
+| 7 | 1048593 | 213.130 | 209.574 | 105.706 | 55.155 | 28.586 | 17.001 | 15.260 |
+| 56 | 32768 | 6.336 | 8.278 | 5.836 | 5.331 | 5.542 | 6.093 | 启动失败 |
+| 56 | 1048593 | 572.867 | 571.693 | 498.720 | 499.459 | 496.182 | 515.952 | 启动失败 |
+| 128 | 32768 | 8.778 | 9.871 | 9.356 | 9.571 | 9.926 | 启动失败 | 启动失败 |
+| 128 | 1048593 | 1141.130 | 1142.163 | 1190.691 | 1191.347 | 1231.258 | 启动失败 | 启动失败 |
+
+X=7 的 S=48/56 也通过：短轴为 2.784/2.979 µs，长轴为 15.939/15.597 µs。
+X=56/128 的 S=48/56 均启动失败。54 个配置全部尝试，**40 个通过并计时、14 个启动失败，
+没有 SKIP、数值错误或进程级超时**。此前跳过的 32 个点中，18 个通过、14 个启动失败。
+
+这组对照得到以下结果：
+
+- **低输出并行度的长轴仍有额外收益。** X=7 长轴在 S=32 时约加速 **13.97 倍**，
+  比本轮 S=16 的 12.54 倍更快；短轴 S=16/32 均约 2.30 倍，继续增加分片不再改善。
+- **已有较多输出任务时，继续拆 R 的收益有限。** GPU 的 X=56 尚未满 128 个 SM，
+  短轴 S=4 约 1.19 倍，长轴 S=8 约 1.15 倍。满核 X=128 的 S=2/4/8 均能执行，
+  但短轴和长轴都没有优于对应 plain。
+- **SM 数预算不等于实际 cooperative launch 上限。** X=56/S=16 的 896 个 program 通过，
+  S=32 的 1792 个失败；X=128/S=8 的 1024 个通过，S=16 的 2048 个失败。
+  CUDA 的实际约束是 kernel 每个 SM 可同时驻留的 block 数乘 SM 数，见
+  [cooperative launch 官方约束][cuda-cooperative-occupancy]；上游 v2.13.0 采用更保守的候选预算。
+
+这些是显式指定分片的手写 kernel，不表示上游会自动为这些 shape/S 启用 cooperative。
+本轮固定 all-read 算法与 BLOCK，未测试实际 Inductor 或 owner-only 合并，不能直接固化启用阈值。
 
 #### 正确性与分核解释
 
-每个 helper 点先校验 fp32 sum，再执行 4 个 phase、变化 epoch 和分片计算量的整数交换。
-A5 所有通过点的整数误差为 0，sum 最大绝对误差为 `0.00193847`，满足本轮约定容限。
-失败点同时存在 sum 读到 NaN 哨兵和整数交换错误，属于同步/映射错误，不是浮点舍入差异。
-下表给出每一个 R、每一个改写版本的错误数量；两个 R 和 native/debug 的计数均相同：
+NPU 的 60 个通过的 helper 点共检查 87192 个整数输出，误差为 0；加上 4 个 plain，
+64 个通过点在计时前后检查 sum，最大绝对误差为 `0.00218261`，满足本轮约定容限。
+88 个已计时配置各保留 7 个样本，共 616 个；其中包含 24 个错误点的耗时。
+
+本轮 24 个 native/debug 错误点均在首次 sum 读到 NaN partial，整数交换也不正确，
+属于同步/映射错误，不是浮点舍入差异。固定输入重复计时后，这 24 点的 sum 全部变为通过：
+上一次调用的 partial 仍留在 workspace，可能掩盖本次未写齐的问题，不能据此将状态改为 PASS。
+因此计时同时保留首次检查与变化数据的整数检查，错误点的耗时只作诊断参考。
+下表为两个 R、native/debug 各点的错误数量；X=7/S=32 的首次错误行数有 2～3 行波动，
+其余所列计数一致：
 
 | S | X=7：错误 sum 输出 | X=7：错误整数输出 | X=56：错误 sum 输出 | X=56：错误整数输出 |
 | ---: | ---: | ---: | ---: | ---: |
 | 16 | 1 / 7 | 56 / 448 | 8 / 56 | 448 / 3584 |
-| 32 | 3 / 7 | 336 / 896 | 24 / 56 | 2688 / 7168 |
+| 32 | 2～3 / 7 | 336 / 896 | 24 / 56 | 2688 / 7168 |
 | 48 | 5 / 7 | 840 / 1344 | 40 / 56 | 6720 / 10752 |
 
 例如 `X=7,R=32768,S=16` 的第 3 行实际为 NaN，参考值约为 `-45.06831`。
@@ -463,7 +533,7 @@ A5 所有通过点的整数误差为 0，sum 最大绝对误差为 `0.00193847`�
 `X=56,S=56` 共 3136 个 program 也通过。原因需要结合分片所属的行来解释。
 
 当前映射以分片为最快维度，线性编号为 `p=shard+S*row`。
-从实际执行的 adapter/metadata 重新编译导出的最终 IR 中，S=2 与 S=16 都保留了步长为 56
+11 月 21 日从实际执行的 adapter/metadata 重新编译导出的最终 IR 中，S=2 与 S=16 都保留了步长为 56
 的外层 program 循环，以及循环内部的跨 Vector 同步：每核先完成 program p 的全部 phase，
 再执行 p+56。它们不是将全部逻辑 program 同时放到物理核上运行。
 
@@ -484,16 +554,30 @@ X=56，S=16：
 不完整批次、分支或 phase 数变化时的通用保证**，也不能据此恢复上游任意 y/z 组独立会合的语义。
 首期仍按已经确认的单批映射准入；若后续放开多批映射，需要 TA/NPUIR 明确保证组完整性和参与者。
 
+original 与 native/debug 也存在编译映射差异。当前 TA 的 AutoBlockify 黑名单包含
+`tt.atomic_rmw` / `tt.atomic_cas`；原版保留 atomic 操作，因此运行 metadata 的
+`auto_blockify_enabled=False`，两个原生版本均为 `True`。
+这说明原版 X=7/S=16 通过与原生版本错误并不矛盾；
+不能假设三种 helper 在超核情况下采用相同的物理执行映射，也不能把全部耗时差归于一条屏障指令。
+TA/NPUIR 仍需明确原版的执行前进条件及原生版本的合法分核契约。
+黑名单规则及编译条件见本轮只读保存的
+[TA utils](../../../artifacts/cooperative-barrier-unfiltered-20261122/npu/installed-ta-utils.py)和
+[TA compiler](../../../artifacts/cooperative-barrier-unfiltered-20261122/npu/installed-ta-compiler.py)。
+
 详细证据：[全部 100 个配置与误差][output-axis-data]、
 [执行版本与参数][output-axis-manifest]、[完整 CSV](assets/barrier-comparison/output-axis.csv)、
 [S=2 最终 IR][output-axis-ir-s2]、[S=16 最终 IR][output-axis-ir-s16]。
-最终 IR 来自实际执行 adapter 的仅编译导出，摘要一致，未将导出产物再次启动运行。
+上述最终 IR 为 11 月 21 日的映射证据，来自实际执行 adapter 的仅编译导出，摘要一致，
+未将导出产物再次启动运行。本轮重新导出的 TTIR/adapter 与运行 metadata 保留在原始数据的 `ir/` 中。
+两点复测合并、独立计时复核及原始日志入口见
+[本轮数据说明](../../../artifacts/cooperative-barrier-unfiltered-20261122/README.md)。
 
-GPU 的 16 个 original 配置均通过 4 phase 整数交换，共检查 4104 个值，误差为 0；
-22 个通过点在计时前后校验 sum，最大绝对误差为 `0.00249652`，满足相同容限。
-每点保留 7 个 device Event 样本，共 154 个；6 个 plain/original S=1 对照组的输入、workspace、
-semaphore 和输出地址一致。进程退出状态为 0。
-例如 GPU 的 X=7/S=16 共 112 个 program 在预算内并通过；不能将 A5 的组跨批错误推广到 GPU。
+GPU 的 34 个 original 配置均通过 4 phase 整数交换，共检查 38600 个值，误差为 0；
+40 个通过点在计时前后校验 sum，最大绝对误差为 `0.00249652`，满足相同容限。
+每点保留 7 个 device Event 样本，共 280 个；6 个 plain/original S=1 对照组的输入、workspace、
+semaphore 和输出地址一致，隔离子进程使用独立地址。
+主进程最终退出码为 1，原因是 14 个已保存的启动失败，54 点矩阵全部执行完毕。
+例如 GPU 的 X=7/S=32 共 224 个 program 也通过，不能将 A5 的组跨批错误推广到 GPU。
 完整数据为[GPU 54 个配置与误差][output-axis-gpu-data]、[执行环境与源码摘要][output-axis-gpu-manifest]。
 
 GPU 补测前出现过容器设备访问故障，仅重启指定容器后恢复；诊断及恢复证据见
@@ -628,9 +712,11 @@ S <= floor(C_eff / Q)
 
 ### 7.4 sync_block_all 版增加什么逻辑才能保证正确
 
-首先明确已有证据的边界：原版在本轮实际运行的预算内配置通过；超过核数预算的 original 配置
-被跳过，**没有验证“原版在任意超预算配置也正确”**。CUDA 上游同样主动限制 CTA 数，注释说明
-若等待尚未运行的 CTA，可能死锁。原版的按组计数保证已到达参与者的会合，不能代替执行前进条件。
+11 月 22 日已解除超核过滤，原版也有实际通过、启动失败或未返回的结果，见第 6.4 节。
+例如 A5 的 `X=7,S=16` 原版通过，而 `X=7,S=32` 在首次 sum 阶段达到 300 秒超时；
+CUDA 则有超过 128 个 CTA 仍通过的配置，也有 cooperative launch 规模超限而启动失败的配置。
+因此原版的适用边界应按实际映射和启动资源判断，不能由此前的 SKIP 推定，也不能概括为任意超核均可执行。
+CUDA 上游的 SM 数限制是候选策略；按组计数本身不能代替执行前进条件。
 
 对受限 cooperative 场景，可以围绕 `sync_block_all` 补齐准入及执行协议；需要保障的是：
 
@@ -823,7 +909,10 @@ NVIDIA 官方说明，传统 runtime hook 注入的 GPU 权限可能在容器更
 经用户授权，于 **18:33:33** 仅重启 `pytorch-dev-gpu67`，没有重建容器或调整宿主机配置。
 18:34 的恢复检查确认 NVIDIA 控制、GPU 6、UVM 设备均可打开，`cuInit(0)=0`，
 CUDA 识别到所选的一张 GPU，UUID 与物理卡 6 一致，`sum(arange(16))=120`。
-随后完成第 6.4 节的 54 个配置，22 PASS、32 按预算跳过；由实际计算确认恢复成功。
+随后完成当日的 54 个配置，22 PASS、32 按预算跳过；由实际计算确认恢复成功。
+11 月 22 日补测前再次出现 NVML 初始化错误、CUDA 设备数为 0，仅重启同一指定容器后恢复。
+本轮重启时间为北京时间 18:13:26，恢复后 `sum(arange(16))=120`，随后取得第 6.4 节的
+40 PASS、14 个 cooperative launch 规模超限结果。
 
 完整命令、设备打开结果及 BPF 指令保留在
 [容器诊断记录][gpu-container-diagnostics]；用户名、进程 ID、完整容器 ID 和工作目录已替换或省略。
@@ -848,10 +937,10 @@ CUDA 识别到所选的一张 GPU，UUID 与物理卡 6 一致，`sum(arange(16)
 [mapping-values]:
   ../../../artifacts/cooperative-barrier-comparison-20261121/npu/mapping-auto-native-112/mapping-observations.json
 [mapping-mlir]: ../../../artifacts/cooperative-barrier-comparison-20261121/npu/final-mapping112/module.hivm.opt.mlir
-[output-axis-data]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/output-axis.json
-[output-axis-manifest]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/manifest.json
-[output-axis-gpu-data]: ../../../artifacts/cooperative-barrier-output-axis-20261121/cuda/output-axis.json
-[output-axis-gpu-manifest]: ../../../artifacts/cooperative-barrier-output-axis-20261121/cuda/manifest.json
+[output-axis-data]: ../../../artifacts/cooperative-barrier-unfiltered-20261122/npu/output-axis.json
+[output-axis-manifest]: ../../../artifacts/cooperative-barrier-unfiltered-20261122/npu/manifest.json
+[output-axis-gpu-data]: ../../../artifacts/cooperative-barrier-unfiltered-20261122/cuda/output-axis.json
+[output-axis-gpu-manifest]: ../../../artifacts/cooperative-barrier-unfiltered-20261122/cuda/manifest.json
 [output-axis-ir-s2]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/final-x56-s2/module.hivm.opt.mlir
 [output-axis-ir-s16]: ../../../artifacts/cooperative-barrier-output-axis-20261121/npu/final-x56-s16/module.hivm.opt.mlir
 [gpu-container-diagnostics]: ../../../artifacts/cooperative-barrier-output-axis-20261121/gpu-container-diagnostics.json
@@ -876,3 +965,5 @@ CUDA 识别到所选的一张 GPU，UUID 与物理卡 6 一致，`sum(arange(16)
 [npu-core-limit-api]: https://gitcode.com/luqichao/pytorch_new/blob/961b95d9acb79551c52a77e991db9dd2613d6d86/torch_npu/npu/npu_config.py#L227
 [ta-core-limit-driver]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/third_party/ascend/backend/driver.py#L101
 [ta-core-limit-compiler]: https://github.com/triton-lang/triton-ascend/blob/20ebbba9c695d5353488d3516d54f1d5f3c43310/third_party/ascend/backend/compiler.py#L964
+
+[cuda-cooperative-occupancy]: https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__EXECUTION.html

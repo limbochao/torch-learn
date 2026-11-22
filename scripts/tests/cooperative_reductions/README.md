@@ -193,7 +193,7 @@ CUDA 在指定容器内按 UUID 选择物理 GPU 6，使用 `--backend cuda --ph
 ## 非规约轴未满核与满核
 
 `output_axis_cases.py` 固定每行一个输出任务，对照 `X=7`（未满 56 核）与 `X=56`（满核），
-并扫描 R 轴分片。每个配置检查 fp32 sum 和多轮整数交换，仅对检查通过的点采集 device 时间。
+并扫描 R 轴分片。每个配置检查 fp32 sum 和多轮整数交换；开启以下诊断开关后，数值错误点也采集 device 时间。
 额外的 `plain` 基线只在 `S=1` 运行，完全省去 workspace 交换和同步。
 
 ```bash
@@ -210,6 +210,8 @@ python scripts/tests/cooperative_reductions/output_axis_cases.py \
 不传这两个开关时保留保守过滤行为。数值错误点的耗时可用于分析性能潜力，不能视为正确实现的收益。
 原版的单次 kernel 可能很慢；`--max-sample-ms 500` 根据额外一次 device Event 预测缩减重复数，
 每条记录保留实际 batch/replays、预测耗时和 7 个测量样本，短 kernel 沿用 32/10。
+至少执行一次调用，因此单个 kernel 本身超过 500 ms 时，样本仍可能超过该目标时间。
+中断后可带 `--resume` 继续未完成点；已完成记录保留，其 `run_manifest` 指向原执行版本与参数。
 原版超预算点使用独立分配的地址；同一进程内的 helper 仍复用相同输入/输出及 workspace 地址。
 CUDA 可使用同一脚本，默认自动补充当前 GPU 的 SM 数作为满核 X；仅测试 original 和 plain。
 便携包运行、选卡、依赖与结果回传见 [GPU 补测说明](GPU_README.md)。
