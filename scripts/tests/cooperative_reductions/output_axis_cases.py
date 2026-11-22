@@ -131,12 +131,13 @@ def measure_case(args, api, exchange, reduce, plain, record, prepared):
             invoke, _, _, _ = suite.make_reduction(args, reduce, rows, count, splits, kind, prepared=prepared)
         checkpoint("sum_launch")
         compiled = invoke()
-        api.synchronize()
-        record["accuracy"] = compare(output, expected)
         record["metadata"] = mapping_metadata(compiled)
         stem = f"x{rows}-r{count}-s{splits}-{kind}"
         if args.save_kernels:
             suite.save_kernel(args, compiled, "sum-" + stem)
+        checkpoint("sum_synchronize")
+        api.synchronize()
+        record["accuracy"] = compare(output, expected)
         if args.time_wrong_results or not record["accuracy"]["mismatched_values"]:
             checkpoint("sum_timing")
             record.update(suite.device_time(args, api, invoke), timing_status="MEASURED")

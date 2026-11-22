@@ -236,7 +236,8 @@ python scripts/tests/cooperative_reductions/output_axis_cases.py \
 保留上一调用的 partial/semaphore，以 CPU fp64 参考检查是否读到旧值。完成后恢复原输入，
 确保后续 helper 仍用相同输入比较。严格整数交换另行改变 epoch/phase 和分片工作量。
 这些校验都在性能计时之外；最终 PASS 要求首次、计时后、变化输入和整数交换全部通过。
-`--save-kernels` 保存每个实际完成调用的 sum/exchange IR 与完整 metadata，用于核对编译后的核数与映射。
+`--save-kernels` 在首次发射返回后、等待结果前保存 sum IR 与完整 metadata；交换调用完成后再保存其产物。
+结果未返回的配置也尽量保留编译证据，用于核对核数与映射。
 `NPU_DEVICE_LIMIT` 是 TA/Inductor 的环境预算；device/stream API 的 runtime 限额单独记录，不能视为同一个值。
 
 ### 结果绘图
