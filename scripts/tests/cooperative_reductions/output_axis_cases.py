@@ -225,7 +225,7 @@ def run(args, api, info):
                     if kind == "original" and record["diagnostic_over_core"] and not args.allow_over_core:
                         record.update(status="SKIP_CORE_BUDGET",
                                       reason="Upstream cooperative candidates bound the grid by the SM budget")
-                    elif kind == "original" and record["diagnostic_over_core"] and not args.case_worker:
+                    elif record["diagnostic_over_core"] and not args.case_worker:
                         record = isolated_case(args, record)
                     else:
                         record = measure_case(args, api, exchange, reduce, plain, record, prepared)
@@ -261,7 +261,7 @@ def main():
     parser.add_argument("--accuracy-repeats", type=int, default=0,
                         help="check new random inputs with the same workspace after timing")
     parser.add_argument("--save-kernels", action="store_true", help="save every compiled sum/exchange and metadata")
-    parser.add_argument("--case-timeout", type=float, default=120, help="wall seconds per isolated original case")
+    parser.add_argument("--case-timeout", type=float, default=120, help="wall seconds per isolated over-budget case")
     parser.add_argument("--max-sample-ms", type=float, help="reduce graph repetitions for very slow kernels")
     parser.add_argument("--resume", action="store_true", help="retain completed cases and run remaining configurations")
     parser.add_argument("--only-kind", choices=("plain", "original", "native", "debug"))
