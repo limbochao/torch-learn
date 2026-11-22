@@ -195,6 +195,7 @@ CUDA 在指定容器内按 UUID 选择物理 GPU 6，使用 `--backend cuda --ph
 `output_axis_cases.py` 固定每行一个输出任务，对照 `X=7`（未满 56 核）与 `X=56`（满核），
 并扫描 R 轴分片。每个配置检查 fp32 sum 和多轮整数交换；开启以下诊断开关后，数值错误点也采集 device 时间。
 额外的 `plain` 基线只在 `S=1` 运行，完全省去 workspace 交换和同步。
+设置 `NPU_DEVICE_LIMIT` 时，预算使用 TA 实际返回的有效 Vector 核数，另行记录物理核数和 runtime 查询值。
 
 ```bash
 python scripts/tests/cooperative_reductions/output_axis_cases.py \
@@ -216,9 +217,34 @@ python scripts/tests/cooperative_reductions/output_axis_cases.py \
 CUDA 可使用同一脚本，默认自动补充当前 GPU 的 SM 数作为满核 X；仅测试 original 和 plain。
 便携包运行、选卡、依赖与结果回传见 [GPU 补测说明](GPU_README.md)。
 
+### 限核后的分片与精度检查
+
+以下示例将 TA 编译和启动预算设为 4 Cube / 8 Vector，覆盖限额内、总 program 数超限以及单组分片超限。
+卡号仅为示例，执行前仍需核对时段、占用与授权。
+
+```bash
+NPU_DEVICE_LIMIT=4,8 ASCEND_RT_VISIBLE_DEVICES=2 \
+python scripts/tests/cooperative_reductions/output_axis_cases.py \
+  --backend npu --physical-device 2 --rows 1,2,8 \
+  --rnumels 32768,1048593 --splits 1,2,4,6,8,12,16,32,48,56 \
+  --allow-over-core --time-wrong-results --accuracy-repeats 3 --save-kernels \
+  --max-sample-ms 500 --case-timeout 60 \
+  --out ../cooperative-results/core-limit-8
+```
+
+`--accuracy-repeats 3` 在首次 NaN 哨兵检查和固定输入计时后，原地址连续换三组输入，
+保留上一调用的 partial/semaphore，以 CPU fp64 参考检查是否读到旧值。完成后恢复原输入，
+确保后续 helper 仍用相同输入比较。严格整数交换另行改变 epoch/phase 和分片工作量。
+这些校验都在性能计时之外；最终 PASS 要求首次、计时后、变化输入和整数交换全部通过。
+`--save-kernels` 保存每个实际完成调用的 sum/exchange IR 与完整 metadata，用于核对编译后的核数与映射。
+`NPU_DEVICE_LIMIT` 是 TA/Inductor 的环境预算；device/stream API 的 runtime 限额单独记录，不能视为同一个值。
+
+### 结果绘图
+
 `plot_output_axis_cases.py` 按相同 X/R 合并两端 JSON，导出 SVG、PNG 和完整 CSV。
 实线表示检查通过的测量，空心虚线表示数值错误或检查未完成但取得的耗时，底部叉号表示无耗时的执行失败。
 CSV 同时保留状态、相对本轮 plain 的倍率、计时前后误差及整数交换误差。
+限核数据另保留有效/物理核数、环境预算与变化输入错误量，可用 `--title` 指定实验标题。
 只有 NPU 数据时可先运行：
 
 ```bash
@@ -227,5 +253,5 @@ python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
   --out docs/requirements-design/cooperative-reduction/assets/barrier-comparison
 ```
 
-GPU 数据取得后增加 `--cuda /实际路径/cuda/output-axis.json` 即可覆盖更新同名 SVG/PNG/CSV；
-未提供 GPU 数据时图中明确标为待补。GPU 单独绘图也使用同一入口，只传 `--cuda`。
+增加 `--cuda /实际路径/cuda/output-axis.json` 即可合并 GPU 数据并更新同名 SVG/PNG/CSV；
+单设备实验只显示所提供设备，GPU 单独绘图只传 `--cuda`。

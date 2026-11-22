@@ -1,4 +1,4 @@
-"""Compare barriers when output-axis tasks underfill or fill the physical cores."""
+"""Compare barriers across output occupancy, split count, and effective core limits."""
 
 from __future__ import annotations
 
@@ -72,6 +72,10 @@ def isolated_case(args, record):
             command.extend(["--" + name.replace("_", "-"), str(value)])
     if args.time_wrong_results:
         command.append("--time-wrong-results")
+    if args.accuracy_repeats:
+        command.extend(["--accuracy-repeats", str(args.accuracy_repeats)])
+    if args.save_kernels:
+        command.append("--save-kernels")
     if args.max_sample_ms is not None:
         command.extend(["--max-sample-ms", str(args.max_sample_ms)])
     # Reuse compiled kernels, while keeping each risky launch in its own device context.
@@ -130,10 +134,34 @@ def measure_case(args, api, exchange, reduce, plain, record, prepared):
         api.synchronize()
         record["accuracy"] = compare(output, expected)
         record["metadata"] = mapping_metadata(compiled)
+        stem = f"x{rows}-r{count}-s{splits}-{kind}"
+        if args.save_kernels:
+            suite.save_kernel(args, compiled, "sum-" + stem)
         if args.time_wrong_results or not record["accuracy"]["mismatched_values"]:
             checkpoint("sum_timing")
             record.update(suite.device_time(args, api, invoke), timing_status="MEASURED")
             record["post_accuracy"] = compare(output, expected)
+        if args.accuracy_repeats:
+            record["changing_input_accuracy"] = []
+            saved_left, saved_right = left.clone(), right.clone()
+            try:
+                for epoch in range(args.accuracy_repeats):
+                    generator = torch.Generator().manual_seed(args.seed + epoch + 1)
+                    new_left = torch.randn((rows, count), generator=generator, dtype=torch.float32)
+                    new_right = torch.randn((rows, count), generator=generator, dtype=torch.float32)
+                    reference = (new_left + new_right).double().sum(-1)
+                    left.copy_(new_left)
+                    right.copy_(new_right)
+                    output.fill_(float("nan"))
+                    # Keep partials and semaphore from the preceding call to expose stale reads.
+                    checkpoint("changing_input_launch")
+                    invoke()
+                    api.synchronize()
+                    record["changing_input_accuracy"].append(dict(compare(output, reference), epoch=epoch))
+            finally:
+                left.copy_(saved_left)
+                right.copy_(saved_right)
+                api.synchronize()
         checkpoint("sum_complete")
         if kind != "plain":
             call, exchange_out, exchange_sem, _ = suite.make_exchange(
@@ -146,7 +174,9 @@ def measure_case(args, api, exchange, reduce, plain, record, prepared):
             record["exchange"]["phases"] = args.phases
             if kind != "original":
                 assert bool((exchange_sem.cpu() == 123).all())
-            if count == args.rnumels[0] and (rows, splits, kind) in (
+            if args.save_kernels:
+                suite.save_kernel(args, exchange_compiled, "exchange-" + stem)
+            elif count == args.rnumels[0] and (rows, splits, kind) in (
                 (7, 8, "native"), (7, 16, "native"), (56, 2, "native"),
                 (56, 16, "native"), (56, 16, "debug"), (56, 1, "original")):
                 stem = f"x{rows}-s{splits}-{kind}"
@@ -154,6 +184,7 @@ def measure_case(args, api, exchange, reduce, plain, record, prepared):
                 suite.save_kernel(args, exchange_compiled, "exchange-" + stem)
         failed = any(record.get(key, {}).get("mismatched_values", 0)
                      for key in ("accuracy", "post_accuracy", "exchange"))
+        failed = failed or any(item["mismatched_values"] for item in record.get("changing_input_accuracy", []))
         record["status"] = "FAIL_WRONG_RESULT" if failed else "PASS"
         record["timing_reference_only"] = bool(failed or record["diagnostic_over_core"])
         record["buffer_addresses"] = [t.data_ptr() for t in buffers] + [output.data_ptr()]
@@ -187,6 +218,8 @@ def run(args, api, info):
                               "X": rows, "R": count, "S": splits, "kind": kind,
                               "output_axis_full": rows == info["core_count"],
                               "program_count": rows * splits, "core_count": info["core_count"],
+                              "physical_core_count": info.get("physical_core_count", info["core_count"]),
+                              "npu_device_limit": info.get("npu_device_limit"),
                               "diagnostic_over_core": rows * splits > info["core_count"],
                               "block": args.block, "dtype": "float32", "run_manifest": args.run_manifest}
                     if kind == "original" and record["diagnostic_over_core"] and not args.allow_over_core:
@@ -225,6 +258,9 @@ def main():
     parser.add_argument("--allow-over-core", action="store_true",
                         help="launch over-budget original cases in isolated subprocesses")
     parser.add_argument("--time-wrong-results", action="store_true", help="retain timings when sum accuracy fails")
+    parser.add_argument("--accuracy-repeats", type=int, default=0,
+                        help="check new random inputs with the same workspace after timing")
+    parser.add_argument("--save-kernels", action="store_true", help="save every compiled sum/exchange and metadata")
     parser.add_argument("--case-timeout", type=float, default=120, help="wall seconds per isolated original case")
     parser.add_argument("--max-sample-ms", type=float, help="reduce graph repetitions for very slow kernels")
     parser.add_argument("--resume", action="store_true", help="retain completed cases and run remaining configurations")
@@ -268,16 +304,28 @@ def main():
     for field in ("block", "phases", "batch", "replays", "samples"):
         if getattr(args, field) < 1:
             parser.error(f"--{field} must be positive")
+    if args.accuracy_repeats < 0:
+        parser.error("--accuracy-repeats must be nonnegative")
     args.kinds = ["original", "native", "debug"] if args.backend == "npu" else ["original"]
     args.mapping, args.phase = "auto", "output-axis"
     torch_module, triton_module, api, args.options = suite.load_stack(args)
     globals().update(torch=torch_module, triton=triton_module, tl=suite.tl)
     info = suite.manifest(args, api)
+    if args.backend == "npu":
+        from triton.backends.ascend.driver import NPUUtils
+
+        info["physical_core_count"] = info["core_count"]
+        info["npu_device_limit"] = os.environ.get("NPU_DEVICE_LIMIT")
+        info["triton_device_properties"] = NPUUtils().get_device_properties(0)
+        info["core_count"] = info["triton_device_properties"]["num_vectorcore"]
+        info["runtime_device_limit"] = api.get_device_limit(0)
+        info["runtime_stream_limit"] = api.get_stream_limit(api.current_stream())
     if args.rows == "auto":
         args.rows = sorted({7, info["core_count"]} | ({56} if args.backend == "cuda" else set()))
     info["rows"] = args.rows
     info["rnumels"], info["splits"] = args.rnumels, args.splits
     info["block"], info["seed"], info["phases"] = args.block, args.seed, args.phases
+    info["accuracy_repeats"], info["save_kernels"] = args.accuracy_repeats, args.save_kernels
     info["driver_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     info["driver"] = Path(__file__).name
     info["scope"] = "Output-axis occupancy; over-budget/incorrect timings are diagnostic references"

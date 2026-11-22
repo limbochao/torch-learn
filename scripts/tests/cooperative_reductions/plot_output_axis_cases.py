@@ -53,6 +53,7 @@ def main():
     parser.add_argument("--npu", "--data", dest="npu", type=Path, help="NPU output-axis.json (--data is an alias)")
     parser.add_argument("--cuda", type=Path, help="CUDA output-axis.json; optional until GPU measurements exist")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--title", help="override the figure title, e.g. for an NPU core-limit experiment")
     args = parser.parse_args()
     if not args.npu and not args.cuda:
         parser.error("provide --npu and/or --cuda")
@@ -147,19 +148,25 @@ def main():
     labels.append("Wrong result / incomplete check; measured diagnostic time")
     figure.legend(handles, labels, loc="outside lower center", ncol=3, fontsize=9)
     device = manifests.get("cuda", {}).get("device_name", "CUDA")
-    comparison = f"NPU / {device}" if args.npu and args.cuda else device if args.cuda else "NPU; CUDA data pending"
+    comparison = f"NPU / {device}" if args.npu and args.cuda else device if args.cuda else "NPU"
     gray = "NPU over-core diagnostics" if args.npu else "CUDA over-SM diagnostics"
-    figure.suptitle(f"Output-axis occupancy and cooperative split count: {comparison}\n"
+    title = args.title or f"Output-axis occupancy and cooperative split count: {comparison}"
+    figure.suptitle(f"{title}\n"
                     f"Median with min/max bands; gray: {gray}; vertical dashed lines: device grid budgets", fontsize=12)
     export(figure, args.out, "output-axis-occupancy")
     plt.close(figure)
-    fields = ("backend", "device_name", "core_count", "X", "R", "S", "kind", "dtype", "block", "status",
+    fields = ("backend", "device_name", "core_count", "physical_core_count", "npu_device_limit",
+              "X", "R", "S", "kind", "dtype", "block", "status",
               "diagnostic_over_core", "timing_status", "timing_reference_only", "median_us", "min_us", "max_us",
-              "plain_speedup", "sum_mismatches", "post_sum_mismatches", "exchange_mismatches", "execution_stage",
+              "plain_speedup", "sum_mismatches", "post_sum_mismatches", "changing_input_mismatches",
+              "exchange_mismatches", "execution_stage",
               "worker_exit_code")
     baselines = {(r["backend"], r["X"], r["R"]): r["median_us"] for r in records
                  if r["kind"] == "plain" and r["status"] == "PASS"}
     for record in records:
+        if "changing_input_accuracy" in record:
+            record["changing_input_mismatches"] = sum(
+                item["mismatched_values"] for item in record["changing_input_accuracy"])
         if "median_us" in record:
             baseline = baselines.get((record["backend"], record["X"], record["R"]))
             if baseline:
