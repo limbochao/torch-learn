@@ -37,7 +37,7 @@ def load_results(path, backend):
         if key in keys:
             raise ValueError(f"{path}: duplicate configuration {key}")
         keys.add(key)
-        if record["status"] == "PASS":
+        if record["status"] == "PASS" or "median_us" in record:
             times = [record[field] for field in ("min_us", "median_us", "max_us")]
             if not all(math.isfinite(value) and value > 0 for value in times) or times != sorted(times):
                 raise ValueError(f"{path}: invalid PASS timings for {key}")
@@ -84,13 +84,19 @@ def main():
                 series = {r["S"]: r for r in selected if r["backend"] == backend and r["kind"] == kind}
                 if not series:
                     continue
-                values = [series[s]["median_us"] if series.get(s, {}).get("status") == "PASS"
-                          else float("nan") for s in splits]
-                axis.plot(splits, values, label=label, color=color, marker=marker, markersize=4)
-                limits = [[series[s][key] if series.get(s, {}).get("status") == "PASS" else float("nan")
+                values = [series.get(s, {}).get("median_us", float("nan")) for s in splits]
+                passed = [value if series.get(s, {}).get("status") == "PASS" else float("nan")
+                          for s, value in zip(splits, values)]
+                diagnostic = [value if series.get(s, {}).get("status") != "PASS" else float("nan")
+                              for s, value in zip(splits, values)]
+                axis.plot(splits, passed, label=label, color=color, marker=marker, markersize=4)
+                axis.plot(splits, diagnostic, color=color, marker=marker, markersize=5,
+                          markerfacecolor="none", linestyle="--")
+                limits = [[series[s][key] if "median_us" in series.get(s, {}) else float("nan")
                            for s in splits] for key in ("min_us", "max_us")]
                 axis.fill_between(splits, *limits, color=color, alpha=0.1)
-                failed = [s for s, r in series.items() if r["status"] != "PASS" and not r["status"].startswith("SKIP_")]
+                failed = [s for s, r in series.items() if r["status"] != "PASS" and "median_us" not in r
+                          and not r["status"].startswith("SKIP_")]
                 axis.plot(failed, [0.025 + index * 0.025] * len(failed),
                           transform=axis.get_xaxis_transform(), linestyle="none", marker="x", color=color)
             occupancy = []
@@ -136,17 +142,31 @@ def main():
         legend.update(zip(labels, handles))
     labels, handles = list(legend), list(legend.values())
     handles.append(Line2D([], [], marker="x", linestyle="none", color="black"))
-    labels.append("Error; no timing")
+    labels.append("Execution failure / timeout; no timing")
+    handles.append(Line2D([], [], marker="o", markerfacecolor="none", linestyle="--", color="black"))
+    labels.append("Wrong result / incomplete check; measured diagnostic time")
     figure.legend(handles, labels, loc="outside lower center", ncol=3, fontsize=9)
     device = manifests.get("cuda", {}).get("device_name", "CUDA")
     comparison = f"NPU / {device}" if args.npu and args.cuda else device if args.cuda else "NPU; CUDA data pending"
-    gray = "NPU over-core diagnostics" if args.npu else "CUDA over-SM budget (skipped)"
+    gray = "NPU over-core diagnostics" if args.npu else "CUDA over-SM diagnostics"
     figure.suptitle(f"Output-axis occupancy and cooperative split count: {comparison}\n"
                     f"Median with min/max bands; gray: {gray}; vertical dashed lines: device grid budgets", fontsize=12)
     export(figure, args.out, "output-axis-occupancy")
     plt.close(figure)
     fields = ("backend", "device_name", "core_count", "X", "R", "S", "kind", "dtype", "block", "status",
-              "diagnostic_over_core", "median_us", "min_us", "max_us")
+              "diagnostic_over_core", "timing_status", "timing_reference_only", "median_us", "min_us", "max_us",
+              "plain_speedup", "sum_mismatches", "post_sum_mismatches", "exchange_mismatches", "execution_stage",
+              "worker_exit_code")
+    baselines = {(r["backend"], r["X"], r["R"]): r["median_us"] for r in records
+                 if r["kind"] == "plain" and r["status"] == "PASS"}
+    for record in records:
+        if "median_us" in record:
+            baseline = baselines.get((record["backend"], record["X"], record["R"]))
+            if baseline:
+                record["plain_speedup"] = baseline / record["median_us"]
+        for name, key in (("sum_mismatches", "accuracy"), ("post_sum_mismatches", "post_accuracy"),
+                          ("exchange_mismatches", "exchange")):
+            record[name] = record.get(key, {}).get("mismatched_values")
     with (args.out / "output-axis.csv").open("w", newline="") as output:
         writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore", lineterminator="\n")
         writer.writeheader()

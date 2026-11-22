@@ -71,6 +71,8 @@ def isolated_case(args, record):
             command.extend(["--" + name.replace("_", "-"), str(value)])
     if args.time_wrong_results:
         command.append("--time-wrong-results")
+    if args.max_sample_ms is not None:
+        command.extend(["--max-sample-ms", str(args.max_sample_ms)])
     # Reuse compiled kernels, while keeping each risky launch in its own device context.
     environment = dict(os.environ, TRITON_CACHE_DIR=str(args.out / "triton_cache"))
     with (directory / "run.log").open("w") as log:
@@ -217,6 +219,7 @@ def main():
                         help="launch over-budget original cases in isolated subprocesses")
     parser.add_argument("--time-wrong-results", action="store_true", help="retain timings when sum accuracy fails")
     parser.add_argument("--case-timeout", type=float, default=120, help="wall seconds per isolated original case")
+    parser.add_argument("--max-sample-ms", type=float, help="reduce graph repetitions for very slow kernels")
     parser.add_argument("--only-kind", choices=("plain", "original", "native", "debug"))
     parser.add_argument("--case-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -228,6 +231,8 @@ def main():
         parser.error("CUDA supports plain/original only")
     if args.case_timeout <= 0:
         parser.error("--case-timeout must be positive")
+    if args.max_sample_ms is not None and args.max_sample_ms <= 0:
+        parser.error("--max-sample-ms must be positive")
     for field in ("rnumels", "splits") + (() if args.rows == "auto" else ("rows",)):
         try:
             setattr(args, field, list(dict.fromkeys(map(int, getattr(args, field).split(",")))))
@@ -253,6 +258,7 @@ def main():
     info["scope"] = "Output-axis occupancy; over-budget/incorrect timings are diagnostic references"
     info["allow_over_core"], info["time_wrong_results"] = args.allow_over_core, args.time_wrong_results
     info["case_timeout_seconds"] = args.case_timeout
+    info["max_sample_ms"] = args.max_sample_ms
     bundle = Path(__file__).with_name("bundle_manifest.json")
     if bundle.exists():
         info["bundle_source_commit"] = json.loads(bundle.read_text())["source_commit"]

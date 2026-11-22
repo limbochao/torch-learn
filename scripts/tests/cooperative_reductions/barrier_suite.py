@@ -217,9 +217,22 @@ def device_time(args, api, invoke):
     for _ in range(5):
         invoke()
     api.synchronize()
+    batch, replays = args.batch, args.replays
+    sample_limit = getattr(args, "max_sample_ms", None)
+    pilot_us = None
+    if sample_limit:
+        start, end = api.Event(enable_timing=True), api.Event(enable_timing=True)
+        start.record()
+        invoke()
+        end.record()
+        end.synchronize()
+        pilot_us = start.elapsed_time(end) * 1000
+        call_budget = max(1, int(sample_limit * 1000 / max(pilot_us, 1)))
+        batch = min(batch, call_budget)
+        replays = min(replays, max(1, call_budget // batch))
     graph = api.CUDAGraph() if args.backend == "cuda" else api.NPUGraph()
     with api.graph(graph):
-        for _ in range(args.batch):
+        for _ in range(batch):
             invoke()
     for _ in range(3):
         graph.replay()
@@ -228,14 +241,15 @@ def device_time(args, api, invoke):
     for _ in range(args.samples):
         start, end = api.Event(enable_timing=True), api.Event(enable_timing=True)
         start.record()
-        for _ in range(args.replays):
+        for _ in range(replays):
             graph.replay()
         end.record()
         end.synchronize()
-        samples.append(start.elapsed_time(end) * 1000 / (args.batch * args.replays))
+        samples.append(start.elapsed_time(end) * 1000 / (batch * replays))
     return {"median_us": statistics.median(samples), "min_us": min(samples), "max_us": max(samples),
             "samples_us": samples, "method": f"{args.backend} graph + device events",
-            "batch": args.batch, "replays": args.replays, "sample_count": args.samples}
+            "batch": batch, "replays": replays, "sample_count": args.samples,
+            "pilot_us": pilot_us, "max_sample_ms": sample_limit}
 
 
 def exchange_expected(splits, rows, phases, epoch, skew):
