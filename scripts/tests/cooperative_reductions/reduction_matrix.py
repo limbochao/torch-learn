@@ -210,7 +210,7 @@ def collect_group(args, operation, rows, count, kind):
                                        start_new_session=True)
             started = time.monotonic()
             current, point_started, active, timeout = None, started, {}, False
-            compile_started, completed_at = None, None
+            progress = None
             while process.poll() is None:
                 time.sleep(0.2)
                 active_path = directory / "active.json"
@@ -218,26 +218,18 @@ def collect_group(args, operation, rows, count, kind):
                     candidate = json.loads(active_path.read_text())
                     if candidate.get("worker_pid") == process.pid:
                         active = candidate
-                        if current != active["RS"]:
-                            current, point_started = active["RS"], time.monotonic()
-                            compile_started, completed_at = None, None
+                        current = active["RS"]
                 now = time.monotonic()
-                if active.get("stage") == "compile_launch":
-                    if compile_started is None:
-                        compile_started = now
-                    limit, reference_time = args.init_timeout, compile_started
-                else:
-                    if compile_started is not None:
-                        point_started += now - compile_started
-                        compile_started = None
-                    limit = args.point_timeout if current is not None else args.init_timeout
-                    reference_time = point_started
+                marker = (current, active.get("stage"), active.get("status"),
+                          len(active.get("samples_us", [])), len(active.get("accuracy", [])))
+                if marker != progress:
+                    progress, point_started = marker, now
+                limit = args.init_timeout if current is None or active.get(
+                    "stage") == "compile_launch" else args.point_timeout
                 if active.get("status") in ("PASS", "WRONG", "ERROR"):
-                    if completed_at is None:
-                        completed_at = now
                     # Completed measurements remain valid even if backend teardown stalls.
-                    limit, reference_time = 15, completed_at
-                if now - reference_time > limit:
+                    limit = 15
+                if now - point_started > limit:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait(timeout=10)
                     timeout = True
@@ -255,7 +247,7 @@ def collect_group(args, operation, rows, count, kind):
             failed = active or {"operation": operation, "X": rows, "R": count, "kind": kind,
                                 "RS": pending[0], "backend": args.backend, "dtype": "float32"}
             failed.update(status="TIMEOUT" if timeout else "PROCESS_ERROR", worker_exit_code=process.returncode,
-                          point_timeout_seconds=args.point_timeout, worker_log=f"worker-{attempt}.log")
+                          point_timeout_seconds=limit, worker_log=f"worker-{attempt}.log")
             records.append(failed)
             suite.write_json(result_path, records)
         elif process.returncode == 0 and not any(r["RS"] == pending[0] for r in records):
@@ -282,7 +274,8 @@ def main():
     parser.add_argument("--samples", type=int, default=7)
     parser.add_argument("--max-sample-ms", type=float, default=50)
     parser.add_argument("--op-timeout-ms", type=int, default=10000)
-    parser.add_argument("--point-timeout", type=float, default=60)
+    parser.add_argument("--point-timeout", type=float, default=60,
+                        help="wall seconds without progress in execution/checking; compilation uses --init-timeout")
     parser.add_argument("--init-timeout", type=float, default=180)
     parser.add_argument("--cuda-barrier", choices=("snapshot", "installed"), default="snapshot")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
