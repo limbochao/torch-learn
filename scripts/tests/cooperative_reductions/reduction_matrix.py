@@ -279,7 +279,7 @@ def main():
     parser.add_argument("--operations", default="sum,amax")
     parser.add_argument("--rows", default="1,7,56")
     parser.add_argument("--rnumels", default=DEFAULT_R)
-    parser.add_argument("--splits", default="1,2,4,8,16,32,48,56,64")
+    parser.add_argument("--splits", help="default: 1,2,4,8,16,32,48,56; CUDA also includes 64")
     parser.add_argument("--kinds", help="NPU defaults to original,debug; CUDA uses original")
     parser.add_argument("--kind", choices=("original", "debug"), help=argparse.SUPPRESS)
     parser.add_argument("--block", type=int, default=1024)
@@ -297,6 +297,7 @@ def main():
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
+    args.splits = args.splits or ("1,2,4,8,16,32,48,56" + (",64" if args.backend == "cuda" else ""))
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=True)
     if args.backend == "npu" and args.physical_device is None:
