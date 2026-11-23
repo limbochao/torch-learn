@@ -98,7 +98,9 @@ def inventory(job):
         visible = []
         for index in range(torch.cuda.device_count()):
             prop = torch.cuda.get_device_properties(index)
-            visible.append({"logical_device": index, "uuid": str(prop.uuid), "name": prop.name,
+            uuid = str(prop.uuid)
+            uuid = uuid if uuid.startswith("GPU-") else "GPU-" + uuid
+            visible.append({"logical_device": index, "uuid": uuid, "name": prop.name,
                             "core_count": prop.multi_processor_count})
         selected = []
         for selector in job["selectors"]:
@@ -197,6 +199,15 @@ def compile_worker(job, out, checkpoint):
                   force_cooperative=kind == "cooperative", status="RUNNING",
                   versions={"torch": torch.__version__, "torch_commit": torch.version.git_version,
                             "triton": triton.__version__, "cuda": torch.version.cuda}, accuracy=[])
+    if job["backend"] == "npu":
+        import torch_npu
+        from triton.backends.ascend.utils import _get_npucompiler_path
+
+        record["versions"]["torch_npu"] = torch_npu.__version__
+        compiler, environment = _get_npucompiler_path()
+        version = subprocess.run([compiler, "--version"], env=environment, text=True,
+                                 capture_output=True, timeout=30)
+        record["compiler_version"] = version.stdout + version.stderr
     for name in ("torch._inductor.choices", "torch._inductor.ir", "torch._inductor.codegen.triton",
                  *( ("torch_npu._inductor.codegen.triton", "torch_npu._inductor.runtime.triton_heuristics")
                     if job["backend"] == "npu" else ())):
@@ -365,7 +376,8 @@ def dsl_group(args, directory, device, environment, operation, rows, count, kind
         metadata = item.get("metadata", {})
         single_wave = rows * item["RS"] <= item.get("effective_core_count", device["effective_core_count"])
         item["single_wave"] = single_wave
-        item["integration_candidate"] = bool(kind == "debug" and single_wave and item["RS"] > 1 and
+        item["integration_candidate"] = bool("950" in device["name"] and kind == "debug" and single_wave and
+                                              item["RS"] > 1 and
                                               item["status"] == "PASS" and
                                               metadata.get("auto_blockify_enabled") is True)
         item["integration_note"] = ("A5 SIMD single-wave candidate; backend contract still required" if
@@ -525,8 +537,9 @@ def collect(args):
 
     if old and identities(old["devices"]) != identities(devices):
         raise ValueError("Device inventory changed; use a new --out directory")
-    suite.write_json(manifest_path, {"config": config, "devices": devices,
-                                   "time_utc": old["time_utc"] if old else datetime.now(timezone.utc).isoformat()})
+    manifest = {"config": config, "devices": devices,
+                "time_utc": old["time_utc"] if old else datetime.now(timezone.utc).isoformat()}
+    suite.write_json(manifest_path, manifest)
     for device in devices:
         message(f"Device: {device['name']} selector={device['selector']} cores={device['core_count']}")
     shapes = [(op, rows, count) for op in args.operations for rows in args.rows for count in args.rnumels]
@@ -537,6 +550,9 @@ def collect(args):
         for name in ("selected", "candidates", "natural"):
             data = [item for shape in sorted(collected) for item in collected[shape][name]]
             suite.write_json(args.out / ("results.json" if name == "selected" else name + ".json"), data)
+        manifest.update(completed_shapes=len(collected), expected_shapes=len(shapes),
+                        complete=len(collected) == len(shapes))
+        suite.write_json(manifest_path, manifest)
 
     def queue(rank, device):
         environment = device_environment(args.backend, device["selector"], args.out / "cache" / str(rank))

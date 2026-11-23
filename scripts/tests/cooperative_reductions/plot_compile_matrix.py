@@ -16,10 +16,10 @@ FIELDS = ("source_run", "backend", "device_name", "device_uuid", "physical_devic
           "median_us", "min_us", "max_us", "plain_us", "speedup_vs_plain", "mismatched_values",
           "exchange_failed", "integration_candidate", "integration_note", "best_integration_config",
           "block_search_boundary", "selected_configs", "configs_by_round", "selection_varied", "round_medians_us",
-          "artifact_dir")
+          "search_splits", "search_blocks", "run_complete", "artifact_dir")
 
 
-def flatten(record, source):
+def flatten(record, source, manifest):
     row = dict(record)
     device = row.get("device", {})
     row.update(source_run=source, device_name=device.get("name"), device_uuid=device.get("uuid"),
@@ -27,6 +27,10 @@ def flatten(record, source):
     checks = [*record.get("accuracy", []), record.get("post_accuracy", {})]
     row["mismatched_values"] = sum(item.get("mismatched_values", 0) for item in checks)
     row["exchange_failed"] = "error" in record.get("exchange", {})
+    row["run_complete"] = manifest.get("complete")
+    if row.get("entry") == "dsl":
+        row["search_splits"] = manifest["config"]["splits"]
+        row["search_blocks"] = manifest["config"]["blocks"]
     return row
 
 
@@ -129,11 +133,19 @@ def main():
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     selected, candidates, natural = [], [], []
-    for source in args.input:
+    if len({source.resolve() for source in args.input}) != len(args.input):
+        parser.error("The same input directory was provided more than once")
+    for index, source in enumerate(args.input):
+        manifest = json.loads((source / "run.json").read_text())
+        if manifest.get("config", {}).get("schema") != "cooperative-compile-matrix-v1":
+            raise ValueError(f"{source}: incompatible measurement schema")
+        label = source.name
+        if sum(item.name == source.name for item in args.input) > 1:
+            label += f"#{index + 1}"
         for name, target in (("results", selected), ("candidates", candidates), ("natural", natural)):
             path = source / (name + ".json")
             if path.exists():
-                target.extend(flatten(item, source.name) for item in json.loads(path.read_text()))
+                target.extend(flatten(item, label, manifest) for item in json.loads(path.read_text()))
             elif name == "results":
                 raise FileNotFoundError(path)
     save_csv(args.out / "results.csv", selected)
