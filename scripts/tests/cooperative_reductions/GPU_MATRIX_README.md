@@ -13,7 +13,14 @@
 绘图可在另一台无 GPU 的机器完成，需要 Matplotlib 3.8+。
 
 便携包包含采集/绘图脚本、上游 helper 和许可证，以及已测 NPU 的 `npu/` 数据。
-解压后在包目录执行以下命令。先检查设备 UUID、空闲显存和占用：
+解压后在包目录执行以下命令：
+
+```bash
+tar -xzf cooperative-reduction-matrix-gpu.tar.gz
+cd cooperative-reduction-matrix-gpu
+```
+
+先检查设备 UUID、空闲显存和占用：
 
 ```bash
 nvidia-smi --query-gpu=index,uuid,name,memory.free,utilization.gpu --format=csv
@@ -97,7 +104,7 @@ python plot_reduction_matrix.py \
 
 生成下列文件，每个形状/实现只选择全部检查通过且中位耗时最小的 RS：
 
-- `best-rs.csv`：NPU origin、NPU debug、当前 GPU 共 162 行，保留最佳 RS、耗时范围与候选状态计数。
+- `best-rs.csv`：NPU origin、NPU debug、当前 GPU 共 162 行，保留最佳 RS、物理卡、耗时范围与候选状态计数。
 - `best-rs-latency.svg` / `.png`：六个子图，分别比较两种归约、三个 X 下的延迟曲线。
 - `best-rs-choice.svg` / `.png`：最佳 RS 分布，格中数字是实际分片数。
 
@@ -111,6 +118,8 @@ python plot_reduction_matrix.py --npu npu/candidates.json \
 不要将不同 BLOCK 的扫描混合比较。缺候选标为 `INCOMPLETE`，没有正确候选标为 `NO_VALID_RS`，
 均不伪造时间。完整扫描且有正确候选才标为 `PASS`。
 CSV 中的 `over_core` 记录最佳候选的 `X*RS` 是否超过设备属性核数，不代表合法性保证。
+本次 NPU 的 X=1 使用物理卡 1，X=7/56 使用物理卡 2；同一形状的两种 helper 和全部 RS 使用同一张卡。
+跨 X 比较还包含共享设备差异，应结合 CSV 的 `physical_device` 及原始 manifest 阅读。
 
 在完整 torch-learn 仓库内刷新已有文档图表，将脚本路径加上
 `scripts/tests/cooperative_reductions/`，输出改为

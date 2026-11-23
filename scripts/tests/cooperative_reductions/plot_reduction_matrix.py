@@ -57,7 +57,8 @@ def load(path, backend, index, gpu_count):
                     if {r["RS"] for r in selected} != set(run["splits"]):
                         status = "INCOMPLETE"
                     counts = Counter(r["status"] for r in selected)
-                    result.append({"scenario": scenario, "device_name": device, "backend": backend,
+                    result.append({"scenario": scenario, "device_name": device,
+                                   "physical_device": best.get("physical_device", ""), "backend": backend,
                                    "kind": kind, "operation": operation, "dtype": "float32", "X": rows,
                                    "R": count, "best_RS": best.get("RS", ""), "median_us": best.get("median_us", ""),
                                    "min_us": best.get("min_us", ""), "max_us": best.get("max_us", ""),
@@ -124,7 +125,8 @@ def draw_splits(records, series, out):
                         scenario, operation, rows, count, "PASS")), {})
                 if record:
                     values[i, j] = math.log2(record["best_RS"])
-                    text = str(record["best_RS"])
+                    mark = record["backend"] == "npu" and record["over_core"]
+                    text = str(record["best_RS"]) + ("*" if mark else "")
                 else:
                     text = "--"
                 axis.text(j, i, text, ha="center", va="center", color="#111111", fontsize=10)
@@ -134,7 +136,7 @@ def draw_splits(records, series, out):
         axis.set_yticks(range(len(labels)), [f"{label}, X={rows}" for _, label, rows in labels])
         axis.set_xlabel("R elements (K=1024)")
     figure.suptitle("Selected RS (correct configurations only)\n"
-                    "Numbers are shard counts; color represents log2(RS)", fontsize=13)
+                    "Color = log2(RS); * = A5 X*RS exceeds vector cores (measured PASS)", fontsize=13)
     export(figure, out, "best-rs-choice")
     plt.close(figure)
 
