@@ -165,6 +165,12 @@ def compile_worker(job, out, checkpoint):
                 launchers = getattr(autotuner, "launchers", ())
                 launcher = launchers[0] if len(launchers) == 1 else None
             kernel = getattr(launcher, "bin", None)
+            results = getattr(autotuner, "compile_results", ()) or ()
+            if kernel is None and launcher is not None:
+                # NPU launchers attach .bin only in store_cubin mode. Read the
+                # matching compile result without enabling a different launch path.
+                selected = _config_payload(getattr(launcher, "config", None))
+                kernel = next((item.kernel for item in results if _config_payload(item.config) == selected), None)
             if kernel is None:
                 return
             self.saved.add(id(autotuner))
@@ -174,7 +180,6 @@ def compile_worker(job, out, checkpoint):
             source = getattr(fn, "src", None)
             if isinstance(source, str):
                 (out / (name + ".py")).write_text(source)
-            results = getattr(autotuner, "compile_results", ()) or ()
             self.artifacts.append({"name": name, "compiled_config_count": len(results),
                                    "compiled_configs": [_config_payload(item.config) for item in results],
                                    "metadata": suite.metadata_dict(kernel)})
@@ -252,7 +257,7 @@ def compile_worker(job, out, checkpoint):
             record["RS"] = max(splits) if splits else 1
             has_coop = bool(record["source_summary"]["cooperative_decorators"])
             record["actual_path"] = ("cooperative" if has_coop and record["RS"] > 1 else
-                                     "unsplit" if has_coop else "ordinary" if record["kernels"] else "external")
+                                     "unsplit" if has_coop else "ordinary" if record["selected_configs"] else "external")
             record["accuracy"].append(matrix.check(torch, first, reference, operation))
             last_output = [first]
 
