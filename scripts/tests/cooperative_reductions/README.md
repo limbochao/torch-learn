@@ -1,14 +1,12 @@
 # Cooperative reduction 调研探针
 
-## 下一轮性能测试方案
+## 多卡 compile / DSL 调优测试
 
-计划改用实际 `torch.compile` 测量 NPU plain、GPU plain/cooperative，
-NPU origin/debug 暂用 DSL 联合搜索 RS 与 BLOCK；完整分组、GPU 强制与自然选择的区别、
-精度和产物要求见[方案第 4.2 节][compile-plan]。
-当前 `reduction_matrix.py` 与便携包仍测手写 DSL、固定单个 BLOCK，只搜索 RS；
-新的统一入口、多 BLOCK 搜索与 CSV/SVG 汇总尚未实现，下面的命令仍对应现有机制实验。
-`strategy_compare.py` 可提供 CUDA compile 入口，`probe.py inductor` 可提供 NPU 入口，
-但两者尚未组成新的全形状采集流程。
+`run_matrix.sh` 统一从实际 `torch.compile` 测量 NPU plain、GPU plain/cooperative，
+NPU origin/debug 使用 DSL 联合搜索 RS 与 BLOCK，支持指定多卡、独立复测、续跑与 CSV/SVG 汇总。
+使用命令和便携包说明见[多卡一键测试](COMPILE_MATRIX_README.md)，
+分组与测量依据见[方案第 4.2 节][compile-plan]。
+下文 `reduction_matrix.py` 仍用于固定 BLOCK 的机制对照；其数据与新入口分别汇总。
 
 [compile-plan]: ../../../docs/requirements-design/cooperative-reduction/design.md#42-全形状性能测试方案调整
 
@@ -33,7 +31,7 @@ ASCEND_RT_VISIBLE_DEVICES=2 NPU_DEVICE_LIMIT=28,56 \
 # 绘图不需要 GPU/NPU。
 python scripts/tests/cooperative_reductions/plot_reduction_matrix.py \
   --npu artifacts/cooperative-reduction-matrix-20261123/npu/candidates.json \
-  --cuda artifacts/cooperative-reduction-matrix-20261123/cuda/candidates.json \
+  --cuda artifacts/cooperative-reduction-matrix-20261123/cuda-l20/candidates.json \
   --out docs/requirements-design/cooperative-reduction/assets/reduction-matrix
 ```
 

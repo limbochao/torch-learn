@@ -8,9 +8,9 @@ plain 每个 program 完成一行，关闭 cooperative launch，不读写 partia
 不调用跨核屏障。两者使用相同的 fp32 加法、循环累加、BLOCK 和 warps。
 本脚本不是实际 Inductor 策略选择或 split 对照测试。
 
-下一轮计划将 GPU 与 NPU plain 改为实际 `torch.compile` 入口，NPU cooperative 仍用 DSL，
-并联合搜索 RS/BLOCK。该统一流程尚未实现，当前便携包和以下命令仍对应固定 BLOCK 的机制实验。
-新方案见[全形状性能测试方案调整](../../../docs/requirements-design/cooperative-reduction/design.md#42-全形状性能测试方案调整)。
+实际 `torch.compile` 与 NPU DSL 联合搜索 RS/BLOCK 的新入口为 `run_matrix.sh`，支持多卡一键执行，
+见[多卡一键测试](COMPILE_MATRIX_README.md)。本文命令及旧便携包继续对应固定 BLOCK 的机制实验。
+当前文档主矩阵已用用户回传的 L20 替换 4090；采集方法保持本文所述口径。
 
 ## 准备
 

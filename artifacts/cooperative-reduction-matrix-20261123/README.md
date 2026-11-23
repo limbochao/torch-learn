@@ -1,7 +1,7 @@
 # fp32 sum / amax 全形状原始记录
 
 用于[同步与性能报告](../../docs/requirements-design/cooperative-reduction/barrier-comparison.md)的
-origin、debug、RTX 4090 cooperative 及两端 plain 对照。
+origin、debug、L20 cooperative 及两端 plain 对照。
 与实际 Inductor split/cooperative 整图实验使用独立结果，这里测量的是固定 BLOCK 的手写 kernel。
 
 ## 范围与选点
@@ -18,8 +18,8 @@ WRONG/ERROR/TIMEOUT 不参加最佳选择；数值错误但能完成计时的候
 | A5 plain | 54 | 54 | 0 | 0 | 0 | 54 |
 | A5 origin | 432 | 324 | 0 | 0 | 108 | 54 |
 | A5 debug | 432 | 324 | 108 | 0 | 0 | 54 |
-| RTX 4090 plain | 54 | 54 | 0 | 0 | 0 | 54 |
-| RTX 4090 original | 486 | 414 | 0 | 72 | 0 | 54 |
+| L20 plain | 54 | 54 | 0 | 0 | 0 | 54 |
+| L20 original | 486 | 414 | 0 | 72 | 0 | 54 |
 
 NPU 的 108 个校验失败点均完成计时，96 点出现浮点结果错误，108 点的严格整数交换均失败；
 另外 12 点不能仅凭浮点输出判定正确。NPU 超时均在 origin 的 X=7/56、RS=32/48/56；
@@ -29,16 +29,16 @@ CUDA 启动失败均在 X=56、RS=32/48/56/64，原因为 `too many blocks in co
 
 ## 环境与源码
 
-| 项目 | NPU | CUDA |
+| 项目 | NPU | L20 |
 | --- | --- | --- |
-| 位置 | NPU_A5 Docker，`pta_213_case` | GPU_4090 的 `pytorch-dev-gpu67` |
-| worktree | `/home/l30023782/PTA_213/torch-learn-matrix-20261123` | `/home/gaojg/dev/torch-learn-matrix-20261123` |
-| 设备 | Ascend950PR_9579；统一物理卡 2；56 Vector | RTX 4090 物理卡 6，128 SM |
-| PyTorch | `2.13.0+cpu` | `2.13.0+cu126` |
+| 位置 | NPU_A5 Docker，`pta_213_case` | 用户在其他机器采集，回传目录 `tmp/cooperative/L20/` |
+| worktree | `/home/l30023782/PTA_213/torch-learn-matrix-20261123` | 未提供 |
+| 设备 | Ascend950PR_9579；统一物理卡 2；56 Vector | NVIDIA L20，92 SM；物理卡号未提供 |
+| PyTorch | `2.13.0+cpu` | 未提供 |
 | torch_npu / TA | `2.13.0+git93d7d01` / `3.6.0+dev20261112182052` | — |
-| Triton / CUDA | `3.6.0` / — | `3.7.1` / `12.6` |
-| 选卡与限额 | 可见物理卡 2；`NPU_DEVICE_LIMIT=28,56` | UUID `GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7` |
-| 采集脚本提交 | `910ba83`，沿用组为 `49a6591` / `e6397d4` | `910ba83` |
+| Triton / CUDA | `3.6.0` / — | 未提供 |
+| 选卡与限额 | 可见物理卡 2；`NPU_DEVICE_LIMIT=28,56` | UUID `bedb56d0-f57b-2286-b96d-3631aa2d4dc9`，全部记录一致 |
+| 采集脚本提交 | `910ba83`，沿用组为 `49a6591` / `e6397d4` | 未提供 Git 提交；脚本 SHA256 与原采集脚本一致 |
 | kernel | SIMD、4 warps、BLOCK=1024 | 4 warps、BLOCK=1024 |
 
 原始输出目录分别为：
@@ -47,27 +47,40 @@ CUDA 启动失败均在 X=56、RS=32/48/56/64，原因为 `too many blocks in co
 - NPU X=1 origin/debug：同级 `npu-x1`；两种 helper 的全部 8 个 RS 同卡重测。
 - NPU X=7/56 origin/debug：`/home/l30023782/PTA_213/cooperative-results/matrix-20261123/`
   下的 `npu-card2-x7`、`npu-card2-x56`，沿用同日卡 2 完整组。
-- GPU：`/mnt/raid1/gaojg/data/dev/cooperative-matrix-plain-20261123/cuda`，
-  plain 与 original 的全部候选在同一轮重新采集。
+- L20：`/home/qc/Repos/Ascend/tmp/cooperative/L20/`，回传的完整 `run.json` 与 `candidates.json`
+  原样归档在 `cuda-l20/`，不从不同来源拼接候选。
 
 汇总时按完整形状选择来源，不跨来源挑选最小 RS；`source-index.json` 记录逐组原始目录和文件摘要。
 NPU 汇总 `run.json` 内嵌各来源的实际调用，不能当作单次扫描命令。
-各形状 `manifest.json` 保留完整版本、NPUIR 编译器、实际限额、设备属性、命令、时间和源码 SHA256。
-original 在两端使用相同源码，SHA256 为
+NPU 各形状 `manifest.json` 保留完整版本、NPUIR 编译器、实际限额、设备属性、命令、时间和源码 SHA256。
+本仓旧采集器的 original helper SHA256 为
 `c9fa8ee90b54adc67a11ba5406b5fe4be55178b974cc26a2bde8c2c9f19f5bb3`，
-CUDA 为 PyTorch v2.13.0 提交 `cf30153c4c131c8164ee7798e5022d810682e2cb` 的快照。
+CUDA 使用 PyTorch v2.13.0 提交 `cf30153c4c131c8164ee7798e5022d810682e2cb` 的快照。
+L20 的 driver 脚本 SHA256 为
+`78ca26c47d3305052679f780364b8db3ef77bca103064575c948f23434ec239e`，与该采集器一致；
+回传的 BLOCK、warps、RS 集合、输入、计时和精度检查参数均符合旧方案。
+L20 未回传独立 helper 文件、manifest、完整 DSL/IR 或软件版本；候选内保留 metadata 和 IR 摘要。
+因此这里只核实到已有记录，不把旧 4090 的版本、helper 文件和生成产物算作 L20 产物。
 debug 为两侧各有一次 `tl.debug_barrier()` 的 `sync_block_all("all_vector",0)`。
 cooperative 设置 `launch_cooperative_grid=True`，plain 显式设为 False；
 该字段不证明 NPU 的实际同步映射合法，仍需看逐点检查。
 plain kernel 源码 SHA256 为 `7fcb083c4656fb5c094c3bf602106c359a380aeaf5fd27bc663384c95ae407fa`。
 
 补测开始时，卡 1 告警；卡 2 Health OK、采样利用率 0%、无可见进程，因此在卡 2 测量全部 plain，
-并重测 X=1 的 origin/debug，替换旧卡 1 结果。GPU 6 采样利用率为 0%，约 10.2 GiB 显存空闲。
+并重测 X=1 的 origin/debug，替换旧卡 1 结果。L20 回传未包含占用、频率与空闲显存信息。
 每卡测速保持串行，复用已有编译缓存，没有修改安装包、复位设备或操作其他任务。
 X=7/56 的 NPU cooperative 与 plain 分时采集；相同物理卡不保证占用、频率完全相同，
 接近 1 倍的差异不能作为稳定收益。此前卡 5 的异常慢校准数据未混入主矩阵。
 
-最新 CUDA 入口另在独立平铺目录执行 X=1/R=4K 的 sum/amax，包含 2 个 plain 和默认 18 个
+旧 4090 全矩阵保留在 `cuda/`，不再进入当前主表或 SVG；其他 4090 整图和同步实验仍维持原设备标签。
+L20 文件与回传源逐字节一致：
+
+| 文件 | SHA256 |
+| --- | --- |
+| `cuda-l20/run.json` | `a4db5cff2bccccbb545ec4a136dd4a29f94ad24990e094540d981f7b6a763579` |
+| `cuda-l20/candidates.json` | `969c8332715a966babe4a7e1ffeeab973c063ecf2500dc1ccc7055e969f7eebb` |
+
+CUDA 旧入口曾在 4090 的独立平铺目录执行 X=1/R=4K 的 sum/amax，包含 2 个 plain 和默认 18 个
 cooperative 候选，20 点全部通过，记录位于 `gpu-portable-plain/`。
 该目录不在源码仓库内，manifest 的 `git_commit` 为 null；driver/helper SHA256 与已提交脚本一致，
 证明新入口不依赖 PyTorch 源码仓库或 NPU 包。
@@ -149,7 +162,8 @@ sum 重测实际调用另存于 `npu/run.json` 的 `cooperative_sum_x1_r1m_repea
 
 | 文件 | 用途 |
 | --- | --- |
-| `npu/candidates.json`、`cuda/candidates.json` | 全候选及逐点状态、实际样本、误差、metadata、IR 摘要 |
+| `npu/candidates.json`、`cuda-l20/candidates.json` | 当前主表全部候选及逐点状态、样本、误差、metadata、IR 摘要 |
+| `cuda/candidates.json` | 旧 4090 矩阵，只作历史证据 |
 | 相邻 `run.json`、`source-index.json` | 完整范围、实际采集 run 和逐形状来源 |
 | `<op>-x<X>-r<R>-<kind>/candidates.json` | 分形状原始记录，可与总表交叉核对 |
 | 各形状 `manifest.json`、`helper-*.py` | 版本、设备、编译器、实际 helper 源码与 SHA256 |

@@ -468,7 +468,8 @@ V 做向量计算，MTE2 将 GM 数据搬入 UB，MTE3 将 UB 数据搬出到 GM
 **下一轮以实际 Inductor 产物作为 NPU plain 和 GPU 的测试对象；NPU cooperative 暂用调优后的 DSL。**
 现有 270 行结果来自两端手写 kernel，plain 固定 `BLOCK=1024`，cooperative 只搜索 RS。
 它回答固定算法下分片、同步和编译映射的影响，不能说明相对实际 Inductor 配置的收益。
-以下为待实现、待重测的方案，现有 CSV/SVG 仍代表原实验。
+统一测试入口已实现，使用方法见[多卡一键测试](../../../scripts/tests/cooperative_reductions/COMPILE_MATRIX_README.md)。
+现有全形状 CSV/SVG 仍代表固定 BLOCK 的 A5/L20 实验，新入口的全量结果待采集。
 
 #### 测试分组与编译入口
 
@@ -530,7 +531,8 @@ GPU 仍由上游按设备 SM 数和 X 选择 RS，再调优局部归约配置；
 
 RS 与 BLOCK 联合枚举，初始每种 helper、每种操作/形状最多 48 个配置，两种 helper 共 5184 个。
 不能先在 BLOCK=1024 下选 RS，再只调整这个 RS 的 BLOCK，否则可能错过更好的组合。
-若最佳 BLOCK 落在搜索边界且资源允许，再向相邻档扩展；RS 另补有效核预算边界及其附近的候选。
+若最佳 BLOCK 落在搜索边界，脚本标记 `block_search_boundary=true`；资源允许时，用新输出目录
+向相邻档扩展 `--blocks` 再测。RS 可通过 `--splits` 补有效核预算边界及其附近的候选。
 “最佳”限定为所公布搜索空间内、检查通过并复测后的最佳，不代表全局最优。
 
 NPU SIMD 的 `num_warps` 先保持现有 DSL 的 4，并完整记录后端实际选项；
@@ -581,15 +583,15 @@ GPU 则测实际 Inductor 的两条路径，但强制矩阵的收益不等于默
 
 #### 脚本改造与结果更新
 
-沿用现有脚本，计划修改点如下；下列能力尚未加入当前便携包。
+保留旧固定 BLOCK 入口，新增统一采集与绘图脚本，便携包包含以下能力。
 
-| 组件 | 需要修改的内容 |
+| 组件 | 已实现内容 |
 | --- | --- |
-| `reduction_matrix.py` | 增加 compile 入口与 NPU DSL 多 BLOCK 搜索；按完整配置隔离失败、续跑和汇总 |
-| 现有 compile worker | 复用 `strategy_compare.py` 的 CUDA 产物采集和 `probe.py` 的 NPU 编译入口；补齐 amax、统一参考和最后一次 replay 校验 |
-| 配置与产物保存 | 记录请求策略、实际路径、全部 launch 配置、候选数量；保存完整 wrapper/DSL、metadata、后端可导出的 IR |
-| `plot_reduction_matrix.py` | 支持 compile 与 DSL 分组，按 RS/BLOCK 等完整配置选择；分开标明强制路径、自然回退和接入条件 |
-| 便携包与 README | 携带 compile 入口及配置采集所需依赖；同一脚本支持其他 CUDA GPU，本轮不替换现有已验证包 |
+| `run_matrix.sh` / `run_matrix.py` | 多卡分配完整形状组；实际 compile 与 DSL 联合搜索、独立复测、失败隔离和续跑 |
+| `reduction_matrix.py` | 复用原 DSL、计时及检查；新增逐配置 DSL/IR 导出，旧固定 BLOCK 入口保留 |
+| 配置与产物保存 | 复用 `BestTilingRecorder`，记录选中及编译候选、实际路径、wrapper/DSL、完整 metadata 和可导出 IR |
+| `plot_compile_matrix.py` | 独立汇总 compile / DSL，导出主表、全部候选、自然选择及同 RS/BLOCK 同步对照 |
+| `pack_matrix.py` 与 README | 独立便携包，不依赖源码仓；CUDA 不导入 torch_npu；同包支持 CUDA/NPU |
 
 NPU 配置采集可复用已有
 [BestTilingRecorder](../../../scripts/tools/autotune_tiling.py)，

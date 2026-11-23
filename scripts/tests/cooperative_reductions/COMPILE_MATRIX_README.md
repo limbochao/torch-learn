@@ -48,8 +48,8 @@ bash run_matrix.sh --backend cuda --devices 0 --out cuda-single
 NPU 在已激活的 torch_npu / Triton-Ascend 环境中运行，下例卡号须替换为当前允许使用的设备：
 
 ```bash
-bash run_matrix.sh --backend npu --devices 1,2 --smoke --out npu-smoke
-bash run_matrix.sh --backend npu --devices 1,2 --out npu-full
+bash run_matrix.sh --backend npu --devices 1,2 --smoke --init-timeout 900 --out npu-smoke
+bash run_matrix.sh --backend npu --devices 1,2 --init-timeout 900 --out npu-full
 ```
 
 如需限核，先设置该环境支持的限核配置，例如 A5 的 `NPU_DEVICE_LIMIT=4,8` 表示 8 个 Vector 核。
@@ -121,7 +121,7 @@ origin 的驻留/映射条件另行确认，不直接套用 debug 的协议。
 
 | 文件 | 内容 |
 | --- | --- |
-| `run.json` | 软件源码指纹、完整参数、设备 UUID/物理卡及限额 |
+| `run.json` | 测试脚本指纹、完整参数、设备 UUID/物理卡及限额 |
 | `results.json` | 每个操作/形状的已选结果与独立复测记录 |
 | `candidates.json` | 所有扫描、复测、错误和超时候选 |
 | `natural.json` | GPU 自然选择实际命中/回退情况 |
@@ -136,6 +136,7 @@ origin 的驻留/映射条件另行确认，不直接套用 debug 的协议。
 SVG 同时生成 PNG。CUDA 与 NPU 的完整主结果合并后为 270 行，GPU natural 另存。
 生成 kernel 的 `ir/` 中保留后端可提供的 TTIR、adapter、LLVM IR 或 PTX；无法导出的阶段不会伪造文件。
 NPU 每个 DSL RS/BLOCK 候选均导出产物。`cache/` 是可再生成的编译缓存，不是唯一的证据来源。
+各 compile 记录另保存实际 PyTorch/Triton/torch_npu 版本和安装源码摘要。
 回传结果时保留除 `cache/` 外的整个输出目录。
 
 ## 刷新与合并图表
@@ -169,6 +170,8 @@ bash run_matrix.sh --backend cuda --devices 0,1 --out cuda-full --resume
 同一输出目录有进程锁，不能同时启动两个采集器。
 
 默认冷初始化/编译无进展时限 300 秒，执行无进展时限 30 秒；可调整 `--init-timeout`、`--point-timeout`。
+NPU 冷编译或共享机器建议使用 `--init-timeout 900`；小范围验证曾出现首次冷编译超过 300 秒，
+同一配置随后完成编译与检查。编译阶段超时不能当作精度错误或 kernel 延迟。
 只终止本脚本创建的子进程组，不操作其他进程。
 退出码 0 表示请求的主结果全部可用；2 表示已完成汇总但有无正确配置或未实际分片的分组；
 1 表示环境/脚本错误；130 表示中断。逐候选错误不会因为扫描进程退出而被标为 PASS。
