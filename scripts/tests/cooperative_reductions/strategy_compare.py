@@ -101,7 +101,8 @@ def worker(args):
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
     record = {"workload": args.workloads, "strategy": args.strategies, "X": args.rows,
-              "R": args.rnumels, "status": "RUNNING"}
+              "R": args.rnumels, "status": "RUNNING",
+              "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     write_json(out / "active.json", record)
     sources = []
     try:
@@ -152,7 +153,8 @@ def worker(args):
             record["source_summary"] = {
                 "cooperative_decorators": text.count("@triton_heuristics.cooperative_reduction("),
                 "barrier_calls": text.count("triton_helpers.x_grid_barrier("),
-                "run_calls": len(re.findall(r"\w+\.run\(", text.split("def benchmark_compiled_module")[0])),
+                "run_calls": sum(len(re.findall(r"\w+\.run\(", source.split(
+                    "def benchmark_compiled_module")[0])) for source in sources),
                 "rsplit_literals": re.findall(r"['\"]RSPLIT['\"]\s*:\s*(\d+)", text)}
             record["accuracy"] = []
             for epoch in range(3):
@@ -164,6 +166,20 @@ def worker(args):
                 torch.cuda.synchronize()
             record["timing"] = timing(torch, invoke, args)
             record["post_accuracy"] = compare(invoke(), fn(a, b), args.workloads)
+            from torch._inductor.codecache import PyCodeCache
+            from torch._inductor.runtime.triton_heuristics import CachingAutotuner
+
+            record["launch_configs"] = []
+            seen = set()
+            for module in PyCodeCache.modules:
+                for name, value in vars(module).items():
+                    if isinstance(value, CachingAutotuner) and id(value) not in seen:
+                        seen.add(id(value))
+                        if value.launchers:
+                            chosen = value.launchers[0].config
+                            record["launch_configs"].append({"name": name, "kwargs": chosen.kwargs,
+                                                             "num_warps": chosen.num_warps,
+                                                             "num_stages": chosen.num_stages})
             with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
                                                    torch.profiler.ProfilerActivity.CUDA]) as prof:
                 invoke()
