@@ -470,6 +470,8 @@ V 做向量计算，MTE2 将 GM 数据搬入 UB，MTE3 将 UB 数据搬出到 GM
 它回答固定算法下分片、同步和编译映射的影响，不能说明相对实际 Inductor 配置的收益。
 统一测试入口已实现，使用方法见[多卡一键测试](../../../scripts/tests/cooperative_reductions/COMPILE_MATRIX_README.md)。
 现有全形状 CSV/SVG 仍代表固定 BLOCK 的 A5/L20 实验，新入口的全量结果待采集。
+小范围验证的 4090 双卡 8 个、A5 单卡 6 个主结果均通过；另确认超核 debug 错误保留耗时并排除出最佳配置。
+实际命令、搜索配置及生成产物见[测试包验证记录](../../../artifacts/cooperative-compile-matrix-20261123/README.md)。
 
 #### 测试分组与编译入口
 

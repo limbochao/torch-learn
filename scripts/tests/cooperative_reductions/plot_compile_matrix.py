@@ -73,6 +73,7 @@ def figures(records, out):
             continue
         key = (item["source_run"], item["device_name"], item["kind"])
         groups[key].append(item)
+    colors = {key: f"C{index % 10}" for index, key in enumerate(sorted(groups))}
     metrics = [("latency", "median_us", "Latency (us)"), ("speedup", "speedup_vs_plain", "Plain / candidate"),
                ("selected-rs", "RS", "RS"), ("selected-block", "block", "BLOCK (NPU DSL)")]
     for filename, field, ylabel in metrics:
@@ -92,7 +93,8 @@ def figures(records, out):
                         continue
                     label = f"{run}: {name} / {KINDS[kind]}"
                     xvalues, yvalues = [item["R"] for item in subset], [item[field] for item in subset]
-                    line, = ax.plot(xvalues, yvalues, "o--" if kind == "plain" else "o-", label=label, markersize=4)
+                    line, = ax.plot(xvalues, yvalues, "o--" if kind == "plain" else "o-", label=label, markersize=4,
+                                    color=colors[run, name, kind])
                     if field == "median_us":
                         ax.fill_between(xvalues, [item.get("min_us", item[field]) for item in subset],
                                         [item.get("max_us", item[field]) for item in subset],

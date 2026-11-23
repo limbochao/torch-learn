@@ -7,6 +7,9 @@ NPU origin/debug 使用 DSL 联合搜索 RS 与 BLOCK，支持指定多卡、独
 使用命令和便携包说明见[多卡一键测试](COMPILE_MATRIX_README.md)，
 分组与测量依据见[方案第 4.2 节][compile-plan]。
 下文 `reduction_matrix.py` 仍用于固定 BLOCK 的机制对照；其数据与新入口分别汇总。
+独立[便携包](../../../artifacts/cooperative-compile-matrix-20261123/cooperative-compile-matrix.tar.gz)
+已通过 4090 双卡和 A5 单卡小矩阵，主结果分别为 8/8、6/6 PASS；
+命令、版本、超核错误过滤与生成产物见[验证记录](../../../artifacts/cooperative-compile-matrix-20261123/README.md)。
 
 [compile-plan]: ../../../docs/requirements-design/cooperative-reduction/design.md#42-全形状性能测试方案调整
 
