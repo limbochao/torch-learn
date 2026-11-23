@@ -158,7 +158,7 @@ def save_kernel(args, kernel, name):
     directory = args.out / "ir"
     directory.mkdir(exist_ok=True)
     write_json(directory / (name + ".metadata.json"), metadata_dict(kernel))
-    for stage in ("ttir", "ttadapter", "llir", "ptx"):
+    for stage in ("ttir", "ttgir", "ttadapter", "llir", "ptx"):
         source = kernel.asm.get(stage)
         if isinstance(source, str):
             (directory / (name + "." + stage)).write_text(source)

@@ -175,14 +175,31 @@ def compile_worker(job, out, checkpoint):
                 return
             self.saved.add(id(autotuner))
             name = f"kernel-{len(self.artifacts)}"
-            suite.save_kernel(SimpleNamespace(out=out), kernel, name)
+            if hasattr(kernel, "metadata"):
+                suite.save_kernel(SimpleNamespace(out=out), kernel, name)
+                metadata = suite.metadata_dict(kernel)
+            else:
+                # Static CUDA launchers discard the CompiledKernel metadata/asm.
+                # Export its exact cache entry; keep the real static launch path.
+                from torch._inductor.runtime.runtime_utils import triton_hash_to_path_key
+
+                key = triton_hash_to_path_key(kernel.hash)
+                cache = Path(os.environ["TRITON_CACHE_DIR"]) / key
+                metadata = json.loads((cache / (kernel.name + ".json")).read_text())
+                ir = out / "ir"
+                ir.mkdir(exist_ok=True)
+                suite.write_json(ir / (name + ".metadata.json"), metadata)
+                for stage in ("ttir", "ttgir", "llir", "ptx"):
+                    source = cache / (kernel.name + "." + stage)
+                    if source.exists():
+                        (ir / (name + "." + stage)).write_bytes(source.read_bytes())
             fn = getattr(autotuner, "fn", None)
             source = getattr(fn, "src", None)
             if isinstance(source, str):
                 (out / (name + ".py")).write_text(source)
             self.artifacts.append({"name": name, "compiled_config_count": len(results),
                                    "compiled_configs": [_config_payload(item.config) for item in results],
-                                   "metadata": suite.metadata_dict(kernel)})
+                                   "metadata": metadata})
 
         def _record_standard(self, autotuner):
             super()._record_standard(autotuner)
