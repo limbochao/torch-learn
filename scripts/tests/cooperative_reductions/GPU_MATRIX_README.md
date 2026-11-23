@@ -2,8 +2,11 @@
 
 `reduction_matrix.py` 测量手写 `(a+b).sum(-1)` / `(a+b).amax(-1)`，
 默认 CUDA，不需要 torch_npu、NPU 设备或 PyTorch 源码仓库。
-它使用固定的 PyTorch v2.13.0 `x_grid_barrier` 快照和 cooperative launch，
-与 NPU origin 保持相同协议。它不是实际 Inductor 策略选择或 split 对照测试。
+默认同时测普通归约 `plain` 和 cooperative：后者使用固定的 PyTorch v2.13.0
+`x_grid_barrier` 快照和 cooperative launch，与 NPU origin 保持相同协议。
+plain 每个 program 完成一行，关闭 cooperative launch，不读写 partial workspace 或 semaphore，
+不调用跨核屏障。两者使用相同的 fp32 加法、循环累加、BLOCK 和 warps。
+本脚本不是实际 Inductor 策略选择或 split 对照测试。
 
 ## 准备
 
@@ -12,7 +15,7 @@
 其他版本先运行下面的小矩阵；不应删除 cooperative launch 选项来绕过启动失败。
 绘图可在另一台无 GPU 的机器完成，需要 Matplotlib 3.8+。
 
-便携包包含采集/绘图脚本、上游 helper 和许可证，以及已测 NPU 的 `npu/` 数据。
+便携包包含采集/绘图脚本、上游 helper 和许可证，以及已测 NPU plain/origin/debug 的 `npu/` 数据。
 解压后在包目录执行以下命令：
 
 ```bash
@@ -60,11 +63,21 @@ CUDA_VISIBLE_DEVICES=GPU-实际UUID python -u reduction_matrix.py --out cuda
 | 每行分片数 RS | 1、2、4、8、16、32、48、56、64 |
 | kernel 配置 | BLOCK=1024、4 warps，all-read 合并，仅 shard 0 写输出 |
 
-GPU 共 54 组形状、486 个候选；不会按 SM 数预先删除候选。
+GPU 共 54 组形状，54 个 plain 加 486 个 cooperative 候选；不会按 SM 数预先删除候选。
 NPU origin/debug 各使用 RS=1/2/4/8/16/32/48/56，共 864 个候选；
+加 54 个 plain，合计 918 个。plain 固定 RS=1，每行一个 program，实际 Grid 为 `(X,)`。
 NPU RS=64 已在代表点发生同步超时，不纳入全形状测速，相关诊断另存。
 过大的 cooperative launch 可能失败，失败点保留原因，没有完成调用时不填设备耗时。
-RS=1 也保留屏障，不能当作普通无屏障归约基线。
+origin/debug 的 RS=1 仍保留屏障；收益基线必须读取独立的 plain 记录。
+
+已有 cooperative 数据时，可以只补测普通归约，输出到新目录：
+
+```bash
+CUDA_VISIBLE_DEVICES=GPU-实际UUID python -u reduction_matrix.py --kinds plain --out cuda-plain
+```
+
+只测原有 cooperative 则使用 `--kinds original`。NPU 可选 `plain,original,debug`，
+例如 `--kinds plain` 只补测 NPU 基线；选卡、限额和容器环境仍需按工作区约定设置。
 
 中断后使用同一设备和配置续跑：
 
@@ -87,7 +100,8 @@ CUDA_VISIBLE_DEVICES=GPU-实际UUID python -u reduction_matrix.py --out cuda --r
 至少仍测一次，单次调用超过目标时不会截断该调用。
 
 输入为固定种子 CPU 生成的 fp32 随机数；CPU 先做 fp32 加法，再做 fp64 归约作为参考。
-每点检查首次结果、最后一次计时输出及两组变化输入，再做 4 phase 的严格整数交换。
+每点检查首次结果、最后一次计时输出及两组变化输入。
+cooperative 额外做 4 phase 的严格整数交换；plain 无跨 program 通信，不执行该项。
 sum 容限为 `atol=0.02,rtol=2e-4`，amax 要求精确一致。
 变化输入检查保留已有 workspace/semaphore，整数交换还引入不同分片工作量。
 这些检查通过仅代表本矩阵验证通过，不代替特殊值、动态 shape 或并发验收。
@@ -104,22 +118,34 @@ python plot_reduction_matrix.py \
 
 生成下列文件，每个形状/实现只选择全部检查通过且中位耗时最小的 RS：
 
-- `best-rs.csv`：NPU origin、NPU debug、当前 GPU 共 162 行，保留最佳 RS、物理卡、耗时范围与候选状态计数。
-- `best-rs-latency.svg` / `.png`：六个子图，分别比较两种归约、三个 X 下的延迟曲线。
-- `best-rs-choice.svg` / `.png`：最佳 RS 分布，格中数字是实际分片数。
+- `best-rs.csv`：NPU plain/origin/debug、GPU plain/original 共 270 行，保留耗时、最佳 RS、物理卡、
+  候选状态计数和 `speedup_vs_plain`。plain 的 RS=1 表示不分片。
+- `best-rs-latency.svg` / `.png`：六个子图，五条延迟曲线；虚线为 plain。
+- `best-rs-choice.svg` / `.png`：三种 cooperative 实现的最佳 RS 分布，省略不分片的 plain。
+- `cooperative-speedup.svg` / `.png`：plain 耗时 / 最佳正确 cooperative 耗时，大于 1 表示受益。
 
-只看 GPU 可省略 `--npu`，得到 54 行；比较多台 GPU 可重复 `--cuda`：
+只看 GPU 可省略 `--npu`，得到 108 行；比较多台 GPU 可重复 `--cuda`：
 
 ```bash
 python plot_reduction_matrix.py --npu npu/candidates.json \
   --cuda cuda-4090/candidates.json --cuda cuda-other/candidates.json --out figures
 ```
 
+如果只补测了 plain，可将新旧数据分别传入，无需手动合并 JSON：
+
+```bash
+python plot_reduction_matrix.py --npu npu/candidates.json \
+  --cuda cuda-old/candidates.json --cuda-plain cuda-plain/candidates.json --out figures
+```
+
+NPU 对应参数为 `--npu-plain`；多台 GPU 的 `--cuda-plain` 顺序必须与 `--cuda` 一致。
+完整扫描已经含 plain 时不要重复添加。加速比只在同一物理卡和相同 UUID 的对应结果间生成；
+来自不同采集时段的共享卡结果仍可能受占用、频率和缓存状态影响。
+
 不要将不同 BLOCK 的扫描混合比较。缺候选标为 `INCOMPLETE`，没有正确候选标为 `NO_VALID_RS`，
 均不伪造时间。完整扫描且有正确候选才标为 `PASS`。
 CSV 中的 `over_core` 记录最佳候选的 `X*RS` 是否超过设备属性核数，不代表合法性保证。
-本次 NPU 的 X=1 使用物理卡 1，X=7/56 使用物理卡 2；同一形状的两种 helper 和全部 RS 使用同一张卡。
-跨 X 比较还包含共享设备差异，应结合 CSV 的 `physical_device` 及原始 manifest 阅读。
+各形状的物理卡以 CSV 的 `physical_device` 及原始 manifest 为准，不将不同卡的绝对耗时配成收益。
 
 在完整 torch-learn 仓库内刷新已有文档图表，将脚本路径加上
 `scripts/tests/cooperative_reductions/`，输出改为

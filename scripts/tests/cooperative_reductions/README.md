@@ -3,8 +3,8 @@
 ## fp32 sum / amax 全形状最佳 RS 扫描
 
 `reduction_matrix.py` 统一扫描 X=1/7/56、R=4K～1M 的 9 档、sum/amax。
-NPU 仅测 original/debug，各 8 个 RS；CUDA 测原始协议、9 个 RS。
-完整矩阵为 1350 个候选、162 个最佳正确结果；NPU 的 RS=64 另保留代表点超时证据。
+NPU 测 original/debug，各 8 个 RS；CUDA 测原始协议、9 个 RS，两端均另测 54 个 plain 基线。
+完整矩阵为 1458 个候选、270 个结果；NPU 的 RS=64 另保留代表点超时证据。
 计算、计时、精度、续跑与便携命令见 [GPU 全形状扫描说明](GPU_MATRIX_README.md)。
 在指定容器工作目录检查设备占用和映射后运行：
 
@@ -25,7 +25,9 @@ python scripts/tests/cooperative_reductions/plot_reduction_matrix.py \
   --out docs/requirements-design/cooperative-reduction/assets/reduction-matrix
 ```
 
-RS=1 仍调用屏障，本扫描用于比较三种实现及寻找已测最佳分片数；它不提供 plain/split 的收益基线。
+origin/debug 的 RS=1 仍调用屏障；独立 plain 每个 program 完成一行，关闭 cooperative launch，
+没有 partial 交换和屏障。CSV 与 SVG 同时给出 plain 耗时及 cooperative 相对 plain 的收益。
+仅补测基线使用 `--kinds plain --out 新目录`；本矩阵不提供 split 对照。
 未通过检查但已完成计时的候选仍保留诊断耗时，不能进入最佳结果。
 
 ## Split 与 cooperative 整图对照

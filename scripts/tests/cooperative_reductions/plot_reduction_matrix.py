@@ -41,8 +41,9 @@ def load(path, backend, index, gpu_count):
     device = next((r["device_name"] for r in records if "device_name" in r), backend.upper())
     result, series = [], []
     for kind in run["kinds"]:
-        scenario = f"npu-{kind}" if backend == "npu" else ("cuda" if gpu_count == 1 else f"cuda-{index + 1}")
-        label = f"A5 {kind}" if backend == "npu" else device.replace("NVIDIA GeForce ", "")
+        family = "npu" if backend == "npu" else ("cuda" if gpu_count == 1 else f"cuda-{index + 1}")
+        scenario = f"npu-{kind}" if backend == "npu" else family + ("-plain" if kind == "plain" else "")
+        label = f"A5 {kind}" if backend == "npu" else device.replace("NVIDIA GeForce ", "") + f" {kind}"
         if backend == "cuda" and gpu_count > 1:
             label += f" (run {index + 1})"
         series.append((scenario, label))
@@ -54,20 +55,35 @@ def load(path, backend, index, gpu_count):
                     valid = [r for r in selected if r["status"] == "PASS"]
                     best = min(valid, key=lambda r: r["median_us"], default={})
                     status = "PASS" if best else "NO_VALID_RS"
-                    if {r["RS"] for r in selected} != set(run["splits"]):
+                    splits = run.get("kind_splits", {}).get(kind, [1] if kind == "plain" else run["splits"])
+                    if {r["RS"] for r in selected} != set(splits):
                         status = "INCOMPLETE"
                     counts = Counter(r["status"] for r in selected)
                     result.append({"scenario": scenario, "device_name": device,
+                                   "device_uuid": best.get("device_uuid", ""),
                                    "physical_device": best.get("physical_device", ""), "backend": backend,
                                    "kind": kind, "operation": operation, "dtype": "float32", "X": rows,
+                                   "cooperative": kind != "plain", "device_run": family,
                                    "R": count, "best_RS": best.get("RS", ""), "median_us": best.get("median_us", ""),
                                    "min_us": best.get("min_us", ""), "max_us": best.get("max_us", ""),
                                    "status": status, "candidate_count": len(selected), "pass_count": len(valid),
                                    "wrong_count": counts["WRONG"], "error_count": counts["ERROR"] + counts[
                                        "PROCESS_ERROR"], "timeout_count": counts["TIMEOUT"],
                                    "over_core": best.get("over_core", ""), "block": run["block"],
-                                   "RS_candidates": "|".join(map(str, run["splits"])), "source": str(path)})
+                                   "RS_candidates": "|".join(map(str, splits)), "source": str(path)})
     return result, series
+
+
+def attach_plain(records):
+    baselines = {(r["device_run"], r["operation"], r["X"], r["R"]): r
+                 for r in records if r["kind"] == "plain"}
+    for record in records:
+        baseline = baselines.get((record["device_run"], record["operation"], record["X"], record["R"]), {})
+        compatible = bool(baseline) and baseline["status"] == record["status"] == "PASS"
+        compatible = compatible and baseline["physical_device"] == record["physical_device"]
+        compatible = compatible and baseline["device_uuid"] == record["device_uuid"]
+        record["plain_us"] = baseline["median_us"] if compatible else ""
+        record["speedup_vs_plain"] = baseline["median_us"] / record["median_us"] if compatible else ""
 
 
 def draw_times(records, series, out):
@@ -84,7 +100,8 @@ def draw_times(records, series, out):
                 selected = sorted((r for r in records if (r["scenario"], r["operation"], r["X"], r["status"]) == (
                     scenario, operation, rows, "PASS")), key=lambda r: r["R"])
                 axis.plot([r["R"] for r in selected], [r["median_us"] for r in selected],
-                          marker="o", markersize=4, color=COLORS[n % len(COLORS)], label=label)
+                          marker="o", markersize=4, color=COLORS[n % len(COLORS)], label=label,
+                          linestyle="--" if any(r["kind"] == "plain" for r in selected) else "-")
                 axis.fill_between([r["R"] for r in selected], [r["min_us"] for r in selected],
                                   [r["max_us"] for r in selected], color=COLORS[n % len(COLORS)], alpha=0.1)
             axis.set_title(f"{operation}: X={rows}")
@@ -100,13 +117,15 @@ def draw_times(records, series, out):
     handles, labels = axes[0, 0].get_legend_handles_labels()
     figure.legend(handles, labels, loc="outside lower center", ncol=min(5, len(series)))
     block = records[0]["block"]
-    figure.suptitle("fp32 (a+b) reduction: fastest measured correct RS per shape\n"
-                    f"Fixed BLOCK={block}; barrier retained at RS=1; shading = sample min/max", fontsize=13)
+    figure.suptitle("fp32 (a+b) reduction: plain and fastest measured correct cooperative RS\n"
+                    f"Fixed BLOCK={block}; plain has no grid barrier; shading = sample min/max", fontsize=13)
     export(figure, out, "best-rs-latency")
     plt.close(figure)
 
 
 def draw_splits(records, series, out):
+    records = [r for r in records if r["cooperative"]]
+    series = [(key, label) for key, label in series if any(r["scenario"] == key for r in records)]
     operations = [op for op in ("sum", "amax") if any(r["operation"] == op for r in records)]
     row_counts = sorted({r["X"] for r in records})
     counts = sorted({r["R"] for r in records})
@@ -141,23 +160,69 @@ def draw_splits(records, series, out):
     plt.close(figure)
 
 
+def draw_speedups(records, series, out):
+    records = [r for r in records if r["cooperative"] and r["speedup_vs_plain"] != ""]
+    if not records:
+        return
+    operations = [op for op in ("sum", "amax") if any(r["operation"] == op for r in records)]
+    rows = sorted({r["X"] for r in records})
+    counts = sorted({r["R"] for r in records})
+    figure, axes = plt.subplots(len(operations), len(rows), figsize=(5.2 * len(rows), 4.1 * len(operations)),
+                                squeeze=False, constrained_layout=True)
+    for i, operation in enumerate(operations):
+        for j, row in enumerate(rows):
+            axis = axes[i, j]
+            axis.axhline(1, color="#555555", linestyle="--", linewidth=1)
+            for n, (scenario, label) in enumerate(series):
+                selected = sorted((r for r in records if (r["scenario"], r["operation"], r["X"]) == (
+                    scenario, operation, row)), key=lambda r: r["R"])
+                if selected:
+                    axis.plot([r["R"] for r in selected], [r["speedup_vs_plain"] for r in selected],
+                              marker="o", markersize=4, color=COLORS[n % len(COLORS)], label=label)
+            axis.set_title(f"{operation}: X={row}")
+            axis.set_xscale("log", base=2)
+            axis.set_xticks(counts, [label_r(r) for r in counts], rotation=35)
+            axis.set_yscale("log", base=2)
+            axis.set_xlabel("R elements (K=1024)")
+            axis.set_ylabel("Plain time / cooperative time (log scale)")
+            axis.grid(alpha=0.2)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    figure.legend(handles, labels, loc="outside lower center", ncol=min(5, len(labels)))
+    figure.suptitle("Cooperative speedup over same-device plain reduction\n"
+                    "Above 1 = faster; below 1 = slower; best correct measured RS", fontsize=13)
+    export(figure, out, "cooperative-speedup")
+    plt.close(figure)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--npu", type=Path)
     parser.add_argument("--cuda", type=Path, action="append", default=[], help="may be repeated for other GPUs")
+    parser.add_argument("--npu-plain", type=Path, help="separately collected plain baseline for --npu")
+    parser.add_argument("--cuda-plain", type=Path, action="append", default=[],
+                        help="separate plain baselines, in the same order as --cuda")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if not args.npu and not args.cuda:
         parser.error("provide --npu and/or --cuda candidates.json")
+    if args.npu_plain and not args.npu:
+        parser.error("--npu-plain requires --npu")
+    if args.cuda_plain and len(args.cuda_plain) != len(args.cuda):
+        parser.error("provide one --cuda-plain for each --cuda, or use combined scans")
     records, series = [], []
     sources = ([(args.npu, "npu", 0)] if args.npu else []) + [
         (path, "cuda", i) for i, path in enumerate(args.cuda)]
+    sources += ([(args.npu_plain, "npu", 0)] if args.npu_plain else []) + [
+        (path, "cuda", i) for i, path in enumerate(args.cuda_plain)]
     for path, backend, index in sources:
         loaded, labels = load(path, backend, index, len(args.cuda))
+        if any(key in {key for key, _ in series} for key, _ in labels):
+            parser.error("duplicate series; do not add a separate baseline to a scan already containing plain")
         records.extend(loaded)
         series.extend(labels)
     if len({r["block"] for r in records}) != 1:
         parser.error("comparison requires the same BLOCK across runs")
+    attach_plain(records)
     order = {key: i for i, (key, _) in enumerate(series)}
     records.sort(key=lambda r: (("sum", "amax").index(r["operation"]), r["X"], r["R"], order[r["scenario"]]))
     args.out.mkdir(parents=True, exist_ok=True)
@@ -167,8 +232,9 @@ def main():
         writer.writerows(records)
     plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False})
     draw_times(records, series, args.out)
-    if any(r["best_RS"] for r in records):
+    if any(r["cooperative"] and r["best_RS"] for r in records):
         draw_splits(records, series, args.out)
+    draw_speedups(records, series, args.out)
     print(f"{len(records)} best-RS rows: {dict(Counter(r['status'] for r in records))}")
 
 
