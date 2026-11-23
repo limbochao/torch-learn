@@ -285,7 +285,7 @@ NPU 的 24 个错误点也已计时，但它们不能加入合法 autotune 候�
 这不足以作为满核时默认拆 R 的依据，仍需实际 Inductor 的重复性能验收。
 
 因此先以 `Q*S<=C_eff` 约束首期单批候选，再校准 S/B 的收益；不能直接采用 CUDA 的最优 S，
-也不能把 helper S=1 当作普通归约基线。正式比较应采用省去 workspace/屏障的普通路径实际选中配置，
+也不能把 helper S=1 当作普通归约基线。正式比较应保留普通路径和可用 split 的实际选中配置，
 不能将固定 BLOCK 的手写测量或尚未定位的物理卡耗时差异固化为生产阈值。
 
 候选先从 `S` 的小集合与保守 `B` 组合开始，按有效核数、输入区间、UB/活跃值和已确认的映射
@@ -315,7 +315,7 @@ Python wrapper 和 NPU Graph 作为首期运行验收，C++/AOT、多 stream 并
 | D3：owner-only 控制流 | 屏障后 owner 分支读/合并/输出，其他参与者完成；屏障不移入分支 | TA 控制流 + NPUIR 优化 | 是；功能与 G3 优化共同依赖 |
 | D4：资源与 ABI | 区分 UB 用量/容量/unknown；返回同步 scratch/lock，保持缓存/Graph ABI | NPUIR metadata → TA → runtime | ABI 影响功能；用量影响配置 |
 | D5：同步与小 partial 成本 | 定界 G1/G2/G4/G7/G8；直接复用 semaphore 时解决返回值 atomic 的软件锁成本 | NPUIR 主导，TA 提供固定对照 | 原生同步原型可继续；所选协议的性能影响默认启用 |
-| D6：模式与流水 | 验收 SIMD multibuffer/访存优化；后续补齐 pure SIMT 同步 | TA options + NPUIR pipeline | SIMD 组合需验收；pure SIMT 不阻塞首期 |
+| D6：模式、数据保留与流水 | 验收 SIMD multibuffer；评估 persistent 片内值跨同步保留的资源成本与连续归约融合；后续补齐 pure SIMT 同步 | TA options + NPUIR pipeline/资源反馈 | SIMD 组合需验收；persistent 与 pure SIMT 不阻塞首期 |
 | D7：分组同步或更轻的归约交换 | 若全 Grid phase 在多输出/多 phase 形态中成为瓶颈，再评估分组或其他交换方式 | TA API/IR + NPUIR 同步实现 | 不阻塞首期；仅作为后续按证据提出的优化 |
 
 交付给 TA/NPUIR 的最小输入是：固定 target/mode/constexpr 的 DSL、参与者/Grid、输入与输出
@@ -355,20 +355,31 @@ wrapper，见[C++ wrapper 实现][N7]。同样，正常 `torch.sum` 等 decompos
 
 ## 3. 性能模型与 NPU 触发条件建议
 
-### 3.1 相对当前普通归约建立收益模型
+### 3.1 相对现有归约路径建立收益模型
 
 以下是决策模型，不是已测得的硬件公式。记 `Q` 为实际输出方向 program 数，`C` 为该模式下
 可用于该 kernel 的物理并行单元数，`L` 为一次 launch 的相关开销。
 
 ```text
 T_ordinary ≈ L + local_reduce(R, B, live_values) with Q-way parallelism
+T_split    ≈ partial_kernel + combine_kernel + consumer_kernels
+                 + intermediate traffic and launch costs
 T_coop     ≈ L + local_reduce(R/S, B, live_values) with Q*S-way parallelism
                  + partial_store + native_barrier + combine + resource/fusion effects
 ```
 
-方案要求 cooperative 相对当前普通归约缩短完整图的执行时间；分片计算减少的时间必须覆盖
-partial、屏障、合并和可能增加的资源开销。产品收益比较须对齐相同图、输入、dtype 和运行条件，保留普通路径实际选中配置。
+方案要求 cooperative 相对现有可用路径缩短完整图时间，基线包含已有 split；不能只与每行
+单 program 的普通归约比较。分片计算减少的时间必须覆盖 partial、屏障、合并和资源开销。
+产品收益比较须对齐相同图、输入、dtype 和运行条件，保留基线实际选中配置。
 连续归约融合还会改变访存和活跃值，需另外测量，不能将单 sum 的收益直接推广到 softmax。
+
+实际 CUDA Inductor 对照已说明这个区别：`(1,1048576)` sum 的 split 为 4.128 µs、cooperative
+为 5.344 µs；`(1,32768)` 连续 4 次 softmax 分别为 18.170/7.210 µs。
+因此静态 sum 可以作为协议接入入口，其默认启用价值尚未确立；整行消费者和连续归约融合
+是必须单独评价的性能方向。单 kernel 长轴 softmax 仍会重读输入，并可能慢于 split。
+流程、生成代码与完整数据见[整图策略对照](barrier-comparison.md#45-split-与-cooperative整图对照与分层组合)。
+NPU 同算法原型中，短轴 RMSNorm 相对 split 约为 1.10 倍，长轴约持平；该原型会重读输入，
+尚未验证跨同步数据保留的价值。融合阶段应先用完整图与资源证据确定收益，再决定扩大默认准入。
 
 还应区分：
 
@@ -386,7 +397,7 @@ partial、屏障、合并和可能增加的资源开销。产品收益比较须�
 2. legality: 单归约形态、支持的 combine、统一 phase、限核后的合法 Grid/映射和 workspace
 3. parallelism: 当前 Q 不足，存在 S > 1 且每片有足够工作量
 4. resources: B、S、persistent/looping 的 UB 与寄存器资源合法
-5. profitability: 预测或实测 cooperative 优于当前普通 reduction
+5. profitability: 预测或实测 cooperative 优于现有可用路径，包括已有 split
 6. 否则回退；force 只绕过第 5 项，不能绕过前四项
 ```
 
@@ -399,10 +410,15 @@ CUDA 的 `X<=16`、`32768*X` 和以 SM 为基础的 `S` 不能直接作为 NPU �
 设置 256 KiB；这个配置常量不能单独证明一个 cooperative persistent tile 能放下，
 见[tile generator 中的容量配置][N8]。
 
-首期由 shape/能力与校准后的收益规则决定 ordinary/cooperative；cooperative 内部搜索合法的
+首期由 shape/能力与校准后的收益规则选择现有路径或 cooperative；cooperative 内部搜索合法的
 `S/B`。现有 `cached_autotune` 不会自动比较两个不同 generated body 的完整代价，不能把加上
 一个 `S` 参数视为已完成普通路径与 cooperative 的自动择优。
 在特性开关默认关闭的前提下先完成接入与校准，再确定默认启用范围。
+
+本方案不把同时开启两个开关解释为自动叠加。若后续实现显式分层，须先产生组 partial，
+在组内选择 cooperative，再用独立 kernel 汇总；这是额外的图划分与性能选择问题。
+CUDA 的 G=4 实验两点均未优于 split，当前不将其纳入首期实现。
+NPU 还必须约束组数与组内分片映射，不能借外层分组绕过 all_vector 的合法参与集合要求。
 
 autotune 预运行还应遵守 workspace/隐式 lock 的初始化契约：每个有效 partial 都由本次调用
 覆盖；不额外引入 CUDA semaphore，也不让上一候选的状态影响下一候选。

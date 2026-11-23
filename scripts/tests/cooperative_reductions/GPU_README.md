@@ -1,4 +1,30 @@
-# GPU 输出并行度补测与 SVG 更新
+# GPU 规约对照与 SVG 更新
+
+## 实际 Inductor 的 split/cooperative 整图测试
+
+`strategy_compare.py` 对比真实 CUDA Inductor 的 sum、RMSNorm、softmax 和连续 softmax，
+另支持同图不同策略、显式分层组合。它与下文的手写同步扫描是两个实验，结果 JSON 不混用。
+单独复制 [strategy_compare.py](strategy_compare.py) 即可在其他 CUDA 机器运行；已测
+PyTorch 2.13.0、Triton 3.7.1。先在目标容器核对卡 UUID，再运行：
+
+```bash
+CUDA_VISIBLE_DEVICES=GPU-实际UUID python strategy_compare.py --out cuda-strategy
+```
+
+回传 `cuda-strategy/` 后，用 `plot_strategy_compare.py` 与同目录的 `plot_barrier_suite.py`
+重建图；绘图机只需 Matplotlib：
+
+```bash
+python plot_strategy_compare.py --cuda cuda-strategy/results.json --out figures
+```
+
+生成 `cuda-strategies.svg`、PNG 与 `timings.csv`。灰色点表示未命中 cooperative、仍走 split，
+不会把开关开启误标成实际 cooperative。完整参数与分层组合命令见
+[脚本说明](README.md#split-与-cooperative-整图对照)。
+GPU_4090 上仍只使用下文指定容器、优先物理卡 6；本轮实际在
+`/home/gaojg/dev/torch-learn-strategy-20261123` 隔离 worktree 内执行。
+
+## 手写同步扫描
 
 入口为 `output_axis_cases.py`，默认 CUDA；与 NPU 共用 `barrier_suite.py` 的 kernel 和计时算法。
 需要可用的 CUDA PyTorch、支持 `launch_cooperative_grid=True` 的 Triton，以及 Python 3.10+。

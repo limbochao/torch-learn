@@ -16,6 +16,11 @@ title: 三种 x_grid_barrier 的 A5 与 RTX 4090 验证
 输出任务已满核的已测场景没有稳定的大幅收益，仍需按有效核数分别判断。
 错误配置的耗时保留为性能参考，启动失败和未完成调用单独标明，详见第 4 节。
 
+本文还包含实际 Inductor 的 split/cooperative 整图对照。**Split 可以处理归约后的整行计算**，
+cooperative 的价值在于满足资源条件时减少阶段边界并复用本片数据，而非获得 split 缺少的数学能力。
+4090 的短轴连续 softmax 达到 2.52 倍；单行长轴 softmax 则慢于 split。
+显式两层组合可以执行，但已测两点均无额外收益，见第 4.5 节。
+
 ## 1. 评估对象
 
 三种实现保持相同的调用形式 `x_grid_barrier(sem)`，同步语义与编译路径如下：
@@ -65,6 +70,7 @@ def x_grid_barrier_debug(sem):
 | 同步实现扫描、功能与并发 | 11 月 21 日，物理卡 2 | 11 月 21 日，物理卡 6 |
 | 输出并行度扫描 | 11 月 22 日，物理卡 5；device/stream 有效 Vector 限额均为 56 | 11 月 22 日，物理卡 6 |
 | 限核矩阵与同卡对照 | 11 月 23 日，物理卡 5；8 Vector 主矩阵、56 Vector 对照 | 无对应限核实验；上行 GPU 对照保持 128 SM |
+| split/cooperative 整图对照 | 11 月 23 日，物理卡 1；56 Vector 的手写匹配原型 | 11 月 23 日，物理卡 6；实际 CUDA Inductor |
 | 设备与占用核对 | ACL 反查物理编号；物理卡 2/5 开始时无驻留进程，结束时 Health OK | 通过 UUID 选择逻辑卡 0；共享使用，采样利用率 0% |
 
 GPU 6 UUID 为 `GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7`，输出并行度扫描开始时约有 10.2 GiB
@@ -80,6 +86,10 @@ GPU 6 UUID 为 `GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7`，输出并行度扫�
 每点的 `run_manifest` / `worker_manifest` 保留实际执行版本、命令与源码摘要，
 预算与同卡对照见[限核实验说明][core-limit-readme]。
 分量实验采用相同包版本与实际 NPUIR，配置及源码对应关系见[atomic 分量证据][atomic-evidence]。
+整图对照的 GPU 主矩阵脚本为 `6925163`，组合实验为 `2712491`；NPU 原型为 `e5356bd`。
+NPU 物理卡 1 经授权共享，开始时采样利用率为 0%、有约 516 MB 驻留进程；GPU 同样共享使用。
+两端脚本、输入、配置、误差和生成产物见[整图实验记录](../../../artifacts/cooperative-strategy-20261123/README.md)。
+主矩阵保存生成代码，组合实验另保存实际选中配置；这些共享卡的热数据测量不能直接作为生产阈值。
 
 ## 3. 用例和计时方法
 
@@ -488,6 +498,205 @@ TA/NPUIR 若要直接复用 semaphore，需要解决返回值 atomic、高效 ac
 证据：[分量测量与版本][atomic-evidence]、[返回值 atomic 同步处理][atomic-source]、
 [无序锁实现][lock-source]、[长 sum LLVM IR][atomic-sum-llvm]、[atomic LLVM IR][atomic-llvm]、
 [轮询计数][poll-counts]。
+
+### 4.5 Split 与 cooperative：整图对照与分层组合
+
+#### 两种策略在哪一层互斥
+
+对**同一条规约**，PyTorch `v2.13.0` 默认在多 kernel split 和单 kernel cooperative 之间选择。
+`Reduction.num_splits()` 在 cooperative 选择条件成立时关闭该规约的 `should_split`；同时开启
+`split_reductions` 和 `triton.cooperative_reductions` 不会自动变成两级分片。
+未命中 cooperative 的其他规约仍可走 split，不能理解成整个图关闭 split。
+代码依据：[配置说明][strategy-config]、[逐规约选择][strategy-ir-choice]。
+
+两者共有的思路是沿 R 分片，区别在于各阶段如何衔接：
+
+```mermaid
+flowchart LR
+    A[输入一行] --> B[各片计算局部统计量]
+    B --> C[Split：结束当前 kernel]
+    C --> D[后续 kernel 合并统计量]
+    D --> E[消费者 kernel 处理整行]
+    B --> F[Cooperative：kernel 内同步]
+    F --> G[各片取得整行统计量]
+    G --> H[在同一 kernel 继续处理本片数据]
+```
+
+图展示 softmax 等整行消费者的典型阶段，不要求所有计算固定生成 3 个 kernel。
+实际 split 的实现创建并 realize 中间 partial，再创建合并规约；中间数组通常只有
+`X×分片数` 个统计量，不必写出整个输入大小的临时张量。源码见[多阶段规约构造][strategy-multilayer]。
+
+同一个图中，两种策略可以分别服务于不同规约。例如实际测试：
+
+```python
+# a、b 均为 (32, 32768)
+return (a + b).sum(), (a - b).sum(-1)
+```
+
+全局 sum 的 `X=1,R=1048576` 命中 cooperative；逐行 sum 的 `X=32` 不命中，仍 split。
+生成产物确实为 **1 个 cooperative kernel + 2 个 split kernel**，精度通过。
+但共存不等于加速：纯 split 为 5.242 µs，共存为 9.414 µs。
+纯 split 的首个 kernel 融合了 add/sub 两支的 partial，共存版将这两支分开；
+这说明策略改变还会影响图内融合，不能简单累加单规约收益。
+证据：[共存生成代码](../../../artifacts/cooperative-strategy-20261123/cuda-mixed/mixed-x32-r32768-cooperative/output_code_0.py)、
+[纯 split 生成代码](../../../artifacts/cooperative-strategy-20261123/cuda-mixed/mixed-x32-r32768-split/output_code_0.py)。
+
+#### 整行消费者：Split 可以处理，cooperative 是否更快要实测
+
+本组使用真实 `torch.compile(fullgraph=True, dynamic=False)`，不替换 CUDA codegen 或 helper。
+比较关闭两种分片的 plain、仅开启 split、开启 cooperative 且保留未命中时 split 回退三种策略，
+`force_cooperative_reductions=False`。完整计算为：
+
+```python
+z = a + b
+sum_result = z.sum(-1)
+rmsnorm_result = z * torch.rsqrt((z * z).mean(-1, keepdim=True) + 1e-5)
+softmax_result = torch.softmax(z, -1)
+# chain 是另一个独立函数，从 z=a+b 开始
+for _ in range(4):
+    z = z + torch.softmax(z, -1)
+```
+
+RMSNorm 是“求每行平方均值，再用同一个缩放系数乘回该行全部元素”的例子；
+chain 是 4 次存在前后依赖的整行更新，不能将 4 次归约同时独立求出。
+以下均为 fp32 连续输入、Graph + device Event 的完整调用中位数，单位 µs。
+倍率为 split/cooperative，大于 1 表示 cooperative 快：
+
+| 计算 | X | R | split | cooperative 开关开启 | 倍率 | 计算 kernel 数：split → 开启后 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| sum | 1 | 32768 | 2.794 | 2.995 | 0.93× | 2 → 1 |
+| sum | 1 | 1048576 | 4.128 | 5.344 | 0.77× | 2 → 1 |
+| sum | 4 | 32768 | 2.845 | 2.848 | 1.00× | 2 → 2，回退 split |
+| sum | 4 | 1048576 | 9.744 | 10.432 | 0.93× | 2 → 1 |
+| RMSNorm | 1 | 32768 | 3.894 | 2.841 | 1.37× | 3 → 1 |
+| RMSNorm | 1 | 1048576 | 8.176 | 7.769 | 1.05× | 3 → 1 |
+| RMSNorm | 4 | 32768 | 4.157 | 4.159 | 1.00× | 3 → 3，回退 split |
+| RMSNorm | 4 | 1048576 | 21.552 | 20.058 | 1.07× | 3 → 1 |
+| softmax | 1 | 32768 | 4.982 | 3.251 | 1.53× | 3 → 1 |
+| softmax | 1 | 1048576 | 8.544 | 10.355 | 0.83× | 3 → 1 |
+| softmax | 4 | 32768 | 5.190 | 5.190 | 1.00× | 3 → 3，回退 split |
+| softmax | 4 | 1048576 | 23.075 | 21.226 | 1.09× | 3 → 1 |
+| 4 次 softmax 更新 | 1 | 32768 | 18.170 | 7.210 | 2.52× | 9 → 1 |
+| 4 次 softmax 更新 | 1 | 1048576 | 24.070 | 28.477 | 0.85× | 9 → 1 |
+| 4 次 softmax 更新 | 4 | 32768 | 18.765 | 18.781 | 1.00× | 9 → 9，回退 split |
+| 4 次 softmax 更新 | 4 | 1048576 | 59.312 | 52.144 | 1.14× | 9 → 1 |
+
+主矩阵共 48 组全部通过：4 种计算 × 4 个 shape × 3 种策略。
+X=4/R=32768 不满足未强制时的 `R>=32768*X`，所以灰色回退点只说明两个开关保留相同路径。
+表中“1 个 kernel”指 Triton 计算 kernel；cooperative wrapper 还发射 semaphore 清零操作，
+已包含在计时中，不应称为整个调用只有一次设备任务。
+精度为 3 组变化随机输入加计时后检查，参考是相同设备上的 eager fp32；sum 使用
+`atol=0.02,rtol=3e-4`，RMSNorm/chain 为 `3e-5,3e-4`，softmax 为 `1e-8,3e-4`。
+它验证这些有限输入下的数值一致性，不覆盖 NaN/Inf、动态 shape、训练或全部 dtype。
+这里的时间覆盖完整图捕获的设备序列；Python 调度、CPU 内存分配和非 Graph 调用延迟另待测量。
+CUDA 的计时后精度检查是另一次 compiled 调用，未单独保留最后一次 Graph replay 的输出。
+
+![实际 CUDA Inductor 的 split 与 cooperative 对照](assets/strategy-comparison/cuda-strategies.svg)
+
+**生成代码给出的收益依据与边界：**
+
+- 短轴 RMSNorm 的 cooperative 是 persistent，输入 `tmp2=a+b` 在同步前算出、同步后直接乘
+  `rsqrt(mean+eps)`，没有重新 load 输入。Split 则为 partial、合并、整行缩放三个 kernel，
+  最后一阶段重新读输入。这是本片数据跨归约保留的具体例子。
+- 短轴 chain 的 cooperative 在同一计算 kernel 内保留本片值、执行 4 轮跨片同步；
+  split 实际为 9 个计算 kernel。减少阶段边界并保留片内状态，给出了 2.52 倍的实测收益。
+- 长轴 softmax 的 cooperative 采用循环，统计后仍重新读取 a、b；split 也只保存小型
+  `(max,exp_sum)` 数组和行统计量，再重读输入。此时单 kernel 并不自动省去一轮输入读取，
+  且同步、分片数、重复合并和资源选择都会影响时间。当前测量不能把退化精确归因于某一项。
+
+可直接对照
+[短轴 RMSNorm](../../../artifacts/cooperative-strategy-20261123/cuda/rmsnorm-x1-r32768-cooperative/output_code_0.py)、
+[短轴 chain](../../../artifacts/cooperative-strategy-20261123/cuda/chain-x1-r32768-cooperative/output_code_0.py)、
+[长轴 softmax 的 split](../../../artifacts/cooperative-strategy-20261123/cuda/softmax-x1-r1048576-split/output_code_0.py)
+与[cooperative](../../../artifacts/cooperative-strategy-20261123/cuda/softmax-x1-r1048576-cooperative/output_code_0.py)。
+所有原始样本、误差与实际 profiler 设备事件见
+[CUDA 结果](../../../artifacts/cooperative-strategy-20261123/cuda/results.json)。
+
+#### 显式分层：外层 split，组内 cooperative
+
+这需要主动构造两个阶段，默认开关不会自动完成。对同一个 sum，本次实验保持数学计算不变，
+先将一行分成 G=4 组，每组内部使用 cooperative 求和，再用第二个 kernel 合并 4 个组 partial：
+
+```python
+# 两个独立 torch.compile callable，阶段间确有 kernel 边界
+def partial(a, b):
+    return (a + b).reshape(1, 4, R // 4).sum(-1)  # (1,4)
+
+def finish(group_partial):
+    return group_partial.sum(-1)                # (1,)
+```
+
+```mermaid
+flowchart LR
+    A[原始一行] --> B[外层分为 4 组]
+    B --> C[每组内部 32 片 cooperative 求局部和]
+    C --> D[写出 4 个组 partial，结束第一 kernel]
+    D --> E[第二 kernel 合并为整行和]
+```
+
+实际第一阶段的配置为 `XBLOCK=1,RSPLIT=32`，共 `4×32=128` 个逻辑 block，
+确实包含 cooperative decorator 与一次 `x_grid_barrier`；第二阶段是普通小归约。
+不分外层组的 cooperative 则使用 `RSPLIT=64`。组合与两种基线在同一批次实测，单位 µs：
+
+| R，X=1 | 仅 split | 仅 cooperative | 外层 4 组 + 组内 cooperative | 相对 split | 精度 |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 1048576 | 4.131 | 5.344 | 5.916 | 0.70× | 三者通过 |
+| 8388608 | 16.528 | 17.888 | 18.608 | 0.89× | 三者通过 |
+
+**能够组合，但本次没有额外收益。** 组合仍需要一次跨片同步和第二次 launch，
+多一级分组本身不会创造收益；同时开启两个开关也不等同于这段显式分层代码。
+只有分组确实改善资源/并行布局、减少昂贵的全局 partial 处理，或组内连续归约可复用数据时，
+才有进一步研究价值。这些是待验证条件，不能从当前两点声称已找到获益 shape。
+本次结果支持先研究整行消费者的融合价值，暂不增加自动分层策略。
+
+NPU 若实现这种组合，仍需使第一阶段所有组的参与者符合 all_vector 的预算和映射约束；
+不能因为每组单独小于核数，就允许同一个 kernel 的总参与集合超预算。
+原始数据及选中配置见[分层对照](../../../artifacts/cooperative-strategy-20261123/cuda-hybrid/results.json)，
+第一、第二阶段代码分别保存在各 hybrid case 的 `output_code_0.py`、`output_code_1.py`。
+
+#### NPU 对照的含义
+
+NPU 尚无实际 Inductor cooperative 接入，因此本次对 sum、RMSNorm、softmax 使用手写匹配原型：
+split 为“局部统计量 kernel + 合并/整行输出 kernel”，cooperative 保持相同分片、BLOCK、
+统计/合并/输出算法，在同一个 kernel 中以 `all_vector` 衔接。
+RMSNorm 与 softmax 两个原型都重读输入，尚未实现 CUDA 短轴 persistent 的片内数据保留，
+不能把 CUDA 的 1.37/1.53/2.52 倍直接当作 NPU 预期。
+脚本为 [npu_strategy_compare.py](../../../scripts/tests/cooperative_reductions/npu_strategy_compare.py)。
+
+矩阵为 X=1，R=32768/1048576，S=1/2/4/8/16/32/56，三种计算，共 78 条记录全部通过精度检查。
+S=1 是不分片、无屏障的 plain；下面分别从 S>1 中选择各策略最快的正确配置，单位 µs：
+
+| 计算 | R | plain | split：S / 时间 | cooperative：S / 时间 | split / cooperative |
+| --- | ---: | ---: | --- | --- | ---: |
+| sum | 32768 | 4.063 | 4 / 2.957 | 8 / 2.798 | 1.06× |
+| sum | 1048576 | 101.726 | 56 / 7.801 | 56 / 7.638 | 1.02× |
+| RMSNorm | 32768 | 7.661 | 8 / 4.075 | 8 / 3.719 | 1.10× |
+| RMSNorm | 1048576 | 208.470 | 56 / 10.401 | 56 / 10.533 | 0.99× |
+| softmax | 32768 | 29.516 | 8 / 6.122 | 8 / 5.802 | 1.06× |
+| softmax | 1048576 | 448.351 | 56 / 15.990 | 56 / 15.870 | 1.01× |
+
+**这组 NPU 原型中，split 已取得大部分归约分片收益。** 短轴 RMSNorm 的 cooperative
+相对 split 约为 1.10 倍，softmax 约为 1.06 倍；长轴基本接近。
+它们并未复现 CUDA 短轴 persistent/多阶段融合的大幅收益，后续应验证片内数据跨同步保留、
+UB/寄存器用量和连续归约融合，而非仅用 all_vector 将两 kernel 合成一个。
+这是一项待实现/测量的性能方向，不能由当前原型推断为 TA/NPUIR 缺少该功能。
+两种策略的 metadata 均为 `auto_blockify_enabled=True`，本组未引入 atomic 软件锁路径。
+
+计时为 NPU Graph 每图 16 次调用、每样本 10 次 replay、7 组中位数，精度方法与上述 GPU 一致，
+参考改为 NPU eager fp32。S 的完整曲线与样本范围如下；原型固定 tile、无 autotune，
+不代表实际 Inductor 的最佳 split 或 cooperative 实现。
+
+![A5 同算法的两 kernel 与单 kernel 同步对照](assets/strategy-comparison/npu-strategies.svg)
+
+NPU 原始 78 点及每个 case 的 metadata/TTIR/adapter 保留在
+[NPU 原型结果](../../../artifacts/cooperative-strategy-20261123/npu/results.json)。
+部分配置的样本范围较宽，其中两个 sum 点做了定向复测，精度均通过：
+R=32768/S=56 的 cooperative 中位数从 54.063 降至 5.921 µs，
+R=1048576/S=4 的 split 从 68.326 降至 28.070 µs；原次样本范围分别为 20.511～118.147、
+27.921～131.408 µs。原始值保留在 JSON，图和 CSV 使用复测值，未改变上表各策略的最优配置。
+干扰来源未定位，不能将这两个原次高值解释成固定同步成本。
+其他配置的波动仍完整显示在图中，因此本组仅用于比较已测原型，不据此制定生产阈值。
+图表的 CSV 同时保留所用来源路径，复测说明见[实验记录](../../../artifacts/cooperative-strategy-20261123/README.md)。
 
 ## 5. 本核屏障在编译产物中的体现
 
@@ -960,6 +1169,11 @@ Vector/Scalar 访存指令的依赖；文档约束在 `scope` 内使用。它不
 采集命令、选卡与参数见[脚本说明](../../../scripts/tests/cooperative_reductions/README.md)，
 其他 GPU 的便携采集与回传见[GPU 使用说明](../../../scripts/tests/cooperative_reductions/GPU_README.md)。
 
+实际 CUDA Inductor 整图对照使用
+[strategy_compare.py](../../../scripts/tests/cooperative_reductions/strategy_compare.py)，
+图表由 [plot_strategy_compare.py](../../../scripts/tests/cooperative_reductions/plot_strategy_compare.py)
+直接读取原始 JSON 刷新；具体命令见脚本说明中的“Split 与 cooperative 整图对照”。
+
 仅重新绘图不需要计算卡。下面两条命令分别重建两组图，输出并行度使用当前 154 点结果：
 
 ```bash
@@ -989,6 +1203,9 @@ python scripts/tests/cooperative_reductions/plot_output_axis_cases.py \
 [当前采集环境记录][current-device-access]；机制背景见[NVIDIA 故障说明][nvidia-gpu-access]。
 
 [npu-manifest]: ../../../artifacts/cooperative-barrier-comparison-20261121/npu/bench-shared/manifest.json
+[strategy-config]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/config.py#L999
+[strategy-ir-choice]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/ir.py#L1410
+[strategy-multilayer]: https://github.com/pytorch/pytorch/blob/cf30153c4c131c8164ee7798e5022d810682e2cb/torch/_inductor/ir.py#L2029
 [gpu-manifest]: ../../../artifacts/cooperative-barrier-comparison-20261121/cuda/bench-shared/manifest.json
 [npu-bench]: ../../../artifacts/cooperative-barrier-comparison-20261121/npu/bench-shared/bench.json
 [gpu-bench]: ../../../artifacts/cooperative-barrier-comparison-20261121/cuda/bench-shared/bench.json

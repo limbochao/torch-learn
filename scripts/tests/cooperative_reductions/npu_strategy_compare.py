@@ -250,10 +250,12 @@ def main():
                         command = [sys.executable, str(Path(__file__).resolve()), "--worker", "--out", str(case),
                                    "--workloads", workload, "--rows", rows, "--rnumels", rnumel, "--splits", splits,
                                    "--physical-device", str(args.physical_device), "--block", str(args.block),
-                                   "--batch", str(args.batch), "--replays", str(args.replays), "--samples", str(args.samples)]
+                                   "--batch", str(args.batch), "--replays", str(args.replays),
+                                   "--samples", str(args.samples)]
                         with (case / "run.log").open("w") as stream:
                             try:
-                                subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT, timeout=args.case_timeout)
+                                subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT,
+                                               timeout=args.case_timeout)
                                 records = json.loads((case / "result.json").read_text()) if (
                                     case / "result.json").exists() else [{"status": "PROCESS_ERROR"}]
                             except subprocess.TimeoutExpired:
@@ -262,7 +264,8 @@ def main():
                         record.update(workload=workload, X=int(rows), R=int(rnumel), S=int(splits))
                         results.append(record)
                     write_json(args.out / "results.json", results)
-                    print(workload, rows, rnumel, splits, [(r.get("strategy"), r["status"]) for r in records], flush=True)
+                    print(workload, rows, rnumel, splits, [(r.get("strategy"), r["status"]) for r in records],
+                          flush=True)
     return 0 if all(r["status"] == "PASS" for r in results) else 1
 
 

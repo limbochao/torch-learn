@@ -1,5 +1,77 @@
 # Cooperative reduction 调研探针
 
+## Split 与 cooperative 整图对照
+
+`strategy_compare.py` 使用实际 CUDA Inductor，不替换 codegen 或同步 helper。
+已测版本是 PyTorch `2.13.0+cu126`（提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`）、
+Triton 3.7.1、CUDA 12.6。使用 Inductor 私有接口，其他版本先运行小矩阵核对生成代码。
+单独复制该脚本即可在其他 CUDA 环境运行；无需 torch_npu 或本地 PyTorch 源码。
+在指定容器工作目录同步代码、检查 UUID 和占用后运行，输出目录建议放在数据挂载盘：
+
+```bash
+# 主矩阵：sum、RMSNorm、softmax、4 次依赖 softmax；48 个独立进程 case
+CUDA_VISIBLE_DEVICES=GPU-实际UUID python -u scripts/tests/cooperative_reductions/strategy_compare.py \
+  --out artifacts/cooperative-strategy-20261123/cuda
+
+# 同一图的不同规约分别命中 cooperative 和 split
+CUDA_VISIBLE_DEVICES=GPU-实际UUID python -u scripts/tests/cooperative_reductions/strategy_compare.py \
+  --workloads mixed --rows 32 --rnumels 32768 --strategies plain,split,cooperative \
+  --out artifacts/cooperative-strategy-20261123/cuda-mixed
+
+# 显式两阶段：外层 4 组，第一阶段内部用 cooperative，第二阶段普通汇总
+CUDA_VISIBLE_DEVICES=GPU-实际UUID python -u scripts/tests/cooperative_reductions/strategy_compare.py \
+  --workloads sum --rows 1 --rnumels 1048576,8388608 \
+  --strategies split,cooperative,hybrid --groups 4 \
+  --out artifacts/cooperative-strategy-20261123/cuda-hybrid
+```
+
+`--strategies plain,split,cooperative` 分别关闭两种分片、仅开 split、两者开关均开但不强制。
+最后一种仍可能回退 split；以 `source_summary.cooperative_decorators` 和生成源码判断。
+每图 16 次完整调用、20 次 replay、7 个 device Event 样本；输入/输出、workspace 沿用
+compiled wrapper，计时包含其 semaphore 清零等设备工作，排除编译、eager 检查和 Python/CPU 分配。
+保留实际设备事件，kernel 数
+只统计生成的计算 kernel，不含 semaphore 清零。每点有三组变化输入和计时后的 eager fp32 对照。
+CUDA 计时后另调用一次检查结果，未单独保存最后一次 Graph replay 的输出。
+`--resume` 读取已有 result，不会重跑已有错误点；针对复测应使用新输出目录。
+
+`npu_strategy_compare.py` 是匹配算法的 A5 SIMD 原型，非 NPU Inductor 集成结果。
+两 kernel split 与一 kernel all_vector 使用相同 `BLOCK=1024`、分片和统计量合并，整行输出均重读输入。
+在 NPU_A5 Docker、`pta_213_case` 中按当前授权、时段和占用选卡；下例物理卡 1 需要仍满足选卡条件：
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=1 NPU_DEVICE_LIMIT=28,56 \
+  python -u scripts/tests/cooperative_reductions/npu_strategy_compare.py \
+  --physical-device 1 --out artifacts/cooperative-strategy-20261123/npu
+```
+
+默认 X=1、R=32768/1048576、S=1/2/4/8/16/32/56；S=1 是无 workspace/屏障的 plain，
+其余分别测 split/cooperative，共 78 条结果。NPU Graph 每图 16 次调用、每样本 10 次 replay、
+7 组中位数；同样检查三组输入与计时后精度，参考为 NPU eager fp32。
+脚本核对 ACL 物理映射，要求 `X*S` 不超过设备属性所报有效 Vector 核数；
+这只是本实验的保守配置约束，不能替代完整的映射、前进性与并发契约。
+
+取回结果后，使用 Matplotlib 在无设备机器上刷新文档同名 SVG/PNG 与 CSV：
+
+```bash
+python scripts/tests/cooperative_reductions/plot_strategy_compare.py \
+  --cuda artifacts/cooperative-strategy-20261123/cuda/results.json \
+  --cuda-mixed artifacts/cooperative-strategy-20261123/cuda-mixed/results.json \
+  --cuda-hybrid artifacts/cooperative-strategy-20261123/cuda-hybrid/results.json \
+  --npu artifacts/cooperative-strategy-20261123/npu/results.json \
+  --npu-recheck artifacts/cooperative-strategy-20261123/npu-recheck-short/results.json \
+  --npu-recheck artifacts/cooperative-strategy-20261123/npu-recheck-long/results.json \
+  --out docs/requirements-design/cooperative-reduction/assets/strategy-comparison
+```
+
+`--npu`、各 CUDA 输入均可单独省略；只画 GPU 时仅需 CUDA JSON。
+`--npu-recheck` 为可选的定向复测输入，按 shape/S/策略替换图和 CSV 中的对应点；
+原始 JSON 不变。上面两条复测仅针对本轮已观察到的噪声点，没有复测文件时省略这两个参数。
+绘图脚本与 `plot_barrier_suite.py` 放在同一目录。保留各 case 的 `result.json`、
+`output_code_*.py` / `*.ttir` / `*.ttadapter` 及总表、manifest；不需回传缓存。
+结果解释见[整图对照](../../../docs/requirements-design/cooperative-reduction/barrier-comparison.md#45-split-与-cooperative整图对照与分层组合)。
+
+## NPU 基础能力与同步探针
+
 `probe.py` 用于 A5 上的定向研究，结果解释见
 [需求分析](../../../docs/requirements-design/cooperative-reduction/requirements.md)。
 不修改已安装的 PyTorch、torch_npu 或 Triton。
