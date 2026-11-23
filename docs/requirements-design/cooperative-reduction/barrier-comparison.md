@@ -12,6 +12,11 @@ title: Cooperative reduction 的同步、性能与分核边界
 见第 4.2 节。cooperative 每组选择最快正确 RS，plain 每行由一个 program 完成。
 这是固定 BLOCK 的手写 kernel 对照，差距同时受分片、同步和编译映射影响。
 
+下一轮改为 NPU plain、GPU plain/cooperative 从 `torch.compile` 入口测试，
+NPU origin/debug 使用 DSL 联合搜索 RS 与 BLOCK。GPU 的强制测试与自然选择分别记录，
+不把回退路径计为 cooperative。具体分组、调优、计时和产物要求见
+[方案第 4.2 节](design.md#42-全形状性能测试方案调整)；当前表格和 SVG 尚未按新方案重测。
+
 **all_vector 可作为受限 cooperative 场景的 NPU 专用同步方案，但不能全局替换上游 x_grid_barrier。**
 核数内的同地址对照中，两种原生改写耗时接近；额外本核屏障没有解决 8/56 核映射中的组跨批问题，
 也没有恢复按输出组独立同步的语义。错误配置的耗时保留为参考，启动失败和未完成调用单独标明。

@@ -733,6 +733,11 @@ cooperative 为 all-read 合并，RS=1 仍带屏障；debug 为 `tl.debug_barrie
 CUDA 的缓存容量变化与 NPU AutoBlockify 差异还会影响耗时；
 完整图是否优于已有 split 仍以上面的实际 Inductor 实验为依据。
 
+下一轮性能评估改用实际 `torch.compile` 产物作为 NPU plain 和 GPU 的测试对象，
+NPU cooperative 暂用联合搜索 RS/BLOCK 的 DSL 原型。这样可以避免只与固定 BLOCK 的手写 plain 比较。
+调优后的 DSL 收益仍属于原型证据；GPU 强制进入 cooperative 的全形状结果与自然选择分开记录。
+具体测量分组与结果口径见[方案第 4.2 节](design.md#42-全形状性能测试方案调整)，现有数值尚未更新。
+
 ### 6.2 性能验收与待量化指标
 
 下表将验收方式与默认启用前需要确定的指标放在一起。CUDA 已有实际 Inductor 对照；

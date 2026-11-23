@@ -463,6 +463,156 @@ V 做向量计算，MTE2 将 GM 数据搬入 UB，MTE3 将 UB 数据搬出到 GM
 工具的 A5 支持、`PipeTimeline`/`InstrTimeline` 参数及两者分开采集的约束见
 [MindStudio 算子工具指南][profiler-guide]；Triton 仿真方法见[TA 性能分析指南][ta-profiling]。
 
+### 4.2 全形状性能测试方案调整
+
+**下一轮以实际 Inductor 产物作为 NPU plain 和 GPU 的测试对象；NPU cooperative 暂用调优后的 DSL。**
+现有 270 行结果来自两端手写 kernel，plain 固定 `BLOCK=1024`，cooperative 只搜索 RS。
+它回答固定算法下分片、同步和编译映射的影响，不能说明相对实际 Inductor 配置的收益。
+以下为待实现、待重测的方案，现有 CSV/SVG 仍代表原实验。
+
+#### 测试分组与编译入口
+
+保留 fp32、sum/amax、`X=1/7/56`、`R=4K～1M` 逐档翻倍，共 54 个操作/形状组合。
+两端从相同的 PyTorch 计算定义出发：
+
+```python
+def sum_fn(a, b):
+    return (a + b).sum(dim=-1)
+
+
+def amax_fn(a, b):
+    return (a + b).amax(dim=-1)
+```
+
+| 结果组 | 测试入口与策略 | 配置选择 |
+| --- | --- | --- |
+| NPU plain | `torch.compile`；关闭 cooperative、force 和上游 split reduction | NPU Inductor 的 tiling/autotune |
+| NPU origin | 手写 DSL，保留原始 semaphore 协议 | 联合搜索 RS、BLOCK |
+| NPU debug | 手写 DSL，保留两侧本核屏障与 `all_vector` | 独立搜索相同的 RS、BLOCK 集合 |
+| GPU plain | `torch.compile`；关闭 cooperative、force 和上游 split reduction | CUDA Inductor 的 tiling/autotune |
+| GPU cooperative | `torch.compile`；开启 cooperative 和 force，关闭上游 split reduction | 上游 RS 选择与局部配置调优 |
+
+编译入口统一使用 `backend="inductor", fullgraph=True, dynamic=False`，并显式设置
+`max_autotune=True`。不使用会额外改变 Graph 策略的编译 mode；Graph 计时由测试程序统一控制。
+CUDA 显式关闭 `triton.cudagraphs`，NPU 同样关闭后端内部的自动 Graph 包装，避免重复捕获。
+记录后端实际生成和测过的候选数量，不能仅凭设置了 `max_autotune` 就称为充分调优。
+NPU 若使用额外的 tiling 搜索开关，也须记录并固定；不将编译器内部候选强行改成 DSL 的配置集合。
+
+这里的 plain 表示关闭上述两种上游策略，**不要求编译产物必须是一行一个 program、一个 kernel，
+或与旧手写 plain 使用相同 BLOCK**。NPU 已有的分核、向量化和融合照常保留，以实际产物解释性能。
+NPU baseline 不通过强开尚未实现的 cooperative 来测试，也不手工改写其生成 DSL。
+本轮先隔离 cooperative 与普通归约的差异；产品默认启用前，仍须与后端现有默认策略比较，
+包括可用 split。该验收要求见第 3.1 节，本轮不扩展 split 的独立参数扫描。
+
+**GPU 的强制测试与自然选择分开记录。** 当前上游选择规则为：`X<=8` 时要求 `R>=32768*X`；
+`8<X<=16` 时要求 `R>=2097152`；`X>16` 不自然选择 cooperative。
+本矩阵中 X=1 从 R=32K 起满足轴长条件，X=7 从 R=256K 起满足，X=56 全部不满足。
+因此仅打开开关无法得到全 54 组 cooperative 性能；全覆盖使用 force，并在表头、CSV 和图例中写明。
+另以 `force=False` 编译、执行并核对生成路径，保存自然命中与回退结果；不把普通路径的耗时填成
+cooperative 耗时。实际 `RS=1`、屏障被消去的情况也单独标注为未分片。
+规则对应 PyTorch `v2.13.0` 的提交 `cf30153c4c131c8164ee7798e5022d810682e2cb`，
+见[选择函数][matrix-choices]。
+
+GPU 仍由上游按设备 SM 数和 X 选择 RS，再调优局部归约配置；**本轮不手工修改 GPU 的 RS**。
+该实现为局部配置候选填入相同 RS，并不默认比较多个 RS，见
+[cooperative runtime 实现][matrix-runtime]。
+因此新表写“实际选中配置”，不能继续把 GPU 结果称为“搜索后的最佳 RS”。
+跨 GPU 运行时记录实际安装版本与源码，不能假定其他版本使用相同的选择函数或候选集。
+
+#### NPU DSL 如何手动调优
+
+本轮保持 all-read 合并、连续分片、SIMD 模式和同步协议不变，先搜索影响明确的两个参数：
+
+| 参数 | 初始候选 | 作用 |
+| --- | --- | --- |
+| RS | 1、2、4、8、16、32、48、56 | 每行分片数，改变并行度、每片工作量和同步参与者 |
+| BLOCK | 256、512、1024、2048、4096、8192 | 每个 program 一轮处理的元素数，改变循环次数、归约代价和 UB 需求 |
+
+RS 与 BLOCK 联合枚举，初始每种 helper、每种操作/形状最多 48 个配置，两种 helper 共 5184 个。
+不能先在 BLOCK=1024 下选 RS，再只调整这个 RS 的 BLOCK，否则可能错过更好的组合。
+若最佳 BLOCK 落在搜索边界且资源允许，再向相邻档扩展；RS 另补有效核预算边界及其附近的候选。
+“最佳”限定为所公布搜索空间内、检查通过并复测后的最佳，不代表全局最优。
+
+NPU SIMD 的 `num_warps` 先保持现有 DSL 的 4，并完整记录后端实际选项；
+只有确认某个额外选项影响生成代码、资源或流水安排后，才把它加入搜索。
+不直接照搬 CUDA 的 warps/stages 参数组合，也不同时更换合并算法或编译模式。
+后续 owner-only、persistent 或数据保留优化另做算法对照，避免与本轮 tiling 收益混合。
+
+每个配置先编译和验证，再粗测；每组最快的三个正确候选使用完整计时设置复测。
+选中配置在新进程中恢复并复测至少三轮，plain 与候选交替测量，最终报告复测中位数与波动范围，
+不将探索阶段偶然最低的耗时作为最终结果。原始候选、选择依据和复测结果均保留。
+
+同步对照保留两个问题：同一 RS/BLOCK 的 origin/debug 差异，以及两者分别调优后的最佳性能。
+前者用于分析同步与编译映射，后者用于评估各自实现能达到的水平；二者都包含完整 kernel，
+不能解释为裸屏障指令的耗时。
+
+**超核配置继续保留实验结果，同时标明接入条件。** debug 的首期可接入候选仍要求
+`Q*RS<=C_eff` 且后端映射满足全体同步契约，本轮 DSL 的 `XBLOCK=1`，所以 `Q=X`。
+例如 56 核、X=56 时没有 RS>1 的首期单批候选；实验通过的多批结果不能自动放入这一集合。
+origin 按其 semaphore 协议与实际映射单独判断，不套用 debug 的同步语义。
+已完成的错误点保留性能；超时点没有有效设备耗时。RS=1 的 DSL 保留作协议开销对照，
+但不冒充无屏障 plain，也不计为实际分片收益。
+汇总同时给出“最快正确配置”和“满足首期接入条件的最快配置”；后者无候选时写明原因，
+不删掉超核、错误或超时证据。NPU RS=64 仍沿用独立诊断范围，不自动加入本轮全量调优。
+
+#### 统一测量范围与正确性
+
+compile 分组测量整个编译 callable，包含该图实际生成的全部设备 kernel 和必要的初始化操作；
+DSL 分组测量同一计算的完整调用，包括算法要求的 workspace/semaphore 设备初始化。
+合法复用同步状态时记录其复用规则。内存分配策略与临时空间大小也要保存，不能只取最快的局部 kernel。
+编译、autotune、CPU 参考、输入构造和结果回传放在计时外；编译/调优耗时单独报告。
+
+两端使用相同种子、输入内容与 CPU 参考：先执行 fp32 加法，再用 fp64 sum 或 amax 作参考。
+sum 继续采用 `atol=0.02, rtol=2e-4`，有限输入的 amax 要求精确一致。
+每个配置检查首次输出、最后一次 Graph replay 输出和两组变化输入；DSL cooperative 另外执行
+相同配置下的多 phase 严格整数交换，验证 partial 可见性与 workspace 重用。
+检查失败但成功完成的配置可保留诊断时间，不能参与最快正确配置选择。
+
+主结果仍使用 Graph + device Event、每图 16 次调用、每样本 10 次 replay、7 个样本中位数；
+慢点沿用按 pilot 减少 batch/replays 的规则，并记录实际值。
+compile 的自动调优和所有懒初始化须在捕获前完成；测试程序负责捕获，避免叠加内部 Graph replay。
+这是相同地址反复运行的缓存口径，跨设备比较保留各自缓存差异，不据此推导冷数据性能。
+无 Graph 的完整调用开销用于后续验收，不混入本轮主曲线。
+
+NPU plain 与 DSL 是不同生成路径，其差异还可能包含融合、编译模式、分核与访存安排。
+新结果能说明“当前实际普通路径”与“已调优 cooperative 原型”的差距，
+仍不能称为 NPU Inductor 已集成 cooperative 的实测收益。
+GPU 则测实际 Inductor 的两条路径，但强制矩阵的收益不等于默认选择收益。
+
+#### 脚本改造与结果更新
+
+沿用现有脚本，计划修改点如下；下列能力尚未加入当前便携包。
+
+| 组件 | 需要修改的内容 |
+| --- | --- |
+| `reduction_matrix.py` | 增加 compile 入口与 NPU DSL 多 BLOCK 搜索；按完整配置隔离失败、续跑和汇总 |
+| 现有 compile worker | 复用 `strategy_compare.py` 的 CUDA 产物采集和 `probe.py` 的 NPU 编译入口；补齐 amax、统一参考和最后一次 replay 校验 |
+| 配置与产物保存 | 记录请求策略、实际路径、全部 launch 配置、候选数量；保存完整 wrapper/DSL、metadata、后端可导出的 IR |
+| `plot_reduction_matrix.py` | 支持 compile 与 DSL 分组，按 RS/BLOCK 等完整配置选择；分开标明强制路径、自然回退和接入条件 |
+| 便携包与 README | 携带 compile 入口及配置采集所需依赖；同一脚本支持其他 CUDA GPU，本轮不替换现有已验证包 |
+
+NPU 配置采集可复用已有
+[BestTilingRecorder](../../../scripts/tools/autotune_tiling.py)，
+并保存实际参数名及值，例如 `R0BLOCK_SUB`；不将 CUDA 的 `RBLOCK` 与 NPU 的字段强行视作同一配置。
+旧 DSL 入口与原数据继续可复现，新增记录用 `entry`、策略开关和搜索空间区分来源。
+每个候选至少保存完整配置、Grid、有效核数、编译映射信息、精度状态和计时；选中候选保存可重放的
+wrapper/DSL、全部 launch 配置、完整 metadata 和可导出的 IR。
+所有 cooperative 候选均补充可用 IR 导出，不能继续只有 `ir_sha256` 而没有对应文件。
+
+新建结果 CSV，五个主分组仍各覆盖 54 组，共 270 行；无正确 cooperative 候选的行保留状态。
+CSV 包含入口、是否 force、实际路径、选中配置、搜索范围、正确性、接入条件、延迟和同设备
+`plain / candidate` 比值。自然选择另存记录，不将回退行归入 cooperative 曲线。
+SVG 给出五组延迟、同设备收益，以及 NPU 的 RS/BLOCK 选择；GPU 图例明确“Inductor 强制 cooperative”。
+同配置同步对照与超核错误耗时作为机制证据单独展示，不与正确收益混画。
+
+新一轮验证完整后，再直接改写性能报告的主表、图和结论；旧固定 BLOCK 结果保留为机制证据。
+旧矩阵不与新 compile 数据拼接，不在尚未重测时改写已有数值或给旧数据换入口标签。
+
+[matrix-choices]:
+  https://github.com/pytorch/pytorch/blob/cf30153c4c13/torch/_inductor/choices.py#L390
+[matrix-runtime]:
+  https://github.com/pytorch/pytorch/blob/cf30153c4c13/torch/_inductor/runtime/triton_heuristics.py#L4632
+
 ## 5. 建议交付阶段与验收
 
 | 阶段 | 交付边界 | 验收依据 |

@@ -132,6 +132,9 @@ def worker(args):
         info["kernel_sha256"] = hashlib.sha256(source.encode()).hexdigest()
     else:
         exchange, reduce = suite.build_kernels()
+        if args.save_kernels:
+            (args.out / "kernel-reduction.py").write_text(inspect.getsource(reduce.fn))
+            (args.out / "kernel-exchange.py").write_text(inspect.getsource(exchange.fn))
     suite.write_json(args.out / "manifest.json", info)
     rows, count = int(args.rows), int(args.rnumels)
     operation = args.operations
@@ -175,6 +178,8 @@ def worker(args):
             compiled = invoke()
             if plain:
                 suite.save_kernel(args, compiled, "plain")
+            elif args.save_kernels:
+                suite.save_kernel(args, compiled, f"reduction-rs{splits}")
             checkpoint("first_synchronize")
             api.synchronize()
             record["accuracy"].append(check(torch, output, expected, operation))
@@ -213,7 +218,9 @@ def worker(args):
                 try:
                     exchange_call, exchange_out, exchange_sem, exchange_buffers = suite.make_exchange(
                         args, exchange, splits, rows, 1, args.kind, phases=args.phases, epoch=11, skew=True)
-                    exchange_call()
+                    exchange_compiled = exchange_call()
+                    if args.save_kernels:
+                        suite.save_kernel(args, exchange_compiled, f"exchange-rs{splits}")
                     checkpoint("integer_exchange")
                     api.synchronize()
                     actual = exchange_out.cpu()
@@ -254,6 +261,9 @@ def collect_group(args, operation, rows, count, kind):
     records = previous
     splits = [1] if kind == "plain" else args.splits
     while pending := [s for s in splits if s not in {r["RS"] for r in records}]:
+        stop_event = getattr(args, "stop_event", None)
+        if stop_event is not None and stop_event.is_set():
+            raise InterruptedError("matrix execution interrupted")
         command = [sys.executable, "-u", str(Path(__file__).resolve()), "--worker", "--backend", args.backend,
                    "--out", str(directory), "--operations", operation, "--rows", str(rows),
                    "--rnumels", str(count), "--kind", kind, "--splits", ",".join(map(str, pending))]
@@ -261,8 +271,10 @@ def collect_group(args, operation, rows, count, kind):
                      "op_timeout_ms", "max_sample_ms", "cuda_barrier"):
             if (value := getattr(args, name)) is not None:
                 command.extend(["--" + name.replace("_", "-"), str(value)])
+        if getattr(args, "save_kernels", False):
+            command.append("--save-kernels")
         attempt = len(records)
-        environment = dict(os.environ)
+        environment = dict(getattr(args, "worker_environment", os.environ))
         environment.setdefault("TRITON_CACHE_DIR", str(args.out / "triton_cache"))
         with (directory / f"worker-{attempt}.log").open("w") as log:
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
@@ -272,6 +284,8 @@ def collect_group(args, operation, rows, count, kind):
             progress = None
             try:
                 while process.poll() is None:
+                    if stop_event is not None and stop_event.is_set():
+                        raise InterruptedError("matrix execution interrupted")
                     time.sleep(0.2)
                     active_path = directory / "active.json"
                     if active_path.exists():
@@ -343,6 +357,7 @@ def main():
     parser.add_argument("--cuda-barrier", choices=("snapshot", "installed"), default="snapshot")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--save-kernels", action="store_true", help="Export DSL, metadata and IR for each RS")
     args = parser.parse_args()
     args.splits = args.splits or ("1,2,4,8,16,32,48,56" + (",64" if args.backend == "cuda" else ""))
     args.out = args.out.resolve()

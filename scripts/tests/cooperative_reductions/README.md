@@ -1,5 +1,17 @@
 # Cooperative reduction 调研探针
 
+## 下一轮性能测试方案
+
+计划改用实际 `torch.compile` 测量 NPU plain、GPU plain/cooperative，
+NPU origin/debug 暂用 DSL 联合搜索 RS 与 BLOCK；完整分组、GPU 强制与自然选择的区别、
+精度和产物要求见[方案第 4.2 节][compile-plan]。
+当前 `reduction_matrix.py` 与便携包仍测手写 DSL、固定单个 BLOCK，只搜索 RS；
+新的统一入口、多 BLOCK 搜索与 CSV/SVG 汇总尚未实现，下面的命令仍对应现有机制实验。
+`strategy_compare.py` 可提供 CUDA compile 入口，`probe.py inductor` 可提供 NPU 入口，
+但两者尚未组成新的全形状采集流程。
+
+[compile-plan]: ../../../docs/requirements-design/cooperative-reduction/design.md#42-全形状性能测试方案调整
+
 ## fp32 sum / amax 全形状最佳 RS 扫描
 
 `reduction_matrix.py` 统一扫描 X=1/7/56、R=4K～1M 的 9 档、sum/amax。

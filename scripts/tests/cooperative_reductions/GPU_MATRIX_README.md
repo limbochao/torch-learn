@@ -8,6 +8,10 @@ plain 每个 program 完成一行，关闭 cooperative launch，不读写 partia
 不调用跨核屏障。两者使用相同的 fp32 加法、循环累加、BLOCK 和 warps。
 本脚本不是实际 Inductor 策略选择或 split 对照测试。
 
+下一轮计划将 GPU 与 NPU plain 改为实际 `torch.compile` 入口，NPU cooperative 仍用 DSL，
+并联合搜索 RS/BLOCK。该统一流程尚未实现，当前便携包和以下命令仍对应固定 BLOCK 的机制实验。
+新方案见[全形状性能测试方案调整](../../../docs/requirements-design/cooperative-reduction/design.md#42-全形状性能测试方案调整)。
+
 ## 准备
 
 需要 Python 3.10+、CUDA PyTorch，以及支持 `launch_cooperative_grid=True` 的 Triton。
