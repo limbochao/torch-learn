@@ -205,9 +205,11 @@ def collect_group(args, operation, rows, count, kind):
             if (value := getattr(args, name)) is not None:
                 command.extend(["--" + name.replace("_", "-"), str(value)])
         attempt = len(records)
+        environment = dict(os.environ)
+        environment.setdefault("TRITON_CACHE_DIR", str(args.out / "triton_cache"))
         with (directory / f"worker-{attempt}.log").open("w") as log:
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                       start_new_session=True)
+                                       start_new_session=True, env=environment)
             started = time.monotonic()
             current, point_started, active, timeout = None, started, {}, False
             progress = None
