@@ -98,8 +98,9 @@ def draw_times(records, series, out):
             axis.grid(alpha=0.2)
     handles, labels = axes[0, 0].get_legend_handles_labels()
     figure.legend(handles, labels, loc="outside lower center", ncol=min(5, len(series)))
+    block = records[0]["block"]
     figure.suptitle("fp32 (a+b) reduction: fastest measured correct RS per shape\n"
-                    "Fixed BLOCK=1024; barrier retained at RS=1; shading = sample min/max", fontsize=13)
+                    f"Fixed BLOCK={block}; barrier retained at RS=1; shading = sample min/max", fontsize=13)
     export(figure, out, "best-rs-latency")
     plt.close(figure)
 
@@ -153,6 +154,8 @@ def main():
         loaded, labels = load(path, backend, index, len(args.cuda))
         records.extend(loaded)
         series.extend(labels)
+    if len({r["block"] for r in records}) != 1:
+        parser.error("comparison requires the same BLOCK across runs")
     order = {key: i for i, (key, _) in enumerate(series)}
     records.sort(key=lambda r: (("sum", "amax").index(r["operation"]), r["X"], r["R"], order[r["scenario"]]))
     args.out.mkdir(parents=True, exist_ok=True)

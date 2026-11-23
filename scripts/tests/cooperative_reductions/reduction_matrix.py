@@ -163,10 +163,20 @@ def worker(args):
                 del new_left, new_right, values
             left.copy_(saved_left)
             right.copy_(saved_right)
-            checkpoint("integer_exchange")
+            checkpoint("exchange_compile_launch")
             try:
-                _, record["exchange"] = suite.verify_exchange(
-                    args, api, exchange, splits, rows, 1, args.kind, phases=args.phases, epoch=11, skew=True)
+                exchange_call, exchange_out, exchange_sem, exchange_buffers = suite.make_exchange(
+                    args, exchange, splits, rows, 1, args.kind, phases=args.phases, epoch=11, skew=True)
+                exchange_call()
+                checkpoint("integer_exchange")
+                api.synchronize()
+                actual = exchange_out.cpu()
+                wanted = suite.exchange_expected(splits, rows, args.phases, 11, True)
+                torch.testing.assert_close(actual, wanted, rtol=0, atol=0)
+                if args.kind != "original":
+                    assert bool((exchange_sem.cpu() == 123).all()), "Debug helper modified semaphore"
+                record["exchange"] = {"max_abs_error": 0, "checked_values": actual.numel(),
+                                      "final_sem": exchange_sem.cpu().tolist()}
             except AssertionError as error:
                 record["exchange"] = {"error": str(error)}
             bad = any(item["mismatched_values"] for item in [*record["accuracy"], record["post_accuracy"]])
@@ -226,8 +236,8 @@ def collect_group(args, operation, rows, count, kind):
                           len(active.get("samples_us", [])), len(active.get("accuracy", [])))
                 if marker != progress:
                     progress, point_started = marker, now
-                limit = args.init_timeout if current is None or active.get(
-                    "stage") == "compile_launch" else args.point_timeout
+                compiling = active.get("stage") in ("compile_launch", "exchange_compile_launch")
+                limit = args.init_timeout if current is None or compiling else args.point_timeout
                 if active.get("status") in ("PASS", "WRONG", "ERROR"):
                     # Completed measurements remain valid even if backend teardown stalls.
                     limit = 15
