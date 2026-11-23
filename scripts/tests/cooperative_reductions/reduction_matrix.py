@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import hashlib
+import inspect
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,30 @@ import barrier_suite as suite
 
 
 DEFAULT_R = ",".join(str(4096 * 2**index) for index in range(9))
+
+
+def build_plain_kernel():
+    @triton.jit
+    def plain(A, Bptr, Out, R: tl.constexpr, BLOCK: tl.constexpr, OP: tl.constexpr):
+        row = tl.program_id(0)
+        offsets = tl.arange(0, BLOCK)
+        if OP == 2:
+            acc = tl.full((BLOCK,), float("-inf"), tl.float32)
+        else:
+            acc = tl.full((BLOCK,), 0, tl.float32)
+        for begin in range(0, R, BLOCK):
+            index = begin + offsets
+            a = tl.load(A + row * R + index, index < R, other=0).to(tl.float32)
+            b = tl.load(Bptr + row * R + index, index < R, other=0).to(tl.float32)
+            value = a + b
+            if OP == 2:
+                acc = tl.maximum(acc, tl.where(index < R, value, float("-inf")))
+            else:
+                acc += value
+        result = tl.max(acc, 0) if OP == 2 else tl.sum(acc, 0)
+        tl.store(Out + row, result)
+
+    return plain
 
 
 def check(torch, actual, expected, operation):
@@ -78,15 +103,19 @@ def point_key(record):
 
 
 def worker(args):
+    plain = args.kind == "plain"
     args.mapping = "auto"
     args.phase = "matrix"
-    args.kinds = [args.kind]
+    args.kinds = [] if plain else [args.kind]
     torch, triton, api, args.options = suite.load_stack(args)
+    globals().update(triton=triton, tl=suite.tl)
+    args.options["launch_cooperative_grid"] = not plain
     torch.set_num_threads(4)
     info = suite.manifest(args, api)
     info.update(driver=Path(__file__).name, driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 torch_commit=torch.version.git_version, npu_device_limit=os.getenv("NPU_DEVICE_LIMIT"),
-                scope="Handwritten (a+b).sum/amax; fixed BLOCK; all-read combine; barrier retained at RS=1")
+                scope=("Handwritten (a+b).sum/amax; fixed BLOCK; one program per row; no workspace or barrier"
+                       if plain else "Handwritten (a+b).sum/amax; fixed BLOCK; all-read combine; barrier at RS=1"))
     if args.backend == "npu":
         from triton.backends.ascend.driver import NPUUtils
 
@@ -96,13 +125,19 @@ def worker(args):
         info["device_name"] = str(api.get_device_properties(0).name)
     else:
         info["effective_core_count"] = info["core_count"]
+    if plain:
+        exchange, reduce = None, build_plain_kernel()
+        source = inspect.getsource(reduce.fn)
+        (args.out / "kernel-plain.py").write_text(source)
+        info["kernel_sha256"] = hashlib.sha256(source.encode()).hexdigest()
+    else:
+        exchange, reduce = suite.build_kernels()
     suite.write_json(args.out / "manifest.json", info)
-    exchange, reduce = suite.build_kernels()
     rows, count = int(args.rows), int(args.rnumels)
     operation = args.operations
     splits_list = list(map(int, args.splits.split(",")))
     _, output, expected, initial = suite.make_reduction(
-        args, reduce, rows, count, 1, args.kind, operation=operation)
+        args, reduce, rows, count, 1, "original" if plain else args.kind, operation=operation)
     left, right = initial[:2]
     records = json.loads((args.out / "candidates.json").read_text()) if (
         args.out / "candidates.json").exists() else []
@@ -111,7 +146,8 @@ def worker(args):
         record = {"backend": args.backend, "device_name": info["device_name"],
                   "device_uuid": info.get("device_uuid"), "physical_device": args.physical_device,
                   "operation": operation, "dtype": "float32", "X": rows, "R": count, "RS": splits,
-                  "kind": args.kind, "block": args.block, "grid": [splits, rows],
+                  "kind": args.kind, "block": args.block, "grid": [rows] if plain else [splits, rows],
+                  "cooperative": not plain,
                   "core_count": info["core_count"], "effective_core_count": info["effective_core_count"],
                   "over_core": rows * splits > info["effective_core_count"],
                   "status": "RUNNING", "worker_pid": os.getpid(), "accuracy": []}
@@ -124,14 +160,21 @@ def worker(args):
 
         try:
             checkpoint("prepare")
-            workspace = torch.full((rows, splits), float("nan"), device=args.backend)
-            sem = torch.zeros(rows, dtype=torch.int32, device=args.backend)
             output.fill_(float("nan"))
-            prepared = (output, expected, (left, right, workspace, sem))
-            invoke, _, _, _ = suite.make_reduction(
-                args, reduce, rows, count, splits, args.kind, operation=operation, prepared=prepared)
+            if plain:
+                def invoke():
+                    return reduce[(rows,)](left, right, output, R=count, BLOCK=args.block,
+                                           OP=2 if operation == "amax" else 0, **args.options)
+            else:
+                workspace = torch.full((rows, splits), float("nan"), device=args.backend)
+                sem = torch.zeros(rows, dtype=torch.int32, device=args.backend)
+                prepared = (output, expected, (left, right, workspace, sem))
+                invoke, _, _, _ = suite.make_reduction(
+                    args, reduce, rows, count, splits, args.kind, operation=operation, prepared=prepared)
             checkpoint("compile_launch")
             compiled = invoke()
+            if plain:
+                suite.save_kernel(args, compiled, "plain")
             checkpoint("first_synchronize")
             api.synchronize()
             record["accuracy"].append(check(torch, output, expected, operation))
@@ -163,22 +206,25 @@ def worker(args):
                 del new_left, new_right, values
             left.copy_(saved_left)
             right.copy_(saved_right)
-            checkpoint("exchange_compile_launch")
-            try:
-                exchange_call, exchange_out, exchange_sem, exchange_buffers = suite.make_exchange(
-                    args, exchange, splits, rows, 1, args.kind, phases=args.phases, epoch=11, skew=True)
-                exchange_call()
-                checkpoint("integer_exchange")
-                api.synchronize()
-                actual = exchange_out.cpu()
-                wanted = suite.exchange_expected(splits, rows, args.phases, 11, True)
-                torch.testing.assert_close(actual, wanted, rtol=0, atol=0)
-                if args.kind != "original":
-                    assert bool((exchange_sem.cpu() == 123).all()), "Debug helper modified semaphore"
-                record["exchange"] = {"max_abs_error": 0, "checked_values": actual.numel(),
-                                      "final_sem": exchange_sem.cpu().tolist()}
-            except AssertionError as error:
-                record["exchange"] = {"error": str(error)}
+            if plain:
+                record["exchange"] = {"applicable": False, "reason": "No inter-program communication"}
+            else:
+                checkpoint("exchange_compile_launch")
+                try:
+                    exchange_call, exchange_out, exchange_sem, exchange_buffers = suite.make_exchange(
+                        args, exchange, splits, rows, 1, args.kind, phases=args.phases, epoch=11, skew=True)
+                    exchange_call()
+                    checkpoint("integer_exchange")
+                    api.synchronize()
+                    actual = exchange_out.cpu()
+                    wanted = suite.exchange_expected(splits, rows, args.phases, 11, True)
+                    torch.testing.assert_close(actual, wanted, rtol=0, atol=0)
+                    if args.kind != "original":
+                        assert bool((exchange_sem.cpu() == 123).all()), "Debug helper modified semaphore"
+                    record["exchange"] = {"max_abs_error": 0, "checked_values": actual.numel(),
+                                          "final_sem": exchange_sem.cpu().tolist()}
+                except AssertionError as error:
+                    record["exchange"] = {"error": str(error)}
             bad = any(item["mismatched_values"] for item in [*record["accuracy"], record["post_accuracy"]])
             bad = bad or "error" in record["exchange"]
             record["status"] = "WRONG" if bad else "PASS"
@@ -206,7 +252,8 @@ def collect_group(args, operation, rows, count, kind):
     if result_path.exists() and not args.resume:
         raise ValueError(f"{result_path} already exists; use --resume or a new output directory")
     records = previous
-    while pending := [s for s in args.splits if s not in {r["RS"] for r in records}]:
+    splits = [1] if kind == "plain" else args.splits
+    while pending := [s for s in splits if s not in {r["RS"] for r in records}]:
         command = [sys.executable, "-u", str(Path(__file__).resolve()), "--worker", "--backend", args.backend,
                    "--out", str(directory), "--operations", operation, "--rows", str(rows),
                    "--rnumels", str(count), "--kind", kind, "--splits", ",".join(map(str, pending))]
@@ -280,8 +327,8 @@ def main():
     parser.add_argument("--rows", default="1,7,56")
     parser.add_argument("--rnumels", default=DEFAULT_R)
     parser.add_argument("--splits", help="default: 1,2,4,8,16,32,48,56; CUDA also includes 64")
-    parser.add_argument("--kinds", help="NPU defaults to original,debug; CUDA uses original")
-    parser.add_argument("--kind", choices=("original", "debug"), help=argparse.SUPPRESS)
+    parser.add_argument("--kinds", help="NPU defaults to plain,original,debug; CUDA defaults to plain,original")
+    parser.add_argument("--kind", choices=("plain", "original", "debug"), help=argparse.SUPPRESS)
     parser.add_argument("--block", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=213)
     parser.add_argument("--phases", type=int, default=4)
@@ -316,15 +363,16 @@ def main():
         if not values or min(values) < 1:
             parser.error(f"--{field} requires positive integers")
         setattr(args, field, values)
-    args.kinds = (args.kinds or ("original,debug" if args.backend == "npu" else "original")).split(",")
-    if set(args.kinds) - ({"original", "debug"} if args.backend == "npu" else {"original"}):
-        parser.error("CUDA supports original; NPU supports original,debug")
+    args.kinds = (args.kinds or ("plain,original,debug" if args.backend == "npu" else "plain,original")).split(",")
+    if set(args.kinds) - ({"plain", "original", "debug"} if args.backend == "npu" else {"plain", "original"}):
+        parser.error("CUDA supports plain,original; NPU supports plain,original,debug")
     run = {"argv": sys.argv, "backend": args.backend, "operations": args.operations, "rows": args.rows,
            "rnumels": args.rnumels, "splits": args.splits, "kinds": args.kinds, "dtype": "float32",
            "block": args.block, "seed": args.seed, "batch": args.batch, "replays": args.replays,
            "samples": args.samples, "phases": args.phases, "max_sample_ms": args.max_sample_ms,
            "point_timeout_seconds": args.point_timeout, "script_sha256": hashlib.sha256(
                Path(__file__).read_bytes()).hexdigest(), "unix_time": time.time()}
+    run["kind_splits"] = {kind: [1] if kind == "plain" else args.splits for kind in args.kinds}
     old_path = args.out / "run.json"
     if args.resume and old_path.exists():
         old = json.loads(old_path.read_text())
