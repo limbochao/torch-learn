@@ -223,29 +223,33 @@ def collect_group(args, operation, rows, count, kind):
             started = time.monotonic()
             current, point_started, active, timeout = None, started, {}, False
             progress = None
-            while process.poll() is None:
-                time.sleep(0.2)
-                active_path = directory / "active.json"
-                if active_path.exists():
-                    candidate = json.loads(active_path.read_text())
-                    if candidate.get("worker_pid") == process.pid:
-                        active = candidate
-                        current = active["RS"]
-                now = time.monotonic()
-                marker = (current, active.get("stage"), active.get("status"),
-                          len(active.get("samples_us", [])), len(active.get("accuracy", [])))
-                if marker != progress:
-                    progress, point_started = marker, now
-                compiling = active.get("stage") in ("compile_launch", "exchange_compile_launch")
-                limit = args.init_timeout if current is None or compiling else args.point_timeout
-                if active.get("status") in ("PASS", "WRONG", "ERROR"):
-                    # Completed measurements remain valid even if backend teardown stalls.
-                    limit = 15
-                if now - point_started > limit:
+            try:
+                while process.poll() is None:
+                    time.sleep(0.2)
+                    active_path = directory / "active.json"
+                    if active_path.exists():
+                        candidate = json.loads(active_path.read_text())
+                        if candidate.get("worker_pid") == process.pid:
+                            active = candidate
+                            current = active["RS"]
+                    now = time.monotonic()
+                    marker = (current, active.get("stage"), active.get("status"),
+                              len(active.get("samples_us", [])), len(active.get("accuracy", [])))
+                    if marker != progress:
+                        progress, point_started = marker, now
+                    compiling = active.get("stage") in ("compile_launch", "exchange_compile_launch")
+                    limit = args.init_timeout if current is None or compiling else args.point_timeout
+                    if active.get("status") in ("PASS", "WRONG", "ERROR"):
+                        # Completed measurements remain valid even if backend teardown stalls.
+                        limit = 15
+                    if now - point_started > limit:
+                        timeout = True
+                        break
+            finally:
+                # Ctrl-C and unexpected parent exceptions must not leave an executing worker behind.
+                if process.poll() is None:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait(timeout=10)
-                    timeout = True
-                    break
         records = json.loads(result_path.read_text()) if result_path.exists() else records
         if process.returncode and not active and not any(r["RS"] in pending for r in records):
             raise RuntimeError(f"worker initialization failed; see {directory / f'worker-{attempt}.log'}")
