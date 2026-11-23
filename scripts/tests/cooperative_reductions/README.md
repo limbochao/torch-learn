@@ -1,5 +1,33 @@
 # Cooperative reduction 调研探针
 
+## fp32 sum / amax 全形状最佳 RS 扫描
+
+`reduction_matrix.py` 统一扫描 X=1/7/56、R=4K～1M 的 9 档、sum/amax。
+NPU 仅测 original/debug，各 8 个 RS；CUDA 测原始协议、9 个 RS。
+完整矩阵为 1350 个候选、162 个最佳正确结果；NPU 的 RS=64 另保留代表点超时证据。
+计算、计时、精度、续跑与便携命令见 [GPU 全形状扫描说明](GPU_MATRIX_README.md)。
+在指定容器工作目录检查设备占用和映射后运行：
+
+```bash
+# CUDA：默认使用固定上游 helper，不依赖 torch_npu。
+CUDA_VISIBLE_DEVICES=GPU-实际UUID python -u scripts/tests/cooperative_reductions/reduction_matrix.py \
+  --out artifacts/cooperative-reduction-matrix-20261123/cuda
+
+# NPU：选卡须符合当前授权和时段；这里只以物理卡 2 为例。
+ASCEND_RT_VISIBLE_DEVICES=2 NPU_DEVICE_LIMIT=28,56 \
+  python -u scripts/tests/cooperative_reductions/reduction_matrix.py --backend npu \
+  --physical-device 2 --point-timeout 15 --out artifacts/cooperative-reduction-matrix-20261123/npu
+
+# 绘图不需要 GPU/NPU。
+python scripts/tests/cooperative_reductions/plot_reduction_matrix.py \
+  --npu artifacts/cooperative-reduction-matrix-20261123/npu/candidates.json \
+  --cuda artifacts/cooperative-reduction-matrix-20261123/cuda/candidates.json \
+  --out docs/requirements-design/cooperative-reduction/assets/reduction-matrix
+```
+
+RS=1 仍调用屏障，本扫描用于比较三种实现及寻找已测最佳分片数；它不提供 plain/split 的收益基线。
+未通过检查但已完成计时的候选仍保留诊断耗时，不能进入最佳结果。
+
 ## Split 与 cooperative 整图对照
 
 `strategy_compare.py` 使用实际 CUDA Inductor，不替换 codegen 或同步 helper。
@@ -68,7 +96,9 @@ python scripts/tests/cooperative_reductions/plot_strategy_compare.py \
 原始 JSON 不变。上面两条复测仅针对本轮已观察到的噪声点，没有复测文件时省略这两个参数。
 绘图脚本与 `plot_barrier_suite.py` 放在同一目录。保留各 case 的 `result.json`、
 `output_code_*.py` / `*.ttir` / `*.ttadapter` 及总表、manifest；不需回传缓存。
-结果解释见[整图对照](../../../docs/requirements-design/cooperative-reduction/barrier-comparison.md#45-split-与-cooperative整图对照与分层组合)。
+结果解释见[整图对照][graph]。
+
+[graph]: ../../../docs/requirements-design/cooperative-reduction/barrier-comparison.md#45-split-与-cooperative整图对照与分层组合
 
 ## NPU 基础能力与同步探针
 

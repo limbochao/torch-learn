@@ -1,5 +1,13 @@
 # GPU 规约对照与 SVG 更新
 
+## fp32 sum / amax 全形状扫描
+
+新增入口 `reduction_matrix.py` 覆盖 X=1/7/56、R=4K～1M、sum/amax，
+与 NPU origin/debug 对照；GPU 从 9 个 RS、NPU 从 8 个 RS 中选最快的正确结果。
+独立运行、完整参数、便携包与自动刷新 CSV/SVG 的命令统一见
+[GPU 全形状扫描说明](GPU_MATRIX_README.md)。
+它与下文的实际 Inductor 整图测试、旧输出并行度扫描分别使用各自的结果 JSON 和绘图入口。
+
 ## 实际 Inductor 的 split/cooperative 整图测试
 
 `strategy_compare.py` 对比真实 CUDA Inductor 的 sum、RMSNorm、softmax 和连续 softmax，
