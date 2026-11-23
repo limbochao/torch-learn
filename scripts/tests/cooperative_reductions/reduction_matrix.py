@@ -210,6 +210,7 @@ def collect_group(args, operation, rows, count, kind):
                                        start_new_session=True)
             started = time.monotonic()
             current, point_started, active, timeout = None, started, {}, False
+            compile_started, completed_at = None, None
             while process.poll() is None:
                 time.sleep(0.2)
                 active_path = directory / "active.json"
@@ -219,8 +220,24 @@ def collect_group(args, operation, rows, count, kind):
                         active = candidate
                         if current != active["RS"]:
                             current, point_started = active["RS"], time.monotonic()
-                limit = args.point_timeout if current is not None else args.init_timeout
-                if time.monotonic() - point_started > limit:
+                            compile_started, completed_at = None, None
+                now = time.monotonic()
+                if active.get("stage") == "compile_launch":
+                    if compile_started is None:
+                        compile_started = now
+                    limit, reference_time = args.init_timeout, compile_started
+                else:
+                    if compile_started is not None:
+                        point_started += now - compile_started
+                        compile_started = None
+                    limit = args.point_timeout if current is not None else args.init_timeout
+                    reference_time = point_started
+                if active.get("status") in ("PASS", "WRONG", "ERROR"):
+                    if completed_at is None:
+                        completed_at = now
+                    # Completed measurements remain valid even if backend teardown stalls.
+                    limit, reference_time = 15, completed_at
+                if now - reference_time > limit:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait(timeout=10)
                     timeout = True
@@ -228,7 +245,13 @@ def collect_group(args, operation, rows, count, kind):
         records = json.loads(result_path.read_text()) if result_path.exists() else records
         if process.returncode and not active and not any(r["RS"] in pending for r in records):
             raise RuntimeError(f"worker initialization failed; see {directory / f'worker-{attempt}.log'}")
-        if timeout or (process.returncode and not any(r["RS"] == current for r in records)):
+        if (timeout or process.returncode) and any(r["RS"] == current for r in records):
+            if timeout:
+                for record in records:
+                    if record["RS"] == current:
+                        record["worker_teardown_terminated"] = True
+                suite.write_json(result_path, records)
+        elif timeout or process.returncode:
             failed = active or {"operation": operation, "X": rows, "R": count, "kind": kind,
                                 "RS": pending[0], "backend": args.backend, "dtype": "float32"}
             failed.update(status="TIMEOUT" if timeout else "PROCESS_ERROR", worker_exit_code=process.returncode,
