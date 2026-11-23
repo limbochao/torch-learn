@@ -1,21 +1,24 @@
 # fp32 sum / amax 全形状原始记录
 
 用于[同步与性能报告](../../docs/requirements-design/cooperative-reduction/barrier-comparison.md)的
-origin、debug、RTX 4090 三组对照。与实际 Inductor split/cooperative 整图实验使用独立结果，
-这里测量的是固定 BLOCK 的手写 kernel。
+origin、debug、RTX 4090 cooperative 及两端 plain 对照。
+与实际 Inductor split/cooperative 整图实验使用独立结果，这里测量的是固定 BLOCK 的手写 kernel。
 
 ## 范围与选点
 
 计算为 `(a+b).sum(-1)` / `(a+b).amax(-1)`，输入连续 fp32，seed=213。
 X=1/7/56，R=4096 起连续翻倍至 1048576，共 9 档；NPU 每组尝试
 RS=1/2/4/8/16/32/48/56，original/debug 各 432 个候选；CUDA 另加 RS=64，共 486 个。
-原始 JSON 保留所有候选；文档 CSV 按每组最小的 PASS 中位数选择，共 162 行。
+两端各增加 54 个 plain：每行一个 program，固定 RS=1，实际 Grid 为 `(X,)`。
+合计 1458 个候选；原始 JSON 保留全部记录，文档 CSV 按每组最小的 PASS 中位数选择，共 270 行。
 WRONG/ERROR/TIMEOUT 不参加最佳选择；数值错误但能完成计时的候选仍保留耗时。
 
 | 场景 | 候选 | PASS | 校验失败 | 执行失败 | 超时 | 最佳结果行数 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A5 plain | 54 | 54 | 0 | 0 | 0 | 54 |
 | A5 origin | 432 | 324 | 0 | 0 | 108 | 54 |
 | A5 debug | 432 | 324 | 108 | 0 | 0 | 54 |
+| RTX 4090 plain | 54 | 54 | 0 | 0 | 0 | 54 |
 | RTX 4090 original | 486 | 414 | 0 | 72 | 0 | 54 |
 
 NPU 的 108 个校验失败点均完成计时，96 点出现浮点结果错误，108 点的严格整数交换均失败；
@@ -30,47 +33,44 @@ CUDA 启动失败均在 X=56、RS=32/48/56/64，原因为 `too many blocks in co
 | --- | --- | --- |
 | 位置 | NPU_A5 Docker，`pta_213_case` | GPU_4090 的 `pytorch-dev-gpu67` |
 | worktree | `/home/l30023782/PTA_213/torch-learn-matrix-20261123` | `/home/gaojg/dev/torch-learn-matrix-20261123` |
-| 设备 | Ascend950PR_9579；X=1 用卡 1，X=7/56 用卡 2；56 Vector | RTX 4090 物理卡 6，128 SM |
+| 设备 | Ascend950PR_9579；统一物理卡 2；56 Vector | RTX 4090 物理卡 6，128 SM |
 | PyTorch | `2.13.0+cpu` | `2.13.0+cu126` |
 | torch_npu / TA | `2.13.0+git93d7d01` / `3.6.0+dev20261112182052` | — |
 | Triton / CUDA | `3.6.0` / — | `3.7.1` / `12.6` |
-| 选卡与限额 | 分别设置可见物理卡 1/2；`NPU_DEVICE_LIMIT=28,56` | UUID `GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7` |
-| 采集脚本提交 | `49a6591` / `e6397d4` | `1f833fb` |
+| 选卡与限额 | 可见物理卡 2；`NPU_DEVICE_LIMIT=28,56` | UUID `GPU-528f4e79-58c0-e843-bf5e-0b40c2671cd7` |
+| 采集脚本提交 | `910ba83`，沿用组为 `49a6591` / `e6397d4` | `910ba83` |
 | kernel | SIMD、4 warps、BLOCK=1024 | 4 warps、BLOCK=1024 |
 
 原始输出目录分别为：
 
-- NPU：`/home/l30023782/PTA_213/cooperative-results/matrix-20261123/` 下的 `npu-card1`、`npu-card2-x7` 与 `npu-card2-x56`。
-- GPU：`/mnt/raid1/gaojg/data/dev/cooperative-matrix-20261123/cuda`。
+- NPU plain：`/home/l30023782/PTA_213/cooperative-results/matrix-plain-20261123/npu-plain`。
+- NPU X=1 origin/debug：同级 `npu-x1`；两种 helper 的全部 8 个 RS 同卡重测。
+- NPU X=7/56 origin/debug：`/home/l30023782/PTA_213/cooperative-results/matrix-20261123/`
+  下的 `npu-card2-x7`、`npu-card2-x56`，沿用同日卡 2 完整组。
+- GPU：`/mnt/raid1/gaojg/data/dev/cooperative-matrix-plain-20261123/cuda`，
+  plain 与 original 的全部候选在同一轮重新采集。
 
-汇总时按完整形状选择来源，不混选不同卡的 RS；`source-index.json` 记录逐组原始目录和文件摘要。
-汇总 `run.json` 显式记录拼接方式，并内嵌各来源最后一次父进程调用，不能当作单次扫描命令。
-各组 manifest 是该组最后一次 worker 的环境；续跑前的 RS 仍保留原始 `worker_pid`、参数与 IR 摘要。
-各形状 `manifest.json` 保留完整版本、NPUIR 编译器信息、实际限额、设备属性、命令、时间和源码 SHA256。
+汇总时按完整形状选择来源，不跨来源挑选最小 RS；`source-index.json` 记录逐组原始目录和文件摘要。
+NPU 汇总 `run.json` 内嵌各来源的实际调用，不能当作单次扫描命令。
+各形状 `manifest.json` 保留完整版本、NPUIR 编译器、实际限额、设备属性、命令、时间和源码 SHA256。
 original 在两端使用相同源码，SHA256 为
 `c9fa8ee90b54adc67a11ba5406b5fe4be55178b974cc26a2bde8c2c9f19f5bb3`，
 CUDA 为 PyTorch v2.13.0 提交 `cf30153c4c131c8164ee7798e5022d810682e2cb` 的快照。
 debug 为两侧各有一次 `tl.debug_barrier()` 的 `sync_block_all("all_vector",0)`。
-两端均显式设置 `launch_cooperative_grid=True`；该字段不证明 NPU 的实际同步映射合法。
+cooperative 设置 `launch_cooperative_grid=True`，plain 显式设为 False；
+该字段不证明 NPU 的实际同步映射合法，仍需看逐点检查。
+plain kernel 源码 SHA256 为 `7fcb083c4656fb5c094c3bf602106c359a380aeaf5fd27bc663384c95ae407fa`。
 
-脚本从 `1f833fb` 到 `e6397d4` 调整子进程看护、共享编译缓存、整数检查阶段记录及 NPU 默认 RS 范围，
-计算 kernel、输入、计时方法和数值判定不变。最新入口还在独立平铺脚本目录中，
-以默认 9 个 RS 测试 X=1/R=4K 的 sum/amax，共 18 个候选全部通过，记录位于 `gpu-portable-smoke/`。
-该目录不位于源码仓库内，证明 CUDA 入口不依赖 PyTorch 源码仓库或 NPU 包。
-NPU 先在卡 1 完成 X=1，并取得 X=7/56 的预算内参考。后续卡 1 出现 Alarm、利用率 100%，
-不继续在该卡测速；X=7/56 改在卡 2 按完整形状重测，卡 1 的这两组参考不进入最终性能矩阵。
-主矩阵的 8 个 RS 均进入最终原始记录。
-另有进程用同参数 `warmup()` 预编译后续 kernel，不发射计算；每卡设备性能测试保持串行。
-这只提前建立编译缓存，不改变计时内的计算。
+补测开始时，卡 1 告警；卡 2 Health OK、采样利用率 0%、无可见进程，因此在卡 2 测量全部 plain，
+并重测 X=1 的 origin/debug，替换旧卡 1 结果。GPU 6 采样利用率为 0%，约 10.2 GiB 显存空闲。
+每卡测速保持串行，复用已有编译缓存，没有修改安装包、复位设备或操作其他任务。
+X=7/56 的 NPU cooperative 与 plain 分时采集；相同物理卡不保证占用、频率完全相同，
+接近 1 倍的差异不能作为稳定收益。此前卡 5 的异常慢校准数据未混入主矩阵。
 
-设备共享使用。卡 1 小矩阵开始前 Health OK、利用率采样为 0%，有约 121312 MB 的驻留进程，
-仍有约 3.9 GiB 可用，足够本实验；GPU 开始时约 10.2 GiB 空闲、利用率 0%。
-NPU 卡 2 的早期 RS=64 尝试不进入性能汇总；后续在卡 2 完整重测 X=7/56。
-同一形状的 original/debug 与全部 RS 同卡；CSV 保留获选候选的物理卡号。
-卡 2 校准时 Health OK、采样利用率 0%，有驻留进程；与卡 1 的 X=7/R=4K sum 耗时接近。
-卡 5 虽然 Health OK、利用率 0%、无可见进程，同配置 amax 耗时却高约十几倍，故不采用该卡性能。
-校准代表值和原始记录单独归档，不计入 864 个主矩阵候选。
-没有修改安装包、复位设备或操作其他任务。
+最新 CUDA 入口另在独立平铺目录执行 X=1/R=4K 的 sum/amax，包含 2 个 plain 和默认 18 个
+cooperative 候选，20 点全部通过，记录位于 `gpu-portable-plain/`。
+该目录不在源码仓库内，manifest 的 `git_commit` 为 null；driver/helper SHA256 与已提交脚本一致，
+证明新入口不依赖 PyTorch 源码仓库或 NPU 包。
 
 ## 选卡校准的实测值
 
@@ -89,14 +89,19 @@ NPU 卡 2 的早期 RS=64 尝试不进入性能汇总；后续在卡 2 完整重
 
 卡 5 的原因未定位；这组校准用于排除该卡的性能数据，不把不同卡绝对耗时拼接成一条曲线。
 16 个原始候选及对应环境保存在 `npu-calibration/`；卡 2 的 4 个校准候选也属于正式 X=7 记录，
-在主矩阵中只计一次，额外校准汇总不增加 864 个候选的计数。
+在主矩阵中只计一次，额外校准汇总不增加 864 个 cooperative 候选的计数。
 
 ## 计算、计时与检查
 
 每片循环读取本片输入，做 fp32 加法和局部规约；把 partial 写到 GM，经过被测屏障后，
 每片读取本行全部 RS 个 partial 并合并，最后只有 shard 0 写行输出。
 这保持 all-read 算法，partial 的逻辑读取量随 RS² 增长；不是 owner-only 合并或 persistent 数据保留实现。
-RS=1 也调用屏障，没有 plain/split 基线，不能据此计算 cooperative 相对它们的收益。
+cooperative 的 RS=1 也调用屏障；独立 plain kernel 每行循环读取全部输入，完成相同的 fp32 加法、
+sum/amax 后直接写输出，显式设置 `launch_cooperative_grid=False`，没有 partial workspace、
+semaphore 或跨核屏障。plain 固定 BLOCK=1024、4 warps，保存 kernel 源码及编译 IR，
+便于核对 ordinary launch 和没有核间交换。这里没有搜索普通归约的其他 BLOCK 或 Inductor 策略。
+CSV 的 `plain_us` 与 `speedup_vs_plain` 使用同物理卡及相同 UUID 配对，后者为 plain / cooperative。
+这提供固定算法的普通归约收益基线，split 收益仍使用独立的完整图实验。
 
 NPUGraph / CUDAGraph + device Event，7 样本取中位数，保留原始样本及 min/max。
 默认每图 batch=16，每样本 replay=10；单调用 pilot 估计每样本调用预算，目标 50 ms，
@@ -105,7 +110,8 @@ NPUGraph / CUDAGraph + device Event，7 样本取中位数，保留原始样本�
 这属于共享卡上的热数据测量，不能直接作为生产阈值或芯片带宽上限。
 热数据指同一组地址反复使用、不主动刷缓存，不表示所有形状的输入都能装入缓存。
 
-每点必须同时通过首次输出、最后一次计时输出、两组变化输入和 4 phase 严格整数交换。
+每点必须同时通过首次输出、最后一次计时输出和两组变化输入；
+cooperative 额外要求 4 phase 严格整数交换通过。plain 没有跨 program 通信，不执行该项。
 CPU 先做 fp32 加法再以 fp64 sum/amax 作为参考，sum 使用 `atol=0.02,rtol=2e-4`，amax 要求精确一致。
 换输入时保留已有 workspace/semaphore，整数交换包括分片工作量差异及下一 phase 写入前的屏障。
 随机输入检查不包含 NaN/Inf、动态 shape、并发和完整 Inductor 接入验收。
@@ -117,13 +123,19 @@ CPU 先做 fp32 加法再以 fp64 sum/amax 作为参考，sum 使用 `atol=0.02,
 
 ## 异常波动组的整组重测
 
-卡 2 的 X=7、amax、R=16K、debug 首次记录中，最佳 RS=2 的 7 样本范围为
-6.034～369.104 µs，中位数 105.745 µs；采样时设备利用率曾达到 100%。
-相邻形状明显更低，因此停止本轮任务、核对状态后，在同卡相同参数下重新执行该组全部 8 个 RS。
-重测最佳仍为 RS=2，中位数为 5.733 µs，范围为 5.725～5.766 µs，最终矩阵采用整组重测值。
-前后全部 8 个 RS 的 IR 摘要和编译 metadata 完全相同。
-旧组保留在 `npu-contention/amax-x7-r16384-debug/`，不计入 864 个主矩阵候选。
-没有跨两次测量挑选最小样本；波动原因未进一步归因，不能将旧组高耗时解释为算子固有成本。
+下列两组在同卡、相同参数下按全部 8 个 RS 重测，采用完整新组；单位 µs。
+各组全部候选的 IR 摘要与编译 metadata 在前后保持一致。
+
+| 用例 | 获选 RS | 旧组：中位数（min～max） | 新组：中位数（min～max） |
+| --- | ---: | ---: | ---: |
+| amax、X=7、R=16K、debug | 2 | 105.745（6.034～369.104） | 5.733（5.725～5.766） |
+| sum、X=1、R=1M、original | 4 | 72.368（51.864～180.537） | 46.177（46.040～47.648） |
+
+amax 旧组采样时利用率曾达到 100%；sum 重测前 Health OK、利用率为 0%。
+波动原因没有进一步归因，旧组高耗时不视为算子固有成本，没有跨轮次挑选最小样本。
+旧组分别保留在 `npu-contention/amax-x7-r16384-debug/` 与
+`npu-contention/sum-x1-r1048576-original/`，不计入 918 个 NPU 主矩阵候选。
+sum 重测实际调用另存于 `npu/run.json` 的 `cooperative_sum_x1_r1m_repeat`。
 
 ## RS=64 的 NPU 诊断
 
@@ -141,6 +153,7 @@ CPU 先做 fp32 加法再以 fp64 sum/amax 作为参考，sum 使用 `atol=0.02,
 | 相邻 `run.json`、`source-index.json` | 完整范围、实际采集 run 和逐形状来源 |
 | `<op>-x<X>-r<R>-<kind>/candidates.json` | 分形状原始记录，可与总表交叉核对 |
 | 各形状 `manifest.json`、`helper-*.py` | 版本、设备、编译器、实际 helper 源码与 SHA256 |
+| plain 各形状的 `kernel-plain.py`、`ir/` | 无 cooperative 的 kernel 源码、TTIR、后端 IR 与 metadata |
 | `cooperative-reduction-matrix-gpu.tar.gz` | 其他 GPU 的便携采集、绘图脚本及 NPU 数据 |
 
 不归档编译缓存、临时 `active.json` 和重复打印结果的正常日志；异常 traceback 已在候选 JSON 中。

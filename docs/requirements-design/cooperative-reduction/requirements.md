@@ -698,49 +698,40 @@ NPU 的匹配手写对照共 78 点全部通过。短轴 RMSNorm 的 split/coope
 这些原型的整行输出均重读输入，尚未实现 CUDA persistent 的片内数据保留；
 已有 split 分片已带来大部分收益，不能把相对 plain 的高倍率算成 cooperative 的额外价值。
 
-**NPU 同步实现的性能差距需使用各自最优 RS 评估。** 新全形状矩阵覆盖 sum/amax、X=1/7/56、
-R=4K～1M，只有 NPU origin、NPU debug 与 RTX 4090 三组；NPU 从 8 个 RS、CUDA 从 9 个 RS 中选最快正确结果。
-完整 CSV 共 162 行；以下摘取 R=1M 的六组，单位为 µs / RS，origin/debug 倍率使用各自获选配置：
-星号表示该 NPU 获选点的 X×RS 超过 56；它通过本次检查，不代表已满足正式准入契约。
+**是否值得拆规约轴，需要同时对比不开 cooperative 的普通归约。**
+全形状矩阵覆盖 sum/amax、X=1/7/56、R=4K～1M，NPU origin/debug 各扫描 8 个 RS，CUDA 扫描 9 个 RS，
+两端分别增加一个 program 完成一行的 plain 基线。plain 显式关闭 cooperative launch，
+没有 partial workspace、semaphore 或跨核屏障；计算、输入种子、BLOCK=1024、4 warps 和计时方式保持一致。
 
-| 操作 | X | A5 origin：µs / RS | A5 debug：µs / RS | RTX 4090：µs / RS | origin / debug |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| sum | 1 | 45.956 / 4 | 7.913 / 48 | 5.434 / 64 | 5.81× |
-| sum | 7 | 183.920 / 2 | 19.070 / 8 | 14.726 / 32 | 9.64× |
-| sum | 56 | 1244.091 / 1 | 341.555 / 1 | 492.128 / 8 | 3.64× |
-| amax | 1 | 76.116 / 8 | 10.562 / 48 | 5.222 / 64 | 7.21× |
-| amax | 7 | 204.035 / 2 | 34.311 / 8 | 14.848 / 32 | 5.95× |
-| amax | 56 | 1193.814 / 1 | 337.429 / 1 | 492.160 / 8 | 3.54× |
+完整 CSV 共 270 行，包含五组延迟及同设备的 plain / cooperative 加速比。
+以下为 R=1M 的六组；plain 单位为 µs，cooperative 列为 µs / 最佳正确 RS：
 
-原始候选保留数值错误、执行失败和超时；它们不参加最佳选择。
-全量形状表、最佳 RS 分布、延迟 SVG 和候选统计见
-[全形状对照](barrier-comparison.md#full-matrix)与[162 行 CSV](assets/reduction-matrix/best-rs.csv)。
-本轮 NPU 的 X=1 来自物理卡 1、X=7/56 来自物理卡 2，GPU 来自物理卡 6，均共享使用；
-同形状/helper 的全部 RS 同卡，不与此前物理卡 5 的绝对耗时混算。
+| 操作 | X | A5 plain | A5 origin：µs / RS | A5 debug：µs / RS | debug 收益 | GPU plain | GPU：µs / RS | GPU 收益 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| sum | 1 | 101.612 | 46.177 / 4 | 8.000 / 48 | 12.70× | 163.236 | 5.152 / 64 | 31.68× |
+| sum | 7 | 105.970 | 183.920 / 2 | 19.070 / 8 | 5.56× | 167.021 | 13.996 / 32 | 11.93× |
+| sum | 56 | 330.619 | 1244.091 / 1 | 341.555 / 1 | 0.97× | 512.793 | 492.192 / 4 | 1.04× |
+| amax | 1 | 228.246 | 76.462 / 8 | 10.507 / 56 | 21.72× | 165.112 | 5.536 / 64 | 29.83× |
+| amax | 7 | 229.053 | 204.035 / 2 | 34.311 / 8 | 6.68× | 168.467 | 14.022 / 32 | 12.01× |
+| amax | 56 | 344.586 | 1193.814 / 1 | 337.429 / 1 | 1.02× | 511.130 | 492.160 / 4 | 1.04× |
 
-这些是手写 all-read kernel，固定 BLOCK=1024、4 warps，RS=1 仍保留屏障；
-debug 是 `tl.debug_barrier → all_vector → tl.debug_barrier`，不是只调用本核屏障。
-它们没有提供 plain/split 的性能基线，三组差值也不是裸屏障净开销；
-CUDA 曲线中的工作集容量变化及 AutoBlockify 差异均需单独解释。
+X=1 的长轴中，NPU debug 相对 plain 的 sum/amax 收益为 12.70/21.72 倍，
+RTX 4090 为 31.68/29.83 倍；X=56 时则为 NPU 的 0.97/1.02 倍、GPU 的 1.04/1.04 倍。
+小输出长归约有明显并行化空间，输出方向已有较多并行度时收益下降，甚至出现退化。
+短轴也不能仅因输出少就启用 cooperative：GPU X=1/R=4K 的 sum，plain 为 1.632 µs，cooperative 为 2.175 µs。
+
+两端的 108 个 plain 全部通过首次、计时后及两组变化输入检查；cooperative 另外检查严格整数交换。
+错误、执行失败和超时保留在原始记录，不参加最佳选择。完整表、收益 SVG 和 RS 分布见
+[全形状对照](barrier-comparison.md#full-matrix)与[270 行 CSV](assets/reduction-matrix/best-rs.csv)。
+NPU 统一使用物理卡 2；X=1 及 plain 为本次补测，X=7/56 cooperative 沿用同日卡 2 完整扫描。
+GPU 在物理卡 6 重测完整矩阵。共享设备分时采集，接近 1 倍的差异不作为稳定收益。
+星号表示 NPU 获选点的 X×RS 超过 56，通过本次检查不等于满足正式准入契约。
+
+这些结果来自固定配置的手写 kernel，没有搜索普通归约的其他 BLOCK 或实际 Inductor 最优策略。
+cooperative 为 all-read 合并，RS=1 仍带屏障；debug 为 `tl.debug_barrier → all_vector → tl.debug_barrier`。
+新增 plain 用于判断固定算法下拆 R 的价值，不能将该倍率解释为相对已有 split 的额外收益。
+CUDA 的缓存容量变化与 NPU AutoBlockify 差异还会影响耗时；
 完整图是否优于已有 split 仍以上面的实际 Inductor 实验为依据。
-
-**限核和映射是独立的正确性条件。** 既有 8 Vector 矩阵共 186 点，包含超过限额的 RS，
-结果为 106 通过、60 错误、20 超时，166 点保留耗时。
-X=1/S=16 的两种 all_vector 写法均出现首次、换输入和严格整数交换错误；相同配置在 56 核同卡对照通过。
-增加两侧本核屏障不能修复同组跨批问题；部分超预算组合通过也不能推广为任意 Grid 都安全。
-完整分片表和错误含义见[限核与精度结果](barrier-comparison.md#73-限核后如何约束分片数)。
-
-**TA/NPUIR 的 atomic 路径仍有独立性能缺口。** 固定 X=1/R=1048576/S=32 的同地址对照中，
-NPU original/native/debug 为 534.695/8.216/8.219 µs；32 program 的 atomic 分量中，
-不使用返回值为 4.012 µs，使用旧值为 278.324 µs，独立地址仍为 278.238 µs。
-源码与最终 IR 确认返回旧值触发软件锁，详见[成本归因](barrier-comparison.md#44-原始-semaphore-协议为什么在-a5-simd-上慢)。
-因此选择 semaphore 依赖 TA/NPUIR 解决此成本；选择原生同步则依赖明确的全体参与和映射契约。
-
-全形状扫描使用 Graph + Event、7 样本中位数，默认 batch=16、replays=10，
-按 pilot 将慢点采样工作量控制在约 50 ms/样本，保留实际参数。
-首次结果、计时后输出、两组变化输入和 4 phase 整数交换均通过才参加最佳选择。
-这属于随机输入、固定 BLOCK、热数据的选点证据，不代表动态 shape、特殊值、模型收益或生产触发阈值。
-当前 mean/更多 dtype/并发的功能证据仍需与完整 Inductor 集成验收区分。
 
 ### 6.2 性能验收与待量化指标
 
