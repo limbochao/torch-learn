@@ -740,8 +740,10 @@ cooperative 为 all-read 合并，RS=1 仍带屏障；debug 为 `tl.debug_barrie
 NPU cooperative 暂用联合搜索 RS/BLOCK 的 DSL 原型。这样可以避免只与固定 BLOCK 的手写 plain 比较。
 调优后的 DSL 收益仍属于原型证据；GPU 强制进入 cooperative 的全形状结果与自然选择分开记录。
 使用方法见[多卡一键测试](../../../scripts/tests/cooperative_reductions/COMPILE_MATRIX_README.md)，
-测量分组见[方案第 4.2 节](design.md#42-全形状性能测试方案调整)。全量数据尚未按新入口采集；
-上表保持 A5/L20 的固定 BLOCK 口径。
+测量分组见[方案第 4.2 节](design.md#42-全形状性能测试方案调整)。后续已按统一 eager 与 profiler device duration
+完成 GPU/NPU 各 199 组对照，包含关闭 split/cooperative 的编译基线和 13 档 R 扫描，见
+[完整结果与验证摘要](../split-cooperative-reduction-comparison/results.md)。NPU split/cooperative 仍是 DSL 原型，
+不是完整 Inductor 集成收益；上表保留 A5/L20 的历史固定 BLOCK 口径，不与新数据混算。
 
 ### 6.2 性能验收与待量化指标
 

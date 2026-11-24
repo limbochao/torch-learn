@@ -11,7 +11,7 @@ title: 需求设计
 <div class="tl-section-heading" markdown="1">
 ## 内容状态
 
-当前已归档 7 篇需求设计文档，后续新增时继续按下面的生命周期组织。
+当前已归档 8 个需求设计与验证主题，后续新增时继续按下面的生命周期组织。
 </div>
 
 ## 已归档设计
@@ -19,6 +19,7 @@ title: 需求设计
 - [NPU Cooperative Reduction 需求分析（PyTorch 2.13）](cooperative-reduction/requirements.md)
 - [NPU Cooperative Reduction 初步方案（PyTorch 2.13）](cooperative-reduction/design.md)（草案，待评审）
 - [三种 x_grid_barrier 的 A5 与 RTX 4090 验证](cooperative-reduction/barrier-comparison.md)
+- [Split 与 cooperative reduction 的 GPU/NPU profiler 对照](split-cooperative-reduction-comparison/results.md)（[测试说明](../../scripts/tests/reduction_strategy_pk/README.md)）
 - [Symbolic Grouped Autotune 增加 Elementwise Workload 设计](symbolic-group/inductor-symbolic-group-elementwise-workload.md)
 - [Elementwise Workload 实现说明](symbolic-group/inductor-symbolic-group-elementwise-workload-detail.md)
 - [Range/Memory-Aware Symbolic Group 分组设计草案](symbolic-group/inductor-symbolic-group-range-memory-aware.md)（未实现、未验证）

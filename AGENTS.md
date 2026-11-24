@@ -28,8 +28,9 @@
 
 ## 分析产物约定
 
-- 需要被文档长期引用的 generated graph、generated code 等原始产物放在 `artifacts/<topic>/`。
-- `artifacts/` 中的文件是分析证据，不作为可执行脚本维护；临时日志和无长期引用价值的产物不提交。
+- 新增实验在项目中只保留最终结果、图表、测试脚本和使用说明。全量原始数据、profiler trace、
+  生成代码/IR、日志、缓存及其压缩归档必须保存在项目外，不得放入 `torch-learn` 或提交到 Git。
+- 最终结果和图表放在对应文档的 assets 目录或 `artifacts/<topic>/`；测试源码包只包含源码和说明。
 - 文档引用 generated DSL、`output_code.py` 或 kernel 片段时，默认保持原始产物的格式，不主动
   pretty-print、重排或拆分参数列表。
 - 只有用户明确要求 pretty JSON 等展示形式时才增加格式化换行；generated artifact 中的原始长行
