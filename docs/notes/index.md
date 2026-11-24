@@ -33,6 +33,10 @@ title: 学习笔记
       <p>按源码说明四种 type 的适用场景、赋值覆盖、索引回退，以及 autotune 最终编译模式。</p>
     </div>
     <div>
+      <a href="compiler/codegen/gpu-config-npu-impact.html">GPU 配置在 Ascend NPU 中的影响</a>
+      <p>补全 48 项配置的默认状态、功能与性能影响，标明 NPU 不支持项及 FakeTensor、NPUGraph 的实际生效条件。</p>
+    </div>
+    <div>
       <a href="compiler/codegen/roadmap/">PyTorch Inductor Codegen 学习路线</a>
       <p>按八个目标系统学习 Dynamo、FX、Inductor IR、scheduler、backend codegen、dynamic shape 和 Ascend NPU；每章包含源码范围、架构总览和技术点专题。</p>
     </div>
