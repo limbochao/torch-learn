@@ -15,7 +15,7 @@ from run import normalize_args, parser
 
 
 def arguments(args):
-    names = ("lowering_profile", "execution", "cache", "rotate_buffers", "sessions", "rounds", "repeats", "sample_budget_ms", "graph_batch", "warmup",
+    names = ("lowering_profile", "execution", "cache", "rotate_buffers", "sessions", "rounds", "repeats", "warmup",
              "seed", "max_working_mib", "timeout", "outputs_per_program", "target_waves", "min_chunk", "max_s",
              "relative_margin", "absolute_margin_us", "metric", "max_r_gap", "boundary_r_gap")
     values = [part for name in names for part in ("--" + name.replace("_", "-"), str(getattr(args, name)))]
@@ -34,7 +34,7 @@ def main():
     p = parser()
     p.description = __doc__
     p.add_argument("--max-refine-rounds", type=int, default=12, help="stop with pending work if this budget is exhausted; may increase on resume")
-    p.add_argument("--with-dynamic", action="store_true", help="also collect dynamic graph-reuse diagnostics after static validation")
+    p.add_argument("--with-dynamic", action="store_true", help="also collect dynamic compiled-graph reuse diagnostics after static validation")
     p.add_argument("--with-controls", action="store_true", help="also collect excluded-type controls")
     p.add_argument("--collect-all", action="store_true", help="collect all initial/static/dynamic/control cases despite individual failures; failed evidence still prevents validation")
     args = normalize_args(p, p.parse_args())

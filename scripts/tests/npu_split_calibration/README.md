@@ -1,12 +1,17 @@
 # NPU split reduction 阈值标定
 
-用实际 `torch.compile → num_splits → create_multilayer → NPU tiling/codegen` 测量完整 forward，
+用实际 `torch.compile → num_splits → create_multilayer → NPU tiling/codegen`，
+直接调用编译后的 forward，通过 profiler 采集并解析 `kernel_details.csv`，累加完整 forward 的 device kernel duration，
 比较一份固定 S 规则与 S=1。**不搜索 S，不把 S 交给 autotune**；正常 tiling autotune 在两侧保持一致。
 所有 hook 限于 worker 进程，不修改安装目录。原始日志、缓存、代码与结果全部放在仓库之外。
 
 产品实现与适用范围见 [NPU Split Reduction 当前实现方案](../../../docs/requirements-design/split-cooperative-reduction-comparison/npu-split-reduction-design.md)。
-本套件输出 `npu-split-table-v2` 实验表；产品接收 `npu-split-policy-v1`，当前没有直接转换入口。
+本套件输出 `npu-split-table-v3` 实验表；产品接收 `npu-split-policy-v1`，当前没有直接转换入口。
 即使实验表通过 holdout，也需在实际产品路径验证上下文和环境后再转换，不能只改 schema/status 导入。
+
+**旧 Event 数据无效：** 2026-11-26 整改前的 `device_us` 是 Event 区间，包含任务间空隙，
+不能用于本套件的 kernel device 性能阈值。新版使用独立的 `kernel_us` 和 v3 manifest/result/table，
+旧结果禁止续跑、合并或生成阈值，须使用新目录重新采集。原始旧数据保留供问题追溯。
 
 ## 脚本分工
 
@@ -17,13 +22,15 @@
 | [merge.py](merge.py) | CPU 离线合并：校验全集/环境/配置/来源，保留原始配对样本，重新生成报告并支持后续补测 |
 | [cases.py](cases.py) | 定义 op/dtype/X/R/布局/融合矩阵、输入数据、参考计算及工作集预算 |
 | [policy.py](policy.py) | 固定 S 候选、IR family 分组、实验准入表验证；不搜索 S |
-| [worker.py](worker.py) | 每 case 独立进程：环境采集、编译、精度检查、Graph/direct 与 hot/rotate 配对计时 |
+| [worker.py](worker.py) | 每 case 独立进程：环境采集、编译、精度检查，直接调用并采集 hot/rotate 配对 profiler 数据 |
+| [profiling.py](profiling.py) | 复用公共 profiler，按实际 kernel 序列归属样本，计算 kernel duration 总和，核验原始 CSV |
 | [hooks.py](hooks.py) | 进程内选择与观测 num_splits/multilayer，记录实际 launch/tiling，按 profile 恢复实验 lowering |
 | [analyze.py](analyze.py) | 核验 split/codegen 证据，计算配对收益和裕量，生成 summary、报告及阈值状态 |
 | [refinement.py](refinement.py) | 提出 R/上下文补点，形成有限区间，生成并审核逐规则 holdout |
 | [common.py](common.py) | 全集与百分比元数据、源码指纹、结果读写、仓库外产物路径校验 |
 
 实际 tiling 记录复用仓库内的 [autotune_tiling.py](../../tools/autotune_tiling.py)。
+采集与 CSV 读取直接复用 [npu_profiler.py](../../tools/npu_profiler.py) 的 `TorchNpuProfiler`、`ProfileResultParser`。
 各机器应使用同一仓库提交；不需要另行打包或分布式运行环境。
 
 ## 常用采集命令
@@ -47,15 +54,13 @@ python scripts/tests/npu_split_calibration/run.py \
 | --- | --- |
 | `--preset coarse,boundary,coverage` | 归约长度粗扫、固定 S 切换边界，以及 dtype/布局/融合代表点。它决定用例全集；临时检查环境可改为 `--preset smoke`。 |
 | `--lowering-profile ordinary_ir` | 在 worker 进程内让 prod/any/xor 等进入普通归约 IR，测到 split 本身。某些安装版本默认将它们转给外部算子执行，无法用于 split 标定；如需检查安装默认路径，改为 `installed`。 |
-| `--execution graph,direct` | 分别测 NPU Graph 回放和普通调用。split 多一阶段的启动代价在两种执行方式下可能不同，分别保留结果，避免只在一种方式下获益就通用开启。 |
 | `--cache hot,rotate` | 分别反复使用同一组输入，以及轮换四组输入地址，观察输入复用对收益的影响。这里指输入数据复用，不是编译缓存开关；rotate 不保证冷 L2。 |
 | `--max-working-mib 65536` | 每个 case 的估算工作集上限为 64 GiB，用于排除过大的测试；不会预分配 64 GiB，也不是实测峰值内存保证。目标卡可用内存较少时可降低，例如 `8192`。 |
 
-默认每个 case 测 `graph/hot`、`graph/rotate`、`direct/hot`、`direct/rotate` 四种条件，
-每种条件各自比较 plain/candidate，不把它们混成一个平均耗时。
+默认每个 case 直接调用并测 `hot`、`rotate` 两种输入复用条件，各自比较 plain/candidate。
+不使用 NPU Graph、Event 或 host wall-clock 作为性能指标；无需传 execution/metric 参数。
 默认预算沿用全量数据采集配置，C=56 时初始 5340 例均进入规划；降低预算会显式记录排除项。
-多机采集用于合并时，这些实验配置必须一致。若目标环境不支持 NPU Graph，所有分片统一加 `--execution direct`，
-得到的准入证据只覆盖 direct。
+多机采集用于合并时，这些实验配置必须一致。
 
 启动时会打印实际使用的配置，并将完整配置写入 plan/manifest；可以加 `--plan --cores 56` 只查看计划。
 旧的 `--visible-devices`、`--device`、`--start-percent`、`--end-percent` 作为兼容入口保留，
@@ -70,23 +75,22 @@ triton-ascend 并加载 CANN 环境；套件使用 Python >=3.10 与标准库，
 ```bash
 # 仅规划初始矩阵，不需要 torch/NPU。56 替换为目标有效 Vector 核数。
 python scripts/tests/npu_split_calibration/campaign.py \
-  --plan --cores 56 --out "$HOME/npu-split-runs/plan-v2"
+  --plan --cores 56 --out "$HOME/npu-split-runs/plan-v3"
 
 # 自动：smoke → 初始矩阵 → 追加 R/上下文 → 冻结 → 每条规则 holdout。
 # --with-dynamic 另收集动态诊断；它不扩大静态准入表的适用范围。
 python scripts/tests/npu_split_calibration/campaign.py \
   --devices 0 --with-dynamic \
-  --out "$HOME/npu-split-runs/calibration-v2"
+  --out "$HOME/npu-split-runs/calibration-v3"
 
 # 中断后原命令加 --resume，只测新增/失败/不完整 case。
 python scripts/tests/npu_split_calibration/campaign.py \
   --devices 0 --with-dynamic --resume \
-  --out "$HOME/npu-split-runs/calibration-v2"
+  --out "$HOME/npu-split-runs/calibration-v3"
 ```
 
 campaign 与 run 使用相同的采集默认值，最多 12 轮自动加密。
 实际 C 从选定设备的 backend config 读取，遵守 `NPU_DEVICE_LIMIT`。
-不支持 NPUGraph 时，从开始就使用 `--execution direct`；该表只适用于相同执行域。
 使用多张空闲卡时传 `--devices 0,1,2,3`，数字为物理卡编号，没有固定的两卡上限。
 runner 对每张卡单独设置 `ASCEND_RT_VISIBLE_DEVICES`，每卡同时只运行一个 case；
 同一 case 的所有策略始终在同一卡配对，结果记录机器名和卡号。预检要求所选卡软硬件指纹一致。
@@ -102,17 +106,17 @@ runner 对每张卡单独设置 `ASCEND_RT_VISIBLE_DEVICES`，每卡同时只运
 
 ```bash
 python scripts/tests/npu_split_calibration/run.py --preset smoke --fail-fast \
-  --out "$HOME/npu-split-runs/smoke-v2"
+  --out "$HOME/npu-split-runs/smoke-v3"
 
 # 保留安装默认 lowering，并将当前安装的 PR/旧策略作为第三个对照。
 python scripts/tests/npu_split_calibration/run.py --preset smoke \
   --lowering-profile installed \
   --modes plain,candidate,policy --policy installed \
-  --out "$HOME/npu-split-runs/installed-v2"
+  --out "$HOME/npu-split-runs/installed-v3"
 
 # 特殊 reduction 的排除路径控制；不用于普通 split 阈值拟合。
 python scripts/tests/npu_split_calibration/run.py --preset controls \
-  --out "$HOME/npu-split-runs/controls-v2"
+  --out "$HOME/npu-split-runs/controls-v3"
 ```
 
 `plain` 强制 S=1；`candidate` 使用固定 S；两者统一 read-layout/hint 分类并禁止嵌套 split。
@@ -197,7 +201,8 @@ manifest 的 `merge.case_sources` 保留来源目录。不同 SoC、软件、源
 不会择优挑一份重复结果；未提交的区间和失败项会列为 INCOMPLETE，阻止准入。
 单个百分比区间只报告该区间的数据，完整合并前状态为 `PARTIAL_COLLECTION`，不生成可用阈值。
 
-默认只复制分析必需的 JSON 和 worker 日志，保留各输入目录的原始代码、IR 和缓存。
+默认复制分析必需的 JSON、worker 日志和每个 profile 的原始 `kernel_details.csv`，
+合并及分析会重新解析 CSV 并核对 SHA-256、任务数量、kernel 顺序和样本之和。
 加 `--copy-artifacts` 可复制完整 case 目录；两种模式都不会修改输入目录，也不会启动 NPU 任务。
 输入必须已经结束，输出必须为空；合并失败或需要加入新输入时使用新的输出目录。
 
@@ -209,8 +214,8 @@ manifest 的 `merge.case_sources` 保留来源目录。不同 SoC、软件、源
 不是阈值已经通过冻结和 holdout。
 
 套件源码参与指纹校验；更换源码版本后的新数据不能与旧版本混合合并或续跑，
-更早的采集目录还可能缺少完整全集元数据。正在运行的旧实验继续使用它保存的 `source/` 快照和原参数。
-本版简化了 CLI 并统一默认采集口径；新一轮采集使用新的输出目录和同一份新版源码。
+更早的采集目录还可能缺少完整全集元数据。旧 Event 数据不能作为本版性能标定证据。
+本版只采集 profiler kernel device duration；新一轮采集使用新的输出目录和同一份新版源码。
 
 ## 类型、dtype、布局与融合覆盖
 
@@ -278,7 +283,7 @@ S           = max(1, min(S_fill, cap, R-1, floor(R/min_chunk)))
 | controls | 4 种特殊路径 forward × X=1/2，共 8 个 |
 
 C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 个 case；
-默认 65536 MiB 预算保留全部 5340 个；改为 8192 MiB 时保留 5178 个，排除 162 个。
+默认 65536 MiB 预算保留全部 5340 个；改为 8192 MiB 时保留 5190 个，排除 150 个。
 超预算点记录在 manifest，不会当作已测。
 初始矩阵之外的精确数量取决于测量结果。`--x/--r/--ops/--dtypes/--layouts/--match/--limit` 都是过滤器，
 不生成任意新尺寸；使用 `--cases-json` 可替代预设矩阵，支持现有 forward。
@@ -303,14 +308,14 @@ C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 �
    不递归沿 tile 边界无限展开；这不是对编译器全部切换点的穷举。
 5. 两端都不获益的区域不自动做密集搜索，也不导出准入规则；可能漏掉孤立获益岛，但不会因此启用未证实的范围。
 
-加密配置为 `--max-r-gap 1.25 --boundary-r-gap 1.05`。同一 case 的所有 Graph/direct、hot/rotate 条件都要参与。
+加密配置为 `--max-r-gap 1.25 --boundary-r-gap 1.05`。同一 case 的 hot/rotate 两种 profiler 条件都要参与。
 至少三个连续通过的 R、上下文齐全且满足间距要求，才形成候选区间。任何未完成 case、待补点或必需补点超预算，
 都阻止导出可冻结规则。`provisional_rules` 只用于诊断，不能当作准入表。
 
 使用同一个 manifest 追加 case，保存 manifest 历史，已完成结果按源码/环境/测量参数/输入定义核验后复用。
 只提高规划显存预算不会改变既有测量；例如原预算为 8192，可在原命令加 `--resume --max-working-mib 16384`；
 增加加密轮数也可续跑，如 `--max-refine-rounds 20`。预算是保守估算，不是设备峰值显存保证。
-改变 dtype/布局筛选、S 规则、计时设置、设备/关键软件/套件代码需要新实验；旧 v1 数据不会被误当成 v2 证据。
+改变 dtype/布局筛选、S 规则、计时设置、设备/关键软件/套件代码需要新实验；旧 Event 数据不会被误当成 profiler v3 证据。
 
 手动追加也可使用：
 
@@ -330,10 +335,10 @@ campaign 在所有补点结束后保存带内容摘要的冻结表，自动生�
 
 - 每个通过采样间隔内部的一个新 R，并确保每个 rule/context 至少有两个未参与标定的内部 R。
 - 区间两个端点，以及区间外紧邻点；若外侧属于另一条规则，按整张表核对是否应拆分。
-- 所有已声明的 execution/cache 组合，使用不同输入 seed，重新编译 table 策略。
+- hot/rotate 缓存条件，使用不同输入 seed，重新编译 table 策略。
 
 验收检查实际 IR decision 是否匹配预期准入，所有进入 split 的完整 forward 都必须 WIN。
-缺少某条规则、某个上下文、某种执行/缓存、内部新点或端点控制，都不能通过；没有实际准入样例也不能通过。
+缺少某条规则、某个上下文、某种缓存条件、内部新点或端点控制，都不能通过；没有实际准入样例也不能通过。
 预算排除了 holdout case 同样失败。不会以多数样例或平均收益掩盖退化点。
 
 通过后输出 `validated-policy.json`，状态为 `VALIDATED_MEASURED_DOMAIN`，含审核记录。
@@ -349,21 +354,32 @@ CPU 参考、NPU eager 和 compiled 结果先比较；xor_sum 的 eager 不存�
 
 prod 使用少量抵消的 2/0.5 因子、非单位尾值和符号，其余为 1，避免长 R 自动下溢、SIMD 分组积溢出。
 整数 prod 使用 ±1 和非单位尾值。额外复用 compiled 图做单位元、末尾、分片边界检查，prod 再测末尾零。
-bool 检查全 False/全 True 相应单位元及尾部反例；Graph replay 也检查这些数据。它们都是计时外检查。
+bool 检查全 False/全 True 相应单位元及尾部反例；这些都在 profiler 采集外检查。
 这是性能准入的正确性前置条件，不是 NaN/Inf、极端消减、任意分布的完整数值认证。
 
-计时前完成编译、autotune、代码/配置采集并卸载观测 hook。测量完整 no_grad forward，包括 split 两阶段、
-partial 读写与融合变化；不含编译和精度比较。无 backward 测试。
+采集前完成编译、autotune、代码/配置采集、精度检查和预热，并卸载观测 hook。
+采集区间只直接调用编译后的 no_grad forward；不做输入 H2D、CPU reference、结果 D2H 或重新编译。
+无 backward 测试。
 
 - 默认 3 session ×7 round，每 round 随机顺序加逆序；两策略为 ABBA/BAAB。
-- 每个策略、每组条件有 42 个样本。direct 每个样本最多 100 次 forward。
-- Graph 每次 capture 8 个完整 forward，每样本最多 replay 100 次，按实际 forward 次数折算。
-- 计时外 pilot 按最慢策略选择双方共用的重复次数，使每样本目标不超过 `--sample-budget-ms 20`；
-  单次调用已超过预算时仍至少测一次；direct/rotate 至少覆盖完整一轮输入，重复次数是 buffer 数的整数倍。
-  保留全部 session/round，原始样本记录实际 repeats/forwards。
-  `--sample-budget-ms 0` 可使用固定重复次数；它是不同计时设置，需要新实验。
-- hot 一组输入；rotate 默认 4 组，在 Graph capture 内也轮换。rotate 不保证冷 L2，记录 working set。
-- device_us 是同一 stream 的 Event 批次时间，包含 kernel 间隙/主机提交导致的等待；wall_us 含同步等主机开销。
+- 每个策略、每种缓存条件有 42 个批次样本；每批固定 `--repeats 20` 个完整 forward。
+  rotate 时 repeats 必须为 buffer 数的整数倍。不会通过 Event pilot 决定重复次数。
+- 每个 session 使用一份 Level0 profiler，CPU+NPU activities，关闭 stack、shape、memory 采集。
+  编译和算子预热在采集外完成；profiler 的 schedule warmup 为 0，正式采集只执行计划内的批次。
+  复用公共 `TorchNpuProfiler`；每批结束同步并 `prof.step()`，同步只确定任务先后，不计为 kernel 时间。
+- 复用 `ProfileResultParser.kernel_rows()` 读取 `kernel_details.csv`，支持 `Duration(us)` / `Task Duration(us)`。
+  对同一 stream 的完整任务序列排序，逐批核对观测到的 kernel 名称、顺序、次数与 inspected launch 序列一致。
+  不按 CPU range 时间戳切片，避免 host/device 时钟偏移；不静默丢弃无法解释的行。
+- `kernel_us = Σ该批全部 kernel duration / 实际 forward 数`。split 包括 partial、combine，
+  融合/多归约场景包括完整 forward 的所有实际 kernel，不能只取第一阶段。
+  每个 launch 单独保存名称、次数、总时长和每次 forward 的平均时长，方便检查两阶段成本。
+- 不使用 Event 区间、首尾任务跨度、CPU duration、同步等待或 kernel 间空隙。
+  一份 capture 中若出现多设备、CSV 明示的多 stream、额外或缺失任务、名称不符、零/无效 duration，直接报错。
+  部分 CANN 的 kernel_details.csv 不含 stream 列，此时明确记录该限制，归属依据为直接调用的串行执行和完整 kernel 序列。
+- hot 一组输入；rotate 默认 4 组相同 shape、不同地址的输入，减少同地址缓存复用。
+  rotate 不保证冷 L2；记录 working set，不重新编译。
+- capture 的 CSV 路径、SHA-256、任务数、实际 duration 列均随结果保存；分析/续跑/合并重新核验 CSV。
+  CSV 缺失、被修改或无法复算时，不接受该结果为性能证据。完整 trace 仍保留在原采集目录。
 
 默认 `gain=Tplain-Tsplit`，裕量 `max(Tplain*8%,0.2us)`。
 每 round 配对平均，session 内取中位数；所有 session 均超过裕量，且 session 裕量的 2000 次 bootstrap
@@ -380,7 +396,8 @@ partial 读写与融合变化；不含编译和精度比较。无 backward 测�
 | preflight/environment.json | SoC、有效/物理核数、软件版本、关键源码摘要、CANN 信息、npu-smi |
 | coverage.json | 24 个普通 op/dtype 的计划数量和实际证据/收益状态；计划过不代表 split 已实现 |
 | refinement.json、next_cases.json | 待补点及原因、预算阻塞、可追加完整矩阵 |
-| cases/id/result.json | 原始配对时间、精度/特殊数据检查、shape/stride、工作集、图编号、实际 launch |
+| cases/id/result.json | kernel_us 配对样本、逐 kernel 成本、CSV 指纹，精度/特殊数据、shape/stride、工作集、编译图编号、实际 launch |
+| cases/id/profiles/probe-*/session-*/ | profiler 原始 trace/CSV、采集计划 plan.json、解析后的 kernel_samples.json |
 | cases/id/mode/lowering.json | num_splits 输入/理由/S、实际 multilayer/depth、partial 逻辑数量与预期 dtype |
 | output_code_*.py、fx_*.py、launches_*/ir/ | wrapper/DSL、FX、可取得的 TTIR/adapter/LLIR；每次观测单独保存，避免动态 shape 覆盖旧证据 |
 | summary.csv/json、report.md | 时间/收益/证据、S、grid/programs、selected tiling/runtime blocks、图编号、错误清单 |
@@ -392,17 +409,21 @@ partial 读写与融合变化；不含编译和精度比较。无 backward 测�
 不能从 X*S 或 partial 逻辑大小推断真实 grid/峰值显存。实际分配看 output_code，
 `partial_dtype_expected` 只是按上游 dst_dtype 规则记录的预期值，不控制 partial 分配；
 上游 `create_multilayer_helper` 实际决定 intermediate 类型，需结合生成 IR/code 核对。
-当前不采集每阶段 profiler 时间、UB 实际占用、L2 miss、带宽或峰值 workspace。
-需要解释反常点时对相应 case 另采 profiler，避免把采样开销混入正式时间。
+当前已采集每个实际 kernel 的 profiler device duration；不采集 UB 实际占用、L2 miss、带宽或峰值 workspace。
+主指标是设备 kernel 时长总和，不代表包含 host 和任务间隙的端到端延迟；模型端到端验收属于独立指标。
 
 重新分析不重跑设备，但会覆盖报告和候选表；已冻结表单独保存：
 
 ```bash
 python scripts/tests/npu_split_calibration/analyze.py \
-  "$HOME/npu-split-runs/calibration-v2/calibration" \
-  --metric wall_us --relative-margin 0.10 --absolute-margin-us 0.5
+  "$HOME/npu-split-runs/calibration-v3/calibration" \
+  --relative-margin 0.10 --absolute-margin-us 0.5
 ```
 
 退出码：1 为环境/执行/数据或证据问题；2 为没有得到准入区间或 holdout 未通过；3 为补点预算/轮数/覆盖仍待处理。
 单独 run.py 的普通采集退出 0 只表示完成，性能退化仍会出现在报告中。
-本地已验证规划、CPU 数据/参考计算和模拟结果的完整流程；这些不能替代真实 NPU 的编译与性能验证。
+已验证规划、CPU 数据/参考计算、模拟 CSV 的分析/分区合并及损坏证据拒绝。
+2026-11-26 在 NPU_A5 的 pta_213_case 环境、单张物理卡 4 上完成 sum/FP32/X=1/R=4096 的
+编译、精度检查、hot/rotate profiler 采集及分析流程；另外复用其生成 wrapper，验证
+每种缓存条件 3 session ×5 round ×ABBA/BAAB ×4 forward，共 6 份 CSV、720 条 kernel，
+全部任务数量、名称顺序及原始 CSV 复算通过。这些是采集链路验证，不能作为全矩阵完成或阈值有效的证据。

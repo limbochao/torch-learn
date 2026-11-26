@@ -9,15 +9,14 @@ import math
 import os
 from pathlib import Path
 import platform
-import random
 import subprocess
-import time
 import traceback
 import types
 from unittest.mock import patch
 
 from cases import cpu_values, estimated_working_bytes, forward_function, input_bytes, input_spec, reference, shapes
-from common import file_hash, read_json, source_hashes, write_json
+from common import file_hash, read_json, require_profiler_settings, source_hashes, timing_contract, write_json
+from profiling import benchmark
 from hooks import SplitController, install_ordinary_lowerings, make_recorder
 from policy import digest, split_count, validate_table
 
@@ -204,103 +203,6 @@ class Strategy:
         return record
 
 
-class Invocation:
-    def __init__(self, strategy, inputs, execution, expected, dtype, graph_batch):
-        import torch
-
-        self.strategy, self.inputs, self.execution = strategy, inputs, execution
-        self.graphs, self.outputs = [], []
-        self.calls_per_replay = graph_batch if execution == "graph" else 1
-        if execution == "graph":
-            graph = torch.npu.NPUGraph()
-            with torch.npu.graph(graph):
-                for index in range(graph_batch):
-                    self.outputs.append(strategy.compiled(*inputs[index % len(inputs)]))
-            graph.replay()
-            torch.npu.synchronize()
-            for index, output in enumerate(self.outputs):
-                accuracy(to_cpu(output), expected[index % len(expected)], dtype)
-            self.graphs.append(graph)
-
-    def call(self, index):
-        if self.execution == "graph":
-            self.graphs[0].replay()
-        else:
-            self.outputs = [self.strategy.compiled(*self.inputs[index])]
-
-    def validate(self, expected, dtype):
-        import torch
-
-        if self.execution == "graph":
-            self.graphs[0].replay()
-            torch.npu.synchronize()
-            for index, output in enumerate(self.outputs):
-                accuracy(to_cpu(output), expected[index % len(expected)], dtype)
-            return
-        for index, reference in enumerate(expected):
-            self.call(index)
-            torch.npu.synchronize()
-            accuracy(to_cpu(self.outputs[0]), reference, dtype)
-
-
-def measure(invocation, repeats):
-    import torch
-
-    start, end = torch.npu.Event(enable_timing=True), torch.npu.Event(enable_timing=True)
-    torch.npu.synchronize()
-    begin = time.perf_counter_ns()
-    start.record()
-    for index in range(repeats):
-        invocation.call(index % len(invocation.inputs))
-    end.record()
-    end.synchronize()
-    calls = repeats * invocation.calls_per_replay
-    wall = (time.perf_counter_ns() - begin) / 1000 / calls
-    device = start.elapsed_time(end) * 1000 / calls
-    if device <= 0 or wall <= 0:
-        raise RuntimeError("nonpositive timing: event resolution insufficient")
-    return dict(device_us=device, wall_us=wall, repeats=repeats, forwards=calls)
-
-
-def benchmark(invocations, settings, seed):
-    import torch
-
-    for invoke in invocations.values():
-        for index in range(settings["warmup"]):
-            invoke.call(index % len(invoke.inputs))
-    torch.npu.synchronize()
-    repeats = settings["repeats"]
-    budget = settings.get("sample_budget_ms", 0)
-    first = next(iter(invocations.values()))
-    cycle = len(first.inputs) if first.execution == "direct" else 1
-    if budget:
-        # One shared repetition count for all paired strategies. Pilot calls
-        # remain outside statistical samples; bound slow baselines without
-        # changing the number of paired rounds or choosing S by timing.
-        longest_replay_us = max(measure(invoke, max(2, cycle))["device_us"] * invoke.calls_per_replay
-                                for invoke in invocations.values())
-        repeats = max(cycle, min(repeats, int(budget * 1000 / longest_replay_us)) // cycle * cycle)
-    print(f"TIMING execution={next(iter(invocations.values())).execution} repeats={repeats} "
-          f"sessions={settings['sessions']} rounds={settings['rounds']}", flush=True)
-    rng = random.Random(seed)
-    samples = []
-    was_enabled = gc.isenabled()
-    gc.disable()
-    try:
-        for session in range(settings["sessions"]):
-            for round_id in range(settings["rounds"]):
-                order = list(invocations)
-                rng.shuffle(order)
-                # ABBA for two strategies; balanced forward/reverse for three.
-                for position, mode in enumerate(order + list(reversed(order))):
-                    samples.append(dict(session=session, round=round_id, position=position,
-                                        mode=mode, **measure(invocations[mode], repeats)))
-    finally:
-        if was_enabled:
-            gc.enable()
-    return samples
-
-
 def checked_reference(case, pair):
     expected = reference(case, pair)
     # prims.xor_sum deliberately has no eager CPU/NPU implementation. Its
@@ -310,7 +212,7 @@ def checked_reference(case, pair):
     return expected
 
 
-def check_special_patterns(case, x, r, strategies, device, settings, cores, execution):
+def check_special_patterns(case, x, r, strategies, device, settings, cores):
     """Reuse compiled code for untimed identity/tail/partition correctness."""
     if case["op"] not in ("prod", "any", "all", "xor_sum"):
         return []
@@ -326,10 +228,6 @@ def check_special_patterns(case, x, r, strategies, device, settings, cores, exec
         for mode, strategy in strategies.items():
             output = strategy.compiled(*inputs[0])
             result[mode] = accuracy(to_cpu(output), expected, case["dtype"])
-            if execution == "graph":
-                invocation = Invocation(strategy, inputs, execution, [expected], case["dtype"], 1)
-                invocation.validate([expected], case["dtype"])
-                del invocation
         checks.append(dict(pattern=pattern, positions=positions if pattern == "partition_edges" else [], results=result))
     return checks
 
@@ -340,6 +238,7 @@ def run_case(job, out):
     if job["source_hashes"] != source_hashes():
         raise RuntimeError("suite source changed after manifest creation")
     settings, case = job["settings"], job["case"]
+    require_profiler_settings(settings)
     environment = initialize(settings["device"], settings.get("lowering_profile", "installed"))
     fingerprint = environment["fingerprint"]
     if fingerprint != job["environment"]:
@@ -353,9 +252,8 @@ def run_case(job, out):
             raise ValueError("table suite code differs from current code; recalibrate")
         if table.get("max_autotune") != settings["max_autotune"]:
             raise ValueError("table max_autotune setting differs")
-        for key in ("graph_batch", "rotate_buffers", "sample_budget_ms"):
-            if table.get("timing_contract", {}).get(key) != settings[key]:
-                raise ValueError(f"table {key} setting differs")
+        if table.get("timing_contract") != timing_contract(settings):
+            raise ValueError("table profiler timing contract differs; recalibrate")
         if table.get("domain", {}).get("contexts") and case["op"] not in table["domain"]["contexts"]:
             raise ValueError("forward context was not covered by table calibration")
         for key, current in (("executions", settings["executions"]), ("cache_modes", settings["cache_modes"])):
@@ -365,7 +263,7 @@ def run_case(job, out):
     torch.manual_seed(settings["seed"])
     torch._dynamo.config.suppress_errors = False
     strategies = {mode: Strategy(mode, settings, case, cores, table, out / mode) for mode in settings["modes"]}
-    record = dict(schema="npu-split-result-v2", case=case, settings=settings, environment=fingerprint, table_digest=digest(table),
+    record = dict(schema="npu-split-result-v3", case=case, settings=settings, environment=fingerprint, table_digest=digest(table),
                   device_assignment=environment["device_assignment"],
                   source_hashes=job["source_hashes"], status="RUNNING", probes=[])
     write_json(out / "result.json", record)
@@ -399,14 +297,14 @@ def run_case(job, out):
                     for pair, reference in zip(inputs[1:], expected[1:]):
                         accuracy(to_cpu(strategy.compiled(*pair)), reference, case["dtype"])
                 for execution in settings["executions"]:
-                    pattern_checks = check_special_patterns(case, x, r, strategies, device, settings, cores, execution)
-                    invocations = {mode: Invocation(strategy, inputs, execution, expected, case["dtype"], settings["graph_batch"])
-                                   for mode, strategy in strategies.items()}
+                    pattern_checks = check_special_patterns(case, x, r, strategies, device, settings, cores)
                     before = {mode: s.compiles for mode, s in strategies.items()}
                     active_before = {mode: s.active_compile_id for mode, s in strategies.items()}
-                    samples = benchmark(invocations, settings, settings["seed"] + probe_id)
-                    for invocation in invocations.values():
-                        invocation.validate(expected, case["dtype"])
+                    samples, profiles = benchmark(strategies, inputs, metadata, settings, settings["seed"] + probe_id,
+                        out / "profiles" / f"probe-{probe_id:03d}-{cache}", out)
+                    for strategy in strategies.values():
+                        for pair, target in zip(inputs, expected):
+                            accuracy(to_cpu(strategy.compiled(*pair)), target, case["dtype"])
                     after = {mode: s.compiles for mode, s in strategies.items()}
                     stable = before == after
                     inspected = all(before[mode] == info["compiles"] and active_before[mode] == info["active_compile_id"]
@@ -418,7 +316,7 @@ def run_case(job, out):
                                  input_working_set_bytes=sum(t.untyped_storage().nbytes() for pair in inputs for t in
                                      (pair if case["op"] in ("add_sum", "sum_amax") or case["layout"] == "broadcast" else pair[:1])),
                                  inputs=[dict(shape=list(t.shape), stride=list(t.stride()), dtype=str(t.dtype)) for t in inputs[0]],
-                                 metadata=metadata, samples=samples, correctness_patterns=pattern_checks,
+                                 metadata=metadata, samples=samples, profiles=profiles, correctness_patterns=pattern_checks,
                                  reference_kind="independent_cpu_xor_tree" if case["op"] == "xor_sum" else "cpu_and_npu_eager",
                                  compiles_before=before, compiles_after=after,
                                  active_before=active_before,
@@ -428,7 +326,6 @@ def run_case(job, out):
                     record["strategies"] = {mode: dict(compiles=s.compiles, sources=s.sources,
                         decisions=s.controller.decisions, splits=s.controller.splits) for mode, s in strategies.items()}
                     write_json(out / "result.json", record)
-                    del invocation, invocations
                 del inputs, expected, metadata
                 gc.collect()
                 torch.npu.empty_cache()

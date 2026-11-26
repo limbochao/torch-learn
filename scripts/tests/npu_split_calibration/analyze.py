@@ -11,7 +11,9 @@ from pathlib import Path
 import random
 import statistics
 
-from common import collection_complete, measurement_settings, read_json, validate_collection, write_json
+from common import (METRIC, TIMING_METHOD, collection_complete, measurement_settings, read_json,
+                    require_profiler_settings, timing_contract, validate_collection, write_json)
+from profiling import sample_evidence, validate_captures
 from cases import PRIMITIVES, context_id
 from policy import VERSION, digest
 from refinement import audit_holdout, observations, propose_intervals, refinement_plan
@@ -60,17 +62,9 @@ def evidence_status(result, probe, mode):
     actual_pairs = Counter((s["session"], s["round"], s["mode"]) for s in probe.get("samples", []))
     if actual_pairs != expected_pairs:
         return "INCOMPLETE_PAIRS"
-    if any(not math.isfinite(s[key]) or s[key] <= 0 for s in probe["samples"] for key in ("device_us", "wall_us")):
-        return "INVALID_TIMING"
-    if settings.get("sample_budget_ms", 0):
-        repeats = {s.get("repeats") for s in probe["samples"]}
-        if len(repeats) != 1 or None in repeats or not 1 <= next(iter(repeats)) <= settings["repeats"]:
-            return "INVALID_REPETITION_CONTRACT"
-        batch = settings["graph_batch"] if probe["execution"] == "graph" else 1
-        if any(s.get("forwards") != s["repeats"] * batch for s in probe["samples"]):
-            return "INVALID_REPETITION_CONTRACT"
-        if probe["execution"] == "direct" and probe["cache"] == "rotate" and next(iter(repeats)) % settings["rotate_buffers"]:
-            return "INVALID_REPETITION_CONTRACT"
+    invalid = sample_evidence(probe, settings)
+    if invalid:
+        return invalid
     strategies = result.get("strategies", {})
     if "plain" not in strategies or mode not in strategies:
         return "MISSING_STRATEGY"
@@ -112,9 +106,12 @@ def evidence_status(result, probe, mode):
     return "VERIFIED_SPLIT"
 
 
-def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric="device_us"):
+def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric=METRIC):
     directory = Path(directory)
     manifest = read_json(directory / "manifest.json")
+    require_profiler_settings(manifest["settings"])
+    if metric != METRIC or manifest.get("schema") != "npu-split-manifest-v3":
+        raise ValueError("only profiler kernel duration manifests can be analyzed; recollect legacy Event data")
     if "collection" in manifest:
         validate_collection(manifest)
     complete = collection_complete(manifest)
@@ -140,6 +137,19 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric="devi
         actual_probes = {(p["probe_id"], p["cache"], p.get("execution", "")) for p in result["probes"]}
         if actual_probes != expected_probes or len(result["probes"]) != len(expected_probes):
             failures.append(dict(case_id=case["id"], status="INCOMPLETE_PROBES"))
+        if result.get("schema") != "npu-split-result-v3":
+            failures.append(dict(case_id=case["id"], status="INVALID_RESULT_SCHEMA"))
+            continue
+        invalid_profiles = False
+        for probe in result["probes"]:
+            if probe.get("status") == "PASS":
+                try:
+                    validate_captures(probe, manifest["settings"], case_dir)
+                except (ValueError, KeyError, OSError) as exc:
+                    failures.append(dict(case_id=case["id"], status="INVALID_PROFILER_EVIDENCE", error=str(exc)))
+                    invalid_profiles = True
+        if invalid_profiles:
+            continue
         results.append(result)
         for probe in result["probes"]:
             for mode in manifest["settings"]["modes"]:
@@ -147,6 +157,7 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric="devi
                     continue
                 row = dict(case_id=case["id"], op=case["op"], dtype=case["dtype"], layout=case["layout"],
                            role=case["role"], X=probe["X"], R=probe["R"], probe_id=probe["probe_id"],
+                           metric=METRIC, timing_method=TIMING_METHOD,
                            cache=probe["cache"], execution=probe.get("execution", ""), mode=mode, context=context_id(case))
                 row["physical_device"] = result.get("device_assignment", {}).get("visible_devices", "")
                 row["hostname"] = result.get("device_assignment", {}).get("hostname", "")
@@ -194,11 +205,11 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric="devi
 
     # Incomplete data must never silently widen a gate. Fail-closed globally;
     # rerun the failed/skipped cases (or explicitly create a smaller new manifest).
-    table = dict(schema="npu-split-table-v2", status=("INCOMPLETE" if failures else "PARTIAL_COLLECTION" if not complete else "NEEDS_REFINEMENT" if needs_refinement else
+    table = dict(schema="npu-split-table-v3", status=("INCOMPLETE" if failures else "PARTIAL_COLLECTION" if not complete else "NEEDS_REFINEMENT" if needs_refinement else
                  "DRAFT_REQUIRES_HOLDOUT" if proposals else "NO_ADMISSIBLE_INTERVAL"),
                  environment=manifest["environment"],
                  suite_source_hashes=manifest["source_hashes"], max_autotune=manifest["settings"]["max_autotune"],
-                 timing_contract={key: manifest["settings"][key] for key in ("graph_batch", "rotate_buffers", "sample_budget_ms")},
+                 timing_contract=timing_contract(manifest["settings"]),
                  selector={"version": VERSION, "params": manifest["settings"]["selector"]},
                  rules=proposals if complete and not failures and not needs_refinement else [], provisional_rules=proposals,
                  collection_complete=complete,
@@ -220,7 +231,7 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric="devi
                  dict(passed=False, status="WAITING_FOR_COLLECTION_MERGE", table_digest=digest(manifest["table"])))
         write_json(directory / "holdout.audit.json", audit)
     write_json(directory / "summary.json", dict(rows=rows, failures=failures, table=table))
-    fields = ["case_id", "role", "op", "dtype", "layout", "X", "R", "mode", "execution", "cache", "probe_id",
+    fields = ["case_id", "role", "op", "dtype", "layout", "X", "R", "mode", "execution", "cache", "probe_id", "metric", "timing_method",
               "evidence", "decision", "plain_us", "strategy_us", "speedup", "gain_pct", "gain_us",
               "min_session_excess_us", "lower99_excess_us", "same_seed_graph"]
     fields += ["hostname", "physical_device", "requested_S", "actual_S", "plain_grids", "strategy_grids", "plain_programs", "strategy_programs",
@@ -232,7 +243,7 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric="devi
                          for key, value in row.items()} for row in rows)
     counts = Counter(row["decision"] for row in rows)
     lines = ["# NPU split calibration", "", f"Metric: `{metric}`. Relative margin {relative_margin:.1%}; absolute margin {absolute_margin:g} us.",
-             "", "Event duration spans the complete call batch, including inter-kernel/host submission gaps. Wall duration includes synchronization overhead.",
+             "", "Metric is the sum of kernel_details.csv device task durations / forward count, including every partial/combine kernel. Host time, inter-task gaps and Event intervals are excluded. No NPU Graph is used.",
              "", f"Cases: {len(manifest['cases'])}; excluded by planned memory budget: {len(manifest.get('excluded_cases', []))}; incomplete/error cases: {len(failures)}; proposed intervals: {len(table['rules'])}.",
              "", "| Decision | Count |", "|---|---:|"]
     lines += [f"| {key} | {value} |" for key, value in sorted(counts.items())]
@@ -267,7 +278,7 @@ def main():
     parser.add_argument("directory", type=Path)
     parser.add_argument("--relative-margin", type=float, default=0.08)
     parser.add_argument("--absolute-margin-us", type=float, default=0.2)
-    parser.add_argument("--metric", choices=("device_us", "wall_us"), default="device_us")
+    parser.add_argument("--metric", choices=(METRIC,), default=METRIC)
     args = parser.parse_args()
     summarize(args.directory, args.relative_margin, args.absolute_margin_us, args.metric)
 

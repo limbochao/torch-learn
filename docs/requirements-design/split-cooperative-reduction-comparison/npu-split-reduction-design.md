@@ -176,6 +176,10 @@ selector version 与 `NPU_DEVICE_LIMIT` 另加入 FX/AOT 持久化图缓存键�
 
 ## 7. 数据如何决定启用范围
 
+标定主指标限定为 profiler 中完整 forward 的 device kernel duration 总和，包含 partial 与 combine；
+直接执行并解析 kernel_details.csv，不使用 NPU Graph、Event 区间或 host 等待时间决定阈值。
+旧 Event 采集结果无效，不能续用于性能准入。
+
 完整的测试矩阵、模块分工、执行方式、产物字段与多机合并流程统一维护在
 [标定脚本 README](../../../scripts/tests/npu_split_calibration/README.md)。
 
@@ -189,7 +193,7 @@ selector version 与 `NPU_DEVICE_LIMIT` 另加入 FX/AOT 持久化图缓存键�
 3. 将实验结果映射到当前产品 selector 的严格上下文，在实际产品编译配置、目标设备及独立时段复测。
    通过后才生成产品策略并启用 auto。应同时检查产品原有基线，避免只证明相对实验 plain 的收益。
 
-测试套件输出的 schema 是 `npu-split-table-v2`，产品接口是 `npu-split-policy-v1`。
+测试套件输出的 schema 是 `npu-split-table-v3`，产品接口是 `npu-split-policy-v1`。
 两者的环境、上下文和合法性检查不同；**目前没有可直接导入的转换工具，不能只改 schema/status 就加载到产品。**
 特别是 `ordinary_ir` profile 在 worker 内恢复部分 fallback lowering，
 与产品安装默认路径属于不同实验域，不能混用准入结果。
@@ -212,7 +216,7 @@ selector version 与 `NPU_DEVICE_LIMIT` 另加入 FX/AOT 持久化图缓存键�
 
 设备测试中的 auto 区间是用于验证控制逻辑的合成规则，不是实测性能阈值。
 目录调整后的最终源码仍需在目标安装/构建环境做设备复验。
-此文不将已启动的全量采集视为已完成，也不声明已经获得可上线阈值。
+旧 Event 全量采集已停止，性能数据作废；profiler 版本须重新采集并验收，当前没有可上线阈值。
 
 剩余验收包括：完整采集与补点结束、逐规则 holdout、当前产品路径复验、
 独立时段/设备稳定性，以及需求规格中尚未覆盖的数值压力、生命周期和模型回归。

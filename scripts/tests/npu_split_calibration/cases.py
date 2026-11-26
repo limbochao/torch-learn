@@ -129,10 +129,9 @@ def input_bytes(case, x, r):
 
 def estimated_working_bytes(case, x, r, settings):
     buffers = settings["rotate_buffers"] if "rotate" in settings["cache_modes"] else 1
-    graph_outputs = settings["graph_batch"] if "graph" in settings["executions"] else 1
     output_size = x * r if case["op"] in ("rmsnorm", "softmax", "cumsum") else x * 3
     return (input_bytes(case, x, r) * buffers + x * r * 32
-            + output_size * 8 * graph_outputs * len(settings["modes"]))
+            + output_size * 8 * len(settings["modes"]))
 
 
 def input_spec(case, x, r):

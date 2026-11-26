@@ -10,7 +10,8 @@ import shutil
 
 from analyze import summarize
 from common import (collection_complete, external_output, measurement_settings, read_json,
-                    source_hashes, validate_collection, write_json)
+                    require_profiler_settings, source_hashes, validate_collection, write_json)
+from profiling import validate_captures
 from policy import digest
 from run import budget_cases
 
@@ -27,8 +28,9 @@ def prepare(inputs, out):
         if active.exists() and read_json(active).get("status") in ("RUNNING", "MERGING"):
             raise ValueError(f"collection is still marked RUNNING: {root}; finish/resume it before merging")
         manifest = read_json(root / "manifest.json")
+        require_profiler_settings(manifest["settings"])
         validate_collection(manifest)
-        if manifest.get("schema") != "npu-split-manifest-v2":
+        if manifest.get("schema") != "npu-split-manifest-v3":
             raise ValueError(f"unsupported manifest schema: {root}")
         manifests.append(manifest)
     first = manifests[0]
@@ -71,6 +73,11 @@ def prepare(inputs, out):
                 raise ValueError(f"result identity mismatch: {path}")
             if result.get("status") == "RUNNING" and not (path.parent / "error.json").exists():
                 raise ValueError(f"unfinished result: {path}; resume the collection before merging")
+            if result.get("status") == "PASS":
+                if result.get("schema") != "npu-split-result-v3":
+                    raise ValueError(f"legacy timing result: {path}")
+                for probe in result["probes"]:
+                    validate_captures(probe, manifest["settings"], path.parent)
         owners.update({case_id: root for case_id in selected})
         reports.append(dict(directory=str(root), created_utc=manifest.get("created_utc"),
                             manifest_digest=digest(manifest), partition=manifest["collection"]["partition"],
@@ -81,7 +88,7 @@ def prepare(inputs, out):
     collection = dict(first["collection"], partition=dict(kind="merged"),
                       selected_case_ids=[case["id"] for case in universe if case["id"] in owners])
     provenance = dict(inputs=reports, case_sources={key: str(value) for key, value in owners.items()})
-    manifest = dict(schema="npu-split-manifest-v2", cases=cases, excluded_cases=excluded,
+    manifest = dict(schema="npu-split-manifest-v3", cases=cases, excluded_cases=excluded,
                     settings=first["settings"], table=first["table"],
                     initial_case_ids=[case["id"] for case in universe],
                     environment=first["environment"], source_hashes=first["source_hashes"],
@@ -134,6 +141,19 @@ def main():
             for name in ("result.json", "error.json", "environment.json", "job.json", "worker.log"):
                 if (source / name).exists():
                     shutil.copy2(source / name, destination / name)
+            # CSVs are portable mandatory evidence, not optional large trace/cache artifacts.
+            if (source / "result.json").exists():
+                result = read_json(source / "result.json")
+                for probe in result.get("probes", []):
+                    for capture in probe.get("profiles", []):
+                        relative = Path(capture["csv"])
+                        csv_source = (source / relative).resolve()
+                        if relative.is_absolute() or source.resolve() not in csv_source.parents:
+                            raise ValueError("profiler CSV path escaped source case")
+                        target = destination / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        if csv_source.exists():
+                            shutil.copy2(csv_source, target)
     if (inputs[0] / "source").exists():
         shutil.copytree(inputs[0] / "source", out / "source")
     _, failures = summarize(out, criteria["relative_margin"], criteria["absolute_margin_us"], criteria["metric"])

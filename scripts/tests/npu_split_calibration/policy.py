@@ -82,7 +82,7 @@ def admit(meta, split, table):
 
 
 def validate_table(table, fingerprint, params):
-    if table.get("schema") != "npu-split-table-v2":
+    if table.get("schema") != "npu-split-table-v3":
         raise ValueError("unsupported admission table schema")
     if table.get("status") not in ("DRAFT_REQUIRES_HOLDOUT", "VALIDATED_MEASURED_DOMAIN"):
         raise ValueError("table is incomplete or still requires refinement")

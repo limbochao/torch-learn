@@ -13,6 +13,20 @@ from policy import digest
 
 
 HERE = Path(__file__).resolve().parent
+TIMING_METHOD = "npu-profiler-kernel-sum-v1"
+METRIC = "kernel_us"
+
+
+def timing_contract(settings):
+    return dict(method=TIMING_METHOD, metric=METRIC, csv="kernel_details.csv",
+                profiler_level=0, profiler_warmup_steps=0, execution="direct", repeats=settings["repeats"],
+                rotate_buffers=settings["rotate_buffers"])
+
+
+def require_profiler_settings(settings):
+    if (settings.get("timing_method") != TIMING_METHOD or settings.get("executions") != ["direct"]
+            or settings.get("criteria", {}).get("metric") != METRIC):
+        raise ValueError("Event/Graph timing data is invalid for calibration; collect a new profiler run in a new directory")
 
 
 def write_json(path, value):
@@ -35,6 +49,7 @@ def source_hashes():
     files = {path.name: file_hash(path) for path in HERE.glob("*.py")}
     recorder = recorder_path()
     files["autotune_tiling.py"] = file_hash(recorder)
+    files["npu_profiler.py"] = file_hash(profiler_path())
     return files
 
 
@@ -128,6 +143,11 @@ def recorder_path():
     # Recorded source snapshots keep the shared recorder alongside this module.
     snapshot = HERE / "autotune_tiling.py"
     return snapshot if snapshot.exists() else HERE.parents[1] / "tools" / "autotune_tiling.py"
+
+
+def profiler_path():
+    snapshot = HERE / "npu_profiler.py"
+    return snapshot if snapshot.exists() else HERE.parents[1] / "tools" / "npu_profiler.py"
 
 
 def external_output(path):

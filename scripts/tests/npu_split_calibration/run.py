@@ -16,9 +16,10 @@ import threading
 import time
 
 from analyze import summarize
+from profiling import validate_captures
 from cases import CONTROLS, DTYPE_BYTES, FLOAT_DTYPES, FUSIONS, LAYOUTS, OPS, PRIMITIVES, PRESETS, estimated_working_bytes, make_case, matrix, shapes
 from common import (HERE, collection_complete, collection_selection, external_output,
-                    measurement_settings, percentage, read_json, recorder_path, source_hashes,
+                    METRIC, TIMING_METHOD, measurement_settings, percentage, profiler_path, read_json, recorder_path, require_profiler_settings, source_hashes,
                     validate_collection, write_json)
 from policy import DEFAULTS, digest
 
@@ -131,7 +132,13 @@ def collect_cases(cases, out, settings, table, environment, identity, args):
                     and previous.get("environment") == environment and len(previous.get("probes", [])) == expected_probes
                     and all(len(probe.get("samples", [])) == settings["sessions"] * settings["rounds"] * 2 * len(settings["modes"])
                             for probe in previous["probes"])):
-                continue
+                try:
+                    for probe in previous["probes"]:
+                        validate_captures(probe, settings, directory)
+                except (ValueError, KeyError, OSError):
+                    pass  # Missing/invalid CSV is an incomplete case, never a resumable PASS.
+                else:
+                    continue
         pending.append((index, case, directory))
 
     slots = csv_items(args.visible_devices) if args.visible_devices else [None]
@@ -272,7 +279,7 @@ def budget_cases(cases, settings):
 def parser():
     p = argparse.ArgumentParser(
         description=__doc__,
-        epilog="Default collection: coarse,boundary,coverage; ordinary_ir; graph,direct x hot,rotate; "
+        epilog="Default collection: coarse,boundary,coverage; ordinary_ir; direct profiler kernel durations x hot,rotate; "
                "65536 MiB per-case planning budget. Override these only for a different experiment.",
     )
     p.add_argument("--out", type=Path, required=True, help="raw output directory outside the source/repository")
@@ -297,14 +304,12 @@ def parser():
     overrides.add_argument("--modes", default="plain,candidate", help="plain,candidate,policy")
     overrides.add_argument("--policy", choices=("installed", "table"), default="installed")
     overrides.add_argument("--table", type=Path)
-    overrides.add_argument("--execution", default="graph,direct", help="graph,direct; each measured independently")
+    overrides.add_argument("--execution", choices=("direct",), default="direct", help=argparse.SUPPRESS)
     overrides.add_argument("--cache", default="hot,rotate", help="hot,rotate")
     overrides.add_argument("--rotate-buffers", type=int, default=4)
     overrides.add_argument("--sessions", type=int, default=3)
     overrides.add_argument("--rounds", type=int, default=7)
-    overrides.add_argument("--repeats", type=int, default=100)
-    overrides.add_argument("--sample-budget-ms", type=float, default=20.0, help="cap repetitions from untimed pilot duration; 0 keeps fixed --repeats")
-    overrides.add_argument("--graph-batch", type=int, default=8, help="complete forwards per captured graph; divides timing by this factor")
+    overrides.add_argument("--repeats", type=int, default=20, help="forwards per profiler batch; default 20")
     overrides.add_argument("--warmup", type=int, default=10)
     overrides.add_argument("--seed", type=int, default=50315)
     overrides.add_argument("--max-working-mib", type=int, default=65536,
@@ -317,7 +322,7 @@ def parser():
     overrides.add_argument("--max-s", type=int, default=DEFAULTS["max_s"])
     overrides.add_argument("--relative-margin", type=float, default=0.08)
     overrides.add_argument("--absolute-margin-us", type=float, default=0.2)
-    overrides.add_argument("--metric", choices=("device_us", "wall_us"), default="device_us")
+    overrides.add_argument("--metric", choices=(METRIC,), default=METRIC, help=argparse.SUPPRESS)
     overrides.add_argument("--max-r-gap", type=float, default=1.25, help="maximum R ratio between passing interval samples")
     overrides.add_argument("--boundary-r-gap", type=float, default=1.05, help="refine gain/tiling transitions to this R ratio")
     overrides.add_argument("--cases-json", type=Path)
@@ -355,11 +360,11 @@ def main():
     partitioned = (args.start_percent, args.end_percent) != ("0", "100") or args.shards != 1
     if args.extend and partitioned:
         p.error("percentage/shard collections are fixed; use a new output directory for a new case universe")
-    for name in ("sessions", "rounds", "repeats", "graph_batch", "warmup", "rotate_buffers", "max_working_mib", "timeout",
+    for name in ("sessions", "rounds", "repeats", "warmup", "rotate_buffers", "max_working_mib", "timeout",
                  "outputs_per_program", "target_waves", "min_chunk"):
         if getattr(args, name) < 1:
             p.error(f"{name} must be positive")
-    if args.max_s < 0 or args.relative_margin < 0 or args.absolute_margin_us < 0 or args.sample_budget_ms < 0 or not math.isfinite(args.sample_budget_ms):
+    if args.max_s < 0 or args.relative_margin < 0 or args.absolute_margin_us < 0:
         p.error("max-s and margins must be nonnegative")
     if not (1 < args.boundary_r_gap <= args.max_r_gap) or not all(map(math.isfinite,
             (args.relative_margin, args.absolute_margin_us, args.max_r_gap, args.boundary_r_gap))):
@@ -369,12 +374,10 @@ def main():
     modes, executions, cache_modes = map(csv_items, (args.modes, args.execution, args.cache))
     if "plain" not in modes or len(set(modes)) != len(modes) or len(modes) < 2 or set(modes) - {"plain", "candidate", "policy"}:
         p.error("modes must include plain and candidate and/or policy")
-    if not executions or set(executions) - {"graph", "direct"} or not cache_modes or set(cache_modes) - {"hot", "rotate"}:
+    if not executions or set(executions) - {"direct"} or not cache_modes or set(cache_modes) - {"hot", "rotate"}:
         p.error("invalid execution/cache modes")
     if len(set(executions)) != len(executions) or len(set(cache_modes)) != len(cache_modes):
         p.error("execution/cache entries must be unique")
-    if "rotate" in cache_modes and "graph" in executions and args.graph_batch % args.rotate_buffers:
-        p.error("graph-batch must be a multiple of rotate-buffers so all inputs rotate evenly")
     if "rotate" in cache_modes and "direct" in executions and args.repeats % args.rotate_buffers:
         p.error("repeats must be a multiple of rotate-buffers so all direct inputs rotate evenly")
     if args.policy == "table" and "policy" in modes and not args.table:
@@ -382,11 +385,13 @@ def main():
     out = external_output(args.out)
     if out.exists() and any(out.iterdir()) and not args.resume:
         p.error("output is not empty; use a new directory or --resume with identical arguments")
+    if (out / "manifest.json").exists():
+        require_profiler_settings(read_json(out / "manifest.json")["settings"])
     out.mkdir(parents=True, exist_ok=True)
     settings = dict(device=args.device, modes=modes, policy=args.policy, executions=executions, cache_modes=cache_modes,
                     rotate_buffers=args.rotate_buffers, sessions=args.sessions, rounds=args.rounds,
-                    repeats=args.repeats, graph_batch=args.graph_batch, warmup=args.warmup, seed=args.seed, max_working_mib=args.max_working_mib,
-                    sample_budget_ms=args.sample_budget_ms, lowering_profile=args.lowering_profile,
+                    repeats=args.repeats, warmup=args.warmup, seed=args.seed, max_working_mib=args.max_working_mib,
+                    timing_method=TIMING_METHOD, lowering_profile=args.lowering_profile,
                     max_autotune=args.max_autotune,
                     max_r_gap=args.max_r_gap, boundary_r_gap=args.boundary_r_gap,
                     criteria=dict(metric=args.metric, relative_margin=args.relative_margin, absolute_margin_us=args.absolute_margin_us),
@@ -446,7 +451,7 @@ def main():
         p.error(f"--cores={args.cores} differs from effective backend cores={cores}")
     selected, collection = select_cases(args, cores, with_collection=True)
     cases, excluded = budget_cases(selected, settings)
-    identity = dict(schema="npu-split-manifest-v2", cases=cases, excluded_cases=excluded, settings=settings, table=table,
+    identity = dict(schema="npu-split-manifest-v3", cases=cases, excluded_cases=excluded, settings=settings, table=table,
                     initial_case_ids=[case["id"] for case in cases] + [entry["case"]["id"] for entry in excluded],
                     environment=environment, source_hashes=source_hashes(), visible_devices=args.visible_devices,
                     collection=collection, schedule=args.schedule)
@@ -488,7 +493,7 @@ def main():
         write_json(manifest_path, dict(identity, created_utc=datetime.now(timezone.utc).isoformat()))
         source_dir = out / "source"
         source_dir.mkdir(exist_ok=True)
-        for path in [*HERE.glob("*.py"), HERE / "README.md", recorder_path()]:
+        for path in [*HERE.glob("*.py"), HERE / "README.md", recorder_path(), profiler_path()]:
             (source_dir / path.name).write_bytes(path.read_bytes())
     print(f"{len(cases)} cases, {len(excluded)} excluded by memory budget, C={cores}, modes={modes}, execution={executions}, cache={cache_modes}", flush=True)
     failed = False
