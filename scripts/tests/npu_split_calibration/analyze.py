@@ -251,13 +251,14 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric=METRI
                          for key, value in row.items()} for row in rows)
     counts = Counter(row["decision"] for row in rows)
     lines = ["# NPU split calibration", "", f"Metric: `{metric}`. Relative margin {relative_margin:.1%}; absolute margin {absolute_margin:g} us.",
+              "", f"Input reuse modes: `{','.join(manifest['settings']['cache_modes'])}`.",
              "", "Metric is the sum of kernel_details.csv device task durations / forward count, including every partial/combine kernel. Host time, inter-task gaps and Event intervals are excluded. No NPU Graph is used.",
              "", f"Cases: {len(manifest['cases'])}; excluded by planned memory budget: {len(manifest.get('excluded_cases', []))}; incomplete/error cases: {len(failures)}; proposed intervals: {len(table['rules'])}.",
              "", "| Decision | Count |", "|---|---:|"]
     lines += [f"| {key} | {value} |" for key, value in sorted(counts.items())]
     if guidance:
         lines += ["", "## Quick threshold guidance", "",
-                  "Screening anchors only; no deployable thresholds. Both cache conditions must WIN. "
+                  "Screening anchors only; no deployable thresholds. All configured input reuse modes must WIN. "
                   "Transition midpoints are in next_cases.json; repeated --resume --extend narrows brackets without rerunning completed cases.",
                   "", "| op / dtype / layout / X | Observed winning anchors | Transition brackets |",
                   "|---|---|---|"]

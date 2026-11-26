@@ -23,7 +23,7 @@
 | [merge.py](merge.py) | CPU 离线合并：校验全集/环境/配置/来源，保留原始配对样本，重新生成报告并支持后续补测 |
 | [cases.py](cases.py) | 定义 op/dtype/X/R/布局/融合矩阵、输入数据、参考计算及工作集预算 |
 | [policy.py](policy.py) | 固定 S 候选、IR family 分组、实验准入表验证；不搜索 S |
-| [worker.py](worker.py) | 每 case 独立进程：环境采集、编译、精度检查，直接调用并采集 hot/rotate 配对 profiler 数据 |
+| [worker.py](worker.py) | 每 case 独立进程：环境采集、编译、精度检查，直接调用并采集 plain/candidate 配对 profiler 数据 |
 | [profiling.py](profiling.py) | 复用公共 profiler，按实际 kernel 序列归属样本，计算 kernel duration 总和，核验原始 CSV |
 | [hooks.py](hooks.py) | 进程内选择与观测 num_splits/multilayer，记录实际 launch/tiling，按 profile 恢复实验 lowering |
 | [analyze.py](analyze.py) | 核验 split/codegen 证据，计算配对收益和裕量，生成 summary、报告及阈值状态 |
@@ -56,10 +56,11 @@ python scripts/tests/npu_split_calibration/run.py \
 | --- | --- |
 | `--preset quick` | 默认快速定位阈值，C=56 时 576 例；完整标定使用 `coarse,boundary,coverage`，C=56 时 5340 例。 |
 | `--lowering-profile ordinary_ir` | 在 worker 进程内让 prod/any/xor 等进入普通归约 IR，测到 split 本身。某些安装版本默认将它们转给外部算子执行，无法用于 split 标定；如需检查安装默认路径，改为 `installed`。 |
-| `--cache hot,rotate` | 分别反复使用同一组输入，以及轮换四组输入地址，观察输入复用对收益的影响。这里指输入数据复用，不是编译缓存开关；rotate 不保证冷 L2。 |
+| `--cache hot` | 默认按常规单算子方式复用同一组输入，预热后重复调用，比较 plain/candidate；这里指输入数据复用，不是编译缓存开关。 |
 | `--max-working-mib 65536` | 每个 case 的估算工作集上限为 64 GiB，用于排除过大的测试；不会预分配 64 GiB，也不是实测峰值内存保证。目标卡可用内存较少时可降低，例如 `8192`。 |
 
-默认每个 case 直接调用并测 `hot`、`rotate` 两种输入复用条件，各自比较 plain/candidate。
+默认每个 case 只测 `hot`：plain/candidate 共享同一组输入，各自预热后配对重复测量。
+如需单独诊断输入地址复用的影响，可显式传 `--cache hot,rotate`；rotate 不参与默认采集或默认收益判定。
 不使用 NPU Graph、Event 或 host wall-clock 作为性能指标；无需传 execution/metric 参数。
 默认预算为 64 GiB，C=56 时 576 个 quick case 均进入规划；降低预算会显式记录排除项。
 多机采集用于合并时，这些实验配置必须一致。
@@ -71,7 +72,7 @@ python scripts/tests/npu_split_calibration/run.py \
 ## 快速指导阈值：先筛查，再定向补点
 
 `run.py` 默认 quick，C=56 时从原来的 5340 例减少到 **576 例，减少约 89.2%**。
-不减少每个点的重复采样：仍使用 3 session ×7 round、每批 20 forward 和 hot/rotate 两种条件。
+每个点默认只测 hot，重复采样仍使用 3 session ×7 round、每批 20 forward。
 省下的是首轮编译、采集、导出的 case 数，不是把有噪声的单次测量当成阈值依据。
 
 | 维度 | quick 首轮 | 取舍 |
@@ -84,7 +85,7 @@ python scripts/tests/npu_split_calibration/run.py \
 
 每组 op/dtype/X 的 `threshold-guidance.json` 和 `report.md` 会列出：
 
-- 每个 R 的 WIN、REGRESSION、UNCERTAIN、NO_SPLIT 或证据错误；只有双方缓存条件都通过裕量才是 WIN。
+- 每个 R 的 WIN、REGRESSION、UNCERTAIN、NO_SPLIT 或证据错误；默认按 hot 的配对结果判定。显式选择多种输入复用条件时，所选条件均通过裕量才是 WIN。
 - 连续观测到的获益点；若出现多个获益区段分别列出，不强行拟合为一个全局 `R >= threshold`。
 - 相邻 WIN/非 WIN 点之间的 R 区间，以及建议的几何中点。`UNCERTAIN` 表示未能证明收益，不等于已证明退化。
 - `next_cases.json` 包含原有 case 和待补点。反复追加后，将已观测到的收益变化边界缩到默认 R 比值 1.05 以内。
@@ -341,7 +342,7 @@ S           = max(1, min(S_fill, cap, R-1, floor(R/min_chunk)))
 | controls | 4 种特殊路径 forward × X=1/2，共 8 个 |
 
 C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 个 case；
-对于这份完整矩阵，65536 MiB 预算保留全部 5340 个；改为 8192 MiB 时保留 5190 个，排除 150 个。
+对于这份完整矩阵，默认 hot 条件下 65536 MiB 预算保留全部 5340 个；改为 8192 MiB 时保留 5252 个，排除 88 个。
 超预算点记录在 manifest，不会当作已测。
 初始矩阵之外的精确数量取决于测量结果。`--x/--r/--ops/--dtypes/--layouts/--match/--limit` 都是过滤器，
 不生成任意新尺寸；使用 `--cases-json` 可替代预设矩阵，支持现有 forward。
@@ -366,7 +367,7 @@ C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 �
    不递归沿 tile 边界无限展开；这不是对编译器全部切换点的穷举。
 5. 两端都不获益的区域不自动做密集搜索，也不导出准入规则；可能漏掉孤立获益岛，但不会因此启用未证实的范围。
 
-加密配置为 `--max-r-gap 1.25 --boundary-r-gap 1.05`。同一 case 的 hot/rotate 两种 profiler 条件都要参与。
+加密配置为 `--max-r-gap 1.25 --boundary-r-gap 1.05`。同一 case 按 manifest 所选输入复用条件分析，默认只要求 hot。
 至少三个连续通过的 R、上下文齐全且满足间距要求，才形成候选区间。任何未完成 case、待补点或必需补点超预算，
 都阻止导出可冻结规则。`provisional_rules` 只用于诊断，不能当作准入表。
 
@@ -393,7 +394,7 @@ campaign 在所有补点结束后保存带内容摘要的冻结表，自动生�
 
 - 每个通过采样间隔内部的一个新 R，并确保每个 rule/context 至少有两个未参与标定的内部 R。
 - 区间两个端点，以及区间外紧邻点；若外侧属于另一条规则，按整张表核对是否应拆分。
-- hot/rotate 缓存条件，使用不同输入 seed，重新编译 table 策略。
+- 沿用标定时所选输入复用条件，默认只测 hot；使用不同输入 seed，重新编译 table 策略。
 
 验收检查实际 IR decision 是否匹配预期准入，所有进入 split 的完整 forward 都必须 WIN。
 缺少某条规则、某个上下文、某种缓存条件、内部新点或端点控制，都不能通过；没有实际准入样例也不能通过。
@@ -434,8 +435,8 @@ bool 检查全 False/全 True 相应单位元及尾部反例；这些都在 prof
 - 不使用 Event 区间、首尾任务跨度、CPU duration、同步等待或 kernel 间空隙。
   一份 capture 中若出现多设备、CSV 明示的多 stream、额外或缺失任务、名称不符、零/无效 duration，直接报错。
   部分 CANN 的 kernel_details.csv 不含 stream 列，此时明确记录该限制，归属依据为直接调用的串行执行和完整 kernel 序列。
-- hot 一组输入；rotate 默认 4 组相同 shape、不同地址的输入，减少同地址缓存复用。
-  rotate 不保证冷 L2；记录 working set，不重新编译。
+- 默认 hot：复用一组输入，预热后重复测量。仅在显式选择 rotate 时轮换输入，默认轮换 4 组相同 shape、不同地址的输入。
+  rotate 作为可选诊断，不保证冷 L2；记录 working set，不重新编译。
 - capture 的 CSV 路径、SHA-256、任务数、实际 duration 列均随结果保存；分析/续跑/合并重新核验 CSV。
   CSV 缺失、被修改或无法复算时，不接受该结果为性能证据。完整 trace 和其它 profiler 产物导出后即清理。
 

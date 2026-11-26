@@ -297,7 +297,7 @@ def budget_cases(cases, settings):
 def parser():
     p = argparse.ArgumentParser(
         description=__doc__,
-        epilog="Default collection: quick screening; ordinary_ir; direct profiler kernel durations x hot,rotate; "
+        epilog="Default collection: quick screening; ordinary_ir; direct profiler kernel durations with hot input reuse; "
                "65536 MiB per-case planning budget. Override these only for a different experiment.",
     )
     p.add_argument("--out", type=Path, required=True, help="raw output directory outside the source/repository")
@@ -323,7 +323,7 @@ def parser():
     overrides.add_argument("--policy", choices=("installed", "table"), default="installed")
     overrides.add_argument("--table", type=Path)
     overrides.add_argument("--execution", choices=("direct",), default="direct", help=argparse.SUPPRESS)
-    overrides.add_argument("--cache", default="hot,rotate", help="hot,rotate")
+    overrides.add_argument("--cache", default="hot", help="input reuse modes: hot (default); rotate or hot,rotate for optional comparisons")
     overrides.add_argument("--rotate-buffers", type=int, default=4)
     overrides.add_argument("--sessions", type=int, default=3)
     overrides.add_argument("--rounds", type=int, default=7)
