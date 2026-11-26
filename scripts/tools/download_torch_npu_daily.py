@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""从华为云 OBS 查询并下载 torch_npu 分支对应的 PyTorch 构建包。
+"""从华为云 OBS 查询 torch_npu 分支构建包，并解压出可安装的 torch_npu wheel。
+
+仅用于 Linux。压缩包在临时目录中下载，只提取匹配目标 Python 版本和架构的 torch_npu wheel；
+压缩包及其他附带文件不保留。包内没有匹配的 wheel 或存在多个匹配时会报错。
 
 命令行配置：
 
@@ -13,8 +16,8 @@
 * ``--python-version``：目标 Python 版本，支持 ``3.11``、``311``、``python311`` 等写法，默认使用
   当前运行脚本的 Python 主次版本。
 * ``--arch``：目标架构，通常为 ``x86_64`` 或 ``aarch64``，默认使用当前机器架构。``amd64``、``x64``
-  会转换为 ``x86_64``，``arm64`` 会转换为 ``aarch64``；仅适用于 ``--source cache``。
-* ``--output-dir``：下载目录，默认当前工作目录。
+  会转换为 ``x86_64``，``arm64`` 会转换为 ``aarch64``；用于筛选 wheel 和选择 ``cache`` 压缩包。
+* ``--output-dir``：wheel 输出目录，默认当前工作目录。
 * ``--list-branches``：列出指定 source 下的可用分支后退出，默认关闭；使用时无需提供 ``branch``。
 * ``--list-builds N``：列出分支最近 N 个日构建号后退出，N 必须为正整数，默认关闭；仅适用于
   ``--source daily``。
@@ -30,8 +33,10 @@ import argparse
 import os
 import platform
 import re
+import shutil
 import ssl
 import sys
+import tarfile
 import tempfile
 import urllib.error
 import urllib.parse
@@ -222,9 +227,48 @@ def resolve_cache(client: ObsClient, branch: str, python_tag: str, arch: str) ->
     return package, None
 
 
+def download_wheel(
+    client: ObsClient, package: ObjectInfo, output_dir: Path, python_tag: str, arch: str
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".torch-npu-", dir=output_dir) as temporary_dir:
+        archive_path = Path(temporary_dir) / package.key.rsplit("/", 1)[-1]
+        client.download(package, archive_path)
+        wheel_path: Path | None = None
+        with tarfile.open(archive_path, "r|gz") as archive:
+            for member in archive:
+                filename = Path(member.name).name
+                if not member.isfile() or not filename.startswith("torch_npu-") or not filename.endswith(".whl"):
+                    continue
+                parts = filename[:-4].rsplit("-", 3)
+                if len(parts) != 4:
+                    continue
+                _, python_tags, _, platform_tags = parts
+                if f"cp{python_tag}" not in python_tags.split(".") or not any(
+                    tag.startswith(("linux_", "manylinux", "musllinux_")) and tag.endswith(f"_{arch}")
+                    for tag in platform_tags.split(".")
+                ):
+                    continue
+                if wheel_path is not None:
+                    raise BuildError(
+                        f"multiple matching torch_npu wheels found in {archive_path.name}: "
+                        f"{wheel_path.name}, {member.name}"
+                    )
+                wheel_path = Path(temporary_dir) / filename
+                print(f"Extracting {wheel_path.name}", file=sys.stderr)
+                with archive.extractfile(member) as source, wheel_path.open("wb") as output:
+                    shutil.copyfileobj(source, output)
+        if wheel_path is None:
+            version = f"{python_tag[0]}.{python_tag[1:]}"
+            raise BuildError(f"no Python {version} {arch} torch_npu wheel found in {archive_path.name}")
+        destination = output_dir / wheel_path.name
+        os.replace(wheel_path, destination)
+    return destination
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Discover and download public torch_npu branch builds from Huawei OBS."
+        description="Discover public torch_npu branch builds from Huawei OBS and extract the torch_npu wheel."
     )
     parser.add_argument("branch", nargs="?", help="torch_npu branch, for example master or v2.7.1")
     parser.add_argument("--source", choices=("daily", "cache"), default="daily")
@@ -282,11 +326,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Last modified: {package.last_modified}")
         print(f"URL: {url}")
         if not args.resolve_only:
-            destination = args.output_dir / package.key.rsplit("/", 1)[-1]
-            client.download(package, destination)
+            destination = download_wheel(client, package, args.output_dir, args.python_version, args.arch)
             print(f"Saved to: {destination.resolve()}")
         return 0
-    except (BuildError, ET.ParseError) as error:
+    except (BuildError, ET.ParseError, OSError, tarfile.TarError, EOFError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 

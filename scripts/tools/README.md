@@ -7,7 +7,12 @@ TorchBench 配套软件安装使用 [torchbench_setup.py](../torchbench.md)，�
 ## torch_npu 分支日构建包
 
 `download_torch_npu_daily.py` 通过公开的华为云 OBS 对象列表查询指定 torch_npu 分支的 PyTorch
-日构建包。默认选择包含当前 Python 版本的最新日构建；使用 `--resolve-only` 可以只查看下载地址：
+日构建包。仅用于 Linux，默认选择包含当前 Python 版本的最新日构建。下载后自动解压，
+按 `--python-version` 和 `--arch` 筛选 `torch_npu` wheel（默认使用当前 Python 版本和机器架构），
+将唯一匹配的 `.whl` 文件直接保存到 `--output-dir`（默认当前目录），可用 `pip install` 安装；
+压缩包、`torch` wheel、其他架构的 wheel、校验文件及调试符号不保留。
+若包内没有匹配的 wheel 或存在多个匹配，则报错并清理临时文件。
+输出目录中原有的其他文件不受影响。使用 `--resolve-only` 可以只查看下载地址：
 
 ```bash
 python scripts/tools/download_torch_npu_daily.py master --python-version 3.11 --resolve-only
