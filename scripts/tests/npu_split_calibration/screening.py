@@ -62,6 +62,7 @@ def threshold_guidance(manifest, rows, complete, failures):
                            observed_win_windows=windows, transition_brackets=transitions,
                            status="INCOMPLETE" if any(p["verdict"] in ("INCOMPLETE", "INVALID_EVIDENCE") for p in points)
                            else "OBSERVED_WINS" if windows else "NO_OBSERVED_WIN"))
-    return dict(status="SCREENING_ONLY" if complete and not failures else "INCOMPLETE_SCREENING",
+    usable = complete and not failures and all(group["status"] != "INCOMPLETE" for group in report)
+    return dict(status="SCREENING_ONLY" if usable else "INCOMPLETE_SCREENING",
                 collection_complete=complete, groups=report, next_cases=list(pending.values()),
                 note="Observed anchors and transition brackets only. No monotonicity, unmeasured interval, layout or X admission is inferred.")

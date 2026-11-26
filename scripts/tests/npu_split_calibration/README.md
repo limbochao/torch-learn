@@ -485,3 +485,6 @@ python scripts/tests/npu_split_calibration/analyze.py \
 编译、精度检查、hot/rotate profiler 采集及分析流程；另外复用其生成 wrapper，验证
 每种缓存条件 3 session ×5 round ×ABBA/BAAB ×4 forward，共 6 份 CSV、720 条 kernel，
 全部任务数量、名称顺序及原始 CSV 复算通过。这些是采集链路验证，不能作为全矩阵完成或阈值有效的证据。
+quick 和产物清理版本另完成相同 sum 用例的单卡验证（1 session ×1 round ×4 forward、hot/rotate）：
+case 结束仅剩两份 kernel_details.csv 和一份 result.json，共 37085 字节；无 cache/debug/trace/生成代码残留，
+分析状态为 SCREENING_ONLY。这是小样本的实际落盘量，不是默认 3×7×20 配置或全矩阵空间的估算。

@@ -221,6 +221,7 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric=METRI
                  rules=proposals if complete and not failures and not needs_refinement and not screening else [], provisional_rules=proposals,
                  collection_complete=complete,
                  refinement_pending=len(refinement["pending"]), refinement_blocked=len(refinement["blocked"]),
+                 screening_pending=len(guidance["next_cases"]) if guidance else 0,
                  blocked_by_incomplete_cases=len(failures),
                  criteria=dict(metric=metric, relative_margin=relative_margin, absolute_margin_us=absolute_margin),
                  domain=dict(executions=manifest["settings"]["executions"], cache_modes=manifest["settings"]["cache_modes"],
@@ -264,10 +265,11 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric=METRI
             wins = "; ".join(", ".join(map(str, window["tested_r"])) for window in group["observed_win_windows"]) or group["status"]
             brackets = "; ".join(f"{b['lo']} ({b['left']}) .. {b['hi']} ({b['right']})" for b in group["transition_brackets"]) or "none observed"
             lines.append(f"| {group['op']} / {group['dtype']} / {group['layout']} / {group['X']} | {wins} | {brackets} |")
-    lines += ["", f"Admission table status: `{table['status']}`; pending R/context probes: {len(refinement['pending'])}; memory-blocked probes: {len(refinement['blocked'])}.",
+    lines += ["", f"Admission table status: `{table['status']}`; pending R/context probes: {table['refinement_pending'] + table['screening_pending']}; memory-blocked probes: {len(refinement['blocked'])}.",
               f"Collection domain complete: `{complete}`. Partial ranges cannot export admission rules; merge them first.",
               "", "Primitive/dtype completeness is in coverage.json. S, grids, programs and selected tiling are also included in summary.csv.",
-              "", "Use campaign.py to append pending probes without rerunning completed cases. Freeze only after refinement has completed."]
+              "", "Use run.py --cases-json <out>/next_cases.json --resume --extend with the original measurement settings to narrow screening brackets."
+              if guidance else "Use campaign.py to append pending probes without rerunning completed cases. Freeze only after refinement has completed."]
     if failures:
         lines += ["", "## Incomplete cases", "", "| Case | Status |", "|---|---|"]
         lines += [f"| {item['case_id']} | {item['status']} |" for item in failures[:50]]
