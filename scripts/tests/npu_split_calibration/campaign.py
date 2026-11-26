@@ -11,11 +11,11 @@ import sys
 from common import HERE, external_output, read_json, source_hashes, write_json
 from policy import digest
 from refinement import make_holdout_plan
-from run import parser
+from run import normalize_args, parser
 
 
 def arguments(args):
-    names = ("device", "lowering_profile", "execution", "cache", "rotate_buffers", "sessions", "rounds", "repeats", "sample_budget_ms", "graph_batch", "warmup",
+    names = ("lowering_profile", "execution", "cache", "rotate_buffers", "sessions", "rounds", "repeats", "sample_budget_ms", "graph_batch", "warmup",
              "seed", "max_working_mib", "timeout", "outputs_per_program", "target_waves", "min_chunk", "max_s",
              "relative_margin", "absolute_margin_us", "metric", "max_r_gap", "boundary_r_gap")
     values = [part for name in names for part in ("--" + name.replace("_", "-"), str(getattr(args, name)))]
@@ -23,7 +23,9 @@ def arguments(args):
     if args.cores is not None:
         values += ["--cores", str(args.cores)]
     if args.visible_devices:
-        values += ["--visible-devices", args.visible_devices]
+        values += ["--devices", args.visible_devices]
+    elif args.device != 0:
+        values += ["--device", str(args.device)]  # Legacy logical-device selection.
     values += ["--schedule", args.schedule]
     return values
 
@@ -31,12 +33,11 @@ def arguments(args):
 def main():
     p = parser()
     p.description = __doc__
-    p.set_defaults(preset="coarse,boundary,coverage", execution="graph,direct", cache="hot,rotate", max_working_mib=8192)
     p.add_argument("--max-refine-rounds", type=int, default=12, help="stop with pending work if this budget is exhausted; may increase on resume")
     p.add_argument("--with-dynamic", action="store_true", help="also collect dynamic graph-reuse diagnostics after static validation")
     p.add_argument("--with-controls", action="store_true", help="also collect excluded-type controls")
     p.add_argument("--collect-all", action="store_true", help="collect all initial/static/dynamic/control cases despite individual failures; failed evidence still prevents validation")
-    args = p.parse_args()
+    args = normalize_args(p, p.parse_args())
     if args.max_refine_rounds < 1:
         p.error("max-refine-rounds must be positive")
     if args.modes != "plain,candidate" or args.policy != "installed" or args.table or args.extend:

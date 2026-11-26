@@ -26,6 +26,41 @@
 实际 tiling 记录复用仓库内的 [autotune_tiling.py](../../tools/autotune_tiling.py)。
 各机器应使用同一仓库提交；不需要另行打包或分布式运行环境。
 
+## 常用采集命令
+
+在 `torch-learn` 根目录执行，只需指定卡、用例百分比范围和输出目录：
+
+```bash
+python scripts/tests/npu_split_calibration/run.py \
+  --devices 0,1,2,3 --range 0,25 \
+  --out "$HOME/npu-split-runs/part-000-025"
+```
+
+这条命令将固定全集的前 25% 用例均分给物理卡 0/1/2/3，每卡同时运行一个 case。
+同一 case 的未拆分和固定 S 候选在同一卡配对测量。只用一张卡写 `--devices 3`；
+不传 `--range` 表示 `0,100`，不传 `--devices` 则使用当前可见的第一张卡。
+不需要再传逻辑卡号 `--device 0`。
+
+下面这些属于实验口径，已设为默认值，常规采集无需填写。只有明确要改变实验时才覆盖：
+
+| 可选配置及默认值 | 实际测什么 / 为什么保留 |
+| --- | --- |
+| `--preset coarse,boundary,coverage` | 归约长度粗扫、固定 S 切换边界，以及 dtype/布局/融合代表点。它决定用例全集；临时检查环境可改为 `--preset smoke`。 |
+| `--lowering-profile ordinary_ir` | 在 worker 进程内让 prod/any/xor 等进入普通归约 IR，测到 split 本身。某些安装版本默认将它们转给外部算子执行，无法用于 split 标定；如需检查安装默认路径，改为 `installed`。 |
+| `--execution graph,direct` | 分别测 NPU Graph 回放和普通调用。split 多一阶段的启动代价在两种执行方式下可能不同，分别保留结果，避免只在一种方式下获益就通用开启。 |
+| `--cache hot,rotate` | 分别反复使用同一组输入，以及轮换四组输入地址，观察输入复用对收益的影响。这里指输入数据复用，不是编译缓存开关；rotate 不保证冷 L2。 |
+| `--max-working-mib 65536` | 每个 case 的估算工作集上限为 64 GiB，用于排除过大的测试；不会预分配 64 GiB，也不是实测峰值内存保证。目标卡可用内存较少时可降低，例如 `8192`。 |
+
+默认每个 case 测 `graph/hot`、`graph/rotate`、`direct/hot`、`direct/rotate` 四种条件，
+每种条件各自比较 plain/candidate，不把它们混成一个平均耗时。
+默认预算沿用全量数据采集配置，C=56 时初始 5340 例均进入规划；降低预算会显式记录排除项。
+多机采集用于合并时，这些实验配置必须一致。若目标环境不支持 NPU Graph，所有分片统一加 `--execution direct`，
+得到的准入证据只覆盖 direct。
+
+启动时会打印实际使用的配置，并将完整配置写入 plan/manifest；可以加 `--plan --cores 56` 只查看计划。
+旧的 `--visible-devices`、`--device`、`--start-percent`、`--end-percent` 作为兼容入口保留，
+新版命令统一使用 `--devices` 和 `--range`。新旧区间写法不能混用；旧命令省略的实验参数也会采用本版默认值。
+
 ## 从仓库运行
 
 以下命令均在 `torch-learn` 根目录执行，不需要打包。需要目标机器已安装 PyTorch、torch_npu、
@@ -40,19 +75,19 @@ python scripts/tests/npu_split_calibration/campaign.py \
 # 自动：smoke → 初始矩阵 → 追加 R/上下文 → 冻结 → 每条规则 holdout。
 # --with-dynamic 另收集动态诊断；它不扩大静态准入表的适用范围。
 python scripts/tests/npu_split_calibration/campaign.py \
-  --device 0 --with-dynamic \
+  --devices 0 --with-dynamic \
   --out "$HOME/npu-split-runs/calibration-v2"
 
 # 中断后原命令加 --resume，只测新增/失败/不完整 case。
 python scripts/tests/npu_split_calibration/campaign.py \
-  --device 0 --with-dynamic --resume \
+  --devices 0 --with-dynamic --resume \
   --out "$HOME/npu-split-runs/calibration-v2"
 ```
 
-campaign 默认 `graph,direct × hot,rotate`，预算 8192 MiB，最多 12 轮自动加密。
-`--device` 是受可见设备环境变量影响的逻辑编号；实际 C 从选定设备的 backend config 读取，遵守 `NPU_DEVICE_LIMIT`。
+campaign 与 run 使用相同的采集默认值，最多 12 轮自动加密。
+实际 C 从选定设备的 backend config 读取，遵守 `NPU_DEVICE_LIMIT`。
 不支持 NPUGraph 时，从开始就使用 `--execution direct`；该表只适用于相同执行域。
-使用多张空闲卡时可传 `--visible-devices 0,1,2,3 --device 0`，数字为物理卡编号，没有固定的两卡上限。
+使用多张空闲卡时传 `--devices 0,1,2,3`，数字为物理卡编号，没有固定的两卡上限。
 runner 对每张卡单独设置 `ASCEND_RT_VISIBLE_DEVICES`，每卡同时只运行一个 case；
 同一 case 的所有策略始终在同一卡配对，结果记录机器名和卡号。预检要求所选卡软硬件指纹一致。
 默认 `--schedule balanced` 按轮询均分待测 case，每卡数量最多差 1；它保证数量均衡，不保证耗时相同。
@@ -69,8 +104,9 @@ runner 对每张卡单独设置 `ASCEND_RT_VISIBLE_DEVICES`，每卡同时只运
 python scripts/tests/npu_split_calibration/run.py --preset smoke --fail-fast \
   --out "$HOME/npu-split-runs/smoke-v2"
 
-# 包含当前安装的 PR/旧策略作为第三个对照。
+# 保留安装默认 lowering，并将当前安装的 PR/旧策略作为第三个对照。
 python scripts/tests/npu_split_calibration/run.py --preset smoke \
+  --lowering-profile installed \
   --modes plain,candidate,policy --policy installed \
   --out "$HOME/npu-split-runs/installed-v2"
 
@@ -84,12 +120,12 @@ python scripts/tests/npu_split_calibration/run.py --preset controls \
 所有模式统一关闭 cooperative、multi_kernel、mix_order，设置 min_num_split=0，默认启用 max_autotune。
 因此 installed 是在这些实验配置下的对照，不等于毫无干预的生产默认行为。
 
-`--lowering-profile installed` 保留当前安装的 lowering，默认使用此配置。
+`--lowering-profile installed` 保留当前安装的 lowering，需要显式选择此配置。
 若后端把 `aten.prod`、`aten.any.dim/dims` 或 `prims.xor_sum.default` 列在 fallback 表中，
 API 正确性通过仍不能说明实际进入了 reduction IR；报告会拒绝将缺失 IR/codegen 证据的点判为 WIN。
 `all` 分解后也可能受到 `any` 的 fallback 影响；XOR 没有 eager 实现，fallback 会直接报错。
 
-为标定已实现的普通 IR/codegen，可显式使用 `--lowering-profile ordinary_ir`：
+为标定已实现的普通 IR/codegen，默认使用 `--lowering-profile ordinary_ir`：
 worker 在进程内恢复社区 prod/any/xor_sum lowering，再比较相同 lowering 下的 S=1 与固定 S。
 此配置不修改安装文件，不改变数学 forward，也不搜索 S；恢复的 overload 列表记录在 environment 中。
 **它与安装默认行为属于不同实验域**，表只能用于同样开启这些 lowering 的实现，不能直接套给原安装配置。
@@ -97,8 +133,7 @@ worker 在进程内恢复社区 prod/any/xor_sum lowering，再比较相同 lowe
 
 ```bash
 python scripts/tests/npu_split_calibration/campaign.py \
-  --lowering-profile ordinary_ir --visible-devices 4,5 \
-  --max-working-mib 65536 --collect-all --with-dynamic --with-controls \
+  --devices 4,5 --collect-all --with-dynamic --with-controls \
   --out "$HOME/npu-split-runs/ordinary-ir"
 ```
 
@@ -110,9 +145,8 @@ python scripts/tests/npu_split_calibration/campaign.py \
 
 | 参数 | 含义 |
 | --- | --- |
-| `--start-percent 0` | 起始百分位，默认 0，包含起点 |
-| `--end-percent 25` | 结束百分位，默认 100，不包含终点；100 覆盖最后一个 case |
-| `--visible-devices 0,1,2,3` | 本进程使用的物理卡，可以指定一张或多张 |
+| `--range 0,25` | 用例数量的百分比区间，左闭右开；默认 `0,100`，100 覆盖最后一个 case |
+| `--devices 0,1,2,3` | 本进程使用的物理卡，可以指定一张或多张 |
 | `--schedule balanced` | 默认值；区间内待测 case 按轮询均分到给出的卡 |
 
 百分位是**用例数量的百分位**。先生成预设或读取 `--cases-json`，按输入顺序去重并应用筛选与 `--limit`，
@@ -137,16 +171,10 @@ cases[floor(N × start_percent / 100) : floor(N × end_percent / 100)]
 ```bash
 # 可先加 --plan --cores 56 查看数量、索引边界和每张卡的 case 列表，无需 NPU。
 python scripts/tests/npu_split_calibration/run.py \
-  --preset coarse,boundary,coverage \
-  --start-percent 0 --end-percent 25 \
-  --visible-devices 0,1,2,3 --device 0 \
-  --lowering-profile ordinary_ir \
-  --execution graph,direct --cache hot,rotate \
-  --max-working-mib 65536 \
+  --devices 0,1,2,3 --range 0,25 \
   --out "$HOME/npu-split-runs/part-000-025"
 ```
 
-`65536` 是每个 case 的规划上限，按实际可用资源选择；并非实际峰值显存保证。
 若需要一起收集动态和特殊路径，可在**每台机器**都改成
 `--preset coarse,boundary,coverage,dynamic,controls`；这会形成另一份全集，C=56 时为 5498 个 case。
 `run.py` 默认单例错误后继续采集，退出状态仍反映失败；原命令加 `--resume` 只重跑失败/不完整项。
@@ -180,8 +208,9 @@ manifest 的 `merge.case_sources` 保留来源目录。不同 SoC、软件、源
 完整的 `campaign.py` 仍管理单份本地实验，不接受部分百分比；离线合并仅表示数据汇总完成，
 不是阈值已经通过冻结和 holdout。
 
-新旧套件源码的指纹不同，旧采集目录缺少完整全集元数据，不能直接与这版区间结果合并或续跑。
-正在运行的旧实验继续使用它保存的源码快照；新一轮区间采集使用新的输出目录和同一份新版源码。
+套件源码参与指纹校验；更换源码版本后的新数据不能与旧版本混合合并或续跑，
+更早的采集目录还可能缺少完整全集元数据。正在运行的旧实验继续使用它保存的 `source/` 快照和原参数。
+本版简化了 CLI 并统一默认采集口径；新一轮采集使用新的输出目录和同一份新版源码。
 
 ## 类型、dtype、布局与融合覆盖
 
@@ -249,7 +278,8 @@ S           = max(1, min(S_fill, cap, R-1, floor(R/min_chunk)))
 | controls | 4 种特殊路径 forward × X=1/2，共 8 个 |
 
 C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 个 case；
-默认 campaign 配置与 8192 MiB 预算保留 5178 个，排除 162 个。超预算点记录在 manifest，不会当作已测。
+默认 65536 MiB 预算保留全部 5340 个；改为 8192 MiB 时保留 5178 个，排除 162 个。
+超预算点记录在 manifest，不会当作已测。
 初始矩阵之外的精确数量取决于测量结果。`--x/--r/--ops/--dtypes/--layouts/--match/--limit` 都是过滤器，
 不生成任意新尺寸；使用 `--cases-json` 可替代预设矩阵，支持现有 forward。
 
@@ -278,7 +308,7 @@ C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 �
 都阻止导出可冻结规则。`provisional_rules` 只用于诊断，不能当作准入表。
 
 使用同一个 manifest 追加 case，保存 manifest 历史，已完成结果按源码/环境/测量参数/输入定义核验后复用。
-只提高规划显存预算不会改变既有测量，可在原命令加 `--resume --max-working-mib 16384`；
+只提高规划显存预算不会改变既有测量；例如原预算为 8192，可在原命令加 `--resume --max-working-mib 16384`；
 增加加密轮数也可续跑，如 `--max-refine-rounds 20`。预算是保守估算，不是设备峰值显存保证。
 改变 dtype/布局筛选、S 规则、计时设置、设备/关键软件/套件代码需要新实验；旧 v1 数据不会被误当成 v2 证据。
 
@@ -288,7 +318,6 @@ C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 �
 # 必须带上与原 run 相同的测量参数；campaign 已自动处理这些参数。
 python scripts/tests/npu_split_calibration/run.py \
   --cases-json "$HOME/npu-split-runs/manual/next_cases.json" \
-  --execution graph,direct --cache hot,rotate --max-working-mib 8192 \
   --resume --extend --out "$HOME/npu-split-runs/manual"
 ```
 

@@ -37,6 +37,33 @@ def device_ids(value):
     return ",".join(cards)
 
 
+def percent_range(value):
+    parts = value.split(",")
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError("use START,END percentages, e.g. --range 0,25")
+    try:
+        start, end = (percentage(part.strip()) for part in parts)
+        collection_selection([], start, end)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return start, end
+
+
+def normalize_args(p, args):
+    """Canonicalize public and legacy options before planning or saving identity."""
+    if args.percent_range is not None:
+        if args.start_percent is not None or args.end_percent is not None:
+            p.error("use --range START,END without --start-percent/--end-percent")
+        args.start_percent, args.end_percent = args.percent_range
+    else:
+        args.start_percent = args.start_percent if args.start_percent is not None else "0"
+        args.end_percent = args.end_percent if args.end_percent is not None else "100"
+    del args.percent_range
+    if args.visible_devices and args.device != 0:
+        p.error("--devices already selects physical cards; do not combine it with a nonzero legacy --device")
+    return args
+
+
 def balanced_assignments(items, slots):
     return {slot: items[index::len(slots)] for index, slot in enumerate(slots)}
 
@@ -243,59 +270,69 @@ def budget_cases(cases, settings):
 
 
 def parser():
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="Default collection: coarse,boundary,coverage; ordinary_ir; graph,direct x hot,rotate; "
+               "65536 MiB per-case planning budget. Override these only for a different experiment.",
+    )
     p.add_argument("--out", type=Path, required=True, help="raw output directory outside the source/repository")
-    p.add_argument("--preset", default="smoke", help="comma-separated: " + ",".join(PRESETS))
+    devices = p.add_mutually_exclusive_group()
+    devices.add_argument("--devices", dest="visible_devices", type=device_ids,
+                         help="physical cards, e.g. 0,1,2,3; omitted: use the first currently visible device")
+    devices.add_argument("--visible-devices", dest="visible_devices", type=device_ids, help=argparse.SUPPRESS)
+    p.add_argument("--range", dest="percent_range", type=percent_range, metavar="START,END",
+                   help="case percentage interval, e.g. 0,25 or 12.5,50; default 0,100")
+    p.add_argument("--resume", action="store_true", help="skip completed cases only when manifest and code match")
     p.add_argument("--plan", action="store_true", help="write the matrix only; requires no torch/NPU")
     p.add_argument("--cores", type=int, help="plan uses this C; a real run checks it against backend effective cores")
-    p.add_argument("--device", type=int, default=0)
-    p.add_argument("--visible-devices", type=device_ids,
-                   help="comma-separated physical ASCEND_RT_VISIBLE_DEVICES IDs; one case per card, --device must be 0")
-    p.add_argument("--schedule", choices=("balanced", "queue"), default="balanced",
+    p.add_argument("--device", type=int, default=0, help=argparse.SUPPRESS)
+    p.add_argument("--start-percent", type=percentage, help=argparse.SUPPRESS)
+    p.add_argument("--end-percent", type=percentage, help=argparse.SUPPRESS)
+    overrides = p.add_argument_group("optional experiment overrides")
+    overrides.add_argument("--preset", default="coarse,boundary,coverage", help="comma-separated: " + ",".join(PRESETS))
+    overrides.add_argument("--schedule", choices=("balanced", "queue"), default="balanced",
                    help="balanced: round-robin case counts; queue: next case goes to the first idle card")
-    p.add_argument("--lowering-profile", choices=("installed", "ordinary_ir"), default="installed",
+    overrides.add_argument("--lowering-profile", choices=("installed", "ordinary_ir"), default="ordinary_ir",
                    help="ordinary_ir restores process-local community prod/any/xor lowering; calibrated table applies only to this profile")
-    p.add_argument("--modes", default="plain,candidate", help="plain,candidate,policy")
-    p.add_argument("--policy", choices=("installed", "table"), default="installed")
-    p.add_argument("--table", type=Path)
-    p.add_argument("--execution", default="graph", help="graph,direct; each measured independently")
-    p.add_argument("--cache", default="hot", help="hot,rotate")
-    p.add_argument("--rotate-buffers", type=int, default=4)
-    p.add_argument("--sessions", type=int, default=3)
-    p.add_argument("--rounds", type=int, default=7)
-    p.add_argument("--repeats", type=int, default=100)
-    p.add_argument("--sample-budget-ms", type=float, default=20.0, help="cap repetitions from untimed pilot duration; 0 keeps fixed --repeats")
-    p.add_argument("--graph-batch", type=int, default=8, help="complete forwards per captured graph; divides timing by this factor")
-    p.add_argument("--warmup", type=int, default=10)
-    p.add_argument("--seed", type=int, default=50315)
-    p.add_argument("--max-working-mib", type=int, default=2048)
-    p.add_argument("--timeout", type=int, default=1800, help="seconds per case/preflight")
-    p.add_argument("--max-autotune", action=argparse.BooleanOptionalAction, default=True)
-    p.add_argument("--outputs-per-program", type=int, default=DEFAULTS["outputs_per_program"])
-    p.add_argument("--target-waves", type=int, default=DEFAULTS["target_waves"])
-    p.add_argument("--min-chunk", type=int, default=DEFAULTS["min_chunk"])
-    p.add_argument("--max-s", type=int, default=DEFAULTS["max_s"])
-    p.add_argument("--relative-margin", type=float, default=0.08)
-    p.add_argument("--absolute-margin-us", type=float, default=0.2)
-    p.add_argument("--metric", choices=("device_us", "wall_us"), default="device_us")
-    p.add_argument("--max-r-gap", type=float, default=1.25, help="maximum R ratio between passing interval samples")
-    p.add_argument("--boundary-r-gap", type=float, default=1.05, help="refine gain/tiling transitions to this R ratio")
-    p.add_argument("--cases-json", type=Path)
-    p.add_argument("--around", type=int, nargs="+", default=[])
-    p.add_argument("--ops")
-    p.add_argument("--dtypes")
-    p.add_argument("--layouts")
-    p.add_argument("--x", type=int, nargs="+")
-    p.add_argument("--r", type=int, nargs="+")
-    p.add_argument("--match")
-    p.add_argument("--limit", type=int, help="limit the filtered universe BEFORE percentage/shard selection")
-    p.add_argument("--start-percent", type=percentage, default="0", help="inclusive start in [0, 100), before memory exclusions")
-    p.add_argument("--end-percent", type=percentage, default="100", help="exclusive end in (0, 100]; 100 includes the final case")
-    p.add_argument("--shards", type=int, default=1)
-    p.add_argument("--shard-index", type=int, default=0)
-    p.add_argument("--resume", action="store_true", help="skip completed cases only when manifest and code match")
-    p.add_argument("--extend", action="store_true", help="with --resume, append cases while preserving the old manifest domain")
-    p.add_argument("--fail-fast", action="store_true")
+    overrides.add_argument("--modes", default="plain,candidate", help="plain,candidate,policy")
+    overrides.add_argument("--policy", choices=("installed", "table"), default="installed")
+    overrides.add_argument("--table", type=Path)
+    overrides.add_argument("--execution", default="graph,direct", help="graph,direct; each measured independently")
+    overrides.add_argument("--cache", default="hot,rotate", help="hot,rotate")
+    overrides.add_argument("--rotate-buffers", type=int, default=4)
+    overrides.add_argument("--sessions", type=int, default=3)
+    overrides.add_argument("--rounds", type=int, default=7)
+    overrides.add_argument("--repeats", type=int, default=100)
+    overrides.add_argument("--sample-budget-ms", type=float, default=20.0, help="cap repetitions from untimed pilot duration; 0 keeps fixed --repeats")
+    overrides.add_argument("--graph-batch", type=int, default=8, help="complete forwards per captured graph; divides timing by this factor")
+    overrides.add_argument("--warmup", type=int, default=10)
+    overrides.add_argument("--seed", type=int, default=50315)
+    overrides.add_argument("--max-working-mib", type=int, default=65536,
+                         help="per-case estimated working-set limit in MiB, not a memory reservation; default 65536 (64 GiB)")
+    overrides.add_argument("--timeout", type=int, default=1800, help="seconds per case/preflight")
+    overrides.add_argument("--max-autotune", action=argparse.BooleanOptionalAction, default=True)
+    overrides.add_argument("--outputs-per-program", type=int, default=DEFAULTS["outputs_per_program"])
+    overrides.add_argument("--target-waves", type=int, default=DEFAULTS["target_waves"])
+    overrides.add_argument("--min-chunk", type=int, default=DEFAULTS["min_chunk"])
+    overrides.add_argument("--max-s", type=int, default=DEFAULTS["max_s"])
+    overrides.add_argument("--relative-margin", type=float, default=0.08)
+    overrides.add_argument("--absolute-margin-us", type=float, default=0.2)
+    overrides.add_argument("--metric", choices=("device_us", "wall_us"), default="device_us")
+    overrides.add_argument("--max-r-gap", type=float, default=1.25, help="maximum R ratio between passing interval samples")
+    overrides.add_argument("--boundary-r-gap", type=float, default=1.05, help="refine gain/tiling transitions to this R ratio")
+    overrides.add_argument("--cases-json", type=Path)
+    overrides.add_argument("--around", type=int, nargs="+", default=[])
+    overrides.add_argument("--ops")
+    overrides.add_argument("--dtypes")
+    overrides.add_argument("--layouts")
+    overrides.add_argument("--x", type=int, nargs="+")
+    overrides.add_argument("--r", type=int, nargs="+")
+    overrides.add_argument("--match")
+    overrides.add_argument("--limit", type=int, help="limit the filtered universe BEFORE percentage/shard selection")
+    overrides.add_argument("--shards", type=int, default=1)
+    overrides.add_argument("--shard-index", type=int, default=0)
+    overrides.add_argument("--extend", action="store_true", help="with --resume, append cases while preserving the old manifest domain")
+    overrides.add_argument("--fail-fast", action="store_true")
     return p
 
 
@@ -306,7 +343,7 @@ def main():
         if os.name == "posix":
             signal.signal(signal.SIGTERM, signal.default_int_handler)
     p = parser()
-    args = p.parse_args()
+    args = normalize_args(p, p.parse_args())
     if not (args.shards > 0 and 0 <= args.shard_index < args.shards):
         p.error("invalid shard index/count")
     try:
@@ -329,8 +366,6 @@ def main():
         p.error("require finite margins and 1 < boundary-r-gap <= max-r-gap")
     if args.extend and not args.resume:
         p.error("--extend requires --resume")
-    if args.visible_devices and args.device != 0:
-        p.error("--visible-devices requires logical --device 0")
     modes, executions, cache_modes = map(csv_items, (args.modes, args.execution, args.cache))
     if "plain" not in modes or len(set(modes)) != len(modes) or len(modes) < 2 or set(modes) - {"plain", "candidate", "policy"}:
         p.error("modes must include plain and candidate and/or policy")
@@ -356,6 +391,11 @@ def main():
                     max_r_gap=args.max_r_gap, boundary_r_gap=args.boundary_r_gap,
                     criteria=dict(metric=args.metric, relative_margin=args.relative_margin, absolute_margin_us=args.absolute_margin_us),
                     selector={key: getattr(args, key) for key in DEFAULTS})
+    print(f"Collection: preset={args.preset if not args.cases_json else args.cases_json}, "
+          f"range={args.start_percent},{args.end_percent}%, "
+          f"devices={args.visible_devices or 'visible logical ' + str(args.device)}, "
+          f"lowering={args.lowering_profile}, execution={args.execution}, cache={args.cache}, "
+          f"memory_budget={args.max_working_mib} MiB", flush=True)
     table = read_json(args.table) if args.table else {}
     if args.policy == "table" and "policy" in modes:
         criteria = dict(metric=args.metric, relative_margin=args.relative_margin, absolute_margin_us=args.absolute_margin_us)
