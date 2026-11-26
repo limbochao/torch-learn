@@ -12,6 +12,9 @@
 
 ## 当前脚本
 
+- [npu_split_calibration/](npu_split_calibration/README.md)：NPU split reduction 固定 S 策略与 S=1 的配对性能标定，
+  覆盖六类普通归约，自动追加 R/上下文并逐规则 holdout；支持百分比区间采集、指定多卡均分、跨机器离线合并、
+  续跑和动态 shape 诊断，保存 lowering/tiling/grid 证据。
 - [run_torchbench.py](../torchbench.md)：自动准备所选模型的数据，开关 Inductor 和精度测试。
 - [run_torchbench_matrix.sh](../torchbench_matrix.md)：读取模型 CSV，串行运行静态/动态 shape、推理/训练、
   性能/精度的八种组合，保留逐项日志并生成结果宽表。
