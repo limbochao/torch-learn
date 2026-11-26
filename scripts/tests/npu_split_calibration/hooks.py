@@ -8,7 +8,7 @@ import math
 import sys
 from contextlib import contextmanager
 
-from common import recorder_path, write_json
+from common import recorder_path
 from policy import SUPPORTED, admit, candidate
 
 
@@ -185,7 +185,7 @@ class SplitController:
                 setattr(cls, method, descriptor)
 
 
-def make_recorder(directory):
+def make_recorder():
     """Reuse the repository's selected-tiling recorder; observe actual grid too."""
     sys.path.insert(0, str(recorder_path().parent))
     from autotune_tiling import BestTilingRecorder, _config_payload
@@ -194,7 +194,6 @@ def make_recorder(directory):
         def __init__(self):
             super().__init__("npu")
             self.launches = []
-            self.binaries = []
 
         def install(self):
             # Older torch_npu releases do not have grouped autotuning.
@@ -252,25 +251,5 @@ def make_recorder(directory):
                 record["grid_error"] = f"{type(exc).__name__}: {exc}"
             record["fallback"] = bool(getattr(launcher, "fallback", False))
             self.launches.append(record)
-            self.save_binary(tuner, launcher, config)
-
-        def save_binary(self, tuner, launcher, config):
-            kernel = getattr(launcher, "bin", None)
-            if kernel is None:
-                kernel = next((item.kernel for item in (getattr(tuner, "compile_results", ()) or ())
-                               if _config_payload(item.config) == _config_payload(config)), None)
-            if kernel is None or not hasattr(kernel, "asm"):
-                return  # output_code plus selected launch metadata remain available
-            name = "kernel_" + str(len(self.binaries))
-            out = directory / "ir"
-            out.mkdir(parents=True, exist_ok=True)
-            for stage in ("ttir", "ttadapter", "llir"):
-                source = kernel.asm.get(stage)
-                if isinstance(source, str):
-                    (out / f"{name}.{stage}").write_text(source, encoding="utf-8")
-            meta = getattr(kernel, "metadata", None)
-            metadata = meta._asdict() if hasattr(meta, "_asdict") else str(meta)
-            write_json(out / f"{name}.json", metadata)
-            self.binaries.append(name)
 
     return Recorder()

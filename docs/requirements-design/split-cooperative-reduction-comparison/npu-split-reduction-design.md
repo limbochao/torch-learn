@@ -183,6 +183,10 @@ selector version 与 `NPU_DEVICE_LIMIT` 另加入 FX/AOT 持久化图缓存键�
 完整的测试矩阵、模块分工、执行方式、产物字段与多机合并流程统一维护在
 [标定脚本 README](../../../scripts/tests/npu_split_calibration/README.md)。
 
+默认单阶段入口先做 quick 筛查，用较少的静态连续归约点定位收益变化区间；
+筛查结果标为 `SCREENING_ONLY`，不生成可用准入规则。profiler 原始数据只保留 kernel_details.csv，
+实际 S/launch/tiling 与精度证据保存在结果元数据中；完整验证仍需补齐下面的区间和上下文要求。
+
 数据决策分为候选验证、区间收敛和产品验收三步：
 
 1. 在同一卡、同输入和同测量配置下配对比较 S=1 与固定候选的完整 forward。

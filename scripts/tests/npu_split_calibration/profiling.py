@@ -5,9 +5,10 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import random
+import shutil
 import sys
 
-from common import METRIC, TIMING_METHOD, file_hash, profiler_path, write_json
+from common import METRIC, TIMING_METHOD, file_hash, profiler_path, remove_artifact
 
 sys.path.insert(0, str(profiler_path().parent))
 from npu_profiler import ProfileResultParser, TorchNpuProfiler
@@ -31,6 +32,28 @@ def paired_schedule(modes, session, rounds, repeats, seed):
             plan.append(dict(session=session, round=round_id, position=position,
                              mode=mode, forwards=repeats))
     return plan
+
+
+def compact_capture(directory):
+    """Keep only byte-for-byte kernel CSVs, including on a failed capture.
+
+    CANN needs raw data during export; remove it after synchronous export, not
+    while its parser is running. Multiple CSVs remain an error for parse_capture.
+    """
+    directory = Path(directory)
+    raw = directory / "_raw"
+    if not raw.exists():
+        return
+    if directory.resolve() not in raw.resolve().parents:
+        raise ValueError("profiler export path escaped capture directory")
+    paths = sorted(raw.rglob("kernel_details.csv"))
+    try:
+        for index, source in enumerate(paths):
+            target = directory / ("" if len(paths) == 1 else f"invalid-{index:02d}") / "kernel_details.csv"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    finally:
+        remove_artifact(raw, directory)
 
 
 def parse_capture(directory, plan, patterns, case_root):
@@ -107,21 +130,22 @@ def benchmark(strategies, inputs, metadata, settings, seed, directory, case_root
         capture_dir = directory / f"session-{session:02d}"
         capture_dir.mkdir(parents=True, exist_ok=False)
         plan = paired_schedule(settings["modes"], session, settings["rounds"], settings["repeats"], seed)
-        write_json(capture_dir / "plan.json", dict(timing_method=TIMING_METHOD, plan=plan, patterns=patterns))
-        collector = TorchNpuProfiler(capture_dir, wait=0, warmup=0, active=len(plan), repeat=1,
+        collector = TorchNpuProfiler(capture_dir / "_raw", wait=0, warmup=0, active=len(plan), repeat=1,
                                      profiler_level=0, activities=("CPU", "NPU"),
                                      record_shapes=False, profile_memory=False, with_stack=False)
         print(f"PROFILE {capture_dir}: {len(plan)} batches x {settings['repeats']} forwards", flush=True)
-        with collector.profile() as prof:
-            for entry in plan:
-                for index in range(entry["forwards"]):
-                    output = strategies[entry["mode"]].compiled(*inputs[index % len(inputs)])
-                torch.npu.synchronize()  # Defines order only; never used as a duration.
-                prof.step()
+        try:
+            with collector.profile() as prof:
+                for entry in plan:
+                    for index in range(entry["forwards"]):
+                        output = strategies[entry["mode"]].compiled(*inputs[index % len(inputs)])
+                    torch.npu.synchronize()  # Defines order only; never used as a duration.
+                    prof.step()
+        finally:
+            compact_capture(capture_dir)
         current, capture = parse_capture(capture_dir, plan, patterns, case_root)
         samples.extend(current)
         captures.append(capture)
-        write_json(capture_dir / "kernel_samples.json", dict(samples=current, capture=capture))
     del output
     return samples, captures
 

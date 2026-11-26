@@ -16,10 +16,10 @@ import threading
 import time
 
 from analyze import summarize
-from profiling import validate_captures
+from profiling import compact_capture, validate_captures
 from cases import CONTROLS, DTYPE_BYTES, FLOAT_DTYPES, FUSIONS, LAYOUTS, OPS, PRIMITIVES, PRESETS, estimated_working_bytes, make_case, matrix, shapes
 from common import (HERE, collection_complete, collection_selection, external_output,
-                    METRIC, TIMING_METHOD, measurement_settings, percentage, profiler_path, read_json, recorder_path, require_profiler_settings, source_hashes,
+                    METRIC, TIMING_METHOD, measurement_settings, percentage, read_json, remove_artifact, require_profiler_settings, source_hashes,
                     validate_collection, write_json)
 from policy import DEFAULTS, digest
 
@@ -114,6 +114,13 @@ def launch(command, directory, timeout, *, visible_device=None, cancel=None):
             if isinstance(exc, KeyboardInterrupt):
                 raise
             return 124
+        finally:
+            if process.poll() is not None:
+                # Caches are process-private. Remove only after the worker exits.
+                for name in ("cache", "debug"):
+                    remove_artifact(directory / name, directory)
+                for capture in directory.glob("profiles/*/session-*"):
+                    compact_capture(capture)  # Also covers interrupted profiler exports.
 
 
 def collect_cases(cases, out, settings, table, environment, identity, args):
@@ -188,9 +195,20 @@ def collect_cases(cases, out, settings, table, environment, identity, args):
                 code = future.result()
                 result_path = directory / "result.json"
                 passed = code == 0 and result_path.exists() and read_json(result_path).get("status") == "PASS"
+                for name in ("job.json", "environment.json"):
+                    remove_artifact(directory / name, directory)
+                if passed:
+                    remove_artifact(directory / "worker.log", directory)
+                else:
+                    # Keep only a short diagnostic tail, never a growing compiler log.
+                    log_path = directory / "worker.log"
+                    with log_path.open("rb") as log:
+                        log.seek(max(0, log_path.stat().st_size - 16384))
+                        tail = log.read().decode("utf-8", errors="replace")
+                    log_path.write_text(tail, encoding="utf-8")
                 failed |= not passed
                 stop |= not passed and args.fail_fast
-                print(f"  {'PASS' if passed else 'FAILED/INCOMPLETE'}; {directory / 'worker.log'}", flush=True)
+                print(f"  {'PASS' if passed else 'FAILED/INCOMPLETE'}; {directory / ('result.json' if passed else 'worker.log')}", flush=True)
                 if not stop:
                     dispatch(slot)
     finally:
@@ -212,7 +230,7 @@ def validate_case(case):
         raise ValueError("control forwards currently require contiguous layout")
     if case["op"] == "softmax" and case["layout"] == "multi_axis":
         raise ValueError("softmax reduces one axis; multi_axis R would not describe its reduction")
-    if case["role"] not in ("smoke", "calibration", "holdout", "dynamic", "control"):
+    if case["role"] not in ("screening", "smoke", "calibration", "holdout", "dynamic", "control"):
         raise ValueError("unknown case role")
     if case.get("dynamic_axes") and case["layout"] != "contiguous":
         raise ValueError("dynamic custom cases currently require contiguous [X,R] inputs")
@@ -279,7 +297,7 @@ def budget_cases(cases, settings):
 def parser():
     p = argparse.ArgumentParser(
         description=__doc__,
-        epilog="Default collection: coarse,boundary,coverage; ordinary_ir; direct profiler kernel durations x hot,rotate; "
+        epilog="Default collection: quick screening; ordinary_ir; direct profiler kernel durations x hot,rotate; "
                "65536 MiB per-case planning budget. Override these only for a different experiment.",
     )
     p.add_argument("--out", type=Path, required=True, help="raw output directory outside the source/repository")
@@ -296,7 +314,7 @@ def parser():
     p.add_argument("--start-percent", type=percentage, help=argparse.SUPPRESS)
     p.add_argument("--end-percent", type=percentage, help=argparse.SUPPRESS)
     overrides = p.add_argument_group("optional experiment overrides")
-    overrides.add_argument("--preset", default="coarse,boundary,coverage", help="comma-separated: " + ",".join(PRESETS))
+    overrides.add_argument("--preset", default="quick", help="default quick; comma-separated: " + ",".join(PRESETS))
     overrides.add_argument("--schedule", choices=("balanced", "queue"), default="balanced",
                    help="balanced: round-robin case counts; queue: next case goes to the first idle card")
     overrides.add_argument("--lowering-profile", choices=("installed", "ordinary_ir"), default="ordinary_ir",
@@ -491,10 +509,6 @@ def main():
                 write_json(manifest_path, dict(identity, created_utc=old["created_utc"]))
     else:
         write_json(manifest_path, dict(identity, created_utc=datetime.now(timezone.utc).isoformat()))
-        source_dir = out / "source"
-        source_dir.mkdir(exist_ok=True)
-        for path in [*HERE.glob("*.py"), HERE / "README.md", recorder_path(), profiler_path()]:
-            (source_dir / path.name).write_bytes(path.read_bytes())
     print(f"{len(cases)} cases, {len(excluded)} excluded by memory budget, C={cores}, modes={modes}, execution={executions}, cache={cache_modes}", flush=True)
     failed = False
     try:

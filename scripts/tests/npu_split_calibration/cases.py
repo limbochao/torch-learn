@@ -17,8 +17,9 @@ FUSIONS = ("mean", "sum_fp32", "add_sum", "exp_sum", "rmsnorm", "softmax", "sum_
 CONTROLS = ("argmax", "argmin", "var_mean", "cumsum")
 OPS = {op for op, _ in PRIMITIVES} | set(FUSIONS) | set(CONTROLS)
 LAYOUTS = ("contiguous", "stride2", "transpose", "multi_axis", "broadcast")
-PRESETS = ("smoke", "coarse", "boundary", "coverage", "holdout", "dynamic", "controls")
+PRESETS = ("quick", "smoke", "coarse", "boundary", "coverage", "holdout", "dynamic", "controls")
 ANCHORS = tuple(2 ** exponent for exponent in range(8, 23))
+QUICK_ANCHORS = tuple(2 ** exponent for exponent in range(8, 23, 2))
 
 
 def x_values(cores):
@@ -54,7 +55,14 @@ def matrix(preset, cores, around=(), params=None):
     def add(*args, **kwargs):
         result.append(make_case(*args, **kwargs))
 
-    if preset == "smoke":
+    if preset == "quick":
+        # Screen every primitive/dtype, but only three occupancy regimes and
+        # logarithmic R anchors. These points guide follow-up, never admission.
+        for op, dtype in PRIMITIVES:
+            for x in sorted({1, max(1, cores // 4), max(1, cores // 2)}):
+                for r in QUICK_ANCHORS:
+                    add(op, x, r, dtype, role="screening")
+    elif preset == "smoke":
         for op, dtype in PRIMITIVES:
             for layout in LAYOUTS:
                 add(op, max(1, min(2, cores - 1)), 4096 if layout == "multi_axis" else 65537,

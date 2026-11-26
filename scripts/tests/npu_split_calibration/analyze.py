@@ -17,6 +17,7 @@ from profiling import sample_evidence, validate_captures
 from cases import PRIMITIVES, context_id
 from policy import VERSION, digest
 from refinement import audit_holdout, observations, propose_intervals, refinement_plan
+from screening import threshold_guidance
 
 
 def paired_stats(samples, mode, metric, relative_margin, absolute_margin):
@@ -115,6 +116,7 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric=METRI
     if "collection" in manifest:
         validate_collection(manifest)
     complete = collection_complete(manifest)
+    screening = any(case["role"] == "screening" for case in manifest["cases"])
     rows, results, failures = [], [], []
     for case_index, case in enumerate(manifest["cases"], 1):
         if case_index % 100 == 0:
@@ -198,20 +200,25 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric=METRI
     # establish context coverage and propose follow-up shapes or intervals.
     refinement = (refinement_plan(manifest, families) if complete else
                   dict(pending=[], blocked=[], status="WAITING_FOR_COLLECTION_MERGE"))
+    guidance = threshold_guidance(manifest, rows, complete, failures) if screening else None
     proposals = propose_intervals(families, manifest["settings"].get("max_r_gap", 1.25))
     needs_refinement = bool(refinement["pending"] or refinement["blocked"])
     write_json(directory / "refinement.json", refinement)
-    write_json(directory / "next_cases.json", dict(cases=[*manifest["cases"], *(item["case"] for item in refinement["pending"])]))
+    next_cases = [*manifest["cases"], *(item["case"] for item in refinement["pending"]),
+                  *(guidance["next_cases"] if guidance else [])]
+    write_json(directory / "next_cases.json", dict(cases=list({case["id"]: case for case in next_cases}.values())))
+    if guidance:
+        write_json(directory / "threshold-guidance.json", guidance)
 
     # Incomplete data must never silently widen a gate. Fail-closed globally;
     # rerun the failed/skipped cases (or explicitly create a smaller new manifest).
-    table = dict(schema="npu-split-table-v3", status=("INCOMPLETE" if failures else "PARTIAL_COLLECTION" if not complete else "NEEDS_REFINEMENT" if needs_refinement else
+    table = dict(schema="npu-split-table-v3", status=("INCOMPLETE" if failures else "PARTIAL_COLLECTION" if not complete else "SCREENING_ONLY" if screening else "NEEDS_REFINEMENT" if needs_refinement else
                  "DRAFT_REQUIRES_HOLDOUT" if proposals else "NO_ADMISSIBLE_INTERVAL"),
                  environment=manifest["environment"],
                  suite_source_hashes=manifest["source_hashes"], max_autotune=manifest["settings"]["max_autotune"],
                  timing_contract=timing_contract(manifest["settings"]),
                  selector={"version": VERSION, "params": manifest["settings"]["selector"]},
-                 rules=proposals if complete and not failures and not needs_refinement else [], provisional_rules=proposals,
+                 rules=proposals if complete and not failures and not needs_refinement and not screening else [], provisional_rules=proposals,
                  collection_complete=complete,
                  refinement_pending=len(refinement["pending"]), refinement_blocked=len(refinement["blocked"]),
                  blocked_by_incomplete_cases=len(failures),
@@ -247,6 +254,16 @@ def summarize(directory, relative_margin=0.08, absolute_margin=0.2, metric=METRI
              "", f"Cases: {len(manifest['cases'])}; excluded by planned memory budget: {len(manifest.get('excluded_cases', []))}; incomplete/error cases: {len(failures)}; proposed intervals: {len(table['rules'])}.",
              "", "| Decision | Count |", "|---|---:|"]
     lines += [f"| {key} | {value} |" for key, value in sorted(counts.items())]
+    if guidance:
+        lines += ["", "## Quick threshold guidance", "",
+                  "Screening anchors only; no deployable thresholds. Both cache conditions must WIN. "
+                  "Transition midpoints are in next_cases.json; repeated --resume --extend narrows brackets without rerunning completed cases.",
+                  "", "| op / dtype / layout / X | Observed winning anchors | Transition brackets |",
+                  "|---|---|---|"]
+        for group in guidance["groups"]:
+            wins = "; ".join(", ".join(map(str, window["tested_r"])) for window in group["observed_win_windows"]) or group["status"]
+            brackets = "; ".join(f"{b['lo']} ({b['left']}) .. {b['hi']} ({b['right']})" for b in group["transition_brackets"]) or "none observed"
+            lines.append(f"| {group['op']} / {group['dtype']} / {group['layout']} / {group['X']} | {wins} | {brackets} |")
     lines += ["", f"Admission table status: `{table['status']}`; pending R/context probes: {len(refinement['pending'])}; memory-blocked probes: {len(refinement['blocked'])}.",
               f"Collection domain complete: `{complete}`. Partial ranges cannot export admission rules; merge them first.",
               "", "Primitive/dtype completeness is in coverage.json. S, grids, programs and selected tiling are also included in summary.csv.",

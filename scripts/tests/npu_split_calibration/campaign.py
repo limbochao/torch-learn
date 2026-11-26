@@ -33,6 +33,8 @@ def arguments(args):
 def main():
     p = parser()
     p.description = __doc__
+    p.set_defaults(preset="coarse,boundary,coverage")
+    p.epilog = "Full validation campaign; for quick threshold guidance use run.py (default --preset quick)."
     p.add_argument("--max-refine-rounds", type=int, default=12, help="stop with pending work if this budget is exhausted; may increase on resume")
     p.add_argument("--with-dynamic", action="store_true", help="also collect dynamic compiled-graph reuse diagnostics after static validation")
     p.add_argument("--with-controls", action="store_true", help="also collect excluded-type controls")
@@ -44,6 +46,13 @@ def main():
         p.error("campaign manages strategy/table/extension stages; use run.py for individual custom comparisons")
     if args.shards != 1 or args.shard_index or (args.start_percent, args.end_percent) != ("0", "100"):
         p.error("a campaign needs a single complete manifest; use run.py for percentage ranges and merge.py to combine them")
+    if "quick" in args.preset.split(","):
+        p.error("quick is screening only; use run.py for threshold guidance, or a full campaign preset for admission")
+    if args.cases_json:
+        custom = read_json(args.cases_json)
+        cases = custom.get("collection", {}).get("universe", custom.get("cases", [])) if isinstance(custom, dict) else custom
+        if any(case.get("role") == "screening" for case in cases):
+            p.error("screening cases cannot validate a policy; use run.py to refine their brackets")
     root = external_output(args.out)
     identity = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
                 if k not in ("resume", "plan", "out", "max_refine_rounds", "max_working_mib")}

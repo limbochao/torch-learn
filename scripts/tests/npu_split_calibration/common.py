@@ -8,6 +8,7 @@ import os
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from pathlib import Path
+import shutil
 
 from policy import digest
 
@@ -43,6 +44,19 @@ def read_json(path):
 
 def file_hash(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def remove_artifact(path, root):
+    """Delete only a checked descendant of this run's owned output directory."""
+    path, root = Path(path), Path(root).resolve(strict=True)
+    if root not in path.resolve().parents:
+        raise ValueError(f"artifact cleanup escaped output directory: {path}")
+    if path.is_symlink():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink(missing_ok=True)
 
 
 def source_hashes():

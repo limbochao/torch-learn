@@ -102,8 +102,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inputs", type=Path, nargs="+", required=True, help="finished run.py output directories copied to this machine")
     parser.add_argument("--out", type=Path, required=True, help="new merged directory outside the repository")
-    parser.add_argument("--copy-artifacts", action="store_true",
-                        help="also copy complete case directories (code, logs, caches); default copies analysis evidence only")
     args = parser.parse_args()
     inputs = [path.expanduser().resolve() for path in args.inputs]
     out = external_output(args.out)
@@ -134,28 +132,22 @@ def main():
         if not source.exists():
             continue
         destination = out / "cases" / case["id"]
-        if args.copy_artifacts:
-            shutil.copytree(source, destination)
-        else:
-            destination.mkdir(parents=True, exist_ok=True)
-            for name in ("result.json", "error.json", "environment.json", "job.json", "worker.log"):
-                if (source / name).exists():
-                    shutil.copy2(source / name, destination / name)
-            # CSVs are portable mandatory evidence, not optional large trace/cache artifacts.
-            if (source / "result.json").exists():
-                result = read_json(source / "result.json")
-                for probe in result.get("probes", []):
-                    for capture in probe.get("profiles", []):
-                        relative = Path(capture["csv"])
-                        csv_source = (source / relative).resolve()
-                        if relative.is_absolute() or source.resolve() not in csv_source.parents:
-                            raise ValueError("profiler CSV path escaped source case")
-                        target = destination / relative
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        if csv_source.exists():
-                            shutil.copy2(csv_source, target)
-    if (inputs[0] / "source").exists():
-        shutil.copytree(inputs[0] / "source", out / "source")
+        destination.mkdir(parents=True, exist_ok=True)
+        for name in ("result.json", "error.json", "worker.log"):
+            if (source / name).exists():
+                shutil.copy2(source / name, destination / name)
+        if (source / "result.json").exists():
+            result = read_json(source / "result.json")
+            for probe in result.get("probes", []):
+                for capture in probe.get("profiles", []):
+                    relative = Path(capture["csv"])
+                    csv_source = (source / relative).resolve()
+                    if relative.is_absolute() or source.resolve() not in csv_source.parents:
+                        raise ValueError("profiler CSV path escaped source case")
+                    target = destination / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    if csv_source.exists():
+                        shutil.copy2(csv_source, target)
     _, failures = summarize(out, criteria["relative_margin"], criteria["absolute_margin_us"], criteria["metric"])
     complete = collection_complete(manifest) and not failures
     holdout_passed = None
@@ -165,7 +157,7 @@ def main():
     write_json(out / "merge.audit.json", dict(status=status, inputs=manifest["merge"]["inputs"],
                expected_cases=len(manifest["collection"]["universe"]), selected_cases=len(owners),
                missing_case_ids=missing, failed_cases=failures, planned_exclusions=len(manifest["excluded_cases"]),
-               holdout_passed=holdout_passed, copied_full_artifacts=args.copy_artifacts))
+               holdout_passed=holdout_passed, profiler_artifacts="kernel_details.csv only"))
     write_json(out / "active.json", dict(status=status, failed_cases=len(failures), missing_ranges=len(missing)))
     print(f"Merged {len(inputs)} directories: {len(owners)}/{len(manifest['collection']['universe'])} cases assigned, "
           f"{len(failures)} failed/missing results. {out / 'merge.audit.json'}")

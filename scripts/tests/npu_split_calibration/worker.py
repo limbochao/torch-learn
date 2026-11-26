@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import importlib
 import math
 import os
@@ -124,15 +125,15 @@ def to_cpu(value):
 
 
 class Strategy:
-    def __init__(self, mode, settings, case, cores, table, directory):
+    def __init__(self, mode, settings, case, cores, table):
         import torch
         from torch._inductor import config
         from torch._inductor.compile_fx import compile_fx
 
-        self.mode, self.directory = mode, directory
-        self.directory.mkdir(parents=True, exist_ok=True)
+        self.mode = mode
         self.controller = SplitController(mode, settings, cores, table)
         self.compiles, self.sources, self.active_compile_id = 0, 0, None
+        self.source_digests = []
         self.inspections = 0
         self.options = {"split_reductions": True, "min_num_split": 0,
                         "triton.cooperative_reductions": False, "triton.force_cooperative_reductions": False,
@@ -150,7 +151,6 @@ class Strategy:
             self.compiles += 1
             compile_id = self.compiles
             self.controller.compile_id = compile_id
-            (directory / f"fx_{self.compiles}.py").write_text(gm.code, encoding="utf-8")
             with config.patch(self.options), self.controller.install():
                 compiled_graph = compile_fx(gm, example_inputs)
 
@@ -173,9 +173,8 @@ class Strategy:
         import torch
         from torch._inductor.graph import GraphLowering
 
-        artifacts = f"launches_{self.inspections:04d}"
         self.inspections += 1
-        recorder = make_recorder(self.directory / artifacts)
+        recorder = make_recorder()
         recorder.install()
         try:
             sources = []
@@ -185,7 +184,7 @@ class Strategy:
                 output = self.compiled(*inputs)
             torch.npu.synchronize()
             for text in sources:
-                (self.directory / f"output_code_{self.sources}.py").write_text(text, encoding="utf-8")
+                self.source_digests.append(hashlib.sha256(text.encode("utf-8")).hexdigest())
                 self.sources += 1
             accuracy(to_cpu(output), expected, dtype)
             # Capture ONE steady launch after compilation/autotune, not their trial launches.
@@ -196,10 +195,8 @@ class Strategy:
             check = accuracy(to_cpu(output), expected, dtype)
         finally:
             recorder.uninstall()  # no Python observation overhead in timed calls
-            write_json(self.directory / "lowering.json", dict(options=self.options,
-                       decisions=self.controller.decisions, splits=self.controller.splits))
         record = dict(compiles=self.compiles, active_compile_id=self.active_compile_id,
-                      selected=selected, launches=recorder.launches, accuracy=check, launch_artifacts=artifacts)
+                      selected=selected, launches=recorder.launches, accuracy=check, inspection=self.inspections)
         return record
 
 
@@ -262,7 +259,7 @@ def run_case(job, out):
     device = f"npu:{settings['device']}"
     torch.manual_seed(settings["seed"])
     torch._dynamo.config.suppress_errors = False
-    strategies = {mode: Strategy(mode, settings, case, cores, table, out / mode) for mode in settings["modes"]}
+    strategies = {mode: Strategy(mode, settings, case, cores, table) for mode in settings["modes"]}
     record = dict(schema="npu-split-result-v3", case=case, settings=settings, environment=fingerprint, table_digest=digest(table),
                   device_assignment=environment["device_assignment"],
                   source_hashes=job["source_hashes"], status="RUNNING", probes=[])
@@ -323,13 +320,13 @@ def run_case(job, out):
                                  reused_seed_graph={mode: info["active_compile_id"] == record["seed"][mode]["active_compile_id"]
                                                     for mode, info in metadata.items()})
                     record["probes"].append(probe)
-                    record["strategies"] = {mode: dict(compiles=s.compiles, sources=s.sources,
+                    record["strategies"] = {mode: dict(compiles=s.compiles, sources=s.sources, source_digests=s.source_digests,
                         decisions=s.controller.decisions, splits=s.controller.splits) for mode, s in strategies.items()}
                     write_json(out / "result.json", record)
                 del inputs, expected, metadata
                 gc.collect()
                 torch.npu.empty_cache()
-        record["strategies"] = {mode: dict(compiles=s.compiles, sources=s.sources,
+        record["strategies"] = {mode: dict(compiles=s.compiles, sources=s.sources, source_digests=s.source_digests,
             decisions=s.controller.decisions, splits=s.controller.splits) for mode, s in strategies.items()}
     record["status"] = "PASS" if record["probes"] and all(p["status"] == "PASS" for p in record["probes"]) else "INCOMPLETE"
     write_json(out / "result.json", record)
