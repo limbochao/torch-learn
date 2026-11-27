@@ -7,8 +7,9 @@
 编译缓存、trace、数据库和生成代码不作为长期产物保留。
 
 产品实现与适用范围见 [NPU Split Reduction 当前实现方案](../../../docs/requirements-design/split-cooperative-reduction-comparison/npu-split-reduction-design.md)。
-本套件输出 `npu-split-table-v3` 实验表；产品接收 `npu-split-policy-v1`，当前没有直接转换入口。
-即使实验表通过 holdout，也需在实际产品路径验证上下文和环境后再转换，不能只改 schema/status 导入。
+本套件输出 `npu-split-table-v3` 实验表，用于分析和改进拆分启发式。
+产品沿用上游 `split_reductions` 和 choices 接口，不读取实验表，也不提供额外的模式或策略配置。
+实验结果须在实际产品 lowering、布局和融合上下文中复验，不能直接视为产品性能验收。
 
 **旧 Event 数据无效：** 2026-11-26 整改前的 `device_us` 是 Event 区间，包含任务间空隙，
 不能用于本套件的 kernel device 性能阈值。新版使用独立的 `kernel_us` 和 v3 manifest/result/table，
