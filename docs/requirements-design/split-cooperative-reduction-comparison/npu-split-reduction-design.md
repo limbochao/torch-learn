@@ -3,7 +3,7 @@ title: NPU Split Reduction 当前实现方案
 ---
 
 更新日期：2026-11-27。实现分支：`pytorch_new/feat/npu-num-splits`，未合入主干。
-代码版本：[bc0838ae1](https://gitcode.com/luqichao/pytorch_new/commit/bc0838ae1)。
+代码版本：[71a91125a](https://gitcode.com/luqichao/pytorch_new/commit/71a91125a4e2fe42eed177efa314137988e96b65)。
 本页描述当前调用链；[需求规格](npu-split-reduction-requirements.md)中的性能指标仍须独立验收。
 实验采集方式见[测试脚本说明](../../../scripts/tests/npu_split_calibration/README.md)。
 
