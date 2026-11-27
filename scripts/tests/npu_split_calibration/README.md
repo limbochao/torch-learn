@@ -82,7 +82,7 @@ python scripts/tests/npu_split_calibration/run.py \
 | X | `{1, max(1,C//4), max(1,C//2)}` 去重 | C=56 时 1/14/28，固定候选的填核目标分别为 56/4/2；这是 selector 的估算，实际 program 数仍记录 grid |
 | R | `256,1024,4096,16384,65536,262144,1048576,4194304` | 覆盖原先的最小/最大 R；大部分机器 R=256 是 S=1 负对照。相邻粗点相差 4 倍，后续按结果缩窄 |
 | 布局 | contiguous | 首轮定位连续归约的收益边界；stride2/transpose/multi_axis/broadcast 延后验证 |
-| 融合、动态、特殊路径 | 不放入 quick | 融合需围绕候选阈值补测；当前产品动态和特殊类型仍 S=1，先测它们不能帮助选择静态普通 split 阈值 |
+| 融合、动态、特殊路径 | 不放入 quick | 融合需围绕候选阈值补测；首轮仅筛查静态普通归约，动态和特殊类型需另做语义与性能验证 |
 
 每组 op/dtype/X 的 `threshold-guidance.json` 和 `report.md` 会列出：
 
@@ -313,7 +313,8 @@ RMSNorm 没有 affine 权重。softmax 可能走专门 lowering，不能仅凭 A
 - `PATH_NOT_EXERCISED`：例如 var_mean 实际改走普通 sum，不能声称验证了 Welford 排除路径。
 - `UNEXPECTED_SPECIAL_SPLIT`：出现了不应接管的拆分。
 
-arg、Welford 不属于本次 PR 的普通新策略范围；NPU scan 被明确保留为 S=1；
+本实验控制 preset 按原始普通归约范围处理 arg/Welford；它不代表产品的 Welford 支持范围。
+产品已单独验证上游 Welford partial/combine，NPU scan 保留 S=1。
 online-softmax 有不同的复合状态合并语义，也没有在普通 selector 中启用。dot/fmax 明确排除。
 控制 preset 不自动强制制造 online-softmax/dot/fmax 专门 IR，也不把没出现的路径算作已覆盖。
 
@@ -351,9 +352,9 @@ C=56 时 coarse=3240、boundary=720、coverage=1548，合并去重后为 5340 �
 动态 R 用 4096/262144/1048576 三个 seed，运行 4096/65537/262144/1048576/4096。
 动态 X 用 2 和 max(3,C//2) 两个 seed，运行 2/max(3,C//2)/C+1/2。
 双动态额外交叉改变 X/R。通过 active_compile_id 区分复用、重编译和返回旧图。
-动态 table 准入仍为 S=1，直到生产实现拥有真实的范围 guard/dispatch。
-实验 candidate 会用编译时 hint 探测动态拆分行为；它属于诊断，
-不等于产品 selector 已支持动态 split。当前产品对 symbolic X/R 一律返回 S=1。
+实验 table 的动态准入仍为 S=1；实验 candidate 用编译时 hint 探测动态拆分行为。
+产品不读取该 table，NPU selector 使用 sizevars 的 hint 和上游符号分片索引，已包含动态 split
+设备测试。实验数据不能直接证明任意运行时尺寸都获益，支持状态以当前实现方案为准。
 
 ## 自动加密如何避免漏点与重跑
 
