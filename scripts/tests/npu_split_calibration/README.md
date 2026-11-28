@@ -1,8 +1,8 @@
-# NPU split reduction 阈值标定
+# NPU split reduction 标定与 S 机制实验
 
 用实际 `torch.compile → num_splits → create_multilayer → NPU tiling/codegen`，
 直接调用编译后的 forward，通过 profiler 采集并解析 `kernel_details.csv`，累加完整 forward 的 device kernel duration，
-比较一份固定 S 规则与 S=1。**不搜索 S，不把 S 交给 autotune**；正常 tiling autotune 在两侧保持一致。
+`run.py` 比较一份固定 S 规则与 S=1。该入口**不搜索 S，不把 S 交给 autotune**；正常 tiling autotune 在两侧保持一致。
 所有 hook 限于 worker 进程，不修改安装目录。输出放在仓库之外；profiler 每轮只保留 `kernel_details.csv`，
 编译缓存、trace、数据库和生成代码不作为长期产物保留。
 
@@ -10,6 +10,9 @@
 本套件输出 `npu-split-table-v3` 实验表，用于分析和改进拆分启发式。
 产品沿用上游 `split_reductions` 和 choices 接口，不读取实验表，也不提供额外的模式或策略配置。
 实验结果须在实际产品 lowering、布局和融合上下文中复验，不能直接视为产品性能验收。
+
+需要研究 S 本身时，使用下文的 `search_s.py`。它保留生成代码和编译器资源证据，
+与固定候选阈值标定使用不同的结果格式；不能把两种结果直接合并成准入表。
 
 **旧 Event 数据无效：** 2026-11-26 整改前的 `device_us` 是 Event 区间，包含任务间空隙，
 不能用于本套件的 kernel device 性能阈值。新版使用独立的 `kernel_us` 和 v3 manifest/result/table，
@@ -19,6 +22,8 @@
 
 | 文件 | 职责 |
 | --- | --- |
+| [search_s.py](search_s.py) | S 机制实验：在真实 NPU 选择入口控制原始归约的候选 S，记录生成代码、tiling、UB、逻辑 grid 和设备发射块数，测量完整 partial/combine |
+| [search_s_cases.json](search_s_cases.json) | 定向实验输入：较大 S、尾块、dtype、算子、outer 和相同 shape 的 autotune 对照；不是产品策略表 |
 | [run.py](run.py) | 单阶段入口：生成/读取用例全集，筛选百分比区间，预检，指定多卡分配，续跑并汇总 |
 | [campaign.py](campaign.py) | 完整实验入口：smoke、初始矩阵、补点、冻结、逐规则 holdout；不接受部分百分比区间 |
 | [merge.py](merge.py) | CPU 离线合并：校验全集/环境/配置/来源，保留原始配对样本，重新生成报告并支持后续补测 |
@@ -35,6 +40,46 @@
 实际 tiling 记录复用仓库内的 [autotune_tiling.py](../../tools/autotune_tiling.py)。
 采集与 CSV 读取直接复用 [npu_profiler.py](../../tools/npu_profiler.py) 的 `TorchNpuProfiler`、`ProfileResultParser`。
 各机器应使用同一仓库提交；不需要另行打包或分布式运行环境。
+
+## 研究 S 与底层实现的关系
+
+这个入口要求已安装带 NPU `choices.reduction_split_factor` / `patch_num_splits` 的实现。
+在目标 NPU 环境中，从仓库根目录运行：
+
+```bash
+ASCEND_RT_VISIBLE_DEVICES=0 ENABLE_PRINT_UB_BITS=1 \
+python -B scripts/tests/npu_split_calibration/search_s.py \
+  --cases-json scripts/tests/npu_split_calibration/search_s_cases.json \
+  --out "$HOME/npu-split-runs/s-mechanism-$(date +%Y%m%d-%H%M%S)"
+```
+
+物理卡通过已有的 `ASCEND_RT_VISIBLE_DEVICES` 选择；脚本默认使用可见集合里的逻辑卡 0。
+`ENABLE_PRINT_UB_BITS` 是 Triton-Ascend 已有的编译器诊断开关，用于取得真实 UB 分配量，
+不参与产品 S 的选择。没有该诊断，或者所选编译路径不报告 UB 时，`required_ub_bytes` 为 null；
+编译器 metadata 中的 0 不能解释成不占 UB。
+
+每个 case 包含 `id/op/dtype/layout/X/R/splits`，可选 `max_autotune` 和输入 `seed`。
+当前支持 sum、amax、amin、prod 的 FP16/BF16/FP32，以及 inner、outer、stride2 输入。
+`splits` 仅是实验干预变量；脚本自动增加 S=1 和当前产品选择作为对照。
+保持真实 NPU 准入检查、hint 分类和上游 multilayer 构造；候选只替换原始 X/R 的 choices 返回值，
+嵌套归约不继续拆分。若请求的 S 未进入 `create_multilayer`，实验直接失败。
+
+每个变体都先核对精度、捕获真实编译 callable，再用共享 `profiling.py` 测量。
+输入为相同的 hot 数据，计时为 2 session × 3 个随机顺序及反向配对 round × 每批 30 forward。
+所有 device CSV 行均按 kernel 名称、调用顺序和任务数校验，完整累加 partial/combine，
+不使用 Graph、Event 或 host 耗时。编译耗时单独记录，不计入性能指标。
+
+输出目录必须在仓库外且尚不存在。保留：
+
+- `strategy-sweep.json`、各 case 的 `result.json`：实际 S、精度、编译配置、两阶段耗时、资源和源码指纹。
+- 各 case 的 `current.py` / `s*.py`：生成的完整 forward，供解释索引、mask 和路径切换。
+- `profiles/session-*/kernel_details.csv`：经校验的全部 device kernel 明细。
+- 编译缓存：便于重放选定的 kernel；不提交 Git。
+
+`grid` 是 Inductor 传入下层的逻辑 grid；`profiled_blocks` 是 profiler 的 `Block Num` / `Mix Block Num`。
+两者应结合 compiler 的 program-grid transform 信息分析，不能默认等价于物理核数或同时驻留核数。
+扫描中的最快 S 只是在本次候选、输入和编译配置中的观测结果，不能直接写成生产规则。
+证据与算法设计见 [S 选择的机制分析](../../../docs/requirements-design/split-cooperative-reduction-comparison/npu-split-factor-evidence.md)。
 
 ## 常用采集命令
 
