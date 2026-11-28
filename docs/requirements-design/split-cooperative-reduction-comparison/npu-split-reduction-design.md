@@ -3,7 +3,7 @@ title: NPU Split Reduction 当前实现方案
 ---
 
 更新日期：2026-11-28。实现分支：`pytorch_new/feat/npu-num-splits`，未合入主干。
-代码版本：[3a2039b08](https://gitcode.com/luqichao/pytorch_new/commit/3a2039b083f35748f93af711436a51b494aa5080)。
+代码版本：[11ca25313](https://gitcode.com/luqichao/pytorch_new/commit/11ca253135d7a2e76f1066976134784030ea4891)。
 本页描述 NPU 独立选择流程；[需求规格](npu-split-reduction-requirements.md)中的性能指标仍须独立验收。
 实验采集方式见[测试脚本说明](../../../scripts/tests/npu_split_calibration/README.md)，本轮汇总见[验证与性能结果](assets/npu-split-redesign-20261128.json)。
 
@@ -45,11 +45,11 @@ scan 保留原来的单 program 前缀传递；它与普通 reduction 的两阶�
 | 总开关与普通归约定义 | 引用上游 `config.split_reductions`、`REDUCTION_COMBINE_FN` |
 | 符号尺寸和读取依赖 | 使用上游 `sizevars`、`dependencies.extract_read_writes` 基础工具 |
 | NPU 支持条件、INNER/OUTER 分类和拆分决策 | NPU `ir.py::num_splits`；不调用上游选择函数 |
-| NPU 的 S 启发式 | [choices.py](https://gitcode.com/luqichao/pytorch_new/blob/3a2039b083f35748f93af711436a51b494aa5080/torch_npu/_inductor/choices.py)：同签名替换 `InductorChoices.reduction_split_factor` |
-| scan 适配及选择入口接线 | [ir.py](https://gitcode.com/luqichao/pytorch_new/blob/3a2039b083f35748f93af711436a51b494aa5080/torch_npu/_inductor/ir.py) |
+| NPU 的 S 启发式 | [choices.py](https://gitcode.com/luqichao/pytorch_new/blob/11ca253135d7a2e76f1066976134784030ea4891/torch_npu/_inductor/choices.py)：同签名替换 `InductorChoices.reduction_split_factor` |
+| scan 适配及选择入口接线 | [ir.py](https://gitcode.com/luqichao/pytorch_new/blob/11ca253135d7a2e76f1066976134784030ea4891/torch_npu/_inductor/ir.py) |
 | 分片索引、尾块 mask、单位元、中间 dtype、合并与动态 `min_num_split` | 上游 `Reduction.create` / `create_multilayer*` |
 | 实际 kernel、局部 tiling 和融合 | 现有 NPU scheduler / codegen / runtime |
-| 选择器与设备验证 | [test_npu_num_splits.py](https://gitcode.com/luqichao/pytorch_new/blob/3a2039b083f35748f93af711436a51b494aa5080/test/_inductor/test_npu_num_splits.py) |
+| 选择器与设备验证 | [test_npu_num_splits.py](https://gitcode.com/luqichao/pytorch_new/blob/11ca253135d7a2e76f1066976134784030ea4891/test/_inductor/test_npu_num_splits.py) |
 
 `reduction_split_factor` 是上游现有扩展点，不是新增配置。CUDA 的实现会读取 SM 数、warp 大小、
 每 SM 线程数和架构阈值，返回一个 S。NPU 在同一个接口读取有效 Vector 核数；
